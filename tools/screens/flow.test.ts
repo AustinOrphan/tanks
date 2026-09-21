@@ -26,6 +26,7 @@ import {
 import { FLAG_REGISTRY } from '../../src/game/devflags';
 import { ENEMY_ROLE_CUES } from '../../src/presentation/enemy-role';
 import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
+import { WRECK_EFFECTS } from '../../src/presentation/wreck';
 import { ACHIEVEMENTS } from '../../src/game/achievements';
 
 const inputs = (over: Record<string, unknown> = {}) => ({ level: 1, seed: 7, driver: 'autoplay', flags: {}, ...over });
@@ -83,6 +84,7 @@ describe('the flow catalogue (issue #815)', () => {
     const vocabularies: Record<string, readonly string[]> = {
       enemyRole: ENEMY_ROLE_CUES,
       identityMarker: IDENTITY_MARKER_STYLES,
+      wreck: WRECK_EFFECTS,
     };
     for (const id of FLOW_FLAG_IDS) {
       const spec = (FLAG_REGISTRY as Record<string, { kind: string; param?: string; values?: readonly string[] }>)[id];

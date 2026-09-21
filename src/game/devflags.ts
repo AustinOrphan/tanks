@@ -18,6 +18,7 @@ import {
   isArrivalLanguage,
   type ArrivalLanguage,
 } from '../presentation/arrival-language';
+import { WRECK_EFFECTS, isWreckEffect, type WreckEffect } from '../presentation/wreck';
 import { HUD_FONTS, isHudFont, type HudFont } from '../presentation/hud-font';
 import { STOCK_CUES, isStockCue, type StockCue } from '../presentation/stock-cue';
 import {
@@ -442,6 +443,12 @@ export interface DevFlags {
    */
   arrival: ArrivalLanguage | null;
   /**
+   * Leaves a temporary hull silhouette where a tank died (issue #232), one of three
+   * removal arms. Null -- absent or unrecognised -- is the shipped board, which leaves
+   * nothing behind. Temporary: deleted once an arm is chosen, or once the idea is.
+   */
+  wreck: WreckEffect | null;
+  /**
    * Which experimental versus STOCK-LOSS CUE to draw on the stock strip (issue #230). `null`
    * draws none, which is the shipped strip: only the digit changes. `pips`, `strike` and
    * `badge` are the shortlisted arms, to be judged in play. A temporary open-question flag.
@@ -574,6 +581,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   enemyRole: null,
   shellTrail: null,
   arrival: null,
+  wreck: null,
   stockCue: null,
   hudFont: null,
   versusActions: null,
@@ -774,6 +782,13 @@ function asArrival(params: URLSearchParams): ArrivalLanguage | null {
   return isArrivalLanguage(raw) ? raw : null;
 }
 
+/** One of the named wreck removal arms, or null when absent or unrecognised. */
+function asWreck(params: URLSearchParams): WreckEffect | null {
+  const raw = params.get('wreck');
+  if (raw === null) return null;
+  return isWreckEffect(raw) ? raw : null;
+}
+
 /** One of the named stock-loss cue arms, or null when absent or unrecognised. */
 function asStockCue(params: URLSearchParams): StockCue | null {
   const raw = params.get('stockCue');
@@ -956,6 +971,7 @@ export function parseDevFlags(search: string): DevFlags {
     enemyRole: asEnemyRole(params),
     shellTrail: asShellTrail(params),
     arrival: asArrival(params),
+    wreck: asWreck(params),
     stockCue: asStockCue(params),
     hudFont: asHudFont(params),
     versusActions: asVersusActions(params),
@@ -1418,6 +1434,16 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Speaks an experimental arrival/destruction language (issue #230). The shipped pair '
       + 'both expand a ring and read alike at speed; \'opposed\' converges the spawn '
       + 'entrance onto the tank and throws a fat, hard-attacked band outward on death.',
+  },
+  wreck: {
+    kind: 'valued',
+    values: [...WRECK_EFFECTS],
+    description:
+      'Leaves a temporary hull silhouette where a tank died (issue #232), in the owner\'s '
+      + 'colour, darkened and unlit so it reads as decoration rather than a tank. Three '
+      + 'removal arms: \'sink\' settles it into the felt, \'fade\' only dims it, \'tilt\' '
+      + 'rolls it onto its side. It never blocks anything. Temporary: deleted once an arm '
+      + 'is chosen, or once the idea is.',
   },
   stockCue: {
     kind: 'valued',

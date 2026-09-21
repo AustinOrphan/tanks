@@ -1,0 +1,14 @@
+{
+  "id": "wreck-paints-every-death-one-colour",
+  "file": "src/render/wreck.ts",
+  "find": "      const w = acquire(darken(bodyColorOf(tank), DARKEN));",
+  "replace": "      const w = acquire(darken(0x3fd0ff, DARKEN));",
+  "expect": "killed",
+  "tests": [
+    "src/render/wreck.test.ts"
+  ],
+  "why": "This is the defect the first draft shipped, restored exactly: it called `resolveOwnerColor`, which is the IDENTITY RING's colour, and an enemy's undefined `controlledBy` resolves to slot 0 -- so every destroyed enemy left a wreck in player one's 0x3fd0ff. Issue #232 asks the wreck to carry the dead tank's identity, and a single colour for every death discards it while still producing a wreck of the right shape, in the right place, on the right clock. It was invisible to a green test suite and was only found by photographing the built page.",
+  "killedBy": [
+    "the wreck carries the dead tank's identity wears the HULL's colour darkened, not the owner ring's"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "full-wreck-pool-drops-the-newest-death-instead-of-the-oldest",
+  "file": "src/render/wreck.ts",
+  "find": "      if (active.length >= MAX_WRECKS) {\n        // Oldest first: `active` is append-ordered, so index 0 is the longest-lived.\n        const oldest = active[0];\n        recycle(oldest, 0);\n        w = pool.pop();\n      }",
+  "replace": "      if (active.length >= MAX_WRECKS) {\n        const newest = active[active.length - 1];\n        recycle(newest, active.length - 1);\n        w = pool.pop();\n      }",
+  "expect": "killed",
+  "tests": [
+    "src/render/wreck.test.ts"
+  ],
+  "why": "The cap has to be bounded AND deterministic about which death it gives up. Dropping the newest makes a coop wipe erase the death the player just caused while older wrecks linger, which is the opposite of the cue, and it still respects the cap and still spawns one wreck per event -- so a test that only counts wrecks passes.",
+  "killedBy": [
+    "the pool is bounded and replaces deterministically never exceeds the cap, and drops the OLDEST rather than the newest death"
+  ]
+}

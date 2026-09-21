@@ -13,6 +13,8 @@ import type { ArrivalLanguage } from '../presentation/arrival-language';
 import type { EnemyRoleCue } from '../presentation/enemy-role';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
+import { createWreckSystem, type WreckSystem } from './wreck';
+import type { WreckEffect } from '../presentation/wreck';
 import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
 import { createShellTrailSystem, type ShellTrailSystem } from './shell-trail';
 import type { ShellTrailStyle } from '../presentation/shell-trail';
@@ -137,6 +139,13 @@ export interface RendererOptions {
    */
   readonly enemyDeathPulse?: boolean;
   /**
+   * `?dev=1&wreck=sink|fade|tilt` (issue #232): leave a temporary hull silhouette where a
+   * tank died. Absent means no wreck at all, which is the shipped behaviour -- the arms
+   * exist to be judged in play, because "fade, crumble, sink, or otherwise" is a feel
+   * choice the issue deliberately leaves open.
+   */
+  readonly wreck?: WreckEffect | null;
+  /**
    * `?dev=1&aiContact=1` (devflags.ts): draws which opponent each AI is committed to and
    * whether it can see it, is remembering it, or has nothing. See ai-contact.ts.
    */
@@ -186,6 +195,9 @@ export function createRenderer(
   }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene, options.arrival === 'opposed');
+  // Constructed only when an arm is asked for: an absent flag must leave the scene graph
+  // byte-identical to the shipped one, not merely quiet.
+  const wreck: WreckSystem | null = options.wreck ? createWreckSystem(ctx.scene, options.wreck) : null;
   const treadTrails: TreadTrailSystem = createTreadTrailSystem(ctx.scene);
   // Built only when the flag names it, like the blocked-fire arms below: without it there is
   // no mesh in the scene and no per-frame sync, so the shipped render is untouched. It is not
@@ -247,6 +259,7 @@ export function createRenderer(
     particles.spawn(events);
     particles.update(dt);
     deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
+    wreck?.spawn(events, curr, entities.bodyColorOf);
     blockedFireRing?.spawn(events, curr, options.blockedFire);
     blockedFireRing?.update(dt);
     blockedFireMuzzle?.spawn(events, curr, options.blockedFire);
@@ -269,6 +282,7 @@ export function createRenderer(
     blockedFirePips?.spawn(events, curr, options.blockedFire);
     blockedFirePips?.update(dt, curr);
     deathPulse.update(dt);
+    wreck?.update(dt);
     treadTrails.sync(prev, curr);
     treadTrails.update(dt);
     ctx.renderer.render(ctx.scene, ctx.camera);
@@ -329,6 +343,8 @@ export function createRenderer(
   function worldReplaced(): void {
     entities.worldReplaced();
     treadTrails.worldReplaced();
+    // Wrecks are board-scoped too: they mark a position on the arena that just went away.
+    wreck?.clear();
   }
 
   function refit(w: number, h: number, boundaryRing: number): void {
@@ -349,6 +365,7 @@ export function createRenderer(
     entities.dispose();
     particles.dispose();
     deathPulse.dispose();
+    wreck?.dispose();
     treadTrails.dispose();
     ctx.dispose();
   }
@@ -366,6 +383,7 @@ export function createRenderer(
     // the death ring; each effect added under issue #289 joins this line.
     setReducedMotion: (on: boolean) => {
       deathPulse.setReducedMotion(on);
+      wreck?.setReducedMotion(on);
       blockedFireRing?.setReducedMotion(on);
       blockedFireMuzzle?.setReducedMotion(on);
       barrelRecoil.setReducedMotion(on);

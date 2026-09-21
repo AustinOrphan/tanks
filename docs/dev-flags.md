@@ -55,7 +55,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (29)
+## Valued flags (30)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -88,6 +88,7 @@ Notes:
 | `stockCue` | `stockCue` | `pips`, `marks`, `strike`, `badge` | `null` | Marks a lost versus stock on the stock strip (issue #230), one of four shortlisted arms: 'pips' turns the count into pips that empty, 'marks' draws those pips as the slot's own identity outline so one channel carries both who and how many (FFA only; teams falls back to 'pips'), 'strike' lifts the old number away struck through, and 'badge' drops a "−1" under the entry. The shipped strip only changes the digit. Temporary: deleted once an arm is chosen. |
 | `topbar` | `topbar` | `full`, `spare`, `mode-chips`, `spare-chips`, `enemies-only`, `denominator-only` | `null` | Renders the gameplay topbar as one of issue #552's alternatives to the shipped bar; `spare-chips` ships, and the others put back the enemy count, the level denominator, or both, and mark Practice alone instead of naming every session kind. `full` is all three together: the bar as it read before the ruling. |
 | `versusActions` | `versusActions` | `header` | `null` | Moves Back out of the pinned action bar and into a compact sticky header beside the pane title (issue #668). The shipped bar carries Start and Back together at the foot, which costs less of a small screen; 'header' keeps the title visible while scrolling, at 49px of permanent chrome. |
+| `wreck` | `wreck` | `sink`, `fade`, `tilt` | `null` | Leaves a temporary hull silhouette where a tank died (issue #232), in the owner's colour, darkened and unlit so it reads as decoration rather than a tank. Three removal arms: 'sink' settles it into the felt, 'fade' only dims it, 'tilt' rolls it onto its side. It never blocks anything. Temporary: deleted once an arm is chosen, or once the idea is. |
 
 Notes:
 

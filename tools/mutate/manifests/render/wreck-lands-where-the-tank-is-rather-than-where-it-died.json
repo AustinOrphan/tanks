@@ -1,0 +1,15 @@
+{
+  "id": "wreck-lands-where-the-tank-is-rather-than-where-it-died",
+  "file": "src/render/wreck.ts",
+  "find": "      w.mesh.position.x = event.pos.x;\n      w.mesh.position.z = event.pos.y;",
+  "replace": "      w.mesh.position.x = tank.pos.x;\n      w.mesh.position.z = tank.pos.y;",
+  "expect": "killed",
+  "tests": [
+    "src/render/wreck.test.ts"
+  ],
+  "why": "Issue #232 wants the hull left WHERE IT DIED. The destroyed tank object stays in world.tanks and its pos is overwritten at respawn, so reading the tank rather than the event's own recorded position leaves a wreck that is correct on the frame of death and then teleports to its owner's next spawn point. Nothing else changes: the wreck still appears once per death, in the right colour, and leaves on the same clock, so only the position distinguishes the two builds.",
+  "killedBy": [
+    "one wreck per destruction, at the death position and heading spawns at the EVENT position, not the tank's current one",
+    "the pool is bounded and replaces deterministically never exceeds the cap, and drops the OLDEST rather than the newest death"
+  ]
+}

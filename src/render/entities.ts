@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
-import type { Wall, TankKind } from '../sim/types';
+import type { Wall, TankKind, Tank } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
@@ -133,6 +133,21 @@ export interface EntityViews {
    * per frame, as barrel-recoil.ts does.
    */
   barrelOf(tankId: number): THREE.Object3D | null;
+  /**
+   * The colour a tank's HULL is actually painted: its slot's chosen hex for a player-kind
+   * tank, its kind's roster colour otherwise.
+   *
+   * A seam rather than something a caller recomputes, for the reason `identityApplies`
+   * records in identity.ts: the last call site that rebuilt colour logic instead of calling
+   * into it indexed the palettes itself and fell back to the wrong colour. The wreck
+   * decoration (`wreck.ts`, issue #232) is a caller -- and it is a caller precisely because
+   * it wants what the hull wore, not the OWNER ring's identity colour, which for an enemy
+   * resolves to player one's swatch.
+   *
+   * Safe to call for a tank whose view has already been disposed, which the wreck does: the
+   * per-slot styles this reads outlive any view built from them.
+   */
+  bodyColorOf(tank: Tank): number;
   dispose(): void;
 }
 
@@ -535,6 +550,11 @@ export function createEntityViews(
   function styleFor(slot: number): PlayerStyle {
     return playerStyles.get(slot) ?? (slot === 0 ? DEFAULT_SLOT_0_STYLE : DEFAULT_OTHER_SLOT_STYLE);
   }
+  /** See `bodyColorOf` on the interface. The view builder below calls this too. */
+  function bodyColorFor(kind: TankKind, controlledBy: number | undefined): number {
+    const style = kind === 'player' ? styleFor(controlledBy ?? 0) : null;
+    return kind === 'player' && style?.hex ? cssHex(style.hex) : tankColor(kind);
+  }
   /**
    * One two-tone texture PER ENEMY KIND, shared by every tank of that kind -- issue
    * #137. A kind's colour never changes at runtime (it is roster data, not a paint
@@ -819,7 +839,7 @@ export function createEntityViews(
     // Resolved per-tank from its OWN slot -- see styleFor -- not off a single global,
     // so two player-kind tanks in the same world can carry different paint.
     const style = kind === 'player' ? styleFor(controlledBy ?? 0) : null;
-    const color = kind === 'player' && style?.hex ? cssHex(style.hex) : tankColor(kind);
+    const color = bodyColorFor(kind, controlledBy);
 
     // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
     // A patterned skin rides as a map on the hull and turret ONLY -- tracks keep
@@ -1927,6 +1947,7 @@ export function createEntityViews(
 
   return {
     sync,
+    bodyColorOf: (tank: Tank): number => bodyColorFor(tank.kind, tank.controlledBy),
     setReducedMotion(on: boolean): void {
       reducedMotion = on;
     },
