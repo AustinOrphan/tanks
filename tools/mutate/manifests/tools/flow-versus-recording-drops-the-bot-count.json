@@ -1,0 +1,14 @@
+{
+  "id": "flow-versus-recording-drops-the-bot-count",
+  "file": "tools/screens/flow.mjs",
+  "find": "  if (bots !== undefined) params.push(['bots', String(bots)]);",
+  "replace": "  if (bots !== undefined && bots < 0) params.push(['bots', String(bots)]);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "a versus recording says how many slots the computer drives (issue #359) puts `bots` after `players`, because it is bounded by it"
+  ],
+  "why": "Validates the bot count and then never asks the page for it. A versus flow whose `bots` is dropped fills every slot with a human nobody is driving, so the recording is tanks sitting still -- and it is worse than no evidence, because the report still names the session that was requested. The failure is silent by construction: the recorder checks that the round is playing and that the stock strip is up, both of which are true of a board full of idle tanks."
+}

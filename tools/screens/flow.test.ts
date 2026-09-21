@@ -104,6 +104,44 @@ describe('the flow catalogue (issue #815)', () => {
   });
 });
 
+describe('a versus recording says how many slots the computer drives (issue #359)', () => {
+  const versus = (over: Record<string, unknown> = {}) =>
+    inputs({ mode: 'ffa', players: 4, ...over });
+
+  it('puts `bots` after `players`, because it is bounded by it', () => {
+    expect(buildFlowUrl(versus({ bots: 3 })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=3&autoplay=1');
+  });
+
+  it('keeps absent and zero distinct, because an all-human board is a real request', () => {
+    // Absent leaves the session's own default alone; `bots=0` asks for no computer players
+    // at all. Collapsing them would make it impossible to record the second on purpose.
+    expect(buildFlowUrl(versus())).not.toContain('bots');
+    expect(buildFlowUrl(versus({ bots: 0 }))).toContain('bots=0');
+  });
+
+  it('refuses more bots than there are slots, rather than letting the page clamp', () => {
+    // `devflags.ts` clamps `bots` against the resolved player count instead of rejecting it.
+    // That is right for a URL a person typed and wrong for a recipe: the clamp would record a
+    // different session than the one named, and the report would describe the request.
+    expect(() => validateFlowInputs(versus({ bots: 5 }))).toThrow(/bots must be a whole number in \[0, 4\]/);
+    expect(() => validateFlowInputs(versus({ bots: -1 }))).toThrow(/bots must be/);
+    expect(() => validateFlowInputs(versus({ bots: 1.5 }))).toThrow(/bots must be/);
+  });
+
+  it('refuses `bots` without a versus session to put them in', () => {
+    expect(() => validateFlowInputs(inputs({ bots: 2 }))).toThrow(/bots needs mode and players/);
+  });
+
+  it('offers the contact overlay, which is what makes the selection visible at all', () => {
+    // A versus recording without it is tanks moving around: the committed opponent and the
+    // reason for each change are drawn only by `aiContact`.
+    expect(FLOW_FLAG_IDS).toContain('aiContact');
+    expect(buildFlowUrl(versus({ bots: 3, flags: { aiContact: true } })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=3&autoplay=1&aiContact=1');
+  });
+});
+
 describe('flow inputs and the URL they build (issue #815)', () => {
   it('builds the query in a fixed order from validated fields, flags last and only when on', () => {
     expect(buildFlowUrl(inputs())).toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1');

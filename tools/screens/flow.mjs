@@ -62,6 +62,16 @@ export const FLOW_FLAGS = Object.freeze({
    * which is exactly what #773's evidence list asks for. Hardcoded and pinned like the above.
    */
   identityMarker: Object.freeze(['arcs', 'shape', 'roof']),
+  /**
+   * Issue #359's contact overlay. A switch: present or absent.
+   *
+   * The only way a recording can SHOW target selection rather than assert it. `aiContact`
+   * draws which opponent each AI is committed to, and `ai-contact.ts` labels the change with
+   * a glyph per `RetargetReason` while it is fresh -- so a viewer sees not just that a bot
+   * switched but which of the three documented reasons it switched for. Without it a versus
+   * recording is tanks moving around, and the sticky-selection policy is invisible in it.
+   */
+  aiContact: true,
 });
 export const FLOW_FLAG_IDS = Object.freeze(Object.keys(FLOW_FLAGS));
 
@@ -268,7 +278,7 @@ function isPlainObject(value) {
  * Validate the structured inputs a flow is driven by. Shared by the recipe schema and by the
  * recorder's own argument parsing, so the two cannot disagree about what is allowed.
  */
-export function validateFlowInputs({ level, seed, driver, flags, mode, players }) {
+export function validateFlowInputs({ level, seed, driver, flags, mode, players, bots }) {
   if (!Number.isInteger(level) || level < 1 || level > CAMPAIGN_LEVEL_COUNT) {
     throw new Error(`level must be a whole number in [1, ${CAMPAIGN_LEVEL_COUNT}]`);
   }
@@ -289,6 +299,19 @@ export function validateFlowInputs({ level, seed, driver, flags, mode, players }
   if (players !== undefined && (!Number.isInteger(players) || players < 2 || players > 4)) {
     throw new Error('players must be a whole number in [2, 4]');
   }
+  // How many of those slots the computer drives (issue #359). Without it a versus flow fills
+  // every slot with a human nobody is driving, and the recording is tanks sitting still --
+  // which is worse than no evidence, because it looks like evidence.
+  //
+  // Bounded by `players` HERE even though the page clamps rather than rejects (`devflags.ts`
+  // on `bots`): a recipe asking for more bots than slots is a mistake in the request, and the
+  // clamp would quietly record a different session than the one named.
+  if (bots !== undefined) {
+    if (players === undefined) throw new Error('bots needs mode and players');
+    if (!Number.isInteger(bots) || bots < 0 || bots > players) {
+      throw new Error(`bots must be a whole number in [0, ${players}]`);
+    }
+  }
   // Both or neither: `mode` alone plays the board with one tank and no stock strip at all,
   // and `players` alone is campaign co-op, which is a different capture wearing this one's
   // name. A half-specified versus round is the failure that would look like a success.
@@ -308,7 +331,7 @@ export function validateFlowInputs({ level, seed, driver, flags, mode, players }
       throw new Error(`flags.${id} must be one of ${allowed.join(', ')}`);
     }
   }
-  return { level, seed, driver, flags: { ...flags }, mode, players };
+  return { level, seed, driver, flags: { ...flags }, mode, players, bots };
 }
 
 /**
@@ -317,10 +340,12 @@ export function validateFlowInputs({ level, seed, driver, flags, mode, players }
  * the replay surface the recorder reads the tick count and the world identity from.
  */
 export function buildFlowUrl(inputs) {
-  const { level, seed, driver, flags, mode, players } = validateFlowInputs(inputs);
+  const { level, seed, driver, flags, mode, players, bots } = validateFlowInputs(inputs);
   const params = [['dev', '1'], ['replay', '1'], ['level', String(level)], ['seed', String(seed)]];
   // Session shape before driver and flags, the order the campaign parameters already follow.
   if (mode !== undefined) params.push(['mode', mode], ['players', String(players)]);
+  // After `players`, because it is bounded by it and reads as its qualifier.
+  if (bots !== undefined) params.push(['bots', String(bots)]);
   if (driver === 'autoplay') params.push(['autoplay', '1']);
   for (const id of FLOW_FLAG_IDS) {
     const value = flags[id];
@@ -331,7 +356,7 @@ export function buildFlowUrl(inputs) {
 }
 
 /** The query parameters a flow always carries for itself, as opposed to the experiment's flags. */
-export const FLOW_DRIVER_PARAMS = Object.freeze(['dev', 'replay', 'level', 'seed', 'mode', 'players', 'autoplay']);
+export const FLOW_DRIVER_PARAMS = Object.freeze(['dev', 'replay', 'level', 'seed', 'mode', 'players', 'bots', 'autoplay']);
 
 /**
  * Which compositor frame each output frame shows, at a constant `fps` from `start`.
