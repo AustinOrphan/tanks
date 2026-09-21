@@ -51,6 +51,7 @@ import {
   reassign,
   botAssignmentAllowed,
   createHeldInputSource,
+  sameSlotSource,
   type Assignment,
   type SlotSource,
 } from '../input/assignment';
@@ -1637,12 +1638,6 @@ export function startGameWith(
     const s = new Set<number>();
     for (let i = 0; i < a.length; i++) if (a[i].kind === 'bot') s.add(i);
     return s;
-  }
-
-  /** Structural equality for the small `SlotSource` union -- `reassign`'s own diff. */
-  function sameSlotSource(a: SlotSource, b: SlotSource): boolean {
-    if (a.kind !== b.kind) return false;
-    return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
   }
 
   /**

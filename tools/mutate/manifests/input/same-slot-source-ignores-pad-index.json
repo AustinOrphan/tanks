@@ -1,0 +1,15 @@
+{
+  "id": "same-slot-source-ignores-pad-index",
+  "file": "src/input/assignment.ts",
+  "find": "  return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;",
+  "replace": "  return true;",
+  "expect": "killed",
+  "tests": [
+    "src/input/assignment.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "`gamepad` is the only member of the `SlotSource` union carrying an identity field, so this line is the whole predicate: without it two different physical controllers compare as the same source. In the game that means `reassign`'s own diff sees a slot rebound from pad 0 to pad 1 as unchanged and skips it, so the player's reassignment silently does nothing. The predicate existed TWICE before this entry -- `sameSlotSource` in game/loop.ts and `sameSource` in game/hud.ts, byte-identical bodies, the only two occurrences in src/ -- and they agreed, which is exactly why nothing failed. Now there is one implementation and this pins the part of it that does the work.",
+  "killedBy": [
+    "sameSlotSource: one implementation for a union with one identity field separates two gamepads by padIndex, which is the whole point"
+  ]
+}

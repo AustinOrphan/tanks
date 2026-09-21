@@ -264,6 +264,10 @@ export type GameplayStatus = {
 
 import type { StatCounts } from './stats';
 import type { TypedOutcome, TypedOutcomeKind } from './app-state';
+import { sameSlotSource } from '../input/assignment';
+import {
+  NOT_SUPPORTED, candidateLabel, slotSourceLabel, unsupportedPad, unsupportedSentence,
+} from './controller-labels';
 import type { Assignment, SlotSource } from '../input/assignment';
 import { unreadablePadIndices, type DetectedPad } from '../input/gamepad';
 import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
@@ -4328,42 +4332,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * a pad's id is unknowable once unplugged, so this is the honest fallback for both
    * cases, not two different ones).
    */
-  function slotSourceLabel(source: SlotSource): string {
-    switch (source.kind) {
-      case 'keyboard':
-        return 'Keyboard / Mouse / Touch';
-      case 'bot':
-        return 'Bot';
-      case 'none':
-        return 'Unassigned';
-      case 'gamepad': {
-        const live = currentDetectedPads.find((p) => p.padIndex === source.padIndex);
-        const name = live && live.id.length > 0 ? live.id : `Controller ${source.padIndex}`;
-        return `${name} (index ${source.padIndex})`;
-      }
-    }
-  }
 
-  /** The short label a CANDIDATE button carries -- `slotSourceLabel` minus the "Keyboard
-   *  / Mouse / Touch" and "Unassigned" prose, which read fine as a current-state summary
-   *  but not as a button someone is about to click. */
-  function candidateLabel(source: SlotSource): string {
-    switch (source.kind) {
-      case 'keyboard':
-        return 'Keyboard';
-      case 'bot':
-        return 'Bot';
-      case 'none':
-        return 'None';
-      case 'gamepad':
-        return slotSourceLabel(source);
-    }
-  }
-
-  function sameSource(a: SlotSource, b: SlotSource): boolean {
-    if (a.kind !== b.kind) return false;
-    return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
-  }
 
   /**
    * REPLACE, never append -- the same "REPLACE, never append" convention `setLevelSelect`
@@ -4411,28 +4380,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     };
   }
 
-  /** The suffix both a refused candidate and a slot's current source carry (issue #597). */
-  const NOT_SUPPORTED = ' — not supported';
-
-  /** Whether the live list holds `padIndex` as a pad Tanks will not read. */
-  function unsupportedPad(padIndex: number): boolean {
-    return currentDetectedPads.some((p) => p.padIndex === padIndex && p.unsupported !== undefined);
-  }
-
   /**
    * One pad's reason, in the player's words (issue #597). `gamepad-diagnostics.ts`'s
    * `describeSupport` is the DEVELOPER line for the same verdict and says so; this is the
    * sentence the issue assigns to the assignment panel, keyed off the structured code so the
    * input layer stays free of copy.
    */
-  function unsupportedSentence(pad: DetectedPad): string {
-    const name = slotSourceLabel({ kind: 'gamepad', padIndex: pad.padIndex });
-    const why =
-      pad.unsupported?.code === 'insufficient-controls'
-        ? 'it has too few buttons or sticks for Tanks.'
-        : "Tanks can't read its buttons in this browser.";
-    return `${name} isn't supported: ${why}`;
-  }
 
   function renderControllerRowsInto(container: HTMLElement, assignment: Assignment): void {
     const restoreFocus = captureFocus(container);
@@ -4449,14 +4402,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
       const current = document.createElement('span');
       current.className = 'hud-controller-row-current';
-      current.textContent = slotSourceLabel(source);
+      current.textContent = slotSourceLabel(source, currentDetectedPads);
       const disconnected =
         source.kind === 'gamepad' && !currentDetectedPads.some((p) => p.padIndex === source.padIndex);
       current.classList.toggle('hud-controller-row-current--disconnected', disconnected);
       if (disconnected) current.textContent += ' — disconnected';
       // An assigned pad Tanks cannot read (issue #597) is present, so it is not
       // "disconnected", and without this it reads exactly like a pad that works.
-      if (source.kind === 'gamepad' && unsupportedPad(source.padIndex)) current.textContent += NOT_SUPPORTED;
+      if (source.kind === 'gamepad' && unsupportedPad(source.padIndex, currentDetectedPads)) {
+        current.textContent += NOT_SUPPORTED;
+      }
 
       row.append(label, current);
 
@@ -4474,14 +4429,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ui-btn ui-selectable hud-controller-source-btn';
-        btn.textContent = candidateLabel(candidate);
+        btn.textContent = candidateLabel(candidate, currentDetectedPads);
         btn.dataset.candidate = candidate.kind === 'gamepad' ? `gamepad-${candidate.padIndex}` : candidate.kind;
-        setSelected(btn, sameSource(candidate, source));
+        setSelected(btn, sameSlotSource(candidate, source));
         // A pad Tanks cannot read is SHOWN, refused, and pointed at its reason (issue #597):
         // listing it is what separates "your browser reports it but the game cannot use it"
         // from "nothing was detected". It gets no reassign listener, so a synthetic click
         // cannot assign a pad the reader would sample as neutral every tick.
-        if (candidate.kind === 'gamepad' && unsupportedPad(candidate.padIndex)) {
+        if (candidate.kind === 'gamepad' && unsupportedPad(candidate.padIndex, currentDetectedPads)) {
           btn.textContent += NOT_SUPPORTED;
           btn.disabled = true;
           describeDisabledReason(btn, controllersUnsupportedEl.id);
@@ -4497,7 +4452,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       container.appendChild(row);
     }
     const unreadable = currentDetectedPads.filter((p) => p.unsupported !== undefined);
-    controllersUnsupportedEl.textContent = unreadable.map(unsupportedSentence).join(' ');
+    // NOT point-free. `unsupportedSentence` takes the live pad list as its second
+    // argument since #556 moved it out of this closure, and `Array.map` passes the INDEX
+    // there -- which typechecks only because the compiler refused it here. A signature
+    // whose second parameter happened to be optional would have compiled and silently
+    // named every pad from an index-shaped list.
+    controllersUnsupportedEl.textContent = unreadable
+      .map((pad) => unsupportedSentence(pad, currentDetectedPads))
+      .join(' ');
     controllersUnsupportedEl.classList.toggle('hud-controllers-unsupported--hidden', unreadable.length === 0);
     restoreFocus();
   }
@@ -7232,7 +7194,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // gives it.
       const device = document.createElement('span');
       device.className = 'hud-versus-slot-device';
-      device.textContent = slotSourceLabel(sources[slot]);
+      device.textContent = slotSourceLabel(sources[slot], currentDetectedPads);
       row.appendChild(device);
 
       // ONE reason is shown, on the FIRST offending card, because `versusSetupProblem`
