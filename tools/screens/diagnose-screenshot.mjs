@@ -1,72 +1,56 @@
 /**
  * Issue #888: why `Page.captureScreenshot` fails on the two WebGL-refused states.
  *
- * TEMPORARY. Exists to be run once on a Linux runner and deleted; it is a diagnostic, not a
- * tool. One run answers the question AND tests every candidate fix, because the failure does
- * not reproduce on macOS and a CI round trip per idea is the whole cost of this issue.
+ * TEMPORARY. Deleted before that issue closes.
+ *
+ * Run 1 refuted the obvious hypothesis: driving those two states through a hand-written
+ * capture, on Linux, with six different browser configurations, every screenshot succeeded.
+ * So the fault is not the state in isolation -- it is something the REAL run does. The
+ * difference under test here is SEQUENCE: the gate captures 45 states through one browser,
+ * and these two sit at 43 and 44.
  */
-import { serve, launchBrowser } from './capture.mjs';
-import { webglOverrideSource } from './steps.mjs';
-import { audioContextOverrideSource } from '../shared/audio-context.mjs';
+import { serve, launchBrowser, captureState } from './capture.mjs';
+import { subsetStates } from './baseline.mjs';
+import { SCREEN_STATES } from './states.mjs';
+import { recipeFor } from './check.mjs';
 
-const BASE_ARGS = ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox', '--font-render-hinting=none'];
+const TARGETS = ['screen.startup.unsupported-render', 'screen.startup.probe-blocked'];
+const VIEWPORT = { width: 1280, height: 800, dpr: 2 };
 
-/** Each arm is a candidate fix; `none` is the shipped configuration. */
-const ARMS = [
-  { id: 'shipped', args: [], perContext: false, retry: false, beyondViewport: false },
-  { id: 'retry-once', args: [], perContext: false, retry: true, beyondViewport: false },
-  { id: 'fresh-context', args: [], perContext: true, retry: false, beyondViewport: false },
-  { id: 'beyond-viewport', args: [], perContext: false, retry: false, beyondViewport: true },
-  { id: 'disable-gpu', args: ['--disable-gpu'], perContext: false, retry: false, beyondViewport: false },
-  { id: 'angle-swiftshader', args: ['--use-angle=swiftshader'], perContext: false, retry: false, beyondViewport: false },
-];
-
-/** The four states that bracket the failure: two that work, two that do not. */
-const MODES = ['ok', 'match-build-fails', 'unsupported', 'probe-blocked'];
-
-async function shoot(browser, base, mode, arm) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2, colorScheme: 'dark', reducedMotion: 'reduce' });
-  const page = await context.newPage();
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e).split('\n')[0]));
-  await page.addInitScript(audioContextOverrideSource());
-  if (mode !== 'ok') await page.addInitScript(webglOverrideSource(mode));
-  await page.goto(base, { waitUntil: 'load' });
-  await page.waitForSelector(mode === 'ok' ? '.hud-splash' : '[role="alert"]', { timeout: 20000 }).catch(() => {});
-  await page.waitForTimeout(300);
-  const canvases = await page.evaluate(() => document.querySelectorAll('canvas').length).catch(() => -1);
-  const opts = arm.beyondViewport ? { captureBeyondViewport: true } : {};
-  let result = 'ok'; let bytes = 0;
-  try {
-    const png = await page.screenshot(opts);
-    bytes = png.length;
-  } catch (e) {
-    result = String(e).split('\n')[0].slice(0, 90);
-    if (arm.retry) {
-      await page.waitForTimeout(250);
-      try { const png = await page.screenshot(opts); bytes = png.length; result = 'ok-on-retry'; }
-      catch (e2) { result = `retry also failed: ${String(e2).split('\n')[0].slice(0, 60)}`; }
-    }
-  }
-  await context.close();
-  return { result, bytes, canvases, errors: errors.length };
+async function capture(browser, base, state) {
+  const v = recipeFor(state.id)?.viewport ?? { width: VIEWPORT.width, height: VIEWPORT.height, devicePixelRatio: VIEWPORT.dpr };
+  const { report, png } = await captureState(browser, base, state, {
+    width: v.width, height: v.height, dpr: v.devicePixelRatio, timeout: 20000,
+  });
+  return { shot: png !== null, bytes: png?.length ?? 0, err: report.producer.screenshotError };
 }
 
+const states = subsetStates(SCREEN_STATES);
 const server = await serve('dist');
 const base = `http://127.0.0.1:${server.address().port}/`;
-console.log('| arm | mode | screenshot | bytes | canvases | pageErrors |');
-console.log('| --- | --- | --- | --- | --- | --- |');
-for (const arm of ARMS) {
-  let browser;
-  try {
-    const { chromium } = await import('playwright');
-    browser = arm.args.length === 0 ? await launchBrowser() : await chromium.launch({ args: [...BASE_ARGS, ...arm.args] });
-  } catch (e) { console.log(`| ${arm.id} | - | LAUNCH FAILED ${String(e).slice(0, 60)} | | | |`); continue; }
-  for (const mode of MODES) {
-    let row;
-    try { row = await shoot(browser, base, mode, arm); }
-    catch (e) { row = { result: `threw: ${String(e).split('\n')[0].slice(0, 70)}`, bytes: 0, canvases: -1, errors: -1 }; }
-    console.log(`| ${arm.id} | ${mode} | ${row.result} | ${row.bytes} | ${row.canvases} | ${row.errors} |`);
+
+console.log(`\n=== ISOLATED: the two targets alone, fresh browser each ===`);
+for (const id of TARGETS) {
+  const state = states.find((s) => s.id === id);
+  const browser = await launchBrowser();
+  const r = await capture(browser, base, state).catch((e) => ({ shot: false, bytes: 0, err: `threw ${String(e).slice(0, 60)}` }));
+  await browser.close();
+  console.log(`ISOLATED ${id}: screenshot=${r.shot} bytes=${r.bytes}${r.err ? ` err=${r.err}` : ''}`);
+}
+
+console.log(`\n=== SEQUENCE: all ${states.length} states through ONE browser, as the gate does ===`);
+{
+  const browser = await launchBrowser();
+  let i = 0;
+  for (const state of states) {
+    i += 1;
+    let r;
+    try { r = await capture(browser, base, state); }
+    catch (e) { r = { shot: false, bytes: 0, err: `threw ${String(e).split('\n')[0].slice(0, 70)}` }; }
+    const flag = r.shot ? '   ' : '>>>';
+    if (!r.shot || TARGETS.includes(state.id)) {
+      console.log(`${flag} [${String(i).padStart(2)}/${states.length}] ${state.id}: screenshot=${r.shot} bytes=${r.bytes}${r.err ? ` err=${r.err}` : ''}`);
+    }
   }
   await browser.close();
 }
