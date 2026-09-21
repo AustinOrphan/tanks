@@ -342,6 +342,8 @@ export function createRenderer(
   function worldReplaced(): void {
     entities.worldReplaced();
     treadTrails.worldReplaced();
+    // Wrecks are board-scoped too: they mark a position on the arena that just went away.
+    wreck?.clear();
   }
 
   function refit(w: number, h: number, boundaryRing: number): void {

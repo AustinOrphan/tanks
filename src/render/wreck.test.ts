@@ -184,6 +184,26 @@ describe('housekeeping', () => {
     expect(wrecks(scene)).toHaveLength(0);
   });
 
+  it('clear retires every wreck, so a new board does not inherit the old one\'s dead', () => {
+    // Issue #232's "round reset, arena change". Six seconds outlives a cleared level, and the
+    // coordinates a wreck marks mean nothing on the next arena -- which is the defect issue
+    // #531's announcement exists to prevent, not a tidiness preference.
+    const scene = new THREE.Scene();
+    const sys = createWreckSystem(scene);
+    const w = world([tank(1, 0, 0), tank(2, 0, 0)]);
+    sys.spawn([destroyed(1, 3, 4), destroyed(2, 5, 6)], w);
+    expect(visible(scene)).toHaveLength(2);
+
+    sys.clear();
+    expect(visible(scene), 'a wreck survived the board it died on').toHaveLength(0);
+
+    // And the meshes are recycled rather than leaked: the next death reuses one of them.
+    const before = wrecks(scene).length;
+    sys.spawn([destroyed(1, 1, 1)], w);
+    expect(visible(scene)).toHaveLength(1);
+    expect(wrecks(scene), 'clear leaked its meshes instead of pooling them').toHaveLength(before);
+  });
+
   it('isWreckEffect accepts exactly the shipped arms', () => {
     for (const e of WRECK_EFFECTS) expect(isWreckEffect(e), e).toBe(true);
     for (const bad of ['crumble', 'CRUMBLE', '', 'sink ', null, 7, undefined]) {

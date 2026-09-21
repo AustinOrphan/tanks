@@ -72,6 +72,17 @@ export const FLOW_FLAGS = Object.freeze({
    * recording is tanks moving around, and the sticky-selection policy is invisible in it.
    */
   aiContact: true,
+  /**
+   * Issue #232's destroyed-hull arms. A CHOICE, hardcoded and pinned like the two above:
+   * `WRECK_EFFECTS` (src/render/wreck.ts) owns the vocabulary and `flow.test.ts` pins the two
+   * together in both directions.
+   *
+   * A recording is the only thing that can settle this one. The arms differ in what the hull
+   * DOES over six seconds -- settling, dimming, rolling -- so a still frame of any of them
+   * looks much like a still frame of the others, and the choice the issue leaves open ("fade,
+   * crumble, sink, or otherwise") is a judgement about movement.
+   */
+  wreck: Object.freeze(['sink', 'fade', 'tilt']),
 });
 export const FLOW_FLAG_IDS = Object.freeze(Object.keys(FLOW_FLAGS));
 

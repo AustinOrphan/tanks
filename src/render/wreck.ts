@@ -61,6 +61,16 @@ export interface WreckSystem {
    * and still leaves on the same clock.
    */
   setReducedMotion(on: boolean): void;
+  /**
+   * Retires every wreck at once, because the board they died on no longer exists.
+   *
+   * Issue #232 asks for cleanup "on round reset, arena change". The renderer is told about
+   * both by the game layer's `worldReplaced()` announcement (issue #531), and a wreck that
+   * survives it is drawn at the OLD board's coordinates on the new one -- the same defect
+   * that announcement was added for, where an inferred discontinuity turned two tread decals
+   * into 158. Six seconds of lifetime is long enough for a cleared level to straddle it.
+   */
+  clear(): void;
   dispose(): void;
 }
 
@@ -181,6 +191,10 @@ export function createWreckSystem(scene: THREE.Scene, effect: WreckEffect = 'sin
     }
   }
 
+  function clear(): void {
+    for (let i = active.length - 1; i >= 0; i--) recycle(active[i], i);
+  }
+
   function dispose(): void {
     for (const w of [...active, ...pool]) {
       w.mesh.material.dispose();
@@ -195,6 +209,7 @@ export function createWreckSystem(scene: THREE.Scene, effect: WreckEffect = 'sin
     spawn,
     update,
     setReducedMotion: (on: boolean) => { reducedMotion = on; },
+    clear,
     dispose,
   };
 }
