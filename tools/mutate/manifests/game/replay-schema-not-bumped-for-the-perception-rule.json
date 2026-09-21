@@ -1,14 +1,14 @@
 {
   "id": "replay-schema-not-bumped-for-the-perception-rule",
   "file": "src/game/replay.ts",
-  "find": "export const REPLAY_SCHEMA = 4;",
-  "replace": "export const REPLAY_SCHEMA = 3;",
-  "why": "The other half of issue #492: adding a required ReplayMeta field WITHOUT bumping the schema, so a schema-3 trace recorded before the field existed is still accepted and replayed with the rule missing -- the exact silent divergence the field was added to stop, and the case the replay layer's no-migration policy answers by rejecting rather than defaulting. Invisible to every other assertion in the file, because `checkTrace` compares a trace's stamp against this same constant and the recorder writes it: the round-trip cases and the existing `REPLAY_SCHEMA + 1` rejection case all still pass at 3, measured at 0 of the 32 cases replay.test.ts held before the regression coverage. Killed only by the case that names the old version as a literal.",
+  "find": "export const REPLAY_SCHEMA = 5;",
+  "replace": "export const REPLAY_SCHEMA = 4;",
+  "why": "The other half of issue #492: adding a required ReplayMeta field WITHOUT bumping the schema, so a schema-3 trace recorded before the field existed is still accepted and replayed with the rule missing -- the exact silent divergence the field was added to stop, and the case the replay layer's no-migration policy answers by rejecting rather than defaulting. Invisible to every other assertion in the file, because `checkTrace` compares a trace's stamp against this same constant and the recorder writes it: the round-trip cases and the existing `REPLAY_SCHEMA + 1` rejection case all still pass at 3, measured at 0 of the 32 cases replay.test.ts held before the regression coverage. Killed only by the case that names the old version as a literal. REPOINTED 4 -> 5 (issue #797), and the guard now covers that bump too: adding `ReplayMeta.pp1Roles` without moving the constant would accept a schema-4 trace recorded before the arm was carried and rebuild it at shipped caps. The entry keeps its #492 name because the BEHAVIOUR it pins is the same one -- the schema must move whenever the meta shape does -- and renaming the file would strand nothing but make its history harder to follow.",
   "tests": [
     "src/game/replay.test.ts"
   ],
   "expect": "killed",
   "killedBy": [
-    "checkTrace rejects a schema-3 trace, which predates the recorded perception rule (issue #492)"
+    "checkTrace rejects a schema-4 trace, which predates the recorded pp1Roles arm (issue #797)"
   ]
 }

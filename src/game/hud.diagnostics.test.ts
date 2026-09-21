@@ -590,7 +590,7 @@ describe('the exports (issue #254)', () => {
     const world = createWorldFor(arenaById('arena-01'), 5, { lives: 3 });
     const rec = createRecordingInput(
       { sample: () => [{ move: { x: 1, y: 0 }, aim: { x: 0, y: 1 }, fire: true, mine: false }] },
-      replayMetaFor(world, 'arena-01'),
+      replayMetaFor(world, 'arena-01', false),
     );
     for (let i = 0; i < 3; i++) rec.sample();
     hud!.setDevExportPort(() => port({ replay: () => rec.trace() }));

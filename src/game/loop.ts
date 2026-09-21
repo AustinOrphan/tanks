@@ -2187,7 +2187,7 @@ export function startGameWith(
    * world, so `begin` restarts it on every level switch (see switchTo).
    */
   const recorder: RecordingInput | null = deps.devFlags.replay
-    ? createRecordingInput(effectiveInput, replayMetaFor(world, level.arenaId))
+    ? createRecordingInput(effectiveInput, replayMetaFor(world, level.arenaId, deps.devFlags.pp1Roles))
     : null;
   const director = deps.createDirector(audio, playerId ?? -1);
   const haptics = deps.createHaptics(playerId ?? -1);
@@ -3099,7 +3099,7 @@ export function startGameWith(
     // A new world means a new trace: the recorded inputs only mean anything
     // applied to the world they were sampled against, so carrying them across a
     // level switch would produce a trace that replays into a different game.
-    recorder?.begin(replayMetaFor(world, level.arenaId));
+    recorder?.begin(replayMetaFor(world, level.arenaId, deps.devFlags.pp1Roles));
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     haptics.setPlayerId(playerId ?? -1);
