@@ -1,0 +1,15 @@
+{
+  "id": "replay-meta-drops-the-pp1roles-arm",
+  "file": "src/game/replay.ts",
+  "find": "    pp1Roles,\n  };",
+  "replace": "    pp1Roles: false,\n  };",
+  "expect": "killed",
+  "tests": [
+    "src/game/replay.test.ts"
+  ],
+  "why": "Issue #797's defect exactly: the meta stamping the SHIPPED arm instead of the one the recorder was given, which is what it did while it omitted the field entirely. Deliberately silent -- the trace still parses and the data fingerprint still reports a match, because it covers the four sim JSON files and the arm's values live in sim/config/pp1-roles.ts, outside it. `pp1Roles` is the first ReplayMeta field that is not a World.rules switch: it is a construction-time stamp that writes per-role shellCap/mineCap onto tanks, so a finished world cannot be asked which arm built it and no assertion about the world can catch this.",
+  "killedBy": [
+    "the pp1Roles arm survives a round trip (issue #797) reads the arm from the recorder, because the world cannot be asked",
+    "the pp1Roles arm survives a round trip (issue #797) rebuilds the ARM caps from the meta alone, not the shipped ones"
+  ]
+}

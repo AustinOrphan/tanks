@@ -33,7 +33,7 @@ export const REPLAY_FORMAT = 'tanks.replay';
  * Bump it when the encoding changes; it says nothing about whether the sim would
  * produce the same run, which is what the fingerprint is for.
  */
-export const REPLAY_SCHEMA = 4;
+export const REPLAY_SCHEMA = 5;
 
 /**
  * Ten minutes at 60 Hz. A trace that grows forever is a memory leak in a flag
@@ -97,6 +97,25 @@ export interface ReplayMeta {
    * REPLAY_SCHEMA 3 -> 4.
    */
   aiTargetPerception: AiTargetPerception;
+  /**
+   * Whether this trace was recorded in issue #358's PP1 role-first ordnance arm
+   * (`?dev=1&pp1Roles=1`). The first meta field that is NOT a `World.rules` switch, and the
+   * reason it has to be here anyway (issue #797).
+   *
+   * `pp1Roles` is not a rule the simulation reads per tick. It is a CONSTRUCTION-time stamp:
+   * `createWorldFor` hands it to `loadArena`, which writes role-specific `shellCap`/`mineCap`
+   * onto the tanks it builds. So nothing on a finished world says which arm built it -- the
+   * caps are the only trace, and inferring the arm from them is not sound, because a roster
+   * edit can make a shipped cap coincide with the arm's.
+   *
+   * Without it a trace recorded in the arm rebuilds at shipped caps and diverges wherever a
+   * cap refused a shot or a mine, silently: the data fingerprint covers the four sim JSON
+   * files, and the arm's values live in `sim/config/pp1-roles.ts`, outside it. Exactly the
+   * gap #492 closed for `aiTargetPerception`, one layer further out.
+   *
+   * REPLAY_SCHEMA 4 -> 5.
+   */
+  pp1Roles: boolean;
 }
 
 /** `[moveX, moveY, aimX, aimY, bits]`, bits = fire | mine<<1. Still the per-SLOT shape:
@@ -171,7 +190,11 @@ export function fingerprint(value: unknown): string {
  * replays anywhere in this codebase; a schema mismatch is already outright rejection
  * (`checkTrace`), never reinterpreted, and `?dev=1&replay=1` traces are a dev-console
  * debug capture, not user save data, so rejecting an old trace rather than reading it
- * under the new shape is the low-risk, in-convention choice.
+ * under the new shape is the low-risk, in-convention choice. 5 (issue #797) is the same shape
+ * of change a third time -- `ticks` unchanged, one more meta field -- adding
+ * `ReplayMeta.pp1Roles`. It is the first field here that is NOT a `World.rules` switch: the
+ * arm is a construction-time stamp on the tanks rather than a rule, so it cannot be read back
+ * off a finished world, and a schema-4 trace is rejected rather than rebuilt at shipped caps.
  *
  * THE VERSION-STAMP DECISION, since a trace recorded against different constants
  * diverges silently and there is no way to tell from the divergence alone.
@@ -315,7 +338,16 @@ export function createRecordingInput(
 }
 
 /** What a world says about itself, for the trace's meta. */
-export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
+/**
+ * `pp1Roles` is a REQUIRED third parameter rather than a trailing defaulted one, and that is
+ * deliberate (issue #797). It cannot be read off the world -- see `ReplayMeta.pp1Roles` -- so
+ * the recorder has to supply it, and a defaulted parameter is a parameter callers drop. This
+ * repository has already measured that failure once: `decidePlayerInput`'s trailing
+ * `difficulty` was dropped at its call site and **1,801 tests stayed green**, because nothing
+ * in the tree drove a bot far enough to notice (see `buildBotSources` in game/loop.ts). A
+ * required parameter makes the omission a compile error instead of a silent wrong replay.
+ */
+export function replayMetaFor(world: World, arenaId: string, pp1Roles: boolean): ReplayMeta {
   return {
     arenaId,
     seed: world.seed,
@@ -328,6 +360,7 @@ export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
     mode: world.rules.mode,
     friendlyFire: world.rules.friendlyFire,
     aiTargetPerception: world.rules.aiTargetPerception,
+    pp1Roles,
   };
 }
 

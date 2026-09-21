@@ -83,7 +83,7 @@ function scripted(seed: number): { sample(): InputState[] } {
 /** Steps a real world `ticks` times through a recorder, as the driver does. */
 function recordedRun(ticks: number, limit?: number): { trace: ReplayTrace; live: World; events: number } {
   const start = createWorldFor(arenaById('arena-01'), 777, { lives: 3 });
-  const rec = createRecordingInput(scripted(99), replayMetaFor(start, 'arena-01'), limit);
+  const rec = createRecordingInput(scripted(99), replayMetaFor(start, 'arena-01', false), limit);
   let live = start;
   let events = 0;
   for (let i = 0; i < ticks; i++) {
