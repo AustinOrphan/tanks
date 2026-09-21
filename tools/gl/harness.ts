@@ -40,7 +40,19 @@ import {
   type RenderQuality,
 } from '../../src/render/quality';
 
-interface Result { name: string; pass: boolean; detail: string }
+/**
+ * `ms` is how long THIS check took, measured around its own body (issue #867).
+ *
+ * The harness's post-load phase -- `load` to `__glResults` -- more than doubled between three
+ * 0.169 and 0.186, and an aggregate cannot tell "one check grew 50x" from "every check grew
+ * 2x", which have completely different fixes. Timed at the two chokepoints every check passes
+ * through rather than per call site, so a check added later is timed without anyone
+ * remembering to.
+ *
+ * `performance.now()`, not `Date.now()`: sub-millisecond checks exist and the point is the
+ * shape of the distribution, not the total, which the runner already has.
+ */
+interface Result { name: string; pass: boolean; detail: string; ms: number }
 declare global { interface Window { __glResults?: Result[] } }
 
 const results: Result[] = [];
@@ -51,11 +63,12 @@ const SFX_KEYS = [
   'mine-drop', 'mine-arm', 'mine-boom', 'fire-blocked', 'victory', 'defeat',
 ].filter(isSfxKey);
 function check(name: string, fn: () => string | null): void {
+  const started = performance.now();
   try {
     const failure = fn();
-    results.push({ name, pass: failure === null, detail: failure ?? 'ok' });
+    results.push({ name, pass: failure === null, detail: failure ?? 'ok', ms: performance.now() - started });
   } catch (e) {
-    results.push({ name, pass: false, detail: `threw: ${String(e)}` });
+    results.push({ name, pass: false, detail: `threw: ${String(e)}`, ms: performance.now() - started });
   }
 }
 
@@ -1051,11 +1064,12 @@ async function renderPeak(
 }
 
 async function checkAsync(name: string, fn: () => Promise<string | null>): Promise<void> {
+  const started = performance.now();
   try {
     const failure = await fn();
-    results.push({ name, pass: failure === null, detail: failure ?? 'ok' });
+    results.push({ name, pass: failure === null, detail: failure ?? 'ok', ms: performance.now() - started });
   } catch (e) {
-    results.push({ name, pass: false, detail: `threw: ${String(e)}` });
+    results.push({ name, pass: false, detail: `threw: ${String(e)}`, ms: performance.now() - started });
   }
 }
 

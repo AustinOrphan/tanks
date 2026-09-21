@@ -182,6 +182,21 @@ try {
     failed++;
     console.log('  FAIL  the harness produced no results at all');
   }
+  // WHERE THE POST-LOAD PHASE GOES (issue #867). The phase from `load` to `__glResults` is the
+  // larger half of a run here, and an aggregate cannot tell one check that grew 50x from every
+  // check growing 2x. Printed always rather than behind a flag: it is two lines, and a number
+  // nobody can see is a number nobody compares. `ms` is measured inside the page, around each
+  // check's own body, so it excludes module evaluation and the runner's own round trips --
+  // which is why the sum below is less than the phase the runner times.
+  const timed = results.filter((r) => typeof r.ms === 'number');
+  if (timed.length > 0) {
+    const total = timed.reduce((a, r) => a + r.ms, 0);
+    const slowest = [...timed].sort((a, b) => b.ms - a.ms).slice(0, 10);
+    console.log(`\n  ${timed.length} timed check(s), ${(total / 1000).toFixed(1)}s inside check bodies`);
+    for (const r of slowest) {
+      console.log(`    ${(r.ms / 1000).toFixed(2).padStart(7)}s  ${((r.ms / total) * 100).toFixed(1).padStart(5)}%  ${r.name}`);
+    }
+  }
   console.log(
     failed === 0 ? `\nall ${results.length} GL checks passed` : `\n${failed} GL check(s) FAILED`,
   );
