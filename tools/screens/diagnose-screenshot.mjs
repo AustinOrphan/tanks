@@ -6,7 +6,8 @@
  * not reproduce on macOS and a CI round trip per idea is the whole cost of this issue.
  */
 import { serve, launchBrowser } from './capture.mjs';
-import { webglOverrideSource, audioContextOverrideSource } from './steps.mjs';
+import { webglOverrideSource } from './steps.mjs';
+import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 
 const BASE_ARGS = ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox', '--font-render-hinting=none'];
 
