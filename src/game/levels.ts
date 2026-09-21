@@ -12,6 +12,7 @@ import { createSandboxWorld } from '../sim/sandbox';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import type { RunStore } from './run';
 import type { VersusConfig } from './versus-config';
+import { botDifficultiesOf } from './versus-setup';
 
 /**
  * The one object that knows how many levels exist, where a session starts, and how to
@@ -273,6 +274,11 @@ export function createVersusLevelSystem(
           // falls back to `teamOf(slot)` for -- so a config saved before teams could be
           // chosen builds exactly the board it always did.
           teams: config.slots.map((slot) => slot.team),
+          // Which slots a computer drives, and how well (issue #891). Derived from the same
+          // per-slot `role` `botSlotsOf` reads, so the simulation's view of which tanks are
+          // bots cannot disagree with the setup pane's -- and `Tank.botDifficulty` is what
+          // lets `stepAi` commit an opponent for a player-kind tank at all.
+          bots: botDifficultiesOf(config.slots),
           rules: {
             unarmedTrigger,
             corpseBlocksShells: flags.corpseBlock,

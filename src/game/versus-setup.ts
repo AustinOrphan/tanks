@@ -1,5 +1,5 @@
 import type { SlotSource } from '../input/assignment';
-import { isBotDifficulty, type BotDifficulty } from '../sim/ai/bot-difficulty';
+import { isBotDifficulty, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import { teamOf } from '../sim/arena';
 
 /**
@@ -53,11 +53,12 @@ export interface VersusSlotSetup {
 /**
  * The whole retained setup: the match rules plus the per-slot roles.
  *
- * Bot DIFFICULTY is deliberately absent. The issue's slot list says "Bot, with contextual
- * difficulty", but the Easy/Normal/Hard presets are issue #267's and no difficulty concept
- * exists in the tree yet (grepped: `botDifficulty` has no definition anywhere). Inventing a
- * field here would either sit unread until #267 lands or force #267 to migrate a stored
- * shape on its first day. `VersusSlotSetup` is the place it belongs when it exists.
+ * Bot DIFFICULTY is deliberately absent AT THIS LEVEL. The issue's slot list says "Bot, with
+ * contextual difficulty", and difficulty is a per-slot property, so it landed on
+ * `VersusSlotSetup.difficulty` when #267 built the presets -- which is where this comment
+ * predicted it would go. The original parenthetical here ("grepped: `botDifficulty` has no
+ * definition anywhere") has since stopped being true twice over: `VersusSlotSetup.difficulty`
+ * carries the choice, and `Tank.botDifficulty` carries it into the simulation (issue #891).
  */
 export interface VersusSetup {
   mode: 'ffa' | 'teams';
@@ -306,4 +307,26 @@ export function botSlotsOf(slots: readonly VersusSlotSetup[]): Set<number> {
     if (s.role === 'bot') out.add(i);
   });
   return out;
+}
+
+/**
+ * The per-slot difficulty array the simulation stamps onto tanks as `Tank.botDifficulty`
+ * (issue #891), indexed by slot and sparse: `undefined` at a slot is a human.
+ *
+ * DERIVED FROM `role`, exactly as `botSlotsOf` above is, so the two cannot disagree about
+ * which slots are bots -- the same reason #260 refuses to store a bot count beside the roles.
+ * A non-bot slot contributes `undefined` even if it is carrying a stale `difficulty` from
+ * having been a bot earlier in the setup pane, because `difficulty` is documented as
+ * meaningful only when `role` is `'bot'`.
+ *
+ * A bot slot with no explicit choice resolves to `DEFAULT_BOT_DIFFICULTY` here rather than
+ * being left `undefined`, because in the array `undefined` already means "human". Leaving it
+ * would make a bot slot the player never touched build a tank the simulation treats as a
+ * human -- no commitment, no contact overlay -- which is the one confusion this array exists
+ * to remove.
+ */
+export function botDifficultiesOf(
+  slots: readonly VersusSlotSetup[],
+): (BotDifficulty | undefined)[] {
+  return slots.map((s) => (s.role === 'bot' ? (s.difficulty ?? DEFAULT_BOT_DIFFICULTY) : undefined));
 }

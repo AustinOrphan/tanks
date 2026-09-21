@@ -1,9 +1,10 @@
 import type { World } from '../world';
 import type { InputState, Tank, Vec2 } from '../types';
 import { vsub, vdist, vnorm, vlen, fromAngle } from '../types';
-import { lineOfSight, aimLead, dangerAvoidMove, incomingThreats, profileAimSpread, profileHazardSpread, wallBlocksPath } from './targeting';
+import { lineOfSight, aimLead, dangerAvoidMove, incomingThreats, profileAimSpread, profileHazardSpread, wallBlocksPath, isOpponent } from './targeting';
 import { backdateHazards, hazardRefreshTicks } from './hazard-perception';
 import { commitHeading } from './commitment';
+import { committedOpponent } from './bot-commitment';
 import { driveVelocity } from '../collision';
 import { configFor, hasAbility, TankAbility } from '../config';
 import {
@@ -168,43 +169,6 @@ const PLAYER_RETREAT_CHANCE = 0.4;
  */
 const PLAYER_MINE_CHANCE = 0.05;
 
-/**
- * True if `other` should be treated as an opponent of `subject` -- the single predicate
- * both `nearestEnemy`'s positional scan and the LOS target-acquisition loop hardcoded
- * separately (`t.kind === 'player'` / `!== 'player'`, both gated on `t.alive`).
- *
- * Mode-aware (n-player arc PR 4 -- the seam PR 2b built for exactly this). This is the
- * fix that lets a BOT actually fight in FFA/teams -- without it, a bot dropped into a
- * versus match finds zero targets under the old kind-only rule and just wanders (caught
- * before PR 4 was written, named in its design doc, not discovered after shipping).
- *
- *  - `'campaign-coop'`: today's rule, byte-for-byte -- every non-player-kind, alive tank
- *    is an opponent. Multiplayer teammates (any OTHER player-kind tank) never fight each
- *    other here.
- *  - `'ffa'`: any OTHER alive player-kind tank (`other.id !== subject.id`) -- there are
- *    no enemy-kind tanks in this mode at all (loadArena strips them), so the predicate's
- *    whole job shifts from "not a teammate" to "not myself".
- *  - `'teams'`: any OTHER alive player-kind tank on a DIFFERENT team
- *    (`other.team !== subject.team`). `Tank.team` is only ever stamped when
- *    `mode === 'teams'` (arena.ts), so both sides are always defined here in real play.
- *
- * Named `subject`, not `self`: purity.test.ts's guard flags any bare `self.`/`self[` as
- * the DOM/worker global by regex, not by scope, so a LOCAL `self` parameter that is ever
- * dotted (`self.pos`) is a real false positive there, not a hypothetical one --
- * confirmed by running into it while writing this function's first draft.
- */
-function isOpponent(world: World, subject: Tank, other: Tank): boolean {
-  if (!other.alive) return false;
-  switch (world.rules.mode) {
-    case 'ffa':
-      return other.kind === 'player' && other.id !== subject.id;
-    case 'teams':
-      return other.kind === 'player' && other.team !== subject.team;
-    case 'campaign-coop':
-    default:
-      return other.kind !== 'player';
-  }
-}
 
 /**
  * Directive A, part 2: whole-map awareness. `world.walls`/`world.tanks`/`world.mines`
@@ -288,13 +252,29 @@ function assessThreats(world: World, subject: Tank): ThreatSummary {
       nearestVisible = t;
     }
   }
+  // WHOLE-MAP, deliberately, and not narrowed to `engaged` with the rest. This is the
+  // retreat direction (`seekLikeMove`), and backing away from the one tank you are engaging
+  // while reversing into the two behind you is worse than the defect #893 fixed.
+  const centroid = count > 0 ? { x: sumX / count, y: sumY / count } : null;
+
+  // ISSUE #891. A bot in a versus slot engages the opponent it is COMMITTED to, written by
+  // `stepAi` one tick ago, rather than re-picking the nearest every tick. `committedOpponent`
+  // returns null for anything that is not a bot-driven slot -- a human, and any player tank in
+  // a world built without `WorldForInit.bots` -- so the branch below is the pre-#891 pair
+  // exactly, with no extra line-of-sight call and no behaviour change off the bot path.
+  const committed = committedOpponent(world, subject);
+  if (committed === null) {
+    return { engaged: nearestVisible ?? nearest, engagedInSight: nearestVisible !== null, centroid };
+  }
   return {
-    engaged: nearestVisible ?? nearest,
-    engagedInSight: nearestVisible !== null,
-    // WHOLE-MAP, deliberately, and not narrowed to `engaged` with the rest. This is the
-    // retreat direction (`seekLikeMove`), and backing away from the one tank you are engaging
-    // while reversing into the two behind you is worse than the defect this change fixes.
-    centroid: count > 0 ? { x: sumX / count, y: sumY / count } : null,
+    engaged: committed,
+    // The committed tank is entitled to a firing solution only if it can actually be seen.
+    // `=== nearestVisible` is the free case; anything else costs one line-of-sight test,
+    // because a commitment is deliberately HELD through a sight break (rule 7) and the tank
+    // it is held to is therefore often not the visible one.
+    engagedInSight:
+      committed === nearestVisible || lineOfSight(subject.pos, committed.pos, world.walls),
+    centroid,
   };
 }
 

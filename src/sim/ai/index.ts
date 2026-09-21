@@ -15,6 +15,7 @@ import { accelSlew } from './turret-accel';
 import { holdAimFor } from './aim-hold';
 import { searchAim } from './search';
 import { commitTarget } from './target-selection';
+import { commitBotTarget, isBotDriven } from './bot-commitment';
 import { memoryAim, updateTargetMemory } from './target-memory';
 import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_AIM_BREAK } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
@@ -122,6 +123,18 @@ export function stepAi(world: World, events: SimEvent[]): void {
   // movement but blocks fire/mines; live is unrestricted.
   const phase = roundPhase(world);
   const canAct = phase === 'live';
+
+  // Versus bots fill PLAYER slots, so the enemy loop below skips them by construction -- see
+  // `Tank.botDifficulty`. Their committed opponent is still simulation state, and the sim is
+  // still the only thing entitled to write it, so it is written here in a pass of its own
+  // (issue #891). They take NOTHING ELSE from the enemy path: their cooldowns already tick in
+  // `applyPlayerInput`, and their decision is `decidePlayerInput`, which `game/loop.ts` ran to
+  // build this step's input before this step began. A separate pass rather than a branch
+  // inside the loop below, because the two share one line of behaviour and nine of it.
+  for (const tank of world.tanks) {
+    if (!tank.alive || !isBotDriven(tank)) continue;
+    commitBotTarget(world, tank);
+  }
 
   for (const tank of world.tanks) {
     if (!tank.alive || tank.kind === 'player') continue;
