@@ -1,0 +1,14 @@
+{
+  "id": "wrecks-outlive-the-board-they-died-on",
+  "file": "src/render/wreck.ts",
+  "find": "    for (let i = active.length - 1; i >= 0; i--) recycle(active[i], i);",
+  "replace": "    void active;",
+  "expect": "killed",
+  "tests": [
+    "src/render/wreck.test.ts"
+  ],
+  "why": "Issue #232 asks for cleanup on round reset and arena change, which reach the renderer as issue #531's worldReplaced announcement. A wreck that survives it is drawn at the OLD board's coordinates on the new one -- the defect that announcement exists to prevent, where an inferred discontinuity turned two tread decals into 158 -- and six seconds of lifetime is long enough for a cleared level to straddle. Every other behaviour is untouched, so only a test that replaces the world sees it.",
+  "killedBy": [
+    "housekeeping clear retires every wreck, so a new board does not inherit the old one's dead"
+  ]
+}

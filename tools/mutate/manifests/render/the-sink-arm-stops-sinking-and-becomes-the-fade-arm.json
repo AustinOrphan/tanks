@@ -1,0 +1,14 @@
+{
+  "id": "the-sink-arm-stops-sinking-and-becomes-the-fade-arm",
+  "file": "src/render/wreck.ts",
+  "find": "        w.mesh.position.y = WRECK_Y - SINK_DEPTH * k;",
+  "replace": "        w.mesh.position.y = WRECK_Y;",
+  "expect": "killed",
+  "tests": [
+    "src/render/wreck.test.ts"
+  ],
+  "why": "The three arms exist to be told apart in play; issue #232 leaves the choice open and this flag is how it gets made. An arm that silently stops moving still appears, still fades, and still expires on the same clock, so the comparison would report that sink and fade feel the same rather than that sink never sank.",
+  "killedBy": [
+    "every arm leaves, and they differ on the way moves the hull for sink and tilt, and only the opacity for fade"
+  ]
+}
