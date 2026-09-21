@@ -236,6 +236,30 @@ export const FLOWS = Object.freeze([
     ],
   }),
   Object.freeze({
+    id: 'coop-round',
+    title: 'A campaign round shared by several players, some of them bots',
+    description:
+      'Boot the built page with every level unlocked, dismiss the launch splash, pick the '
+      + 'requested level from Level Select, and record a CAMPAIGN round whose player slots are '
+      + 'shared -- the shape that puts several player tanks on the board against the level\'s '
+      + 'own enemy AI.',
+    /**
+     * Campaign-shaped, so it opens exactly as `campaign-round` does and differs only in how
+     * many slots are filled. That is the whole point of it being its own flow: co-op is a
+     * campaign round with company, not a versus round without a stock strip.
+     *
+     * WHY IT EXISTS (issue #359). The enemy AI is the only AI that runs sticky target
+     * selection -- `stepAi` skips `kind === 'player'` tanks outright, so a versus board of
+     * bots has no committed targets to show and its `aiContact` overlay draws nothing. Co-op
+     * is therefore the ONLY session shape in which the policy can be photographed: several
+     * player tanks for the enemies to distribute themselves across, with the overlay naming
+     * the opponent each enemy is committed to and the ticks it has left.
+     */
+    storage: LEVEL_SELECT_STORAGE,
+    open: PAST_SPLASH,
+    start: ({ level }) => levelSelectSteps(level),
+  }),
+  Object.freeze({
     id: 'versus-round',
     title: 'A versus round at a chosen player count',
     description:
@@ -307,16 +331,22 @@ export function validateFlowInputs({ level, seed, driver, flags, mode, players, 
   // on `bots`): a recipe asking for more bots than slots is a mistake in the request, and the
   // clamp would quietly record a different session than the one named.
   if (bots !== undefined) {
-    if (players === undefined) throw new Error('bots needs mode and players');
+    if (players === undefined) throw new Error('bots needs players');
     if (!Number.isInteger(bots) || bots < 0 || bots > players) {
       throw new Error(`bots must be a whole number in [0, ${players}]`);
     }
   }
-  // Both or neither: `mode` alone plays the board with one tank and no stock strip at all,
-  // and `players` alone is campaign co-op, which is a different capture wearing this one's
-  // name. A half-specified versus round is the failure that would look like a success.
-  if ((mode === undefined) !== (players === undefined)) {
-    throw new Error('mode and players must be given together');
+  // `mode` still needs `players`: alone it plays the board with one tank and no stock strip
+  // at all, a half-specified versus round that looks like a success.
+  //
+  // `players` alone is no longer refused. It IS campaign co-op, which this rule's first
+  // version called "a different capture wearing this one's name" -- correct then, because the
+  // only multi-player flow was `versus-round`. `coop-round` (issue #359) is now that capture
+  // under its own name, and the evidence answering #359's last criterion cannot be recorded
+  // without it. A `versus-round` recipe that drops `mode` still fails, and fails loudly: its
+  // own `start` waits on `.hud-versus-stocks`, which a campaign session never shows.
+  if (mode !== undefined && players === undefined) {
+    throw new Error('mode needs players');
   }
   if (!isPlainObject(flags)) throw new Error('flags must be a plain object');
   for (const [id, value] of Object.entries(flags)) {
@@ -343,7 +373,13 @@ export function buildFlowUrl(inputs) {
   const { level, seed, driver, flags, mode, players, bots } = validateFlowInputs(inputs);
   const params = [['dev', '1'], ['replay', '1'], ['level', String(level)], ['seed', String(seed)]];
   // Session shape before driver and flags, the order the campaign parameters already follow.
-  if (mode !== undefined) params.push(['mode', mode], ['players', String(players)]);
+  // Each independently, because they no longer travel as a pair: `mode` implies `players`,
+  // but co-op is `players` with no mode at all. Emitting `players` only alongside `mode` --
+  // which is what this line did when versus was the only multi-player flow -- silently
+  // records a ONE-player campaign round for every co-op request, and a one-player campaign
+  // round looks exactly like a correct capture.
+  if (mode !== undefined) params.push(['mode', mode]);
+  if (players !== undefined) params.push(['players', String(players)]);
   // After `players`, because it is bounded by it and reads as its qualifier.
   if (bots !== undefined) params.push(['bots', String(bots)]);
   if (driver === 'autoplay') params.push(['autoplay', '1']);

@@ -1,0 +1,14 @@
+{
+  "id": "flow-coop-recording-loses-its-players",
+  "file": "tools/screens/flow.mjs",
+  "find": "  if (mode !== undefined) params.push(['mode', mode]);\n  if (players !== undefined) params.push(['players', String(players)]);",
+  "replace": "  if (mode !== undefined) params.push(['mode', mode], ['players', String(players)]);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "killedBy": [
+    "co-op is its own named capture (issue #359) asks for the player slots even with no mode, which is what makes it co-op at all"
+  ],
+  "why": "Restores the shape these two lines had while versus was the only multi-player flow, and it is a real bug the moment co-op exists: `players` is emitted only alongside `mode`, so every `coop-round` request records a ONE-player campaign round. Nothing about the capture looks wrong -- the round plays, the overlay draws, the recorder reports its tick rate -- and the clip would be filed as evidence of enemy target distribution across co-op players who were never on the board. It was written this way for an hour before the URL was read back."
+}
