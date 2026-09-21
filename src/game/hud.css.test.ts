@@ -923,16 +923,15 @@ describe('hud.css is syntactically whole', () => {
     //    Latent rather than reachable -- that pane's content is 318px tall, so no handset
     //    clips it today, and it was fixed before the developer shell grows into it.
     //  - `.hud-controllers` (issue #633), at 422x195 -- an 844x390 handset in landscape at
-    //    200% browser zoom, which is #327's own criterion for this pane. Measured over
+    //    200% browser zoom, which is #327's own criterion for these panes. Over
     //    `screen.controllers.pads`, so two pads are connected: `#hud-controllers-title` at
-    //    y = -14, now y = +8. Reachable today, and the one pane here that was. Its inner
-    //    `.hud-controller-rows` already scrolled, which is why the LIST was reachable while
-    //    the heading above it was not.
-    //  - `.hud-levelselect` (issue #633): latent, like `.hud-devtools`. Every measured box is
-    //    positive at 195x422, 422x195 and 320x568, because the mid-campaign fixture has
-    //    cleared two levels and `.hud-levels` comes to 98px wide. It is a NON-WRAPPING flex
-    //    row of 44px buttons, so it overflows once a campaign runs further than any fixture
-    //    here goes; the wrapping half of that is left to this issue's own children.
+    //    y = -14, now y = +21. Its inner `.hud-controller-rows` already scrolled, which is
+    //    why the LIST was reachable the whole time while the heading above it was not.
+    //  - `.hud-levelselect` (issue #633), at 422x195: `#hud-levelselect-title` at y = -7,
+    //    now y = +21. Reachable, not latent -- and only visible once the heading was ADDED
+    //    to that state's measured set, because the pane and the grid both read positive
+    //    while the title above them was off the top. `.hud-levels` inside it is still a
+    //    non-wrapping row; this makes its overflow reachable, not absent.
     //
     // What still fails here, now that there is no residual to pin: any of the eight
     // scrollers above re-centring, and any ninth arriving centred. The `for` loop is the

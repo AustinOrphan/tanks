@@ -23,6 +23,27 @@
       }
     },
     {
+      "selector": "#hud-levelselect-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 592,
+        "y": 295,
+        "w": 95,
+        "h": 42
+      },
+      "text": "Levels",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "32px",
+        "margin-top": "21.44px",
+        "margin-bottom": "21.44px"
+      }
+    },
+    {
       "selector": ".hud-levels",
       "present": true,
       "visible": true,
