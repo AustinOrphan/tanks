@@ -1,0 +1,36 @@
+# TEMPORARY, issue #888. Deleted before that issue closes.
+#
+# The failure it investigates happens only on Linux, so there is no way to iterate on it from
+# a macOS checkout. This runs the diagnostic ONCE against every candidate fix at the same
+# time, rather than spending a CI round trip per idea.
+name: scratch 888
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright
+        run: npm i --no-save playwright@1.62.0
+      - name: Install chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: GPU and driver state
+        run: |
+          npx playwright --version
+          echo "--- glxinfo/vulkan, if present ---"
+          (command -v glxinfo >/dev/null && glxinfo -B) || echo "no glxinfo"
+          (command -v vulkaninfo >/dev/null && vulkaninfo --summary | head -20) || echo "no vulkaninfo"
+      - name: Diagnose the screenshot failure
+        run: node tools/screens/diagnose-screenshot.mjs
