@@ -1,13 +1,13 @@
 {
   "id": "unsupported-reason-line-never-shown",
-  "file": "src/game/hud.ts",
+  "file": "src/game/controllers-pane.ts",
   "find": "    controllersUnsupportedEl.classList.toggle('hud-controllers-unsupported--hidden', unreadable.length === 0);\n",
   "replace": "    controllersUnsupportedEl.classList.add('hud-controllers-unsupported--hidden');\n",
   "expect": "killed",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
-  "why": "Issue #597. The reason line stays hidden even while a listed pad cannot be read. The disabled candidate still points at it, but a controller player never focuses a disabled button, so nothing on screen says why the pad is refused. Killed by the disabled-candidate case and the case that pushes an unreadable pad after a readable one.",
+  "why": "Issue #597. The reason line stays hidden even while a listed pad cannot be read. The disabled candidate still points at it, but a controller player never focuses a disabled button, so nothing on screen says why the pad is refused. Killed by the disabled-candidate case and the case that pushes an unreadable pad after a readable one. Re-pointed when the Controllers pane moved to `controllers-pane.ts` (issue #556); the anchor text is unchanged.",
   "killedBy": [
     "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) a pad the browser reports but Tanks cannot read (issue #597) is a DISABLED candidate, labelled as unsupported, pointing at a visible reason",
     "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) a pad the browser reports but Tanks cannot read (issue #597) shows no unsupported line when every listed pad is readable, and the help line always"

@@ -1,0 +1,14 @@
+{
+  "id": "controllers-pane-releases-a-closed-pane",
+  "file": "src/game/controllers-pane.ts",
+  "find": "      if (host.isSurfaceOpen(surface)) for (const cb of closeCbs) cb();",
+  "replace": "      for (const cb of closeCbs) cb();",
+  "expect": "killed",
+  "tests": [
+    "src/game/controllers-pane.test.ts"
+  ],
+  "killedBy": [
+    "createControllersPane (issue #556) releases only a pane that is on screen"
+  ],
+  "why": "Tells this pane's subscribers to tear down when it was never on screen. `release` is the sibling-replacing path (issue #558): an incoming pane fades this surface out, so only the subscribers are released. Without the open guard a replace that never involved this pane still fires its close, stopping a gamepad poller nobody started. Survives all 341 `createHud` cases, because the layer stack only ever releases a pane it actually replaced."
+}

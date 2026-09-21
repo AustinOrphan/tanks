@@ -1,0 +1,14 @@
+{
+  "id": "controllers-pane-opens-redundantly",
+  "file": "src/game/controllers-pane.ts",
+  "find": "        if (!wasOpen) for (const cb of openCbs) cb();",
+  "replace": "        for (const cb of openCbs) cb();",
+  "expect": "killed",
+  "tests": [
+    "src/game/controllers-pane.test.ts"
+  ],
+  "killedBy": [
+    "createControllersPane (issue #556) fires the open callbacks once per REAL transition, not once per show(true)"
+  ],
+  "why": "Fires the open subscribers on a `show(true)` that transitions nothing. `loop.ts` starts polling gamepads off this callback and stops off its pair, so a redundant open leaves a poller running with no close to match it. Measured when the pane was extracted: this survives all 341 cases in hud.surfaces, hud.controls and hud.navigation, because the real host's transition runner hides the redundancy from anything driving through `createHud`. That is exactly the gap a module test is for, and it is why this case exists rather than a second copy of a `createHud` assertion."
+}
