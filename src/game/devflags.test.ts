@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TANK_KINDS } from '../sim/config';
 import { BLOCKED_FIRE_CUES } from '../presentation/blocked-fire';
+import { HUD_FONTS } from '../presentation/hud-font';
 import { ENEMY_ROLE_CUES } from '../presentation/enemy-role';
 import {
   parseDevFlags,
@@ -594,6 +595,39 @@ describe('parseDevFlags: arrival (issue #230 -- spawn and death told apart)', ()
 
   it('does not disturb the boolean flags', () => {
     expect(parseDevFlags('?dev=1&arrival=opposed')).toEqual({ ...DEV_FLAGS_OFF, arrival: 'opposed' });
+  });
+});
+
+describe('parseDevFlags: hudFont (issue #865 -- the two faces #864 kept)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?hudFont=inter').hudFont).toBeNull();
+  });
+
+  it('is null when absent -- the shipped HUD is drawn in the bundled Plex', () => {
+    expect(parseDevFlags('?dev=1').hudFont).toBeNull();
+  });
+
+  it('accepts each face -- population: every value in HUD_FONTS', () => {
+    // From the vocabulary rather than a copy of it: a face added to the shortlist without a
+    // parse is a flag the CLI documents and the page ignores.
+    for (const v of HUD_FONTS) {
+      expect(parseDevFlags(`?dev=1&hudFont=${v}`).hudFont).toBe(v);
+    }
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 7 forms below', () => {
+    // `plex` and `ibm-plex-sans` name the SHIPPED face, and naming the default is not a way to
+    // select an arm: there is no `.hud-font--plex` class, so accepting either would put a value
+    // in the field that no rule matches and leave the HUD on Plex while the flag claims an arm.
+    // `Inter` and `ATKINSON` are the casings someone reading the issue would type;
+    // `hyperlegible` and `atkinson-hyperlegible` are the face's own name and its package's.
+    for (const v of ['', 'plex', 'ibm-plex-sans', 'Inter', 'ATKINSON', 'hyperlegible', 'atkinson-hyperlegible']) {
+      expect(parseDevFlags(`?dev=1&hudFont=${encodeURIComponent(v)}`).hudFont).toBeNull();
+    }
+  });
+
+  it('does not disturb the other flags', () => {
+    expect(parseDevFlags('?dev=1&hudFont=atkinson')).toEqual({ ...DEV_FLAGS_OFF, hudFont: 'atkinson' });
   });
 });
 
