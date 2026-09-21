@@ -1,0 +1,14 @@
+{
+  "id": "controllers-pane-leaks-its-back-listener",
+  "file": "src/game/controllers-pane.ts",
+  "find": "      backBtn.removeEventListener('click', handleBack);\n      backBtn.removeEventListener('click', blurIfPointer);",
+  "replace": "      backBtn.removeEventListener('click', blurIfPointer);",
+  "expect": "killed",
+  "tests": [
+    "src/game/controllers-pane.test.ts"
+  ],
+  "killedBy": [
+    "createControllersPane (issue #556) removes every listener it added, on both of its own controls"
+  ],
+  "why": "Leaves the pane's Back listener on a disposed HUD, so a second `createHud` over the same document has two panes answering one click. `dispose` is the only place a pane may undo what its factory did, and a missed removal is invisible to every test that builds one HUD and tears it down: it survives all 341 `createHud` cases."
+}

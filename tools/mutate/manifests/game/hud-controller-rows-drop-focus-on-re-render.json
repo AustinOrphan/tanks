@@ -1,12 +1,12 @@
 {
   "id": "hud-controller-rows-drop-focus-on-re-render",
-  "file": "src/game/hud.ts",
+  "file": "src/game/controllers-pane.ts",
   "find": "    controllersUnsupportedEl.classList.toggle('hud-controllers-unsupported--hidden', unreadable.length === 0);\n    restoreFocus();",
   "replace": "    controllersUnsupportedEl.classList.toggle('hud-controllers-unsupported--hidden', unreadable.length === 0);",
   "tests": [
     "src/game/hud.navigation.test.ts"
   ],
-  "why": "A hotplug or reassignment rebuilds the Controllers rows; without the restore the focused candidate is gone and focus falls to body.",
+  "why": "A hotplug or reassignment rebuilds the Controllers rows; without the restore the focused candidate is gone and focus falls to body. Re-pointed when the Controllers pane moved to `controllers-pane.ts` (issue #556); the anchor text is unchanged.",
   "expect": "killed",
   "killedBy": [
     "hud: the semantic action dispatcher (issue #494) focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not"
