@@ -3283,6 +3283,19 @@
 .hud-levels {
   pointer-events: auto;
   display: flex;
+  /* A GUARD, not a fix: at five levels this row never wraps, so nothing here changes today.
+   *
+   * MEASURED at 320px, the narrowest width issue #633 names. The row is centred with 30px
+   * either side, so it has exactly 260px to work in -- and five 44px buttons with four 10px
+   * gaps are exactly 260px. It fits, with nothing to spare, and it still fits at 280px.
+   *
+   * A SIXTH campaign level makes the row 314px against that same 260 and it would overflow
+   * horizontally, inside `.hud-levelselect`, which is one of only two full-screen panes with
+   * no `overflow` property -- so the overflow would be unreachable rather than merely cramped,
+   * which is the failure #633 describes and the one case where it is still right. Nothing in
+   * the tree says `campaign.json` stays at five levels, and a row that fits does not wrap, so
+   * this costs a rendered pixel of nothing and removes the trap. */
+  flex-wrap: wrap;
   gap: var(--hud-space-3);
   margin-bottom: 4px;
 }
