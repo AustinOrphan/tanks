@@ -1,10 +1,10 @@
 {
   "id": "hud-gallery-missing-from-the-panel-list",
   "file": "src/game/hud.ts",
-  "find": "      galleryView,\n      confirmView,\n",
-  "replace": "      confirmView,\n",
+  "find": "    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container)]) {",
+  "replace": "    for (const c of [panel, ...Object.entries(LAYERS)\n      .filter(([id]) => id !== 'developer-gallery')\n      .map(([, row]) => row.container)]) {",
   "expect": "killed",
-  "why": "`act` and the arrow-key handler move focus inside whichever pane `activePanelContainer` returns. The gallery workbench was missing from that list from #741 until this entry's tests: a controller's D-pad and the arrow keys moved nothing in it, and Confirm with nothing focused landed nowhere.",
+  "why": "Drops the gallery workbench out of the population `activePanelContainer` derives. This is the regression as it shipped: issue #741 added the pane to the paint order and not to the keyboard's list, so arrows and a D-pad moved nothing inside it and Confirm landed nowhere. The entry survives the move from a hand-written array to a derivation because it pins something the derivation's own entries cannot -- that THIS pane is swept, rather than that some pane is.",
   "tests": [
     "src/game/hud.gallery.test.ts"
   ],
