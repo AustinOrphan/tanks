@@ -4410,34 +4410,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * and Enter and nothing else -- which is what makes restoring a button legal.
    */
   function activePanelContainer(): HTMLElement | null {
-    for (const c of [
-      panel,
-      customizeView,
-      statsView,
-      achView,
-      levelSelectView,
-      controllersView,
-      versusSetupView,
-      settingsView,
-      aboutView,
-      layoutView,
-      devToolsView,
-      selfTestView,
-      devCfgView,
-      // The gallery workbench (issue #730) was left out when #741 added it, while the paint
-      // order below listed it: arrow keys and a D-pad moved nothing inside the pane, and
-      // Confirm landed nowhere. `hud.gallery.test.ts` pins its place here.
-      galleryView,
-      confirmView,
-      // The match-failure overlay (issue #325) was left out the same way the gallery was, and
-      // with the same consequence: arrows and a D-pad moved nothing inside it and Confirm
-      // landed nowhere, so Retry and Back to menu were reachable by pointer and by Escape
-      // only. Measured before this line existed -- with the overlay up, `act('down')` and
-      // `act('confirm')` both returned false while the sibling `confirmView` walked its two
-      // buttons normally. It is a PLAYER-FACING state, not a developer one: the screen gate
-      // photographs it as `screen.startup.match-failed`.
-      alertView,
-    ]) {
+    // DERIVED FROM `LAYERS`, not listed beside it (issue #914). This was a hand-kept array of
+    // every pane's container, and twice a pane shipped that was not in it: the gallery
+    // workbench (#730, missed by #741) and the match-failure overlay (#325, fixed in #912).
+    // Both had the same symptom and neither was visible to a type -- arrows moved nothing
+    // inside the pane and Confirm landed nowhere, while every other gate stayed green.
+    //
+    // `LAYERS` is a `Record<HudLayerId, LayerRow>`, so a fifteenth layer added without a row
+    // is a COMPILE error rather than a silently unreachable pane. Reading its containers here
+    // makes that one declaration the single place a layer has to be named.
+    //
+    // ORDER IS NOT LOAD-BEARING, which is what makes reading a record safe. The loop returns
+    // the first container that is displayed and not leaving, and at most one ever qualifies:
+    // opening a layer hides the surface beneath it, and a crossfade's outgoing half carries
+    // LEAVING for the duration. `hud.navigation.test.ts` pins that invariant directly rather
+    // than leaving it resting on this array's old hand-chosen order.
+    //
+    // `panel` is first and is NOT a layer: it is the main menu, the pause screen and both
+    // outcome screens, which are states of one container rather than panes on the stack.
+    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container)]) {
       // A surface fading OUT is displayed but no longer active (issue #364). Before the
       // transition contract exactly one of these was ever displayed, and this loop could
       // return the first one it found; a crossfade puts two on screen at once for the
