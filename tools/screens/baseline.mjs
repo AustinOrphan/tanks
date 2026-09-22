@@ -22,8 +22,60 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Where a state's expectation lives. One file per state, named by its id. */
+/** Where a state's expectation lives. One file per state and viewport arm. */
 export const BASELINE_DIR = new URL('./baseline/', import.meta.url);
+
+/**
+ * The extra viewports a few states are checked at (issue #633).
+ *
+ * The gate photographs everything at one desktop size, which is the size at which none of
+ * #633's findings reproduce: a pane that cannot scroll is merely roomy at 1280x800, and a row
+ * that cannot wrap has nothing to wrap. That issue's own "Evidence this needs" section asks for
+ * these two arms by name, and without them every item in it is argued rather than measured.
+ *
+ * `narrow` is the 320 CSS px phone the issue names. `zoomed` is 200% browser zoom, which is not
+ * a separate mechanism: doubling the zoom halves the CSS viewport, so a 1280x800 window at 200%
+ * lays out as 640x400. Expressing it as a viewport rather than a zoom setting is what makes it
+ * reproducible -- Playwright has no zoom knob, and a `deviceScaleFactor` change is device pixel
+ * ratio, which is a different thing entirely.
+ */
+export const VIEWPORT_ARMS = Object.freeze([
+  Object.freeze({ id: 'narrow', width: 320, height: 568, devicePixelRatio: 2 }),
+  Object.freeze({ id: 'zoomed', width: 640, height: 400, devicePixelRatio: 2 }),
+]);
+
+/**
+ * Which states carry the extra arms, and why these.
+ *
+ * A LIST, deliberately, where `subsetStates` is a rule. The rule there answers "is this state
+ * cheap enough to check", which every state can be asked. This answers "is this state's layout
+ * worth two more captures", which is a judgement about that state's markup, and inventing a
+ * rule for it would mean inventing a property of a state that does not exist.
+ *
+ * NOT every state, because this is a required check. Each arm is a full capture, and 45 states
+ * times three viewports is a gate three times its current length for evidence about panes whose
+ * layout nothing in #633 questions. Six states, two arms: twelve extra captures.
+ *
+ * Three of the six carry an open #633 finding, and each one's `measure` list already names the
+ * element the finding is about, so the arm produces a number rather than a picture to squint at:
+ *
+ *  - `screen.levels`      -- `.hud-levels` is a non-wrapping flex row inside `.hud-levelselect`,
+ *                            which has no `overflow`. Both halves of that pairing are measured.
+ *  - `screen.controllers` -- `.hud-controller-rows` inside the other pane with no `overflow`.
+ *  - `screen.customize`   -- `.hud-preview` is a fixed 260x190 box in a pane with no padding.
+ *
+ * The other three are CONTROLS, and they are the half that makes a failure readable. They are
+ * panes that already scroll (`.hud-panel`, `.hud-settings`, `.hud-about`), so a narrow capture
+ * that broke all six would be telling us about the arm, not about the three findings.
+ */
+export const ARMED_STATE_IDS = Object.freeze([
+  'screen.main-menu',
+  'screen.levels',
+  'screen.controllers',
+  'screen.customize',
+  'screen.settings',
+  'screen.about',
+]);
 
 /**
  * The states the required subset covers: every screen state EXCEPT the played endings.
@@ -40,15 +92,45 @@ export function subsetStates(states) {
   return states.filter((state) => !state.id.endsWith('.played'));
 }
 
+/**
+ * Every (state, viewport) the gate checks, in the order it checks them.
+ *
+ * `arm: null` is the state's own recipe viewport -- the capture that existed before #633 and
+ * whose baseline keeps its plain `<id>.json` name, so this change does not rewrite 45 files to
+ * add 12. An armed state is checked at its recipe viewport FIRST and then at each arm, so a
+ * failure reads down the log in the order a person would ask about it: does it work at all,
+ * then does it work small.
+ */
+export function viewportPlan(states) {
+  const plan = [];
+  for (const state of states) {
+    plan.push({ state, arm: null });
+    if (!ARMED_STATE_IDS.includes(state.id)) continue;
+    for (const arm of VIEWPORT_ARMS) plan.push({ state, arm });
+  }
+  return plan;
+}
+
+/** How a (state, arm) pair is named in a log line and an evidence directory. */
+export function planLabel(stateId, armId) {
+  return armId === null ? stateId : `${stateId} @ ${armId}`;
+}
+
 /** The file name a state's baseline takes. Ids are already `screen.`-prefixed and unique. */
-export function baselineFileName(stateId) {
+export function baselineFileName(stateId, armId = null) {
   if (!/^[a-z0-9.-]+$/.test(stateId)) throw new Error(`unsafe state id '${stateId}'`);
-  return `${stateId}.json`;
+  if (armId === null) return `${stateId}.json`;
+  // `@` separates them because a state id cannot contain one -- the check above admits only
+  // lowercase, digits, dots and hyphens. A hyphen would have been ambiguous against the ids
+  // that already contain them, and the whole point of validating the name is that a baseline
+  // path cannot be made to mean two things.
+  if (!/^[a-z0-9-]+$/.test(armId)) throw new Error(`unsafe viewport arm '${armId}'`);
+  return `${stateId}@${armId}.json`;
 }
 
 /** Read a state's committed expectation, or null when it has none yet. */
-export function readBaseline(dir, stateId) {
-  const file = join(dir, baselineFileName(stateId));
+export function readBaseline(dir, stateId, armId = null) {
+  const file = join(dir, baselineFileName(stateId, armId));
   if (!existsSync(file)) return null;
   return JSON.parse(readFileSync(file, 'utf8'));
 }

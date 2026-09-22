@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { SCREEN_STATES } from './states.mjs';
 import { captureState, launchBrowser, serve } from './capture.mjs';
-import { BASELINE_DIR, subsetStates, baselineFileName, serialiseBaseline, judgePageErrors, formatPageErrorRefusal } from './baseline.mjs';
+import { BASELINE_DIR, subsetStates, viewportPlan, planLabel, baselineFileName, serialiseBaseline, judgePageErrors, formatPageErrorRefusal } from './baseline.mjs';
 import { recipeFor } from './check.mjs';
 
 /**
@@ -57,9 +57,11 @@ async function main() {
   const base = `http://127.0.0.1:${server.address().port}/`;
   let written = 0;
   try {
-    for (const state of states) {
+    for (const { state, arm } of viewportPlan(states)) {
       const recipe = recipeFor(state.id);
-      const v = recipe?.viewport ?? { width: 1280, height: 800, devicePixelRatio: 2 };
+      // The arm's viewport when there is one, the state's own recipe otherwise (issue #633).
+      const v = arm ?? recipe?.viewport ?? { width: 1280, height: 800, devicePixelRatio: 2 };
+      const label = planLabel(state.id, arm?.id ?? null);
       const { report } = await captureState(browser, base, state, {
         width: v.width, height: v.height, dpr: v.devicePixelRatio, timeout: 20000,
       });
@@ -68,17 +70,17 @@ async function main() {
       // subject rather than a reason to refuse. See `judgePageErrors`.
       const errorVerdict = judgePageErrors(state, errors);
       if (!errorVerdict.ok) {
-        console.log(`REFUSED ${formatPageErrorRefusal(errorVerdict, state.id)}`);
+        console.log(`REFUSED ${formatPageErrorRefusal(errorVerdict, label)}`);
         for (const e of errorVerdict.errors) console.log(`  ${e}`);
         process.exitCode = 1;
         continue;
       }
       await writeFile(
-        join(baselineDir, baselineFileName(state.id)),
-        serialiseBaseline(state.id, report.producer.measurements),
+        join(baselineDir, baselineFileName(state.id, arm?.id ?? null)),
+        serialiseBaseline(label, report.producer.measurements),
       );
       written += 1;
-      console.log(`accepted ${state.id} (${report.producer.measurements.length} measured selector(s))`);
+      console.log(`accepted ${label} (${report.producer.measurements.length} measured selector(s))`);
     }
   } finally {
     await browser.close();

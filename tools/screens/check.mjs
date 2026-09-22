@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { SCREEN_STATES } from './states.mjs';
 import { captureState, launchBrowser, serve } from './capture.mjs';
-import { BASELINE_DIR, subsetStates, readBaseline, diffMeasurements, formatFailure, judgePageErrors, pageErrorRefusalReason } from './baseline.mjs';
+import { BASELINE_DIR, subsetStates, viewportPlan, planLabel, readBaseline, diffMeasurements, formatFailure, judgePageErrors, pageErrorRefusalReason } from './baseline.mjs';
 import { CAPTURE_RECIPES } from '../capture/registry.mjs';
 import { inspectSourceState } from '../capture/provenance.mjs';
 
@@ -39,7 +39,7 @@ export function recipeFor(stateId, recipes = CAPTURE_RECIPES) {
  * Pure, so every outcome is unit-testable without a browser: a missing baseline, a clean
  * match, a field that moved, and a page error each have a case of their own.
  */
-export function judgeState({ stateId, state, recipe, baseline, report }) {
+export function judgeState({ stateId, label = null, state, recipe, baseline, report }) {
   const pageErrors = report.pageErrors ?? [];
   // A state may DECLARE the error it exists to demonstrate; see `judgePageErrors`. Expected
   // errors fall through to the ordinary comparison, so the failure card's layout is still
@@ -54,6 +54,7 @@ export function judgeState({ stateId, state, recipe, baseline, report }) {
   const changes = diffMeasurements(baseline.measurements, report.measurements);
   return {
     stateId,
+    label,
     status: changes.length === 0 ? 'match' : 'differs',
     // Missing evidence does not change the verdict, but it is never silent: a state that
     // passed without producing a screenshot has no picture for the next person to read.
@@ -98,7 +99,7 @@ export async function writeFailureArtifacts(dir, { verdict, baseline, report, pn
 /** One verdict as the text a reader sees, in the terminal and in `diff.txt`. */
 export function formatVerdict(verdict) {
   const note = verdict.screenshotError ? `\n  no screenshot: ${verdict.screenshotError}` : '';
-  if (verdict.status === 'match') return `PASS ${verdict.recipeId ?? verdict.stateId}${note}`;
+  if (verdict.status === 'match') return `PASS ${verdict.label ?? verdict.recipeId ?? verdict.stateId}${note}`;
   if (verdict.status === 'page-error') {
     // A state that DECLARED its error gets the declaration's own wording, because the two
     // ways it breaks need different fixes: an unexpected error is a regression in the page,
@@ -158,9 +159,12 @@ async function main() {
   const verdicts = [];
   const started = Date.now();
   try {
-    for (const state of states) {
+    for (const { state, arm } of viewportPlan(states)) {
       const recipe = recipeFor(state.id);
-      const viewport = recipe?.viewport ?? { width: 1280, height: 800, devicePixelRatio: 2 };
+      // The arm's viewport when there is one, the state's own recipe otherwise (issue #633).
+      const viewport = arm ?? recipe?.viewport ?? { width: 1280, height: 800, devicePixelRatio: 2 };
+      const label = planLabel(state.id, arm?.id ?? null);
+      const evidenceDir = arm === null ? state.id : `${state.id}@${arm.id}`;
       let png = null; let report = null; let failure = null;
       try {
         const out = await captureState(browser, base, state, {
@@ -171,24 +175,24 @@ async function main() {
         failure = err instanceof Error ? err.message.split('\n')[0] : String(err);
       }
       if (failure !== null) {
-        const verdict = { stateId: state.id, status: 'capture-failed', pageErrors: [failure], changes: [] };
+        const verdict = { stateId: label, status: 'capture-failed', pageErrors: [failure], changes: [] };
         verdicts.push(verdict);
         console.log(formatVerdict(verdict));
         // EVIDENCE FOR THIS TOO. An earlier draft returned here before writing anything, so a
         // run where the captures timed out left 37 failures and an empty directory -- the one
         // failure mode where a reader has least to go on gave them nothing at all. There is no
         // capture to show, so the actual side records what went wrong instead.
-        await writeFailureArtifacts(join(outDir, state.id), {
-          verdict, baseline: readBaseline(baselineDir, state.id), report: { measurements: [] }, png: null, source,
+        await writeFailureArtifacts(join(outDir, evidenceDir), {
+          verdict, baseline: readBaseline(baselineDir, state.id, arm?.id ?? null), report: { measurements: [] }, png: null, source,
         });
         continue;
       }
-      const verdict = judgeState({ stateId: state.id, state, recipe, baseline: readBaseline(baselineDir, state.id), report });
+      const verdict = judgeState({ stateId: label, label, state, recipe, baseline: readBaseline(baselineDir, state.id, arm?.id ?? null), report });
       verdicts.push(verdict);
       console.log(formatVerdict(verdict));
       if (verdict.status !== 'match') {
-        await writeFailureArtifacts(join(outDir, state.id), {
-          verdict, baseline: readBaseline(baselineDir, state.id), report, png, source,
+        await writeFailureArtifacts(join(outDir, evidenceDir), {
+          verdict, baseline: readBaseline(baselineDir, state.id, arm?.id ?? null), report, png, source,
         });
       }
     }
