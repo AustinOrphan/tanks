@@ -2,7 +2,7 @@
   "id": "hit-targets-counts-visible-overflow-as-a-scroll",
   "file": "tools/visual/hit-targets.mjs",
   "find": "  if (box.overflowX === 'visible') return false;",
-  "replace": "",
+  "replace": "  if (false) return false;",
   "expect": "killed",
   "tests": [
     "tools/visual/hit-targets.test.ts"

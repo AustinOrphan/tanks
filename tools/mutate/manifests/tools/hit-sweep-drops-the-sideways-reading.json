@@ -2,12 +2,12 @@
   "id": "hit-sweep-drops-the-sideways-reading",
   "file": "tools/visual/hit-sweep.mjs",
   "find": "    overflow.sideways = await page.evaluate(COLLECT_SIDEWAYS);",
-  "replace": "",
+  "replace": "    overflow.sideways = [];",
   "expect": "killed",
   "tests": [
     "tools/visual/hit-sweep.test.ts"
   ],
-  "why": "Collects the sideways reading nowhere, so `measureHitTargets` hands the verdict an overflow object with only the dead `page` field on it. The verdict answers that with a failure rather than a pass, but nothing would hold this line in place on its own -- and a reading that is never collected is the same blind spot as a reading that can never fire.",
+  "why": "Reports an empty sideways result instead of collecting one, which is the dangerous shape rather than the obvious one: the field is present, the verdict's missing-reading guard is satisfied, and every sweep passes because nothing was ever measured. That is precisely how `overflow.page` behaved -- present, answered, and structurally unable to report the defect sitting in front of it. The wiring assertion exists because the verdict cannot tell an honest empty reading from this one.",
   "killedBy": [
     "hit-sweep.mjs: handing the sideways reading to the verdict collects the sideways reading and puts it on the overflow object it returns"
   ]

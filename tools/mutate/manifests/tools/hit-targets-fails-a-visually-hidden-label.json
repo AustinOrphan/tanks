@@ -2,7 +2,7 @@
   "id": "hit-targets-fails-a-visually-hidden-label",
   "file": "tools/visual/hit-targets.mjs",
   "find": "  if (box.clientW <= 1) return false;",
-  "replace": "",
+  "replace": "  if (false) return false;",
   "expect": "killed",
   "tests": [
     "tools/visual/hit-targets.test.ts"
