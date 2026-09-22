@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { SCREEN_STATE_IDS, SCREEN_STATES, STEP_KINDS } from '../screens/states.mjs';
-import { HIT_EXTRA_STATES, hitSweepExclusion, hitSweepStates } from './hit-sweep.mjs';
+import { HIT_EXTRA_STATES, HIT_VIEWPORTS, hitSweepExclusion, hitSweepStates } from './hit-sweep.mjs';
 
 /**
  * Issue #710: the `visual` gate sweeps menu hit targets, and WHICH surfaces it sweeps is
@@ -135,6 +135,59 @@ describe('hit-sweep.mjs: removing the AudioContext constructor before boot', () 
     expect(at, 'the override call was not found').toBeGreaterThan(-1);
     expect(firstGoto, 'no navigation was found').toBeGreaterThan(-1);
     expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
+  });
+});
+
+/**
+ * Issue #933. `HIT_VIEWPORTS` is the only place issue #327's fifth criterion -- core menus
+ * operable "at 200% zoom and minimum supported phone widths without two-axis scrolling" -- is
+ * written as something a machine runs. Nothing asserted it: the list was referenced by its own
+ * definition and by `verify.mjs`, which reads `.length` to print a summary line. Dropping an
+ * entry would have changed that number and nothing else, leaving every required check green
+ * while the conditions the criterion names quietly stopped being swept.
+ */
+describe('hit-sweep.mjs: the viewports issue #327 criterion 5 names (issue #933)', () => {
+  const byName = (name: string) => HIT_VIEWPORTS.find((v) => v.name === name);
+
+  it('sweeps the minimum supported phone width, at the size that makes it one', () => {
+    // 320 CSS px is the narrowest width the project supports, and the width every horizontal
+    // finding in this criterion was measured at: the hull swatch row was 324px here, and the
+    // seven-level campaign grid spans x=-24..344. A wider "minimum" would pass both.
+    expect(byName('320x568'), 'the minimum phone width is no longer swept').toEqual({
+      name: '320x568', width: 320, height: 568, dpr: 2,
+    });
+  });
+
+  it('sweeps the 200% zoom reading, whose CSS width is half the screen it stands for', () => {
+    // The entry is a ZOOM, not just another small viewport, and the two numbers are what say
+    // so: a 1280x800 screen at 200% browser zoom gives the page 640x400 CSS px at dpr 2.
+    // Setting `width: 1280` here would leave the name claiming a zoom reading that is not
+    // being taken -- the one change this assertion exists to reject.
+    const zoom = byName('1280x800@200%');
+    expect(zoom, 'the 200% zoom viewport is no longer swept').toEqual({
+      name: '1280x800@200%', width: 640, height: 400, dpr: 2,
+    });
+    // Derived rather than restated, so the pair cannot drift apart: the label names the screen,
+    // the width is what the page actually gets at 200%.
+    const [nominalW, nominalH] = '1280x800@200%'.split('@')[0].split('x').map(Number);
+    expect(zoom?.width, 'the zoom width is no longer half its screen').toBe(nominalW / 2);
+    expect(zoom?.height, 'the zoom height is no longer half its screen').toBe(nominalH / 2);
+  });
+
+  it('keeps every entry frozen and uniquely named, since the sweep keys its readings by name', () => {
+    // A reading is reported as `${state} ${viewport.name}`, so two entries sharing a name would
+    // report two different measurements under one label and the second would read as a repeat.
+    const names = HIT_VIEWPORTS.map((v) => v.name);
+    expect(new Set(names).size, 'two viewports share a name').toBe(names.length);
+    expect(Object.isFrozen(HIT_VIEWPORTS), 'the viewport list can be mutated at runtime').toBe(true);
+    for (const v of HIT_VIEWPORTS) {
+      expect(Object.isFrozen(v), `${v.name} can be mutated at runtime`).toBe(true);
+      expect(v.width, `${v.name} has no width`).toBeGreaterThan(0);
+      expect(v.height, `${v.name} has no height`).toBeGreaterThan(0);
+    }
+    // The two above are the criterion's; the other two are #686's phone and laptop readings.
+    // Pinned as a COUNT rather than a list so adding a viewport is free and losing one is not.
+    expect(HIT_VIEWPORTS.length, 'a viewport was dropped from the sweep').toBe(4);
   });
 });
 

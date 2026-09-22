@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-drops-the-narrowest-viewport",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  Object.freeze({ name: '320x568', width: 320, height: 568, dpr: 2 }),",
+  "replace": "  Object.freeze({ name: '360x640', width: 360, height: 640, dpr: 2 }),",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Widens the narrowest swept viewport past the minimum width the project supports, which is the shape this would really go wrong in: the entry is still there, still a phone, and the sweep still reports four viewports, so nothing looks missing. Every horizontal finding in issue #327's fifth criterion was measured at 320 and none of them reproduces at 360 -- the hull swatch row is 324px wide, and the seven-level campaign grid spans x=-24..344. At 360 both fit and the gate goes quiet.",
+  "killedBy": [
+    "hit-sweep.mjs: the viewports issue #327 criterion 5 names (issue #933) sweeps the minimum supported phone width, at the size that makes it one"
+  ]
+}
