@@ -16,6 +16,8 @@ import { LITERALS } from './devtools-menu';
 // still true rather than asserting it. A TEST may read a fixture; this is the same shape
 // `index-html.test.ts` uses for index.html.
 import hudSource from './hud.ts?raw';
+// The hull palette, because the even-row cap below is derived from how many swatches there are.
+import { PALETTE } from '../presentation/customization';
 // The extracted pane modules (issue #556). A pane's markup and class toggles leave hud.ts's text,
 // so every source scan below that asks "what does the HUD write" reads these too.
 const paneSources = import.meta.glob('./*-pane.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -2988,6 +2990,38 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     for (const row of ['.hud-swatches', '.hud-skins', '.hud-accents']) {
       expect(ruleBody(row), `${row} cannot wrap`).toMatch(/flex-wrap:\s*wrap/);
     }
+  });
+
+  it('splits the six hull swatches into two even rows, not five and a stranded one', () => {
+    // MEASURED on the real build at 320x568 with the cap defeated, which is what makes the
+    // breakpoint a measurement rather than a guess: at 324px and wider all six swatches share
+    // one line; at 323px and below they fall to 5 + 1, and the lone swatch reads as a rendering
+    // fault rather than a layout. A swatch is `--hud-control-min` (44px) at a `--hud-space-4`
+    // (12px) gap, so six are 6x44 + 5x12 = 324px -- the same 324 the edge sits at -- and three
+    // are 3x44 + 2x12 = 156px. Capping the row at 156px turns 5 + 1 into 3 + 3.
+    const at = src.indexOf('@media (max-width: 323px)');
+    expect(at, 'the even-row cap is gone, or its breakpoint moved off the measured 324px edge')
+      .toBeGreaterThan(-1);
+    const block = src.slice(at, src.indexOf('\n}', at));
+    expect(block, 'the cap no longer names the hull swatch row').toMatch(/\.hud-swatches\s*\{/);
+    // Derived from the tokens rather than spelled `156px`: the arithmetic is only true while the
+    // swatch and the gap are the sizes it assumes, and a literal would go quietly wrong the
+    // first time either token is retuned.
+    expect(block, 'the cap stopped tracking the swatch and gap tokens')
+      .toMatch(/max-width:\s*calc\(3 \* var\(--hud-control-min\) \+ 2 \* var\(--hud-space-4\)\)/);
+
+    // THE NEGATIVE HALF, and it guards a mistake that was actually made rather than a
+    // hypothetical one: the first draft of this rule capped `.hud-accents` alongside the
+    // swatches, and measuring showed it turning a clean single row of five into 3 + 2. Five
+    // accents are 5x44 + 4x12 = 268px, which fits a 320px line with room to spare -- there is
+    // no lone item there to rescue, so the cap would be pure damage.
+    expect(block, 'the cap now also squeezes the accent row, which fits a 320px line intact')
+      .not.toMatch(/\.hud-accents/);
+
+    // The count the whole derivation rests on. A seventh hull colour needs 7x44 + 6x12 = 380px
+    // and reopens the lone swatch across 324px-380px, which a 323px cap does not reach, so
+    // adding one has to fail here rather than ship looking broken on a phone.
+    expect(PALETTE.length, 'the hull palette changed size; re-derive the cap breakpoint').toBe(6);
   });
 
   it('lets the level grid wrap, which is the guard against a seventh campaign level', () => {

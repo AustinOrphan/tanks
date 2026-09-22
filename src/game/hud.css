@@ -3038,6 +3038,37 @@
   gap: var(--hud-space-4);
 }
 
+/*
+ * EVEN ROWS on the narrowest screens, rather than a lone swatch on a line of its own.
+ *
+ * Wrapping alone (see `.hud-swatches` above) stops the sideways overflow but leaves 5 + 1: five
+ * swatches fill the line and the sixth sits by itself, which reads as a rendering fault rather
+ * than a layout. Capping the row at three columns makes it 3 + 3.
+ *
+ * THE ARITHMETIC, so none of the numbers are magic. A swatch is `--hud-control-min` (44px) and
+ * the gap is `--hud-space-4` (12px), so six on one line are 6x44 + 5x12 = 324px and three are
+ * 3x44 + 2x12 = 156px. 324 is therefore the exact width at which the row stops fitting, and
+ * `max-width: 323px` is "one pixel narrower than that": measured with the cap defeated, 324px
+ * and wider keep all six on one line and 323px and below fall to 5 + 1. So the cap lands on
+ * every width that would show the lone swatch and on no width that would not.
+ *
+ * `.hud-accents` IS DELIBERATELY NOT INCLUDED, and that is the whole reason this rule names one
+ * selector instead of both. Five accents are 5x44 + 4x12 = 268px, which fits a 320px line with
+ * room to spare -- they have no lone-item problem to fix, and capping them alongside the hull
+ * swatches was measured turning a clean row of five into 3 + 2. Skins are text buttons of
+ * varying width rather than fixed circles, so this arithmetic does not describe them either.
+ *
+ * COUNT-COUPLED, necessarily: CSS cannot express "wrap into equal rows" without knowing how
+ * many items there are. A seventh hull colour would need 7x44 + 6x12 = 380px and would reopen
+ * the lone swatch between 324px and 380px, where this cap does not reach. The swatch count is
+ * pinned in `hud.css.test.ts` so adding one fails a test rather than shipping quietly.
+ */
+@media (max-width: 323px) {
+  .hud-swatches {
+    max-width: calc(3 * var(--hud-control-min) + 2 * var(--hud-space-4));
+  }
+}
+
 /* The colour swatches are NOT `.ui-btn`: each one's background IS the colour it offers,
  * set inline, and it carries no text -- so the quiet control's fill and text colour
  * would be handed to them only to be overridden. They do share the selection ring, at
