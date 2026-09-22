@@ -1,0 +1,17 @@
+{
+  "id": "hud-panel-list-drops-the-surfaces",
+  "file": "src/game/hud.ts",
+  "find": "    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container)]) {",
+  "replace": "    for (const c of [...Object.values(LAYERS).map((row) => row.container)]) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "Removes `panel`, which is not a layer and is easy to read as redundant beside a record that names every pane. It is four screens rather than one: the main menu, the pause screen and both outcome screens are states of the same container, and dropping it takes the keyboard and the D-pad off all four at once -- including the pause screen, which is the one surface a player reaches mid-match with a controller already in their hands.",
+  "killedBy": [
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at main-menu, whose control set is its own",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at paused, whose control set is its own",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at outcome-win, whose control set is its own",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at outcome-lose, whose control set is its own"
+  ]
+}

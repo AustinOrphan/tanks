@@ -1,0 +1,14 @@
+{
+  "id": "hud-panel-list-is-hand-written-again",
+  "file": "src/game/hud.ts",
+  "find": "    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container)]) {",
+  "replace": "    for (const c of [panel, customizeView, statsView, achView, levelSelectView, controllersView,\n      versusSetupView, settingsView, aboutView, layoutView, devToolsView, selfTestView, devCfgView,\n      galleryView, confirmView]) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "Restores the exact array this replaced, character for character, as it stood before issue #912 -- every pane named by hand and `alertView` missing from the end. This is not a hypothetical regression: it is the code that shipped, and it left the match-failure overlay operable by pointer and Tab only, so a pad player who hit a failed match could dismiss it and never choose Retry. It is the most important entry here because it is the one a well-meaning refactor would reintroduce, and the list looks complete.",
+  "killedBy": [
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside match-failed"
+  ]
+}

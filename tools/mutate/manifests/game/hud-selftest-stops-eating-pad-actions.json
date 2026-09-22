@@ -1,0 +1,14 @@
+{
+  "id": "hud-selftest-stops-eating-pad-actions",
+  "file": "src/game/hud.ts",
+  "find": "    if (selfTestOpen) return true;",
+  "replace": "    if (false) return true;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "Lets pad actions through to the focus ring inside the controller self-test, whose whole subject is which physical control is which index (issue #599). A Confirm pressed there has to appear in the readout rather than activate whatever is focused, and a stick push has to move an axis bar rather than the focus. The sweep asserts this as a named SUPPRESSION rather than skipping the pane, so the one deliberate exception to 'every layer walks' is held to its stated behaviour instead of being a hole nobody can tell from a bug.",
+  "killedBy": [
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside controller-selftest"
+  ]
+}

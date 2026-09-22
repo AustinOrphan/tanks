@@ -1,0 +1,14 @@
+{
+  "id": "hud-panel-list-drops-a-layer",
+  "file": "src/game/hud.ts",
+  "find": "    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container)]) {",
+  "replace": "    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container).slice(0, -1)]) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "Drops one layer from the population `activePanelContainer` derives, which is the defect this derivation exists to make impossible. Twice a pane shipped missing from the hand-kept list it replaced -- the gallery workbench (#730, missed by #741) and the match-failure overlay (#325, fixed in #912) -- and both had the same symptom: arrows moved nothing inside the pane and Confirm landed nowhere, with every required check green. The sweep walks every `HudLayerId`, so whichever layer falls off the end is the one that fails.",
+  "killedBy": [
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside confirm-new-campaign"
+  ]
+}
