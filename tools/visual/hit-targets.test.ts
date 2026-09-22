@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { HIT_FLOOR, hitTargetFailures } from './hit-targets.mjs';
+import { HIT_FLOOR, hitTargetFailures, scrollsSideways } from './hit-targets.mjs';
 
 /**
  * The verdict applied to a measured screen state (issue #686). The browser half cannot run
@@ -11,23 +11,28 @@ import { HIT_FLOOR, hitTargetFailures } from './hit-targets.mjs';
  * toggle at 27 px tall, the versus player-count button at 39.4 px wide, and the tertiary
  * Start New Campaign at 157.9x19.
  */
-const control = (over: Partial<{ key: string; text: string; x: number; y: number; w: number; h: number; reachable: boolean; pinned: string }> = {}) => ({
-  key: 'button.ui-btn.ui-btn--slab.hud-settings-back',
-  text: 'Back',
-  x: 100,
-  y: 500,
-  w: 72,
-  h: 44,
-  reachable: true,
-  ...over,
-});
+const control = (over: Partial<{ key: string; text: string; x: number; y: number; w: number; h: number; pressableW: number; reachable: boolean; pinned: string }> = {}) => {
+  const box = {
+    key: 'button.ui-btn.ui-btn--slab.hud-settings-back',
+    text: 'Back',
+    x: 100,
+    y: 500,
+    w: 72,
+    h: 44,
+    reachable: true,
+    ...over,
+  };
+  // `pressableW` follows the width unless a case sets it, so a control that is not clipped
+  // reads the same as it always did and every existing case keeps its meaning.
+  return { pressableW: box.w, ...box };
+};
 
 function holding() {
   return {
     state: 'screen.settings',
     viewport: '320x568',
     controls: [control(), control({ key: 'button.ui-btn.ui-btn--sm.hud-settings-mute', text: 'Mute (M)', y: 440, w: 83 })],
-    overflow: { page: false },
+    overflow: { page: false, sideways: [] },
   };
 }
 
@@ -108,8 +113,93 @@ describe('menu hit-target verdict (issue #686)', () => {
 
   it('fails a page that scrolls horizontally', () => {
     const run = holding();
-    run.overflow = { page: true };
+    run.overflow = { page: true, sideways: [] };
     expect(hitTargetFailures(run)).toEqual(['screen.settings 320x568: the page scrolls horizontally']);
+  });
+
+  it('fails a control clipped by the screen edge, which measures 44px but cannot all be pressed', () => {
+    // THE READING #932 EXISTS FOR, in the numbers it was found with. Measured on the tree
+    // before #913: the first and last hull swatch sat at x=-2 and right=322 in a 320px
+    // viewport. Both reported w=44 and cleared the floor, while 2px of each hung off the
+    // screen -- and `.hud-customize` carries `touch-action: pan-y`, so no gesture brought
+    // them back. The box was never the thing a player presses.
+    const run = holding();
+    run.controls[1] = control({ key: 'button.ui-selectable.hud-swatch', text: 'Hull: Classic blue', x: -2, y: 300, w: 44, h: 44, pressableW: 42 });
+    expect(hitTargetFailures(run)).toEqual([
+      'screen.settings 320x568: button.ui-selectable.hud-swatch "Hull: Classic blue" is 44x44 with only 42px of it on screen, under the 44px floor',
+    ]);
+  });
+
+  it('does not fail a control clipped downward, because scrolling answers that one', () => {
+    // The asymmetry, asserted rather than described. A control below the fold is still its full
+    // size once a player scrolls to it, and whether they CAN is `reachable`'s question, already
+    // asked above. Only the across reading is cut to the screen, so this must stay passing --
+    // a floor that read a clipped height would fail most of a long pane.
+    const run = holding();
+    run.controls[1] = control({ key: 'button.ui-btn.hud-settings-mute', text: 'Mute (M)', y: 900, h: 44, clip: { x: 100, y: 900, w: 72, h: 0 } });
+    expect(hitTargetFailures(run)).toEqual([]);
+  });
+
+  it('fails a control measured without a pressable width, instead of falling back to its box', () => {
+    // A negative control for the requirement itself. Defaulting the missing field to `c.w`
+    // would restore the exact behaviour that passed the swatches, and nothing would say so.
+    const run = holding();
+    const { pressableW: _dropped, ...noWidth } = control({ key: 'button.ui-btn.hud-settings-mute', text: 'Mute (M)', y: 440 });
+    run.controls[1] = noWidth as typeof run.controls[1];
+    expect(hitTargetFailures(run)).toEqual([
+      'screen.settings 320x568: button.ui-btn.hud-settings-mute "Mute (M)" was measured without a pressable width',
+    ]);
+  });
+
+  it('fails a container that scrolls sideways, naming it and its two widths', () => {
+    // The pane that shipped: 320px of viewport over 322px of content, which `overflow.page`
+    // could not see because everything here is inside a `position: fixed` app root.
+    const run = holding();
+    run.overflow = { page: false, sideways: [{ key: 'div.hud-customize', clientW: 320, scrollW: 322, overflowX: 'auto' }] };
+    expect(hitTargetFailures(run)).toEqual([
+      'screen.settings 320x568: div.hud-customize scrolls sideways, 320px wide over 322px of content',
+    ]);
+  });
+
+  it('passes the two reported shapes that are wider than their box and are not defects', () => {
+    // Both exemptions, with the populations that forced each. A bare `scrollWidth >
+    // clientWidth` sweep reported 236 boxes on a CLEAN tree and would have been unusable.
+    const run = holding();
+    run.overflow = {
+      page: false,
+      sideways: [
+        // 168 of the 236: a visible-overflow box paints its content outside its padding box
+        // without scrolling anywhere. Nearly all were buttons whose label is wider than the
+        // box the text is centred in.
+        { key: 'button.ui-btn.hud-versus-option-btn', clientW: 96, scrollW: 118, overflowX: 'visible' },
+        // The other 68: `.ui-sr-only` is 1px wide holding a whole sentence.
+        { key: 'span.ui-sr-only', clientW: 1, scrollW: 55, overflowX: 'hidden' },
+      ],
+    };
+    expect(hitTargetFailures(run)).toEqual([]);
+  });
+
+  it('fails a one-pixel box only for being one pixel, not for the class it happens to carry', () => {
+    // The exemption is keyed on the BOX, so any visually-hidden idiom is covered and a real
+    // pane cannot buy its way out by borrowing a class name. Same 1px box under a different
+    // class still passes; the same class at a real width does not.
+    expect(scrollsSideways({ key: 'p.visually-hidden', clientW: 1, scrollW: 55, overflowX: 'hidden' })).toBe(false);
+    expect(scrollsSideways({ key: 'div.ui-sr-only', clientW: 320, scrollW: 322, overflowX: 'hidden' })).toBe(true);
+    // And clipped counts, not just scrollable: `overflow-x: hidden` means the content cannot be
+    // reached at all, which is worse than a pane a player can drag.
+    expect(scrollsSideways({ key: 'div.hud-customize', clientW: 320, scrollW: 322, overflowX: 'hidden' })).toBe(true);
+    expect(scrollsSideways({ key: 'div.hud-customize', clientW: 320, scrollW: 320, overflowX: 'auto' })).toBe(false);
+  });
+
+  it('fails a reading with no sideways result at all, instead of passing it', () => {
+    // The same hole one level up: `overflow.page` spent its whole life unable to fire and
+    // looked exactly like a clean reading. A collector that stopped reporting `sideways` --
+    // or a `page.evaluate` that returned undefined -- must not read as "nothing overflowed".
+    const run = holding();
+    run.overflow = { page: false } as typeof run.overflow;
+    expect(hitTargetFailures(run)).toEqual([
+      'screen.settings 320x568: no sideways overflow reading, so nothing was checked',
+    ]);
   });
 
   it('fails a reading that never reached its surface, instead of passing an empty one', () => {
