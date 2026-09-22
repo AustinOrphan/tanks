@@ -1,7 +1,7 @@
 {
   "id": "hit-targets-ignores-a-narrow-control",
   "file": "tools/visual/hit-targets.mjs",
-  "find": "    if (c.w < HIT_FLOOR || c.h < HIT_FLOOR) {",
+  "find": "    if (across < HIT_FLOOR || c.h < HIT_FLOOR) {",
   "replace": "    if (c.h < HIT_FLOOR) {",
   "expect": "killed",
   "tests": [
