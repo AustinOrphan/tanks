@@ -3007,6 +3007,20 @@
 
 .hud-swatches {
   display: flex;
+  /* WRAPS, like `.hud-skins` below, and for a reason that is already happening rather than a
+   * future one. MEASURED on the real build at 320x568, the smallest viewport the visual gate
+   * sweeps: six 44px hull swatches at a 12px gap are 324px in a 320px viewport, so the row sat
+   * at x=-2 with one swatch clipped off each edge and `.hud-customize` reported clientWidth 320
+   * against scrollWidth 322 -- horizontal overflow on top of the vertical it already has, which
+   * is the two-axis scrolling issue #327's criterion forbids by name.
+   *
+   * WORSE THAN A CLIP, because this pane carries `touch-action: pan-y`: a touch player can pan
+   * down but not across, so the two clipped swatches were not reachable at all, by any gesture.
+   *
+   * `.hud-skins` (7 children) already wraps and fits; `.hud-accents` (5) does not wrap and fits
+   * today at 268px, and wraps here too rather than waiting to become the next 324. */
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--hud-space-4);
 }
 
@@ -3016,6 +3030,11 @@
  * unlike every other row in this pane. */
 .hud-accents {
   display: flex;
+  /* Wraps for the same reason as `.hud-swatches` above: five accents are 268px and fit at 320,
+   * but they are the same shape of row and a sixth would put them at 324 -- the number the hull
+   * swatches were already at. */
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--hud-space-4);
 }
 

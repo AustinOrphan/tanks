@@ -2974,6 +2974,22 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
       .not.toMatch(/font-family:\s*ui-monospace/);
   });
 
+  it('wraps every choice row, so none of them can overflow the narrowest viewport', () => {
+    // MEASURED, and this one was already happening rather than a future risk. At 320x568 -- the
+    // smallest viewport the required `visual` gate sweeps -- six 44px hull swatches at a 12px
+    // gap were 324px wide in a 320px viewport: the row sat at x=-2 with one swatch clipped off
+    // each edge, and `.hud-customize` reported clientWidth 320 against scrollWidth 322. That is
+    // the two-axis scrolling #327's criterion forbids by name, and the pane carries
+    // `touch-action: pan-y`, so a touch player could not reach the clipped swatches by any
+    // gesture.
+    //
+    // All three rows, not just the one that overflowed: they are the same shape, and `.hud-skins`
+    // was already wrapping, which is what made the other two look deliberate rather than missed.
+    for (const row of ['.hud-swatches', '.hud-skins', '.hud-accents']) {
+      expect(ruleBody(row), `${row} cannot wrap`).toMatch(/flex-wrap:\s*wrap/);
+    }
+  });
+
   it('lets the level grid wrap, which is the guard against a seventh campaign level', () => {
     // Nothing observable depends on this today and that is the point of writing it down.
     // Measured at 320px by cloning buttons onto the real pane: 5 buttons are 260px and fit,
