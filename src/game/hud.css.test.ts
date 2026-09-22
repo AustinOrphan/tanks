@@ -2974,6 +2974,19 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
       .not.toMatch(/font-family:\s*ui-monospace/);
   });
 
+  it('lets the level grid wrap, which is the guard against a seventh campaign level', () => {
+    // Nothing observable depends on this today and that is the point of writing it down.
+    // Measured at 320px by cloning buttons onto the real pane: 5 buttons are 260px and fit,
+    // 6 are 314px and fit, 7 are 368px and are CLIPPED AT BOTH ENDS -- the row is centred, so
+    // it loses level 1 off the left edge as well as level 7 off the right. `.hud-levelselect`
+    // has no `overflow` property, so those are unreachable. `campaign.json` is not pinned at
+    // five anywhere.
+    expect(ruleBody('.hud-levels'), 'the level grid can no longer wrap').toMatch(/flex-wrap:\s*wrap/);
+    // And it is still a row: `flex-direction: column` would "fix" the overflow by stacking five
+    // buttons vertically, which is a different layout, not this guard.
+    expect(ruleBody('.hud-levels'), 'the level grid stopped being a row').not.toMatch(/flex-direction:\s*column/);
+  });
+
   it('makes the control primitive INHERIT the family, which a <button> otherwise refuses', () => {
     // The gap the bundling left. A <button>'s UA stylesheet sets `font` as a shorthand --
     // family, size and weight in one declaration -- and that beats the family every other

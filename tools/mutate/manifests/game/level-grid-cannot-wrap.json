@@ -1,0 +1,14 @@
+{
+  "id": "level-grid-cannot-wrap",
+  "file": "src/game/hud.css",
+  "find": "  flex-wrap: wrap;\n  gap: var(--hud-space-3);\n  margin-bottom: 4px;\n}",
+  "replace": "  gap: var(--hud-space-3);\n  margin-bottom: 4px;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) lets the level grid wrap, which is the guard against a seventh campaign level"
+  ],
+  "why": "Restores the trap this guard exists for, and restores it invisibly. Measured at a 320px viewport by cloning buttons onto the real pane: five level buttons are 260px and fit, six are 314px and still fit, and SEVEN are 368px and are clipped at BOTH ends -- the row is centred, so it loses level 1 off the left edge as well as level 7 off the right. `.hud-levelselect` is one of only two full-screen panes with no `overflow` property, so those buttons are unreachable rather than merely cramped: the exact failure issue #633 describes, and the one case where that issue is still right. At today's five levels a row that fits does not wrap, so removing `flex-wrap` changes not one rendered pixel and no capture, measurement or screenshot moves -- which is why this entry exists. Nothing pins `campaign.json` at five levels."
+}
