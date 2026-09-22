@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-defaults-a-missing-pressable-width",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "    if (typeof c.pressableW !== 'number') {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Lets a control measured without a pressable width pass instead of failing, which is how the reading would silently revert: with the guard gone the floor reads `undefined < 44` as false and every clipped control passes. A collector that stopped reporting the field would then look exactly like a clean sweep -- the same shape as `overflow.page`, which spent its whole life unable to fire.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a control measured without a pressable width, instead of falling back to its box"
+  ]
+}

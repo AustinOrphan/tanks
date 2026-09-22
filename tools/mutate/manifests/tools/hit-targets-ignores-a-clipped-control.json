@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-ignores-a-clipped-control",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "    const across = c.pressableW;",
+  "replace": "    const across = c.w;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Puts the floor back on the control's box instead of the part of it a player can press, which is the exact reading that passed the two clipped hull swatches (issue #932). Measured on the tree before #913: both sat at the screen edge of a 320px viewport, reported w=44, cleared the 44px floor, and had 2px of each hanging off the screen with `touch-action: pan-y` preventing any gesture from bringing them back. This mutation restores a check that looks identical and cannot see that.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a control clipped by the screen edge, which measures 44px but cannot all be pressed"
+  ]
+}

@@ -137,3 +137,53 @@ describe('hit-sweep.mjs: removing the AudioContext constructor before boot', () 
     expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
   });
 });
+
+/**
+ * Issue #932. The two collectors run only inside `page.evaluate`, where no Vitest run reaches
+ * them -- jsdom reports 0 for every layout property they read, so there is nothing to execute
+ * here even in principle. What the verdict CAN be held to lives in `hit-targets.mjs` and is
+ * tested there; what is left is the wiring, and the wiring is exactly what went wrong before:
+ * a reading that is collected but never handed over is indistinguishable from a clean one.
+ */
+describe('hit-sweep.mjs: handing the sideways reading to the verdict', () => {
+  const src = () => readFileSync(new URL('./hit-sweep.mjs', import.meta.url), 'utf8');
+
+  it('collects the sideways reading and puts it on the overflow object it returns', () => {
+    expect(src(), 'the sideways collector is no longer run in the page')
+      .toMatch(/overflow\.sideways = await page\.evaluate\(COLLECT_SIDEWAYS\);/);
+    // Before the controls are returned, not after: `measureHitTargets` returns `overflow`
+    // itself, so a collection that happened later would never reach the verdict.
+    const assigned = src().search(/overflow\.sideways = await page\.evaluate/);
+    const returned = src().indexOf('return { state: state.id, viewport: viewport.name, controls, overflow');
+    expect(assigned, 'the sideways reading is never collected').toBeGreaterThan(-1);
+    expect(returned, 'the reading is no longer returned').toBeGreaterThan(-1);
+    expect(assigned, 'the reading is collected after it is returned').toBeLessThan(returned);
+  });
+
+  it('reports every wider-than-its-box element, leaving both exemptions to the verdict', () => {
+    // The split this module is built on. Filtering in the page would put the two exemptions --
+    // visible overflow, and the one-pixel visually-hidden box -- somewhere no test and no
+    // mutation entry can reach, which is how `overflow.page` stayed dead for so long.
+    const collector = /export const COLLECT_SIDEWAYS = \(\) => \{[\s\S]*?\n\};/.exec(src())?.[0] ?? '';
+    expect(collector, 'the sideways collector is gone').not.toBe('');
+    expect(collector, 'the collector now judges overflowX, which belongs in the verdict')
+      .not.toMatch(/overflowX\s*===/);
+    expect(collector, 'the collector now judges the box width, which belongs in the verdict')
+      .not.toMatch(/clientWidth\s*<=/);
+    // It must still REPORT both, or the verdict has nothing to judge on.
+    expect(collector, 'overflowX is no longer reported').toMatch(/overflowX: getComputedStyle\(el\)\.overflowX/);
+    expect(collector, 'the client width is no longer reported').toMatch(/clientW: el\.clientWidth/);
+  });
+
+  it('cuts the pressable width to the viewport across, and leaves the height alone', () => {
+    const controls = /export const COLLECT_CONTROLS = \(\) => \{[\s\S]*?\n\};/.exec(src())?.[0] ?? '';
+    expect(controls, 'the control collector is gone').not.toBe('');
+    expect(controls, 'the pressable width no longer clips to the viewport')
+      .toMatch(/Math\.min\(right, window\.innerWidth\) - Math\.max\(left, 0\)/);
+    expect(controls, 'the pressable width is no longer reported').toMatch(/^ {6}pressableW,$/m);
+    // ACROSS ONLY. A pressable HEIGHT cut to the viewport would fail every control below the
+    // fold on a long pane, which scrolling answers and `reachable` already asks about.
+    expect(controls, 'a viewport-clipped height appeared, which scrolling already answers')
+      .not.toMatch(/window\.innerHeight\) - Math\.max\(top/);
+  });
+});

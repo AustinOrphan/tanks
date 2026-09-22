@@ -153,6 +153,8 @@ export const COLLECT_CONTROLS = () => {
       w: +Math.max(0, right - left).toFixed(1),
       h: +Math.max(0, bottom - top).toFixed(1),
     };
+    // What survives the screen's own edges, across only. See the header.
+    const pressableW = +Math.max(0, Math.min(right, window.innerWidth) - Math.max(left, 0)).toFixed(1);
     const classes = [...el.classList].filter((c) => !/--(on|hidden|active|selected|entering|leaving)$/.test(c));
     out.push({
       key: `${el.tagName.toLowerCase()}${el.tagName === 'INPUT' && el.type ? `[${el.type}]` : ''}${classes.length ? `.${classes.join('.')}` : ''}`,
@@ -161,9 +163,44 @@ export const COLLECT_CONTROLS = () => {
       y: +r.y.toFixed(1),
       w: +r.width.toFixed(1),
       h: +r.height.toFixed(1),
+      pressableW,
       clip,
       reachable,
       pinned,
+    });
+  }
+  return out;
+};
+
+/**
+ * Every element whose content is wider than its own box, read in the page (issue #932).
+ *
+ * THE READING THE GATE WAS MISSING. `overflow.page` asks whether the DOCUMENT scrolls
+ * horizontally, and it cannot: the app root is `position: fixed` under
+ * `html, body { overflow: hidden }`, and Chromium leaves fixed-position boxes out of the
+ * document's scrollable overflow. Measured with issue #913's defect restored -- two hull
+ * swatches clipped at both screen edges, `.hud-customize` 320px wide over 322px of content --
+ * `documentElement.scrollWidth` was still exactly 320 in every one of the 128 readings. Asking
+ * each element instead reported that pane at once.
+ *
+ * THIS COLLECTS AND DOES NOT JUDGE, which is the split this module's neighbour was built on:
+ * `hit-targets.mjs` decides, so the decision has unit tests and mutation entries, and a
+ * function that only ever runs inside `page.evaluate` has neither. Both exemptions that make
+ * this reading usable -- visible overflow is not a scroll, and a one-pixel box is a
+ * visually-hidden label -- therefore live there, over `overflowX` and `clientW` reported here.
+ *
+ * No epsilon: `clientWidth` and `scrollWidth` are integers, so the inequality is exact.
+ */
+export const COLLECT_SIDEWAYS = () => {
+  const out = [];
+  for (const el of document.querySelectorAll('*')) {
+    if (el.scrollWidth <= el.clientWidth) continue;
+    const classes = [...el.classList].filter((c) => !/--(on|hidden|active|selected|entering|leaving)$/.test(c));
+    out.push({
+      key: `${el.tagName.toLowerCase()}${classes.length ? `.${classes.join('.')}` : ''}`,
+      clientW: el.clientWidth,
+      scrollW: el.scrollWidth,
+      overflowX: getComputedStyle(el).overflowX,
     });
   }
   return out;
@@ -216,6 +253,7 @@ export async function measureHitTargets(browser, base, state, viewport, timeout 
     await page.waitForTimeout(250);
     const controls = await page.evaluate(COLLECT_CONTROLS);
     const overflow = await page.evaluate(() => ({ page: document.documentElement.scrollWidth > window.innerWidth }));
+    overflow.sideways = await page.evaluate(COLLECT_SIDEWAYS);
     return { state: state.id, viewport: viewport.name, controls, overflow, errors };
   } catch (e) {
     return { state: state.id, viewport: viewport.name, failed: String(e).split('\n')[0].slice(0, 200), errors };

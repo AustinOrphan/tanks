@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-clips-the-pressable-height",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "    const pressableW = +Math.max(0, Math.min(right, window.innerWidth) - Math.max(left, 0)).toFixed(1);",
+  "replace": "    const pressableW = +Math.max(0, Math.min(right, window.innerWidth) - Math.max(left, 0)).toFixed(1);\n    const pressableH = +Math.max(0, Math.min(bottom, window.innerHeight) - Math.max(top, 0)).toFixed(1);",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Adds the vertical twin of the pressable width, which is the tempting symmetry and is wrong. Clipping downward is answered by scrolling -- a control below the fold is still its full size once reached, and whether it can be reached is what `reachable` already asks -- so a floor reading a viewport-clipped height would fail most of every long pane. Only the across reading is cut to the screen, because two-axis scrolling is what the layout forbids.",
+  "killedBy": [
+    "hit-sweep.mjs: handing the sideways reading to the verdict cuts the pressable width to the viewport across, and leaves the height alone"
+  ]
+}
