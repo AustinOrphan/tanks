@@ -2714,6 +2714,56 @@ describe('the About & Legal pane in the assembled HUD (issue #117)', () => {
  * the match used to be, so the same descriptor on a fresh canvas is the other valid action. It
  * is offered only when the caller can retry: the HUD does not know what failed.
  */
+describe('hud: the match-failure overlay is reachable by keyboard and D-pad (issue #327)', () => {
+  const failure = { title: 'That match could not start.', detail: 'Something went wrong.', action: 'Back to menu' };
+
+  /**
+   * `act` and the arrow-key handler both find the pane to move focus in through
+   * `activePanelContainer`. The match-failure overlay was missing from that list, exactly as the
+   * gallery workbench was before `hud.gallery.test.ts` pinned it there -- and with the same
+   * consequence: a controller's D-pad and the arrow keys moved nothing inside the overlay, and
+   * Confirm landed nowhere, so Retry and Back to menu were reachable by pointer and Escape only.
+   *
+   * MEASURED before the fix, with the overlay up: `act('down')` and `act('confirm')` both
+   * returned false while the sibling `confirmView` walked its two buttons normally. This is a
+   * player-facing state -- the screen gate photographs it as `screen.startup.match-failed`.
+   */
+  const openAlert = () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showMatchFailure(failure, vi.fn());
+    vi.runAllTimers();
+    return { h, root };
+  };
+
+  it("a controller's D-pad and Confirm both act inside the overlay", () => {
+    vi.useFakeTimers();
+    try {
+      const { h, root } = openAlert();
+      (document.activeElement as HTMLElement | null)?.blur();
+      expect(h.act('down'), 'the D-pad moved nothing inside the overlay').toBe(true);
+      const alert = root.querySelector('.hud-alert') as HTMLElement;
+      expect(alert.contains(document.activeElement), 'focus went outside the overlay').toBe(true);
+      expect(h.act('confirm'), 'Confirm landed nowhere').toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still answers Back, which was the only action that ever worked here', () => {
+    // The negative control for the fix: Back reached the overlay before `alertView` joined the
+    // list, because `act` short-circuits Back before it asks for a container. If this stopped
+    // working, the fix would have traded one unreachable path for another.
+    vi.useFakeTimers();
+    try {
+      const { h } = openAlert();
+      expect(h.act('back')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('hud: the match-failure alert offers Retry only when it can (issue #685)', () => {
   const failure = { title: 'That match could not start.', detail: 'Something went wrong.', action: 'Back to menu' };
 

@@ -4429,6 +4429,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // Confirm landed nowhere. `hud.gallery.test.ts` pins its place here.
       galleryView,
       confirmView,
+      // The match-failure overlay (issue #325) was left out the same way the gallery was, and
+      // with the same consequence: arrows and a D-pad moved nothing inside it and Confirm
+      // landed nowhere, so Retry and Back to menu were reachable by pointer and by Escape
+      // only. Measured before this line existed -- with the overlay up, `act('down')` and
+      // `act('confirm')` both returned false while the sibling `confirmView` walked its two
+      // buttons normally. It is a PLAYER-FACING state, not a developer one: the screen gate
+      // photographs it as `screen.startup.match-failed`.
+      alertView,
     ]) {
       // A surface fading OUT is displayed but no longer active (issue #364). Before the
       // transition contract exactly one of these was ever displayed, and this loop could
