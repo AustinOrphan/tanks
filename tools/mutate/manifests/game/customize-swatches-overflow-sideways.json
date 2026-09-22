@@ -1,0 +1,14 @@
+{
+  "id": "customize-swatches-overflow-sideways",
+  "file": "src/game/hud.css",
+  "find": "   * swatches were already at. */\n  flex-wrap: wrap;",
+  "replace": "   * swatches were already at. */",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) wraps every choice row, so none of them can overflow the narrowest viewport"
+  ],
+  "why": "Stops the accent row wrapping, which is the shape the hull swatches were in when this was found: a non-wrapping choice row that outgrows the narrowest supported viewport. Measured on the real build at 320x568, the smallest the required `visual` gate sweeps -- six 44px hull swatches at a 12px gap were 324px in a 320px viewport, clipped one swatch off each edge, and `.hud-customize` reported clientWidth 320 against scrollWidth 322. That is two-axis scrolling, which issue #327's criterion forbids by name, and the pane carries `touch-action: pan-y` so the clipped swatches could not be reached by any gesture. The gate did not catch it: its only horizontal check reads `document.documentElement.scrollWidth`, and everything the app draws is inside a `position: fixed` app root, which Chromium excludes from document scrollable overflow."
+}
