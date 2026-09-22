@@ -3285,16 +3285,23 @@
   display: flex;
   /* A GUARD, not a fix: at five levels this row never wraps, so nothing here changes today.
    *
-   * MEASURED at 320px, the narrowest width issue #633 names. The row is centred with 30px
-   * either side, so it has exactly 260px to work in -- and five 44px buttons with four 10px
-   * gaps are exactly 260px. It fits, with nothing to spare, and it still fits at 280px.
+   * MEASURED at 320px, the narrowest width issue #633 names, by cloning buttons onto the real
+   * pane. The row is content-sized, so it grows until it is wider than the viewport and then --
+   * because it is CENTRED -- it is clipped at BOTH ends rather than just the right:
    *
-   * A SIXTH campaign level makes the row 314px against that same 260 and it would overflow
-   * horizontally, inside `.hud-levelselect`, which is one of only two full-screen panes with
-   * no `overflow` property -- so the overflow would be unreachable rather than merely cramped,
-   * which is the failure #633 describes and the one case where it is still right. Nothing in
-   * the tree says `campaign.json` stays at five levels, and a row that fits does not wrap, so
-   * this costs a rendered pixel of nothing and removes the trap. */
+   *   5 buttons  260px  fits
+   *   6 buttons  314px  fits, with 3px to spare
+   *   7 buttons  368px  CLIPPED -- level 1 off the left edge, level 7 off the right
+   *
+   * `.hud-levelselect` is one of only two full-screen panes with no `overflow` property, so
+   * those clipped buttons are unreachable rather than merely cramped -- the failure #633
+   * describes, and the one case where that issue is still right. With this line, seven buttons
+   * wrap to two rows and all of them are reachable.
+   *
+   * SEVEN, not six: an earlier version of this comment said a sixth level would overflow, from
+   * arithmetic that mistook the 30px margins either side of a centred 260px row for padding
+   * that constrained it. They are a consequence of the row being narrower than the pane, not a
+   * limit on it. A screenshot is what corrected that. */
   flex-wrap: wrap;
   gap: var(--hud-space-3);
   margin-bottom: 4px;
