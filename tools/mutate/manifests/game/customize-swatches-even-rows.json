@@ -1,0 +1,14 @@
+{
+  "id": "customize-swatches-even-rows",
+  "file": "src/game/hud.css",
+  "find": "    max-width: calc(3 * var(--hud-control-min) + 2 * var(--hud-space-4));",
+  "replace": "    max-width: calc(6 * var(--hud-control-min) + 5 * var(--hud-space-4));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) splits the six hull swatches into two even rows, not five and a stranded one"
+  ],
+  "why": "Widens the narrow-viewport cap from three swatch columns back to six, which is the same as having no cap at all: six columns are 6x44 + 5x12 = 324px, wider than the 320px line the cap exists to divide, so the row falls back to the 5 + 1 split this rule was added to remove. Measured on the real build at 320x568 with the cap defeated -- 324px and wider keep all six swatches on one line, 323px and below strand the sixth on a line of its own."
+}

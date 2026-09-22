@@ -1,8 +1,8 @@
 {
   "id": "hit-targets-ignores-a-short-control",
   "file": "tools/visual/hit-targets.mjs",
-  "find": "    if (c.w < HIT_FLOOR || c.h < HIT_FLOOR) {",
-  "replace": "    if (c.w < HIT_FLOOR) {",
+  "find": "    if (across < HIT_FLOOR || c.h < HIT_FLOOR) {",
+  "replace": "    if (across < HIT_FLOOR) {",
   "expect": "killed",
   "tests": [
     "tools/visual/hit-targets.test.ts"

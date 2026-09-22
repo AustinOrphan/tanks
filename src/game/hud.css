@@ -3007,6 +3007,20 @@
 
 .hud-swatches {
   display: flex;
+  /* WRAPS, like `.hud-skins` below, and for a reason that is already happening rather than a
+   * future one. MEASURED on the real build at 320x568, the smallest viewport the visual gate
+   * sweeps: six 44px hull swatches at a 12px gap are 324px in a 320px viewport, so the row sat
+   * at x=-2 with one swatch clipped off each edge and `.hud-customize` reported clientWidth 320
+   * against scrollWidth 322 -- horizontal overflow on top of the vertical it already has, which
+   * is the two-axis scrolling issue #327's criterion forbids by name.
+   *
+   * WORSE THAN A CLIP, because this pane carries `touch-action: pan-y`: a touch player can pan
+   * down but not across, so the two clipped swatches were not reachable at all, by any gesture.
+   *
+   * `.hud-skins` (7 children) already wraps and fits; `.hud-accents` (5) does not wrap and fits
+   * today at 268px, and wraps here too rather than waiting to become the next 324. */
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--hud-space-4);
 }
 
@@ -3016,7 +3030,43 @@
  * unlike every other row in this pane. */
 .hud-accents {
   display: flex;
+  /* Wraps for the same reason as `.hud-swatches` above: five accents are 268px and fit at 320,
+   * but they are the same shape of row and a sixth would put them at 324 -- the number the hull
+   * swatches were already at. */
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--hud-space-4);
+}
+
+/*
+ * EVEN ROWS on the narrowest screens, rather than a lone swatch on a line of its own.
+ *
+ * Wrapping alone (see `.hud-swatches` above) stops the sideways overflow but leaves 5 + 1: five
+ * swatches fill the line and the sixth sits by itself, which reads as a rendering fault rather
+ * than a layout. Capping the row at three columns makes it 3 + 3.
+ *
+ * THE ARITHMETIC, so none of the numbers are magic. A swatch is `--hud-control-min` (44px) and
+ * the gap is `--hud-space-4` (12px), so six on one line are 6x44 + 5x12 = 324px and three are
+ * 3x44 + 2x12 = 156px. 324 is therefore the exact width at which the row stops fitting, and
+ * `max-width: 323px` is "one pixel narrower than that": measured with the cap defeated, 324px
+ * and wider keep all six on one line and 323px and below fall to 5 + 1. So the cap lands on
+ * every width that would show the lone swatch and on no width that would not.
+ *
+ * `.hud-accents` IS DELIBERATELY NOT INCLUDED, and that is the whole reason this rule names one
+ * selector instead of both. Five accents are 5x44 + 4x12 = 268px, which fits a 320px line with
+ * room to spare -- they have no lone-item problem to fix, and capping them alongside the hull
+ * swatches was measured turning a clean row of five into 3 + 2. Skins are text buttons of
+ * varying width rather than fixed circles, so this arithmetic does not describe them either.
+ *
+ * COUNT-COUPLED, necessarily: CSS cannot express "wrap into equal rows" without knowing how
+ * many items there are. A seventh hull colour would need 7x44 + 6x12 = 380px and would reopen
+ * the lone swatch between 324px and 380px, where this cap does not reach. The swatch count is
+ * pinned in `hud.css.test.ts` so adding one fails a test rather than shipping quietly.
+ */
+@media (max-width: 323px) {
+  .hud-swatches {
+    max-width: calc(3 * var(--hud-control-min) + 2 * var(--hud-space-4));
+  }
 }
 
 /* The colour swatches are NOT `.ui-btn`: each one's background IS the colour it offers,
@@ -3313,6 +3363,26 @@
 .hud-levels {
   pointer-events: auto;
   display: flex;
+  /* A GUARD, not a fix: at five levels this row never wraps, so nothing here changes today.
+   *
+   * MEASURED at 320px, the narrowest width issue #633 names, by cloning buttons onto the real
+   * pane. The row is content-sized, so it grows until it is wider than the viewport and then --
+   * because it is CENTRED -- it is clipped at BOTH ends rather than just the right:
+   *
+   *   5 buttons  260px  fits
+   *   6 buttons  314px  fits, with 3px to spare
+   *   7 buttons  368px  CLIPPED -- level 1 off the left edge, level 7 off the right
+   *
+   * `.hud-levelselect` is one of only two full-screen panes with no `overflow` property, so
+   * those clipped buttons are unreachable rather than merely cramped -- the failure #633
+   * describes, and the one case where that issue is still right. With this line, seven buttons
+   * wrap to two rows and all of them are reachable.
+   *
+   * SEVEN, not six: an earlier version of this comment said a sixth level would overflow, from
+   * arithmetic that mistook the 30px margins either side of a centred 260px row for padding
+   * that constrained it. They are a consequence of the row being narrower than the pane, not a
+   * limit on it. A screenshot is what corrected that. */
+  flex-wrap: wrap;
   gap: var(--hud-space-3);
   margin-bottom: 4px;
 }

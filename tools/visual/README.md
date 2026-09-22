@@ -146,17 +146,31 @@ The sweep has three parts:
 
 The verdict is `hit-targets.mjs`. A reading fails on any of these:
 
-- a control under 44 px in either dimension;
+- a control under 44 px in either dimension, measured ACROSS on the part of it that is on
+  screen and DOWN on its whole box (issue #932) — clipping at the screen edge is permanent
+  where clipping below the fold is answered by scrolling;
 - two controls on the same layer that overlap;
 - a control that cannot be scrolled to;
+- a container that scrolls sideways (issue #932);
 - a page that scrolls horizontally;
-- a state that never reached its surface.
+- a state that never reached its surface, or one whose sideways reading is missing.
 
 The check prints one summary line, then only the failing lines. The report's `hitTargets`
 array holds every reading.
 
 Which surfaces are swept is unit-tested and has mutation entries (`hit-sweep-*`). The in-page
-collector is not: it runs only in the browser, so the gate itself is its test.
+collectors are not executed by any Vitest run — jsdom reports 0 for every layout property they
+read — so they COLLECT and do not judge: both exemptions that make the sideways reading usable
+live in `hit-targets.mjs`, where a unit test and a mutation entry can reach them. What is left
+in `hit-sweep.test.ts` is the wiring, which is what failed before.
+
+**`overflow.page` cannot fire in this layout, and is kept anyway.** It reads
+`documentElement.scrollWidth > innerWidth`; everything the app draws is inside a
+`position: fixed` app root under `html, body { overflow: hidden }`, and Chromium leaves
+fixed-position boxes out of the document's scrollable overflow. Measured across all 128
+readings with issue #913's defect restored: 0. The per-container reading beside it is what
+answers the question for the layout as it actually is, and `overflow.page` stays because it
+becomes the right question again the moment the app root stops being fixed.
 
 ## Validation
 

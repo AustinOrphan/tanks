@@ -1,0 +1,14 @@
+{
+  "id": "customize-accents-wrongly-capped",
+  "file": "src/game/hud.css",
+  "find": "@media (max-width: 323px) {\n  .hud-swatches {",
+  "replace": "@media (max-width: 323px) {\n  .hud-swatches,\n  .hud-accents {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) splits the six hull swatches into two even rows, not five and a stranded one"
+  ],
+  "why": "Restores the mistake the first draft of the even-row cap actually shipped into review: capping `.hud-accents` alongside the hull swatches. It looks symmetrical and is pure damage -- five accents are 5x44 + 4x12 = 268px and already fit a 320px line intact, so the cap breaks a clean single row into 3 + 2 while rescuing nothing. Measured both ways on the real build at 320x568. Without this entry the test's negative half is unproven, since every assertion around it passes whether or not the accent row is named."
+}

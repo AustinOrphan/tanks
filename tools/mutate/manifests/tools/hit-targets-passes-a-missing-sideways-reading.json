@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-passes-a-missing-sideways-reading",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "  if (!Array.isArray(run.overflow.sideways)) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Treats a reading with no sideways result as a clean one. This is the defect that let a sideways-overflowing pane ship: `overflow.page` could never fire, and a check that cannot fire is indistinguishable from a check that found nothing. Without the guard, a `page.evaluate` that returned undefined -- or a collector that stopped reporting -- would restore exactly that blind spot while every required check stayed green.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) fails a reading with no sideways result at all, instead of passing it"
+  ]
+}
