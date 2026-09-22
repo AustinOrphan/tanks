@@ -1,0 +1,14 @@
+{
+  "id": "hud-colour-sweep-enumerates-states",
+  "file": "src/game/hud.css.test.ts",
+  "find": "      const stateful = /--[a-z0-9-]+/.test(selector) ||",
+  "replace": "      const stateful = /--(on|active|armed|selected|full)\\b/.test(selector) ||",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Turns the population from every modifier into a list of the modifiers someone judged to be states, which is the failure mode the sweep is shaped to avoid: a new state joins by omission and is never swept. The list here is generous on purpose -- it still contains the five modifiers the allowlist names -- so the mutation is killed only by the allowlist's own both-directions check noticing that entries it holds have silently left the population, not by a state disappearing. That is the assertion doing the work a narrower population would have lost.",
+  "killedBy": [
+    "hud.css: no state is carried by colour alone (issue #926) keeps the allowlist honest: every entry is still colour-only, and still reinforced"
+  ]
+}
