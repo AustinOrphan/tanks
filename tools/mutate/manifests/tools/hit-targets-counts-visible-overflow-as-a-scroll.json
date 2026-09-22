@@ -1,0 +1,14 @@
+{
+  "id": "hit-targets-counts-visible-overflow-as-a-scroll",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "  if (box.overflowX === 'visible') return false;",
+  "replace": "",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Drops the exemption that makes the sideways reading usable at all. A visible-overflow box reports content painting outside its padding box without scrolling anywhere: measured on a clean tree, 168 such readings across 12 element classes, nearly all buttons whose label is wider than the box its text is centred in. Without this line the gate fails a clean tree on 168 non-defects, which is a check nobody can keep.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) passes the two reported shapes that are wider than their box and are not defects"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "hit-targets-fails-a-visually-hidden-label",
+  "file": "tools/visual/hit-targets.mjs",
+  "find": "  if (box.clientW <= 1) return false;",
+  "replace": "",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-targets.test.ts"
+  ],
+  "why": "Drops the one-pixel exemption, so every visually-hidden label reads as a menu scrolling sideways. `.ui-sr-only` (hud.css:4403) is `width: 1px; overflow: hidden` holding a whole sentence, reporting 1px over 55; measured, 68 of them across the sweep, every one a false positive. The exemption is keyed on the box rather than the class so any visually-hidden idiom is covered, and no box wider than a pixel is excluded by it.",
+  "killedBy": [
+    "menu hit-target verdict (issue #686) passes the two reported shapes that are wider than their box and are not defects",
+    "menu hit-target verdict (issue #686) fails a one-pixel box only for being one pixel, not for the class it happens to carry"
+  ]
+}

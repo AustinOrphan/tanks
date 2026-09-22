@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-drops-the-sideways-reading",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "    overflow.sideways = await page.evaluate(COLLECT_SIDEWAYS);",
+  "replace": "",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Collects the sideways reading nowhere, so `measureHitTargets` hands the verdict an overflow object with only the dead `page` field on it. The verdict answers that with a failure rather than a pass, but nothing would hold this line in place on its own -- and a reading that is never collected is the same blind spot as a reading that can never fire.",
+  "killedBy": [
+    "hit-sweep.mjs: handing the sideways reading to the verdict collects the sideways reading and puts it on the overflow object it returns"
+  ]
+}
