@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-unzooms-the-zoom-viewport",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  Object.freeze({ name: '1280x800@200%', width: 640, height: 400, dpr: 2 }),",
+  "replace": "  Object.freeze({ name: '1280x800@200%', width: 1280, height: 800, dpr: 2 }),",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Keeps the name and takes the zoom away. The entry exists because issue #327's fifth criterion names 200% zoom: a 1280x800 screen at 200% gives the page 640x400 CSS px, which is the tightest landscape a desktop player can produce. Restoring the full width leaves a label claiming a zoom reading that is no longer being taken, and the viewport count, the summary line and every other check stay exactly as they were -- so this is the version of the mistake nothing else would show.",
+  "killedBy": [
+    "hit-sweep.mjs: the viewports issue #327 criterion 5 names (issue #933) sweeps the 200% zoom reading, whose CSS width is half the screen it stands for"
+  ]
+}

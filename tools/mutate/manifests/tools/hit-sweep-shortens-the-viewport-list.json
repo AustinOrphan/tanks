@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-shortens-the-viewport-list",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  Object.freeze({ name: '390x844', width: 390, height: 844, dpr: 2 }),",
+  "replace": "  // the common-phone reading, dropped",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Removes a viewport that is not one of criterion 5's two, proving the count guard is doing work the two per-viewport assertions cannot. Dropping an entry makes the sweep cheaper and every required check faster and greener, and the only visible trace is the viewport number in `verify.mjs`'s own summary line, which nothing reads back.",
+  "killedBy": [
+    "hit-sweep.mjs: the viewports issue #327 criterion 5 names (issue #933) keeps every entry frozen and uniquely named, since the sweep keys its readings by name"
+  ]
+}
