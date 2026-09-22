@@ -1,10 +1,10 @@
 {
   "id": "hud-layout-missing-from-the-panel-list",
   "file": "src/game/hud.ts",
-  "find": "      aboutView,\n      layoutView,\n",
-  "replace": "      aboutView,\n",
+  "find": "    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container)]) {",
+  "replace": "    for (const c of [panel, ...Object.entries(LAYERS)\n      .filter(([id]) => id !== 'controller-layout')\n      .map(([, row]) => row.container)]) {",
   "expect": "killed",
-  "why": "`act` finds the pane a controller is acting in from this list. Left out, the Controller Layout pane is open with no active container, so a controller's Confirm and directions do nothing there, and the pane cannot be operated from a controller at all.",
+  "why": "Drops the controller layout pane out of the population `activePanelContainer` derives. The pane exists to be configured with a controller in hand, so losing the D-pad inside it is the one place that cost lands hardest; issue #754 added it and the list had to be edited by hand to keep up. Kept per-pane after the derivation replaced that list, because it pins that THIS pane is swept rather than that some pane is.",
   "tests": [
     "src/game/hud.controller-layout.test.ts"
   ],

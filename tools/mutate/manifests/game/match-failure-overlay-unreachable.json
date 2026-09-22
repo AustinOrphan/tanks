@@ -1,8 +1,8 @@
 {
   "id": "match-failure-overlay-unreachable",
   "file": "src/game/hud.ts",
-  "find": "      alertView,\n    ]) {",
-  "replace": "    ]) {",
+  "find": "    for (const c of [panel, ...Object.values(LAYERS).map((row) => row.container)]) {",
+  "replace": "    for (const c of [panel, ...Object.entries(LAYERS)\n      .filter(([id]) => id !== 'match-failed')\n      .map(([, row]) => row.container)]) {",
   "expect": "killed",
   "tests": [
     "src/game/hud.surfaces.test.ts"
@@ -10,5 +10,5 @@
   "killedBy": [
     "hud: the match-failure overlay is reachable by keyboard and D-pad (issue #327) a controller's D-pad and Confirm both act inside the overlay"
   ],
-  "why": "Restores the defect the match-failure overlay shipped with until issue #327's audit found it. `act` and the arrow-key handler both locate the pane to move focus in through `activePanelContainer`; with the overlay absent from that list the arrows and a D-pad move nothing inside it and Confirm lands nowhere, so Retry and Back to menu are reachable by pointer and Escape only. Measured on the shipped tree before the fix: with the alert up, `act('down')` and `act('confirm')` both returned false while the sibling `confirmView` walked its two buttons normally. This is a player-facing state, not a developer path -- the screen gate photographs it as `screen.startup.match-failed`. Two panes have now been left out of this list the same way, the gallery workbench (#730, caught by #741) being the other."
+  "why": "Drops the match-failure overlay out of the population `activePanelContainer` derives, restoring the state issue #912 fixed: the overlay was operable by pointer and Tab only, so a pad player who hit a failed match could dismiss it with B and never choose Retry -- which is the whole point of the screen. Measured before the fix: with the overlay up, `act('down')` and `act('confirm')` both returned false while the sibling confirmation walked its two buttons normally."
 }
