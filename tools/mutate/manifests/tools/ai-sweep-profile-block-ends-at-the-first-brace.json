@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-profile-block-ends-at-the-first-brace",
+  "file": "tools/ai-sweep/patch.mjs",
+  "find": "      depth--;\n      if (depth === 0) {",
+  "replace": "      depth--;\n      if (depth >= 0) {",
+  "expect": "killed",
+  "why": "Ends the profile's block at the FIRST closing brace instead of its own. Today every profile in ai-profiles.json is flat, so this mutation is invisible against the shipped file -- it only bites once a profile gains a nested object, at which point the sweep would silently patch a truncated block or the wrong field. The fixture in the test carries that nested case deliberately, so the guard fails now rather than on the day the file changes.",
+  "tests": [
+    "tools/ai-sweep/patch.test.ts"
+  ],
+  "killedBy": [
+    "patchProfileField: one profile, and only that one finds the profile s real closing brace, not the first one"
+  ]
+}

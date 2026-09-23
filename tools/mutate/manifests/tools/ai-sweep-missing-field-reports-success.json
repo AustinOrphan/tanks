@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-missing-field-reports-success",
+  "file": "tools/ai-sweep/patch.mjs",
+  "find": "  if (count === 0) return { patched: text, count: 0 };\n  return { patched: text.slice(0, open) + newBlock + text.slice(close + 1), count };",
+  "replace": "  return { patched: text.slice(0, open) + newBlock + text.slice(close + 1), count: count || 1 };",
+  "expect": "killed",
+  "why": "Reports a successful patch when the field was not found on that profile. The sweep compares this count against the one it took before the run and refuses a mismatch, so a truthful 0 stops the run; a fabricated 1 lets it proceed and measure the SHIPPED value under the label it meant to set. That is the dead-knob failure this whole tool is built to make impossible -- its header says so in its first paragraph.",
+  "tests": [
+    "tools/ai-sweep/patch.test.ts"
+  ],
+  "killedBy": [
+    "patchProfileField: one profile, and only that one REFUSES a field the profile does not have"
+  ]
+}
