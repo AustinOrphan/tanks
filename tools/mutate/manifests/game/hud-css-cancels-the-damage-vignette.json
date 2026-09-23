@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-cancels-the-damage-vignette",
+  "file": "src/game/hud.css",
+  "find": ".hud--reduced-motion .hud-damage--hit {\n  animation-name: hud-damage-flash--still;\n}",
+  "replace": ".hud--reduced-motion .hud-damage--hit {\n  animation: none;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #930, and this is the SHIPPED defect restored rather than an invented one. `.hud-damage` rests at `opacity: 0` and `@keyframes hud-damage-flash` ramps opacity and nothing else, so cancelling the animation leaves the vignette at 0 forever. Measured on the stylesheet in a browser, twelve samples over 480ms after the class toggle `hud.ts` performs: peak opacity 1.00 with motion allowed, 0 under reduced motion. The old two-class list named `.hud-capacity--flash` and `.hud-count--pop` only, so this state passed the suite for as long as it stood.",
+  "killedBy": [
+    "hud.css: every animation answers to the resolved motion policy (issue #631) never answers an animation by cancelling a cue that rests invisible"
+  ]
+}
