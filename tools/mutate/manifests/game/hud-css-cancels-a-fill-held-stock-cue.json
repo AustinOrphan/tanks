@@ -1,0 +1,15 @@
+{
+  "id": "hud-css-cancels-a-fill-held-stock-cue",
+  "file": "src/game/hud.css",
+  "find": ".hud--reduced-motion .hud-stock-cue--badge {\n  animation-name: hud-stock-badge--still;\n}",
+  "replace": ".hud--reduced-motion .hud-stock-cue--badge {\n  animation: none;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #930's second half: the badge has NO `opacity: 0` in its own rule -- it rests invisible because `animation: ... both` holds a keyframe set opening at `opacity: 0`, which is how all three stock-cue arms do it and why a population derived from base rules alone would miss them. NOT A CLOSED GAP, and worth stating plainly: this mutation was already killed before issue #930 by the arms' own case in `hud.css: the stock-loss cue arms (issue #230)`, and it still fails that one too. What the derived rule adds here is a SECOND, general guard -- the #230 case is arm-specific and a fourth arm added tomorrow joins the derived population automatically. The gap this issue actually closed is `hud-css-cancels-the-damage-vignette`, which the old suite did not catch at all.",
+  "killedBy": [
+    "hud.css: every animation answers to the resolved motion policy (issue #631) never answers an animation by cancelling a cue that rests invisible",
+    "hud.css: the stock-loss cue arms (issue #230) gives every cue a reduced-motion form, keyed off the resolved policy class"
+  ]
+}
