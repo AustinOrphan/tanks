@@ -14,7 +14,7 @@
  */
 import { findScreenState, SCREEN_STATES } from '../screens/states.mjs';
 import { audioContextOverrideSource } from '../shared/audio-context.mjs';
-import { runStep, applyEntryMode } from '../screens/steps.mjs';
+import { runStep, applyEntryMode, webglOverrideSource } from '../screens/steps.mjs';
 
 /**
  * The four viewports #686 measured, and the reason each is here: the smallest supported
@@ -68,7 +68,12 @@ export const HIT_EXTRA_STATES = Object.freeze([
  */
 export function hitSweepExclusion(state) {
   if (state.id.startsWith('screen.devtools')) return 'a developer pane, reached only behind ?dev=1';
-  if (state.webgl !== 'ok') return 'a startup failure page, which has no menu to press';
+  // A `webgl !== 'ok'` rule used to sit here, reading "a startup failure page, which has no
+  // menu to press". That was false about the page and true only about this driver: `boot.ts`
+  // draws a real `<button>` on every branded failure page and focuses it, and the reason the
+  // sweep could not see it was that `measureHitTargets` never applied `state.webgl`, so the
+  // two states booted normally here and timed out waiting for an alert that never came. The
+  // driver applies the override now (see below), so the rule has nothing left to justify it.
   if (state.javascript === 'off') return 'the no-script page: the collector runs as page script';
   if (state.steps.some((step) => 'breakWebgl' in step)) return 'the match failure overlay, owned by its own capture';
   // Issue #617. A played ending is tens of seconds of software-GL play before its panel
@@ -232,6 +237,13 @@ export async function measureHitTargets(browser, base, state, viewport, timeout 
   // THIS driver navigates for itself, separately from `verify.mjs`'s own two page paths,
   // which is the shape of bug issues #781 and #844 both hit here.
   await context.addInitScript(audioContextOverrideSource());
+  // The catalogue's WebGL mode reaches this driver too, which is the third field to have
+  // needed saying so here: issue #781's `entry`, issue #844's `touch`, and now `webgl`. Every
+  // one was missing for the same reason -- `captureState` navigates for itself and so does
+  // this, and a field added to the catalogue reaches whichever driver its author was looking
+  // at. Without it the two branded startup-failure pages boot normally under this driver and
+  // time out on `[role="alert"]`, which is why they were excluded rather than measured.
+  if (state.webgl !== 'ok') await context.addInitScript(webglOverrideSource(state.webgl));
   const errors = [];
   try {
     const page = await context.newPage();

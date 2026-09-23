@@ -137,8 +137,10 @@ that shape.
 The sweep has three parts:
 
 - **Surfaces** — `tools/visual/hit-sweep.mjs` decides these. It takes the screen-state
-  catalogue, minus developer panes, startup failure pages, the no-script page and the match
-  failure overlay. It adds the Controllers pane and Settings with Reset stats armed.
+  catalogue, minus developer panes, the no-script page, the match failure overlay, the played
+  endings and the states that declare no menu. It adds the Controllers pane and Settings with
+  Reset stats armed. The branded startup failure pages ARE swept: each draws one focused
+  Reload button, and the driver applies the catalogue's `webgl` mode to reach them.
 - **Viewports** — each surface is read at 320x568, 390x844, 1280x800 and 1280x800 at 200%,
   one fresh context per reading.
 - **Driving** — `tools/screens/steps.mjs` runs each state's steps, the same runner

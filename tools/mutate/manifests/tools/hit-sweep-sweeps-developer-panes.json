@@ -9,7 +9,7 @@
   ],
   "why": "Issue #710. The sweep stops excluding the developer panes, so the visual gate drives the 7 `screen.devtools*` states as if players met them. Those panes sit behind ?dev=1, and #686 scoped the 44 px floor to player-facing surfaces. Killed by the exclusion-map case (the developer rule disappears) and the swept-list case (7 more ids).",
   "killedBy": [
-    "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule",
+    "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, no-script, match-failure, played-ending and menu-less states, each for its rule",
     "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the extra surface"
   ]
 }
