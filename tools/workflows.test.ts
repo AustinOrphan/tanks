@@ -97,6 +97,7 @@ const ATOMIC = {
   'test:unit': 'vitest run',
   build: 'vite build',
   portability: 'node tools/portability/check.mjs dist',
+  'bundle:budget': 'node tools/bundle-budget/check.mjs dist',
   'test:gl': 'node tools/gl/run.mjs',
   'trace:browser': 'node tools/baseline/run.mjs',
   visual: 'node tools/visual/verify.mjs dist --check',
@@ -115,7 +116,7 @@ const COMPOSITES = {
   test: 'npm run verify:quick --',
   'mutate:smoke': 'npm run mutate -- --only capture-prerequisite-error-drops-the-ci-pin',
   'verify:quick': 'npm run typecheck && npm run test:unit --',
-  'verify:build': 'npm run build && npm run portability',
+  'verify:build': 'npm run build && npm run portability && npm run bundle:budget',
   'verify:visual':
     'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual && npm run roundtrip && npm run devtools:pages',
   'verify:full': 'npm run verify:quick && npm run mutate && npm run verify:build && npm run audit:prod',
@@ -242,7 +243,7 @@ describe('the canonical verification scripts', () => {
     }
 
     expect(expandScript('verify:quick', SCRIPTS)).toEqual(['typecheck', 'test:unit']);
-    expect(expandScript('verify:build', SCRIPTS)).toEqual(['build', 'portability']);
+    expect(expandScript('verify:build', SCRIPTS)).toEqual(['build', 'portability', 'bundle:budget']);
     expect(expandScript('mutate:smoke', SCRIPTS)).toEqual(['mutate']);
     expect(expandScript('verify:full', SCRIPTS)).toEqual([
       'typecheck',
@@ -250,6 +251,7 @@ describe('the canonical verification scripts', () => {
       'mutate',
       'build',
       'portability',
+      'bundle:budget',
       'audit:prod',
     ]);
   });
@@ -258,6 +260,7 @@ describe('the canonical verification scripts', () => {
     expect(expandScript('verify:visual', SCRIPTS)).toEqual([
       'build',
       'portability',
+      'bundle:budget',
       'test:gl',
       'trace:browser',
       'visual',

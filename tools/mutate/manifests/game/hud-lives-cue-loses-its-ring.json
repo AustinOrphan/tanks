@@ -1,0 +1,15 @@
+{
+  "id": "hud-lives-cue-loses-its-ring",
+  "file": "src/game/hud.css",
+  "find": "  50% { color: #ff6a6a; transform: none; outline-width: 2px; }",
+  "replace": "  50% { color: #ff6a6a; transform: none; }",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Takes the ring off the life counter, restoring the state the stylesheet conceded in a comment for as long as the rule existed: with the vignette cancelled and the scale removed, 'you lost a life' under reduced motion is a hue change on one number. `.hud-lives` is not opted out of the `forced-colors` block, so reduced motion plus forced colours leaves no cue at all -- two accessibility settings combining to remove a signal, which is worse than either alone. Captured in greyscale before this fix, the life-lost digit is pixel-identical to the one at rest.",
+  "killedBy": [
+    "hud.css: no reduced-motion cue is carried by colour alone (issue #924) gives every reduced-motion cue a channel besides hue",
+    "hud.css: no reduced-motion cue is carried by colour alone (issue #924) rings the life counter, which is the channel that survives forced colours and greyscale"
+  ]
+}

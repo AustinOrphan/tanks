@@ -1,0 +1,14 @@
+{
+  "id": "bundle-budget-gzips-at-the-default-level",
+  "file": "tools/bundle-budget/check.mjs",
+  "find": "return gzipSync(buffer, { level: 9 }).length;",
+  "replace": "return gzipSync(buffer).length;",
+  "expect": "killed",
+  "why": "Compresses at zlib`s default level 6 instead of the 9 the recorded ceilings were measured at, which hands the budget silent headroom: the same bytes measure larger, so the gate reports a bundle closer to its ceiling than it is -- or, after someone re-baselines against the wrong level, further from it. Every other assertion in the suite compares gzipSize against itself and would not notice; only a test that pins the level can.",
+  "tests": [
+    "tools/bundle-budget/check.test.ts"
+  ],
+  "killedBy": [
+    "bundle budget: what it measures gzips with zlib level 9, not with whatever the platform defaults to"
+  ]
+}
