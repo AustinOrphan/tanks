@@ -1,0 +1,14 @@
+{
+  "id": "particles-close-the-switch-with-a-default",
+  "file": "src/render/particles.ts",
+  "find": "          const _exhaustive: never = ev;",
+  "replace": "          const _exhaustive: unknown = ev;",
+  "expect": "killed",
+  "tests": [
+    "src/render/particles.test.ts"
+  ],
+  "why": "Widens the exhaustiveness guard's type so it accepts anything, which removes the compile error while leaving the shape of the code identical. `audio/director.ts` and `game/haptics.ts` both fail the build when a SimEvent kind is added; before issue #929 this layer did not, and for a criterion about information surviving a muted game the visual channel was the wrong one to leave silent. MEASURED: adding a `shield-broken` kind to the union errors in all three files now, and produced zero errors from particles.ts before. The assertion is structural because a compile error is not something a Vitest run can observe.",
+  "killedBy": [
+    "particles: which events burst, and how much closes its switch with the exhaustiveness guard, not a default (issue #929)"
+  ]
+}

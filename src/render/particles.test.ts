@@ -2,6 +2,8 @@
 // maths on the CPU, so a Scene needs no GL context. That is the same property
 // framing.test.ts relies on, and it is why this file can exist at all while
 // scene.ts and renderer.ts still cannot be tested.
+import { readFileSync } from 'node:fs';
+
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
 import type { SimEvent } from '../sim/events';
@@ -107,7 +109,8 @@ describe('particles: where a burst is drawn', () => {
 });
 
 describe('particles: which events burst, and how much', () => {
-  // Population: all 11 SimEvent kinds. Five burst, six deliberately do not.
+  // Population: the five kinds that burst, with the count each draws. The whole union is swept
+  // below -- this list is only the ones whose SIZE is worth pinning.
   const bursting: Array<[SimEvent, number]> = [
     [{ type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 }, 5],
     [{ type: 'ricochet', ownerId: 1, pos: { x: 0, y: 0 }, bounceIndex: 0 }, 6],
@@ -132,16 +135,76 @@ describe('particles: which events burst, and how much', () => {
     expect(activeMeshes(scene).length).toBe(0);
   });
 
-  it('the five non-visual events spawn nothing', () => {
-    const { scene, ps } = setup();
-    ps.spawn([
-      { type: 'mine-dropped', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
-      { type: 'mine-armed', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
-      { type: 'win' },
-      { type: 'lose' },
-      { type: 'respawn', tankId: 1, controlledBy: 0, pos: { x: 0, y: 0 } },
-    ]);
-    expect(activeMeshes(scene).length).toBe(0);
+  /**
+   * One of every `SimEvent` kind, keyed by its own `type` (issue #929).
+   *
+   * SUPERSEDES 'the five non-visual events spawn nothing', which named five of them by hand and
+   * had fallen three behind the union: `mine-triggered`, `mine-fuse-warning` and `fire-blocked`
+   * were never swept here. So had the comment in particles.ts, and so had the "all 11 SimEvent
+   * kinds" note above -- three hand-kept lists drifting from the same union, which is the case
+   * for deriving rather than listing.
+   *
+   * `Record<SimEvent['type'], SimEvent>` is what makes this hold: a new event kind that is not
+   * given a fixture here does not compile, so it cannot join the sweep by omission.
+   */
+  const ONE_OF_EACH: Record<SimEvent['type'], SimEvent> = {
+    fire: { type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 },
+    ricochet: { type: 'ricochet', ownerId: 1, pos: { x: 0, y: 0 }, bounceIndex: 0 },
+    explosion: { type: 'explosion', pos: { x: 0, y: 0 } },
+    'wall-destroyed': { type: 'wall-destroyed', wallId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
+    'mine-detonate': { type: 'mine-detonate', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
+    'mine-dropped': { type: 'mine-dropped', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
+    'mine-armed': { type: 'mine-armed', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
+    'mine-triggered': { type: 'mine-triggered', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
+    'mine-fuse-warning': { type: 'mine-fuse-warning', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
+    'tank-destroyed': { type: 'tank-destroyed', tankId: 1, kind: 'brown', by: { source: 'shell', ownerId: 9 }, pos: { x: 0, y: 0 } },
+    'fire-blocked': { type: 'fire-blocked', ownerId: 1, reason: 'shell-cap' },
+    respawn: { type: 'respawn', tankId: 1, controlledBy: 0, pos: { x: 0, y: 0 } },
+    win: { type: 'win' },
+    lose: { type: 'lose' },
+  };
+
+  /** The kinds this layer draws for. Everything else in the union must draw nothing. */
+  const DRAWS = new Set<SimEvent['type']>(['fire', 'ricochet', 'explosion', 'wall-destroyed', 'mine-detonate']);
+
+  it('draws for exactly the events it means to, swept across the whole SimEvent union', () => {
+    // BOTH DIRECTIONS in one pass. A kind that quietly starts drawing is as much a defect as one
+    // that stops: `tank-destroyed` is in the union precisely because handling it once doubled
+    // every kill into a 48-particle burst, and nothing but a sweep like this would have said so.
+    const drew: string[] = [];
+    for (const type of Object.keys(ONE_OF_EACH) as SimEvent['type'][]) {
+      const { scene, ps } = setup();
+      ps.spawn([ONE_OF_EACH[type]]);
+      if (activeMeshes(scene).length > 0) drew.push(type);
+    }
+    expect(drew.sort()).toEqual([...DRAWS].sort());
+  });
+
+  it('sweeps every kind the union declares, so the fixture map cannot fall behind it', () => {
+    // The fixture map is exhaustive by its TYPE; this is the count that makes a silent
+    // truncation visible too, and the number to update deliberately when the union grows.
+    expect(Object.keys(ONE_OF_EACH).length, 'a SimEvent kind was added or removed').toBe(14);
+    for (const [type, ev] of Object.entries(ONE_OF_EACH)) {
+      expect(ev.type, `the fixture keyed ${type} carries the wrong type`).toBe(type);
+    }
+  });
+
+  it('closes its switch with the exhaustiveness guard, not a default (issue #929)', () => {
+    // STRUCTURAL, and it says so: the real guarantee is a COMPILE error, which no Vitest run can
+    // observe -- the same reason `capture.test.ts` reads its own source. Measured rather than
+    // assumed: adding a `shield-broken` kind to `SimEvent` errors in audio/director.ts,
+    // game/haptics.ts and now render/particles.ts; before this change the same probe produced
+    // ZERO errors from particles.ts, which is the asymmetry issue #929 names.
+    const src = readFileSync(new URL('./particles.ts', import.meta.url), 'utf8');
+    expect(src, 'the visual channel no longer fails the build on a new event kind')
+      .toMatch(/const _exhaustive: never = ev;/);
+    // And the cases are NAMED rather than swept up by a default, or the guard is unreachable and
+    // a new kind silently draws nothing again.
+    expect(src, 'a bare default returned, so a new event kind falls through it')
+      .not.toMatch(/^\s*default:\s*$\n\s*break;/m);
+    for (const type of ['mine-triggered', 'mine-fuse-warning', 'fire-blocked']) {
+      expect(src, `${type} is no longer named in the switch`).toMatch(new RegExp(`case '${type}':`));
+    }
   });
 });
 
