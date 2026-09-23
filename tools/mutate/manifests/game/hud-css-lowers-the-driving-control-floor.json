@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-lowers-the-driving-control-floor",
+  "file": "src/game/hud.css",
+  "find": "  --hud-control-touch: 56px;\n",
+  "replace": "  --hud-control-touch: 44px;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #957. 56px is the floor for the on-screen driving controls, deliberately larger than the 44px menu floor because these three sit at the screen edge under a thumb. Collapsing it onto the menu number is the most likely way it would be lost -- it reads like a tidy-up. Before this issue nothing asserted it: `hit-sweep.mjs` skips `.hud-touch` by rule and no catalogue state showed the controls, so the token could drop with every required check green.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps the driving controls on their own 56px floor, separate from the menu one"
+  ]
+}
