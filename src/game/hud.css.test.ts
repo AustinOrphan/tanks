@@ -2044,6 +2044,43 @@ describe('hud.css is syntactically whole', () => {
     );
   });
 
+  /**
+   * The three focus-visible cases above assert that a ring EXISTS -- each looks for
+   * `outline:` inside a block. None of them can see what the ring is made of, because
+   * every one of them resolves to the same three tokens, so a ring narrowed to 1px or
+   * recoloured to something that disappears against the pane would leave all three green
+   * (issue #921).
+   *
+   * The direction fixes both: "2-3 px high-contrast outer ring with offset, never
+   * indicated by color change alone" (2026-08-23-ui-ux-direction.md, section 6). 2px sits
+   * at the bottom of that range, so moving to 3px is a deliberate edit here and in the
+   * stylesheet together; 1px is out of the range entirely, and 0 offset makes it an inner
+   * ring rather than the outer one the direction asks for.
+   *
+   * TEXT, like every other focus assertion in this file and for the reason stated on the
+   * generic case: jsdom does not recompute a dynamic pseudo-class, so a computed-style
+   * read would report every focus-visible rule here as absent whether it is wired or not.
+   */
+  it('pins what the focus ring is made of, not only that there is one', () => {
+    const src = stripComments(css);
+    expect(src, 'the focus width token is gone or is no longer 2px')
+      .toMatch(/--hud-focus-width:\s*2px\s*;/);
+    expect(src, 'the focus colour token is gone or is no longer the light blue')
+      .toMatch(/--hud-focus-color:\s*#7fd0ff\s*;/i);
+    expect(src, 'the focus offset token is gone or is no longer 2px')
+      .toMatch(/--hud-focus-offset:\s*2px\s*;/);
+
+    // ...and the tokens must still be what the rings are drawn FROM. Pinning the values
+    // while a rule hard-codes `outline: 1px solid grey` beside them would be a guard on
+    // three declarations nothing reads.
+    expect(src, 'no rule draws its outline from the focus tokens').toContain(
+      'outline: var(--hud-focus-width) solid var(--hud-focus-color);',
+    );
+    expect(src, 'no rule offsets its outline from the focus token').toContain(
+      'outline-offset: var(--hud-focus-offset);',
+    );
+  });
+
   it('keeps the narrow-viewport rules the phone layout needs', () => {
     // Measured on a 393px-wide phone before this existed: the volume slider ran 35px
     // PAST the viewport edge and the topbar wrapped to 72px tall, eating the top of the

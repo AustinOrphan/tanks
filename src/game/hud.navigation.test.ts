@@ -1610,6 +1610,39 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     addSpy.mockRestore();
     removeSpy.mockRestore();
   });
+
+  /**
+   * The keydown case above had a test and this one did not (issue #921), although the two
+   * are registered four lines apart and torn down two lines apart.
+   *
+   * It is on `document`, not `window`, which is why the spy above cannot see it: the modal
+   * focus trap has to catch a focus landing anywhere in the document, and `focusin` is not
+   * fired at `window`. A leaked one outlives the HUD that owns it and keeps dragging focus
+   * back toward an overlay that is no longer on the page.
+   */
+  it('removes its own capture-phase document focusin listener on dispose', () => {
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const h = createHud(root);
+
+    const added = addSpy.mock.calls.find((c) => c[0] === 'focusin' && c[2] === true);
+    expect(added, 'no capture-phase focusin listener was registered at document').toBeDefined();
+
+    h.dispose();
+
+    // The SAME function reference, not merely a focusin removal: `removeEventListener`
+    // with a different callback is a silent no-op, so an assertion that only counted
+    // calls would pass against the leak it exists to catch.
+    const removed = removeSpy.mock.calls.find(
+      (c) => c[0] === 'focusin' && c[1] === added![1] && c[2] === true,
+    );
+    expect(removed, 'dispose did not remove the capture-phase focusin listener it added').toBeDefined();
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
 });
 
 describe('hud: relaunch target -- the title/outcome affordance policy', () => {
