@@ -2444,18 +2444,94 @@ describe('hud.css: every animation answers to the resolved motion policy (issue 
     expect(unanswered, 'animations no motion preference can reach').toEqual([]);
   });
 
+  /**
+   * The opening block of every `@keyframes` set, by name. A cue that starts at `opacity: 0`
+   * and carries `both`/`backwards` fill is held invisible before it plays, exactly as one
+   * whose base rule says `opacity: 0` is.
+   */
+  function keyframeOpenings(): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const m of text.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\n\}/g)) {
+      const first = /(?:^|\n)\s*(?:0%|from)[^{]*\{([^}]*)\}/.exec(m[2]);
+      out.set(m[1], (first?.[1] ?? '').replace(/\s+/g, ' ').trim());
+    }
+    return out;
+  }
+
+  /** Classes whose own rule parks them at `opacity: 0`. */
+  function baseInvisibleClasses(): Set<string> {
+    const out = new Set<string>();
+    for (const m of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = m[1].trim();
+      if (selector.startsWith('@') || selector.includes('%')) continue;
+      if (selector.includes('hud--reduced-motion')) continue;
+      if (!/(?:^|;)\s*opacity\s*:\s*0\s*(?:;|$)/.test(m[2].trim())) continue;
+      for (const part of selector.split(',')) {
+        if (/[:>[]/.test(part)) continue;
+        const classes = part.trim().match(/\.([\w-]+)/g);
+        if (classes) out.add(classes[classes.length - 1].slice(1));
+      }
+    }
+    return out;
+  }
+
+  /**
+   * DERIVED, not listed (issue #930). The population is every animated selector whose cue
+   * is invisible until the animation paints it -- by its own `opacity: 0`, or by `both`
+   * fill holding a keyframe set that opens at `opacity: 0`.
+   *
+   * The second half is what a base-rule-only predicate misses, and it is not an edge case:
+   * the three stock-cue arms rest invisible that way and no other. A rule that only read
+   * base rules would cover the damage vignette and none of them.
+   */
+  function restsInvisibleSites(): { selector: string; why: string }[] {
+    const opens = keyframeOpenings();
+    const baseZero = baseInvisibleClasses();
+    const out: { selector: string; why: string }[] = [];
+    for (const m of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = m[1].trim();
+      if (selector.startsWith('@') || selector.includes('%')) continue;
+      if (selector.includes('hud--reduced-motion')) continue;
+      const value = /(?:^|;)\s*animation\s*:\s*([^;]+)/.exec(m[2])?.[1]?.trim();
+      if (value === undefined || value === 'none') continue;
+      const name = value.split(/\s+/).find((t) => opens.has(t));
+      const classes = selector.match(/\.([\w-]+)/g) ?? [];
+      const last = classes[classes.length - 1]?.slice(1) ?? '';
+      const base = last.includes('--') ? last.slice(0, last.indexOf('--')) : last;
+      const byBase = baseZero.has(last) || baseZero.has(base);
+      const byFill =
+        /\b(both|backwards)\b/.test(value) && /opacity\s*:\s*0\s*(?:;|$)/.test(opens.get(name ?? '') ?? '');
+      if (byBase) out.push({ selector, why: 'its own rule rests it at opacity: 0' });
+      else if (byFill) out.push({ selector, why: 'its fill holds a keyframe set opening at opacity: 0' });
+    }
+    return out;
+  }
+
+  it('finds the rests-invisible population it is about', () => {
+    // Vacuity guard, in the same shape as the animation one above: the rule below is a loop
+    // over this list and passes trivially on an empty one. Anchored on one member of each
+    // half rather than on the whole list, so a cue added tomorrow joins the rule without
+    // editing a literal -- which is the entire point of issue #930.
+    const sites = restsInvisibleSites();
+    expect(sites.length, 'no rests-invisible cues derived from hud.css').toBeGreaterThan(4);
+    expect(sites.map((s) => s.selector)).toContain('.hud-damage--hit');
+    expect(sites.map((s) => s.selector)).toContain('.hud-stock-cue--badge');
+    expect(sites.some((s) => s.why.startsWith('its fill')), 'the fill half derived nothing').toBe(true);
+  });
+
   it('never answers an animation by cancelling a cue that rests invisible', () => {
-    // `.hud-capacity` and `.hud-count` sit at `opacity: 0` between plays, so `animation:
-    // none` on them does not calm the cue -- it deletes it. Both are redefined to a
-    // motionless keyframe set instead, keeping the opacity ramp that IS the message. The
-    // shipped stylesheet got this right for the capacity flash and its comment says why;
-    // this makes it a rule rather than a habit.
-    for (const cls of ['hud-capacity--flash', 'hud-count--pop']) {
-      const rule = new RegExp(`\\.hud--reduced-motion\\s+\\.${cls}\\s*\\{([^}]*)\\}`).exec(text);
-      expect(rule, `${cls} has no reduced-motion answer`).not.toBeNull();
-      expect(rule![1], `${cls} is cancelled, so the cue never appears at all`)
+    // `animation: none` on a cue that is invisible between plays does not calm it -- it
+    // deletes it. MEASURED on `.hud-damage--hit`, which was cancelled: peak computed
+    // opacity 1.00 with motion allowed, and 0 across twelve samples over 480ms under
+    // reduced motion. Every member is redefined to a motionless keyframe set instead,
+    // keeping the opacity ramp that IS the message.
+    for (const { selector, why } of restsInvisibleSites()) {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rule = new RegExp(`\\.hud--reduced-motion\\s+${escaped}\\s*\\{([^}]*)\\}`).exec(text);
+      expect(rule, `${selector} rests invisible (${why}) and has no reduced-motion answer`).not.toBeNull();
+      expect(rule![1], `${selector} is cancelled, so the cue never appears at all`)
         .not.toMatch(/animation\s*:\s*none/);
-      expect(rule![1], `${cls} does not select a motionless keyframe set`)
+      expect(rule![1], `${selector} does not select a motionless keyframe set`)
         .toMatch(/animation-name\s*:\s*[\w-]+--still/);
     }
   });
@@ -3423,9 +3499,15 @@ describe('hud.css: no reduced-motion cue is carried by colour alone (issue #924)
   it('gives every reduced-motion cue SOMETHING that changes, since a still set that varies nothing is not a cue', () => {
     // The other way a `--still` set goes wrong, and the one a colour check alone would pass: a
     // set that declares only `transform: none` at every step animates nothing at all, so the cue
-    // it replaces simply disappears under reduced motion. `.hud-damage--hit` is cancelled with
-    // `animation: none` precisely because it is pure movement; anything that keeps a keyframe
-    // set is claiming to still say something.
+    // it replaces simply disappears under reduced motion. Anything that keeps a keyframe set is
+    // claiming to still say something.
+    //
+    // This comment used to cite `.hud-damage--hit` as the cancelled case, "precisely because it
+    // is pure movement". That was wrong in both places it was written (issue #930): the
+    // vignette's keyframes set opacity and nothing else, and its base rule rests at `opacity: 0`,
+    // so cancelling deleted the cue rather than calming it -- measured at 0 opacity across twelve
+    // samples. It now selects `hud-damage-flash--still` like every other member of that
+    // population, which is derived above rather than listed.
     for (const { name, varying } of stillSets()) {
       expect(varying.length, `${name} varies nothing, so the cue it replaces is gone`).toBeGreaterThan(0);
     }

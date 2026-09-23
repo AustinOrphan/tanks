@@ -3944,9 +3944,35 @@
  * two apart and the guard below would measure nothing.
  */
 
-/* Cancelled outright: the cue is pure movement, so stopping it loses nothing else. */
+/*
+ * THE CUE IS THE OPACITY, NOT A MOVEMENT (issue #930).
+ *
+ * This rule was `animation: none`, under a comment reading "the cue is pure movement, so
+ * stopping it loses nothing else". `@keyframes hud-damage-flash` sets opacity and nothing
+ * else -- there is no transform anywhere in it -- and `.hud-damage` rests at `opacity: 0`,
+ * so cancelling did not calm the vignette. It deleted it.
+ *
+ * MEASURED on the built stylesheet, sampling computed opacity every 40ms for 480ms after
+ * the same class toggle `hud.ts` performs: peak 1.00 with motion allowed, and 0 across all
+ * twelve samples under reduced motion. A player on this preference took a hit and the
+ * screen did nothing.
+ *
+ * The answer is the one `.hud-capacity--flash` below already uses, and for the reason its
+ * own comment gives: keep the message, drop the movement. Here there was no movement to
+ * drop, so the ramp is unchanged and `transform: none` is written out rather than left
+ * implicit -- the point of the set is to say that this was looked at.
+ *
+ * A single non-repeating fade is what `prefers-reduced-motion` leaves alone; the option it
+ * replaces was no damage vignette at all.
+ */
+@keyframes hud-damage-flash--still {
+  0% { opacity: 0; transform: none; }
+  12% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+
 .hud--reduced-motion .hud-damage--hit {
-  animation: none;
+  animation-name: hud-damage-flash--still;
 }
 
 /* The hint stays fully legible rather than stopping mid-pulse at 0.55 opacity:
