@@ -11,6 +11,7 @@
   "killedBy": [
     "renderIndexPage: the page a reviewer opens points every cell at the png the sweep wrote, lazily",
     "renderIndexPage: the page a reviewer opens captions a cell with the selectors that were measured and their size",
-    "renderIndexPage: the page a reviewer opens declares one grid column per layout, plus the state column"
+    "renderIndexPage: the page a reviewer opens declares one grid column per layout, plus the state column",
+    "renderIndexPage: the page a reviewer opens stops being a 9-column grid below TV width, and names the layout in the cell instead"
   ]
 }
