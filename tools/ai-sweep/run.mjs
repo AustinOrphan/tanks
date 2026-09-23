@@ -22,6 +22,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { summarise, knobIsWired, parseSeeds } from './stats.mjs';
+import { patchField, patchProfileField, profileIds } from './patch.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PROFILES_REL = 'src/sim/config/data/ai-profiles.json';
@@ -46,24 +47,6 @@ function assertClean() {
     console.error('commit or stash them first -- a sweep rewrites this file and restores it after.');
     process.exit(2);
   }
-}
-
-/**
- * Set `field` to `value` in every profile, returning the new text and how many it changed.
- *
- * The count is returned so the caller can assert the patch actually landed everywhere. A
- * regex that silently matched nothing would leave the shipped value in place and the run
- * would report it under a different label, which is the dead-knob failure in its most
- * convincing form.
- */
-export function patchField(text, field, value) {
-  const re = new RegExp(`("${field}"\\s*:\\s*)(-?[0-9.]+)`, 'g');
-  let count = 0;
-  const patched = text.replace(re, (_m, head) => {
-    count += 1;
-    return `${head}${value}`;
-  });
-  return { patched, count };
 }
 
 function measure(seeds, ticks) {
@@ -93,29 +76,48 @@ function main() {
     console.error('--values must be non-negative numbers');
     process.exit(2);
   }
+  // Issue #908: vary ONE profile while the other seven hold, which is what shows a
+  // personality difference rather than a global rebalance. Absent, every profile moves
+  // together, which is what #359 needed and is still the default.
+  const profile = arg('profile', null);
   const seeds = arg('seeds', '1-20');
   parseSeeds(seeds); // fail here, with the bad spec named, rather than inside every child
   const ticks = Number(arg('ticks', 1800));
 
   assertClean();
   const original = readFileSync(PROFILES, 'utf8');
-  const expected = patchField(original, field, 0).count;
-  if (expected === 0) {
-    console.error(`no "${field}" found in ${PROFILES_REL}`);
+  if (profile !== null && !profileIds(original).includes(profile)) {
+    console.error(`unknown profile '${profile}'; ${PROFILES_REL} has: ${profileIds(original).join(', ')}`);
     process.exit(2);
   }
-  console.log(`sweeping ${field} over ${values.join(', ')} -- ${expected} profile(s), seeds ${seeds}, ${ticks} ticks each\n`);
+  const apply = (text, value) =>
+    profile === null ? patchField(text, field, value) : patchProfileField(text, profile, field, value);
+  const expected = apply(original, 0).count;
+  if (expected === 0) {
+    console.error(
+      profile === null
+        ? `no "${field}" found in ${PROFILES_REL}`
+        : `no "${field}" on profile ${profile} in ${PROFILES_REL}`,
+    );
+    process.exit(2);
+  }
+  const scope = profile === null ? `${expected} profile(s)` : `profile ${profile} only`;
+  console.log(`sweeping ${field} over ${values.join(', ')} -- ${scope}, seeds ${seeds}, ${ticks} ticks each\n`);
 
   const rows = [];
   try {
     for (const value of values) {
-      const { patched, count } = patchField(original, field, value);
+      const { patched, count } = apply(original, value);
       if (count !== expected) throw new Error(`patched ${count} of ${expected} profiles for ${value}`);
       writeFileSync(PROFILES, patched);
       const raw = measure(seeds, ticks);
       // The child's own read-back. If this disagrees, the patch did not reach the simulation
       // and every number from that process is about the wrong configuration.
-      if (raw.observedCommitmentTime !== value && field === 'targetCommitmentTime') {
+      // The child reads ONE profile's resolved value back, so this only proves the patch
+      // landed when every profile moved together. With --profile the child may legitimately
+      // report a profile that was deliberately left alone, so the check that the patch is
+      // real is the count above plus `knobIsWired` over the rows.
+      if (profile === null && raw.observedCommitmentTime !== value && field === 'targetCommitmentTime') {
         throw new Error(`asked for ${field}=${value} but the simulation read ${raw.observedCommitmentTime}`);
       }
       rows.push(summarise({ value, changes: raw.changes, aiTicks: raw.aiTicks, pressureSamples: raw.pressureSamples }));
