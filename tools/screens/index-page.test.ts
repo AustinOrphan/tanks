@@ -117,6 +117,24 @@ describe('renderIndexPage: the page a reviewer opens', () => {
     expect(clean).not.toContain('capture(s) failed');
   });
 
+  it('stops being a 9-column grid below TV width, and names the layout in the cell instead', () => {
+    // MEASURED on the full 49x9 page, which is the only size where this bites. The wide
+    // template gives a 92px cell at 1920 -- the TV case the issue is about -- but 20px at
+    // 1280 and a sideways overflow at 390 (443 against a 390 viewport). After the fallback:
+    // 157px at 1280 and 262px at 390, neither scrolling sideways. jsdom does no layout, so
+    // this asserts the rules that produced those numbers rather than the numbers.
+    const html = renderIndexPage(full(), manifest([]));
+    expect(html, 'the narrow fallback is gone, so 1280 and below get a 20px cell')
+      .toContain('@media (max-width: 1599px)');
+    expect(html).toContain('grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));');
+    // The fallback hides the header row, so the layout name has to travel into the cell or a
+    // wrapped strip is thumbnails with nothing saying which layout each one is.
+    expect(html).toContain('data-layout="320x568"');
+    expect(html).toContain("content: attr(data-layout)");
+    // ...and the wide template is still what the grid uses by default.
+    expect(html).toContain('style="--cols: minmax(220px, 1fr) repeat(2, minmax(0, 1fr));"');
+  });
+
   it('marks a capture that raised page errors', () => {
     const grid = sweepGrid(manifest([ok('screen.main-menu', '320x568', 2)]), STATES);
     expect(renderIndexPage(grid, manifest([]))).toContain('2 page error(s)');

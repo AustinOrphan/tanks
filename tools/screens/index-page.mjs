@@ -89,7 +89,20 @@ body { margin: 0; padding: 24px; background: #14171d; color: #e7ecf4;
 h1 { font-size: 28px; margin: 0 0 4px; }
 .meta { color: #aab3c0; font-size: var(--caption); margin: 0 0 24px; }
 .meta code { color: #e7ecf4; }
-.grid { display: grid; gap: var(--gap); align-items: start; }
+.grid { display: grid; gap: var(--gap); align-items: start; grid-template-columns: var(--cols); }
+/* BELOW TV WIDTH THE GRID STOPS BEING A GRID, and that is measured rather than tasteful.
+   At 49 states x 9 layouts the wide template puts a cell at 92px on a 1920 viewport -- fine --
+   but 20px on a 1280 laptop, and it overflows a 390px phone sideways (443 against 390). A
+   thumbnail no one can see is not a review surface, and two-axis scrolling is the thing
+   issue #327 criterion 5 rules out. So narrow viewports get a wrapping strip per state, which
+   keeps one axis and a legible cell. The states-by-layouts grid the issue asks for is the TV
+   case, and it is the one this page exists for. */
+@media (max-width: 1599px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .state { grid-column: 1 / -1; position: static; padding-top: 8px; }
+  .head { display: none; }
+  .cell figcaption::before { content: attr(data-layout) ' · '; color: #e7ecf4; }
+}
 .head, .state { position: sticky; }
 .head { top: 0; z-index: 1; background: #14171d; padding: 4px 0;
   font-size: var(--caption); color: #aab3c0; }
@@ -139,7 +152,10 @@ export function renderIndexPage(grid, manifest) {
           return [
             '<figure class="cell">',
             `<img src="${escapeHtml(cell.png)}" alt="${escapeHtml(row.id)} at ${escapeHtml(cell.layout)}" loading="lazy">`,
-            `<figcaption>${escapeHtml(caption)}${caption && errors ? '<br>' : ''}${errors}</figcaption>`,
+            // `data-layout` carries the column header down into the cell, because the narrow
+            // layout drops the header row: a wrapped strip has no column for a header to sit
+            // over, and a thumbnail whose layout is unnamed is not evidence of anything.
+            `<figcaption data-layout="${escapeHtml(cell.layout)}">${escapeHtml(caption)}${caption && errors ? '<br>' : ''}${errors}</figcaption>`,
             '</figure>',
           ].join('');
         })
@@ -174,7 +190,7 @@ export function renderIndexPage(grid, manifest) {
     source <code>${escapeHtml(manifest.source ?? 'unknown')}</code> ·
     dist <code>${escapeHtml(manifest.dist ?? 'unknown')}</code>${incomplete}${failed}
   </p>
-  <div class="grid" style="grid-template-columns: ${cols};">
+  <div class="grid" style="--cols: ${cols};">
       ${head}
       ${rows}
   </div>

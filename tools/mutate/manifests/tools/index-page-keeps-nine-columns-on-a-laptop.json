@@ -1,0 +1,14 @@
+{
+  "id": "index-page-keeps-nine-columns-on-a-laptop",
+  "file": "tools/screens/index-page.mjs",
+  "find": "@media (max-width: 1599px) {\n",
+  "replace": "@media (max-width: 0px) {\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/index-page.test.ts"
+  ],
+  "why": "Issue #936. The wide states-by-layouts template is right at TV width and wrong below it. MEASURED on the full 49x9 page: a cell is 92px at 1920, 20px at 1280, and the page overflows a 390px viewport sideways (443 against 390). With the fallback the same page gives 157px at 1280 and 262px at 390 and scrolls in one axis at both. A media query whose condition can never match is the shape this would take if someone 'simplified' the breakpoint, and it leaves every non-TV reviewer a page of 20px thumbnails.",
+  "killedBy": [
+    "renderIndexPage: the page a reviewer opens stops being a 9-column grid below TV width, and names the layout in the cell instead"
+  ]
+}
