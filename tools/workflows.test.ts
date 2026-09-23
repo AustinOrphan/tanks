@@ -101,6 +101,7 @@ const ATOMIC = {
   'trace:browser': 'node tools/baseline/run.mjs',
   visual: 'node tools/visual/verify.mjs dist --check',
   roundtrip: 'node tools/visual/roundtrip.mjs dist',
+  'devtools:pages': 'node tools/devtools-pages/run.mjs dist',
   mutate: 'node tools/mutate/run.mjs',
   'audit:prod': 'node tools/audit/prod.mjs',
   'lint:workflows': 'node tools/workflow-lint/run.mjs',
@@ -116,11 +117,11 @@ const COMPOSITES = {
   'verify:quick': 'npm run typecheck && npm run test:unit --',
   'verify:build': 'npm run build && npm run portability',
   'verify:visual':
-    'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual && npm run roundtrip',
+    'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual && npm run roundtrip && npm run devtools:pages',
   'verify:full': 'npm run verify:quick && npm run mutate && npm run verify:build && npm run audit:prod',
 } as const;
 
-const BROWSER_LEAVES = ['test:gl', 'trace:browser', 'visual', 'roundtrip'] as const;
+const BROWSER_LEAVES = ['test:gl', 'trace:browser', 'visual', 'roundtrip', 'devtools:pages'] as const;
 const DIRECT_BEACON_COMMAND = 'node tools/baseline/run.mjs --beacon --timeout 300000';
 
 const referencedScripts = (command: string): string[] =>
@@ -264,6 +265,8 @@ describe('the canonical verification scripts', () => {
       // so `browserLeaks` below has to know about it or `verify:full` could quietly acquire
       // a chromium dependency the "complete core, non-browser composite" promises it has not.
       'roundtrip',
+      // Developer Tools on a Pages-shaped serve (issue #947). Browser leaf, same reason.
+      'devtools:pages',
     ]);
     expect(browserLeaks(expandScript('verify:full', SCRIPTS))).toEqual([]);
     expect(browserLeaks(['typecheck', 'visual'])).toEqual(['visual']);
