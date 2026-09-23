@@ -3371,20 +3371,26 @@ describe('hud.css: no reduced-motion cue is carried by colour alone (issue #924)
     'text-decoration-color', 'caret-color', 'accent-color',
   ]);
 
-  /** Every `--still` keyframe set, with the properties whose value actually varies across it. */
-  function stillSets(): { name: string; varying: string[] }[] {
+  /**
+   * Every `--still` keyframe set in `source`, with the properties whose value actually varies.
+   *
+   * Takes its source so the classifier can be pointed at a SYNTHETIC known-bad set below. The
+   * real tree cannot serve as that control: the moment the defect is fixed the control passes,
+   * which is how a fixture aimed at a broken shipped rule deletes itself.
+   */
+  function stillSets(source: string = text): { name: string; varying: string[] }[] {
     const out: { name: string; varying: string[] }[] = [];
-    for (const m of text.matchAll(/@keyframes\s+([\w-]+--still)\s*\{/g)) {
+    for (const m of source.matchAll(/@keyframes\s+([\w-]+--still)\s*\{/g)) {
       const open = m.index + m[0].length - 1;
       let depth = 0;
       let close = -1;
-      for (let i = open; i < text.length; i++) {
-        if (text[i] === '{') depth++;
-        else if (text[i] === '}' && --depth === 0) { close = i; break; }
+      for (let i = open; i < source.length; i++) {
+        if (source[i] === '{') depth++;
+        else if (source[i] === '}' && --depth === 0) { close = i; break; }
       }
       expect(close, `@keyframes ${m[1]} is unclosed`).toBeGreaterThan(-1);
       const values = new Map<string, Set<string>>();
-      for (const step of text.slice(open + 1, close).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      for (const step of source.slice(open + 1, close).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         for (const d of step[2].matchAll(/(?:^|;)\s*([a-z-]+)\s*:\s*([^;]+)/g)) {
           const seen = values.get(d[1]) ?? new Set<string>();
           seen.add(d[2].trim());
@@ -3423,6 +3429,28 @@ describe('hud.css: no reduced-motion cue is carried by colour alone (issue #924)
     for (const { name, varying } of stillSets()) {
       expect(varying.length, `${name} varies nothing, so the cue it replaces is gone`).toBeGreaterThan(0);
     }
+  });
+
+  it('reads a cancelled transform as no channel at all, rather than as a second one', () => {
+    // A SYNTHETIC known-bad set, and it has to be synthetic: this is the exact shape
+    // `hud-lives-pulse--still` had before the ring was added, so pointing the control at the
+    // real tree would have made the fix delete its own guard. Every `--still` set carries
+    // `transform: none` at every step -- that is what makes it the reduced variant -- so a
+    // classifier counting declared property NAMES calls the cancelled movement a channel and
+    // passes the one set that has none.
+    const broken = `@keyframes hud-synthetic-pulse--still {
+      0%, 100% { color: var(--hud-text); transform: none; }
+      50% { color: #ff6a6a; transform: none; }
+    }`;
+    expect(stillSets(broken).map((s) => s.varying)).toEqual([['color']]);
+
+    // And the other way, so the rule is not merely "ignore transform": a transform that really
+    // moves IS a channel, which is why the non-reduced sets are not swept here at all.
+    const moving = `@keyframes hud-synthetic-move--still {
+      0%, 100% { color: var(--hud-text); transform: none; }
+      50% { color: #ff6a6a; transform: scale(1.5); }
+    }`;
+    expect(stillSets(moving).map((s) => s.varying)).toEqual([['color', 'transform']]);
   });
 
   it('rings the life counter, which is the channel that survives forced colours and greyscale', () => {
