@@ -3109,7 +3109,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* `justify-content` comes from the shared `safe center` scroller rule (issue #633). */
   gap: var(--hud-space-3);
   background: var(--hud-scrim-pane);
   color: var(--hud-text);
@@ -3165,10 +3165,40 @@
  * A browser that does not parse `safe` drops this declaration and keeps the base rule's
  * `center`, which is exactly the clipping these panes had before -- no worse than that.
  */
+/*
+ * TWO PANES JOINED THIS RULE LATER (issue #633). They were the last two full-screen panes
+ * still `justify-content: center` with no scroller of their own, and BOTH were clipping
+ * their own heading -- neither is a precaution.
+ *
+ * Measured through tools/screens on the BUILT page at 422x195: an 844x390 handset in
+ * landscape at 200% browser zoom, which halves the CSS viewport, and which is #327's own
+ * criterion for these panes. The heading is the box that goes above the scroll origin, and
+ * it is the box neither pane's measured set contained until this change added it:
+ *
+ *                                                     before        after
+ *   screen.controllers.pads  #hud-controllers-title     -14 px       +21 px
+ *   screen.levels            #hud-levelselect-title      -7 px       +21 px
+ *
+ * Nothing moves where the pane already fits: both headings read 106 px at 195x422 and 179 px
+ * at 320x568 in both arms, which is what `safe center` is for -- centred while the column
+ * fits, start-aligned the moment it does not.
+ *
+ * `.hud-controllers` is the one that was easiest to miss: its inner `.hud-controller-rows`
+ * already scrolls, so the LIST was reachable the whole time and only the heading above it
+ * was not. `.hud-levels` inside `.hud-levelselect` is still a NON-WRAPPING flex row of 44px
+ * buttons; this makes its overflow reachable, it does not make the row wrap, and no fixture
+ * here clears enough levels to show that half.
+ *
+ * Both panes' own rules below no longer set `justify-content`: `.hud-controllers` is
+ * declared AFTER this rule and would otherwise win it back, which is the kind of ordering
+ * accident this file has been bitten by before.
+ */
 .hud-panel,
 .hud-stats,
 .hud-customize,
-.hud-achievements {
+.hud-achievements,
+.hud-levelselect,
+.hud-controllers {
   justify-content: safe center;
   overflow-y: auto;
 }
@@ -4059,7 +4089,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* `justify-content` comes from the shared `safe center` scroller rule (issue #633), which
+     is declared EARLIER in this file -- so setting it here would win it back and re-clip
+     the heading this pane was measured losing. */
   gap: var(--hud-space-3);
   background: var(--hud-scrim-pane);
   color: var(--hud-text);

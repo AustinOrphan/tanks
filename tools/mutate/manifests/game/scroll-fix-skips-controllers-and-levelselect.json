@@ -1,0 +1,14 @@
+{
+  "id": "scroll-fix-skips-controllers-and-levelselect",
+  "file": "src/game/hud.css",
+  "find": ".hud-achievements,\n.hud-levelselect,\n.hud-controllers {\n  justify-content: safe center;",
+  "replace": ".hud-achievements {\n  justify-content: safe center;",
+  "expect": "killed",
+  "why": "Takes the two panes issue #633 added back off the shared `safe center` + `overflow-y: auto` rule, which is the whole of that change. Neither pane sets `justify-content` in its own rule any more, so this does not merely re-centre them -- it removes their scroller, which is what made `#hud-controllers-title` reachable at y = +21 where it had been at y = -14, and `#hud-levelselect-title` at +21 where it had been at -7 (422x195, the 200%-zoom landscape handset, measured on the built page through tools/screens). CSS is typechecked by nothing, so without this the two class names could be deleted from that selector list and only the named-scroller sweep would notice.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole never centres the main axis of a pane that scrolls"
+  ]
+}
