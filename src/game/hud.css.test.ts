@@ -3338,3 +3338,134 @@ describe('hud.css: no state is carried by colour alone (issue #926)', () => {
     }
   });
 });
+
+/**
+ * No reduced-motion cue is carried by colour alone either (issue #924).
+ *
+ * THE SHAPE `no state is carried by colour alone` ABOVE CANNOT SEE. That sweep reads RULES, and
+ * the rule applying a cue declares `animation-name`, which is not a colour property -- so it
+ * passes while the keyframes it points at change nothing but hue. `hud-lives-pulse--still` was
+ * exactly that: `color` and `transform: none`, and the stylesheet conceded it in a comment for
+ * as long as the rule existed.
+ *
+ * A CHANNEL IS A PROPERTY WHOSE VALUE CHANGES, which is the whole subtlety here and the reason
+ * a property-name check is not enough. Every `--still` set declares `transform: none` at every
+ * step -- that is what makes it the reduced variant -- so counting declared property NAMES reads
+ * the cancelled movement as a second channel and passes all nine sets, the broken one included.
+ * Measured both ways while writing this: by name, 0 offenders; by varying value, exactly 1, and
+ * it was the one the tree already admitted to.
+ */
+describe('hud.css: no reduced-motion cue is carried by colour alone (issue #924)', () => {
+  const text = stripComments(css);
+
+  /** The body of the rule whose selector is exactly `selector`, at the start of a line. */
+  const bodyOf = (selector: string): string => {
+    const at = text.indexOf(`\n${selector} {`);
+    expect(at, `${selector} has a rule`).toBeGreaterThan(-1);
+    const open = text.indexOf('{', at);
+    return text.slice(open + 1, text.indexOf('}', open));
+  };
+
+  const COLOUR_PROPS = new Set([
+    'color', 'background', 'background-color', 'border-color', 'outline-color', 'fill', 'stroke',
+    'text-decoration-color', 'caret-color', 'accent-color',
+  ]);
+
+  /**
+   * Every `--still` keyframe set in `source`, with the properties whose value actually varies.
+   *
+   * Takes its source so the classifier can be pointed at a SYNTHETIC known-bad set below. The
+   * real tree cannot serve as that control: the moment the defect is fixed the control passes,
+   * which is how a fixture aimed at a broken shipped rule deletes itself.
+   */
+  function stillSets(source: string = text): { name: string; varying: string[] }[] {
+    const out: { name: string; varying: string[] }[] = [];
+    for (const m of source.matchAll(/@keyframes\s+([\w-]+--still)\s*\{/g)) {
+      const open = m.index + m[0].length - 1;
+      let depth = 0;
+      let close = -1;
+      for (let i = open; i < source.length; i++) {
+        if (source[i] === '{') depth++;
+        else if (source[i] === '}' && --depth === 0) { close = i; break; }
+      }
+      expect(close, `@keyframes ${m[1]} is unclosed`).toBeGreaterThan(-1);
+      const values = new Map<string, Set<string>>();
+      for (const step of source.slice(open + 1, close).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        for (const d of step[2].matchAll(/(?:^|;)\s*([a-z-]+)\s*:\s*([^;]+)/g)) {
+          const seen = values.get(d[1]) ?? new Set<string>();
+          seen.add(d[2].trim());
+          values.set(d[1], seen);
+        }
+      }
+      out.push({
+        name: m[1],
+        varying: [...values].filter(([, seen]) => seen.size > 1).map(([prop]) => prop).sort(),
+      });
+    }
+    return out;
+  }
+
+  it('finds the reduced-motion keyframe population it is about', () => {
+    // Vacuity guard: every assertion below filters this list and passes trivially on an empty
+    // one, which a regex that stopped matching would quietly produce.
+    const sets = stillSets();
+    expect(sets.length, 'no --still keyframe sets parsed out of hud.css').toBeGreaterThan(6);
+    expect(sets.map((s) => s.name)).toContain('hud-lives-pulse--still');
+  });
+
+  it('gives every reduced-motion cue a channel besides hue', () => {
+    const offenders = stillSets()
+      .filter(({ varying }) => varying.length > 0 && varying.every((p) => COLOUR_PROPS.has(p)))
+      .map(({ name }) => name);
+    expect(offenders, 'a reduced-motion cue changes colour and nothing else').toEqual([]);
+  });
+
+  it('gives every reduced-motion cue SOMETHING that changes, since a still set that varies nothing is not a cue', () => {
+    // The other way a `--still` set goes wrong, and the one a colour check alone would pass: a
+    // set that declares only `transform: none` at every step animates nothing at all, so the cue
+    // it replaces simply disappears under reduced motion. `.hud-damage--hit` is cancelled with
+    // `animation: none` precisely because it is pure movement; anything that keeps a keyframe
+    // set is claiming to still say something.
+    for (const { name, varying } of stillSets()) {
+      expect(varying.length, `${name} varies nothing, so the cue it replaces is gone`).toBeGreaterThan(0);
+    }
+  });
+
+  it('reads a cancelled transform as no channel at all, rather than as a second one', () => {
+    // A SYNTHETIC known-bad set, and it has to be synthetic: this is the exact shape
+    // `hud-lives-pulse--still` had before the ring was added, so pointing the control at the
+    // real tree would have made the fix delete its own guard. Every `--still` set carries
+    // `transform: none` at every step -- that is what makes it the reduced variant -- so a
+    // classifier counting declared property NAMES calls the cancelled movement a channel and
+    // passes the one set that has none.
+    const broken = `@keyframes hud-synthetic-pulse--still {
+      0%, 100% { color: var(--hud-text); transform: none; }
+      50% { color: #ff6a6a; transform: none; }
+    }`;
+    expect(stillSets(broken).map((s) => s.varying)).toEqual([['color']]);
+
+    // And the other way, so the rule is not merely "ignore transform": a transform that really
+    // moves IS a channel, which is why the non-reduced sets are not swept here at all.
+    const moving = `@keyframes hud-synthetic-move--still {
+      0%, 100% { color: var(--hud-text); transform: none; }
+      50% { color: #ff6a6a; transform: scale(1.5); }
+    }`;
+    expect(stillSets(moving).map((s) => s.varying)).toEqual([['color', 'transform']]);
+  });
+
+  it('rings the life counter, which is the channel that survives forced colours and greyscale', () => {
+    // Pinned specifically rather than left to the sweep, because WHICH channel matters here.
+    // The counter is `display: inline-block`, so a `font-weight` step would reflow its
+    // neighbours -- movement reintroduced by the fix for movement -- and an `opacity` blink is
+    // the wrong answer to a reduced-motion preference. An outline is drawn outside the box and
+    // takes no layout space, and `currentColor` is repainted by the system under forced colours
+    // rather than dropped, so it survives that combination too.
+    const still = stillSets().find((s) => s.name === 'hud-lives-pulse--still');
+    expect(still?.varying, 'the life-loss pulse no longer rings the digit').toContain('outline-width');
+    // The style and colour live on the rule, or `outline-width` animates against `none` and
+    // draws nothing at all.
+    const applied = bodyOf('.hud--reduced-motion .hud-lives--hit');
+    expect(applied, 'the outline has no style to open into').toMatch(/outline:\s*0\s+solid\s+currentColor/);
+    expect(applied, 'the ring sits on the glyph instead of around it').toMatch(/outline-offset:/);
+  });
+});

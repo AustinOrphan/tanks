@@ -1,0 +1,14 @@
+{
+  "id": "hud-lives-ring-has-no-style-to-open",
+  "file": "src/game/hud.css",
+  "find": "  outline: 0 solid currentColor;",
+  "replace": "  outline-width: 0;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Keeps the animated `outline-width` and takes away the style it opens into. An outline whose `outline-style` is the initial `none` draws nothing at any width, so the keyframes animate a number that has no effect and the cue silently reverts to hue alone -- while every property-name check still sees `outline-width` varying and passes. `currentColor` matters for the same reason it is named: under forced colours the system repaints it rather than dropping it, which is the combination that left no cue at all.",
+  "killedBy": [
+    "hud.css: no reduced-motion cue is carried by colour alone (issue #924) rings the life counter, which is the channel that survives forced colours and greyscale"
+  ]
+}

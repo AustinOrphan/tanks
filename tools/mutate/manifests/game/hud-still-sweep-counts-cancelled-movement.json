@@ -1,0 +1,14 @@
+{
+  "id": "hud-still-sweep-counts-cancelled-movement",
+  "file": "src/game/hud.css.test.ts",
+  "find": "        varying: [...values].filter(([, seen]) => seen.size > 1).map(([prop]) => prop).sort(),",
+  "replace": "        varying: [...values].map(([prop]) => prop).sort(),",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Counts every declared property instead of only the ones whose value changes, which is the subtlety that makes this sweep work. Every `--still` set declares `transform: none` at each step -- that is what makes it the reduced variant -- so a property-NAME check reads the cancelled movement as a second channel. Measured both ways on the tree before the fix: by name, 0 offenders across all nine sets; by varying value, exactly 1, and it was the one the stylesheet already admitted to. This entry SURVIVED on first run and is the reason the synthetic control exists: once the ring is added the real pulse varies `outline-width` either way, so no assertion over the shipped tree can tell the two classifiers apart.",
+  "killedBy": [
+    "hud.css: no reduced-motion cue is carried by colour alone (issue #924) reads a cancelled transform as no channel at all, rather than as a second one"
+  ]
+}

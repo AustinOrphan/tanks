@@ -3970,23 +3970,37 @@
 }
 
 /*
- * The life-loss pulse keeps its colour and drops the scale.
+ * The life-loss pulse keeps its colour, drops the scale, and rings the digit (issue #924).
  *
- * KNOWN GAP, and it belongs to issue #630 rather than to this change: with the vignette
- * cancelled above and the scale removed here, what is left of "you lost a life" under
- * reduced motion is a hue change on one number -- and `.hud-lives` is not opted out of the
- * `forced-colors` block, so reduced motion plus forced colours leaves NO cue at all. Two
- * accessibility settings combining to remove a signal is worse than either alone. #630
- * owns the non-colour channel; this rule is written so that adding one here later does not
- * have to unpick the motion decision as well.
+ * THE GAP THIS CLOSES was conceded here for as long as the rule existed: with the vignette
+ * cancelled above and the scale removed, what was left of "you lost a life" under reduced
+ * motion was a hue change on one number -- and `.hud-lives` is not opted out of the
+ * `forced-colors` block, so reduced motion PLUS forced colours left no cue at all. Two
+ * accessibility settings combining to remove a signal is worse than either alone.
+ *
+ * AN OUTLINE, chosen against the alternatives on what each costs here:
+ *   - `font-weight` reflows. The counter is `display: inline-block` and a heavier digit is a
+ *     wider one, so neighbours shift -- movement, reintroduced by the fix for movement.
+ *   - `opacity` blinks. A cue that flashes is the wrong answer to a reduced-motion preference
+ *     and a worse one to photosensitivity.
+ *   - An outline is drawn OUTSIDE the box and takes no layout space, so nothing moves; it is
+ *     presence rather than hue, so greyscale keeps it; and `currentColor` is repainted by the
+ *     system under forced colours rather than dropped, so that combination keeps it too.
+ *
+ * The style and colour sit on the rule below rather than in the steps, so the keyframes vary
+ * `outline-width` alone and the non-reduced path is untouched. Same keyframes and the same
+ * `--hud-duration-slow` as before: the cue is held exactly as long as it always was.
  */
 @keyframes hud-lives-pulse--still {
-  0%, 100% { color: var(--hud-text); transform: none; }
-  50% { color: #ff6a6a; transform: none; }
+  0%, 100% { color: var(--hud-text); transform: none; outline-width: 0; }
+  50% { color: #ff6a6a; transform: none; outline-width: 2px; }
 }
 
 .hud--reduced-motion .hud-lives--hit {
   animation-name: hud-lives-pulse--still;
+  /* Zero-width until the keyframes open it, so the digit is unringed at rest. */
+  outline: 0 solid currentColor;
+  outline-offset: 3px;
 }
 
 /*
