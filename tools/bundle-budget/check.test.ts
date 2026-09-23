@@ -49,9 +49,25 @@ describe('bundle budget: what it measures', () => {
     // The header records that `gzip -9` and zlib disagree by 0.5% on the real bundle. If
     // this call loses its level the ceilings silently gain headroom, and nothing else here
     // would notice -- every other test compares gzipSize against itself.
-    const sample = buf(20_000, 'abcdefgh');
-    expect(gzipSize(sample)).toBe(gzipSync(sample, { level: 9 }).length);
-    expect(gzipSize(sample)).not.toBe(gzipSync(sample, { level: 1 }).length);
+    //
+    // THE FIXTURE IS THE WHOLE TEST, and the first one was dead. `'abcdefgh'.repeat(2500)`
+    // compresses to 73 bytes at BOTH level 6 and level 9, so an assertion built on it
+    // cannot tell the two apart -- the mutation that drops `{ level: 9 }` SURVIVED it.
+    // Levels 6 and 9 agree on most inputs; they part on data that is compressible but
+    // awkward, so this is 60 KB drawn from a four-letter alphabet, measured to differ:
+    // 17,992 B at the default against 18,005 B at level 9. Level 9 is LARGER here, which
+    // is ordinary zlib behaviour and is why the assertion is inequality, not a direction.
+    const awkward = Buffer.alloc(60_000);
+    let seed = 1;
+    for (let i = 0; i < awkward.length; i++) {
+      seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+      awkward[i] = 97 + ((seed >>> 16) % 4);
+    }
+    expect(gzipSize(awkward)).toBe(gzipSync(awkward, { level: 9 }).length);
+    expect(
+      gzipSize(awkward),
+      'gzipSize must not be compressing at zlib’s default level',
+    ).not.toBe(gzipSync(awkward).length);
   });
 });
 
