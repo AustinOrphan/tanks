@@ -2081,6 +2081,56 @@ describe('hud.css is syntactically whole', () => {
     );
   });
 
+  /**
+   * Issue #957, out of #633's audit. `--hud-control-touch` is the 56px floor for the
+   * ON-SCREEN DRIVING CONTROLS, and it is a different number from the 44px menu floor
+   * `--hud-control-min` sets, because these three sit at the screen edge under a thumb.
+   *
+   * NOTHING ASSERTED IT, and nothing could. `hit-sweep.mjs` skips `.hud-touch` by rule --
+   * correctly, since 44 is the wrong number for these -- and until `screen.practice.touch`
+   * landed beside this, no catalogue state put the controls on a screen at all. So the
+   * token could have been lowered, or the three rules could have stopped reading it, with
+   * every required check green.
+   *
+   * The floor holds today: measured in a touch context on a live round, 56x56, 66.2x56 and
+   * 69.5x56 at 320x568, 390x844 and 640x400@2x, all fully on screen. This is the guard, not
+   * the fix.
+   *
+   * TEXT, like the focus case above and for the reason this file's own doc comment gives:
+   * jsdom resolves a tokenised property to the literal `var(...)` string, so a
+   * computed-style read here would measure nothing.
+   */
+  it('keeps the driving controls on their own 56px floor, separate from the menu one', () => {
+    const src = stripComments(css);
+    expect(src, 'the driving-control token is gone or is no longer 56px')
+      .toMatch(/--hud-control-touch:\s*56px\s*;/);
+    // ...and it is not quietly the same number as the menu floor, which is what a later
+    // tidy-up would most likely do to it.
+    expect(src, 'the menu floor moved off 44px').toMatch(/--hud-control-min:\s*44px\s*;/);
+
+    // The controls must still take their size FROM the token. Pinning the value while a rule
+    // hard-codes 44px beside it would guard a declaration nothing reads -- the same trap the
+    // focus case above names.
+    //
+    // FOUND BY SCANNING every rule that reads the token, not by matching the first block with
+    // this selector list. There are two such blocks -- one sets `pointer-events: auto` and the
+    // sizing one comes 25 lines later -- and a first-match regex asserted against the wrong
+    // one, which is how this test first failed.
+    const sizing = [...src.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .map((m) => ({ selector: m[1].trim(), body: m[2] }))
+      .filter(({ body }) => body.includes('var(--hud-control-touch)'));
+    expect(sizing.length, 'no rule sizes anything from the driving-control floor').toBeGreaterThan(0);
+    for (const { selector, body } of sizing) {
+      expect(body, `${selector} reads the touch floor but not for its width`)
+        .toMatch(/min-width:\s*var\(--hud-control-touch\)\s*;/);
+      expect(body, `${selector} reads the touch floor but not for its height`)
+        .toMatch(/min-height:\s*var\(--hud-control-touch\)\s*;/);
+      for (const control of ['.hud-pause-btn', '.hud-fire-btn', '.hud-mine-btn']) {
+        expect(selector, `${control} is no longer sized by the touch floor`).toContain(control);
+      }
+    }
+  });
+
   it('keeps the narrow-viewport rules the phone layout needs', () => {
     // Measured on a 393px-wide phone before this existed: the volume slider ran 35px
     // PAST the viewport edge and the topbar wrapped to 72px tall, eating the top of the

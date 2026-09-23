@@ -1188,7 +1188,7 @@
       "events": [],
       "allowUnexpectedEvents": true
     },
-    "title": "Developer Configuration \u2014 Sandbox",
+    "title": "Developer Configuration — Sandbox",
     "description": "The Sandbox group scrolled into view: the tank multiset built by a count per kind.",
     "altText": "Screenshot of the Tanks! developer configuration menu, Sandbox group.",
     "timeoutMs": 60000,
@@ -2934,6 +2934,55 @@
     "title": "Practice, mid-round",
     "description": "A practice round in play, reached by picking a level from the grid.",
     "altText": "Screenshot of a Tanks! practice round in play, with the Practice chip in the topbar.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.practice.touch",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.practice.touch"
+    },
+    "fixture": {
+      "id": "screen.practice.touch",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-touch",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Practice on a touchscreen, with the driving controls up",
+    "description": "A practice round in play on a device with a touchscreen, where the on-screen Pause, Fire and Mine controls exist. They are sized by --hud-control-touch, and this is the only capture that puts them in front of a gate (issue #957).",
+    "altText": "Screenshot of a Tanks! practice round on a touchscreen, with the on-screen pause, fire and mine controls along the bottom of the board.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
   }
