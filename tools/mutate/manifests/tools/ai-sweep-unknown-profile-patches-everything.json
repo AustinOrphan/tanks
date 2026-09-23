@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-unknown-profile-patches-everything",
+  "file": "tools/ai-sweep/patch.mjs",
+  "find": "  if (key === null) return { patched: text, count: 0 };",
+  "replace": "  if (key === null) return patchField(text, field, value);",
+  "expect": "killed",
+  "why": "Falls back to a GLOBAL patch when the profile id does not match -- the natural wrong implementation, and the worst possible one here. A typo in --profile would then sweep all eight profiles together while the run's own header said \"profile X only\", so the report would describe a personality difference that was actually a global rebalance. The caller refuses on count 0, which is why returning 0 rather than guessing is the whole contract.",
+  "tests": [
+    "tools/ai-sweep/patch.test.ts"
+  ],
+  "killedBy": [
+    "patchProfileField: one profile, and only that one REFUSES an unknown profile rather than patching everything"
+  ]
+}
