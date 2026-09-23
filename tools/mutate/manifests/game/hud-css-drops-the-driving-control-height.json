@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-drops-the-driving-control-height",
+  "file": "src/game/hud.css",
+  "find": "  min-height: var(--hud-control-touch);\n  padding: 8px 14px;\n",
+  "replace": "  padding: 8px 14px;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #957's other half: the token can keep its value and stop being read. Without the height floor the three controls fall back to their content box -- measured at 15px text plus 8px padding either side, well under 56 -- and the token sits in `:root` looking correct. Pinning the value alone would guard a declaration nothing reads, which is why the rule asserts both.",
+  "killedBy": [
+    "hud.css is syntactically whole keeps the driving controls on their own 56px floor, separate from the menu one"
+  ]
+}

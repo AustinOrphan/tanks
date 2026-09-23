@@ -92,6 +92,7 @@ on:
           - screen.pause.campaign
           - screen.pause.versus
           - screen.practice
+          - screen.practice.touch
           - screen.records.achievements
           - screen.records.stats
           - screen.records.stats.empty

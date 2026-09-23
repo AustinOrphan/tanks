@@ -444,7 +444,18 @@ describe('the screen capture adapter', () => {
     // A state that quietly gained or lost it would change what its capture shows without any
     // other signal, because the flag reaches Playwright's context rather than the page.
     const touchStates = SCREEN_STATES.filter((s: any) => s.touch === true).map((s: any) => s.id);
-    expect(touchStates).toEqual(['screen.settings.touch']);
+    expect(touchStates).toEqual(['screen.practice.touch', 'screen.settings.touch']);
+
+    // `screen.practice.touch` joined in issue #957, and it is the one state that puts the
+    // ON-SCREEN DRIVING CONTROLS in front of a gate: `hit-sweep.mjs` skips `.hud-touch` by
+    // rule, and `screen.settings.touch` is a pane. Its three controls are measured for the
+    // same reason the two below are -- the boxes are the evidence, not the PNG.
+    const practice = SCREEN_STATES.find((s: any) => s.id === 'screen.practice.touch') as any;
+    for (const control of ['.hud-pause-btn', '.hud-fire-btn', '.hud-mine-btn']) {
+      expect(practice.measure).toContain(control);
+    }
+    const desktopBoard = SCREEN_STATES.find((s: any) => s.id === 'screen.practice') as any;
+    expect(desktopBoard.measure).not.toContain('.hud-fire-btn');
 
     // And it is measured, not merely rendered: the two controls that exist only with a
     // touchscreen are in the state's `measure` list, so the capture's report carries the

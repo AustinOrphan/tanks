@@ -105,6 +105,10 @@ describe('capture recipe schema', () => {
       'screen.launch',
       'screen.boot-loading',
       'screen.practice',
+      // Issue #957: the same round under the touchscreen capability profile, which is what
+      // puts the on-screen driving controls on the page. Appended rather than placed beside
+      // `screen.practice`, because this list is asserted in the order the file carries.
+      'screen.practice.touch',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });

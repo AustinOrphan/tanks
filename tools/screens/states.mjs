@@ -435,6 +435,42 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-practice', '.hud-topbar', '.hud-lives', '.hud-enemies'],
   }),
   state({
+    id: 'screen.practice.touch',
+    title: 'Practice on a touchscreen, with the driving controls up',
+    description:
+      'The only state that puts the on-screen driving controls in front of a gate. They are '
+      + 'sized by --hud-control-touch, a 56px floor no check could reach before this.',
+    storage: MID_CAMPAIGN,
+    touch: true,
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-levelselect-open' },
+      { waitVisible: '.hud-levelselect' },
+      { click: '.hud-level-btn[aria-label="Level 1"]' },
+      { waitVisible: '.hud-practice' },
+      // The row is toggled by `setState`, not by the touch profile, so waiting on the
+      // practice chip alone would photograph the board a tick before the controls arrive.
+      { waitVisible: '.hud-fire-btn' },
+    ],
+    // No menu, for the reason `screen.practice` gives: the hit collector leaves the driving
+    // controls out because they are not menu targets, and the 44px menu floor is the wrong
+    // number for them anyway. This state exists so the 56px one has somewhere to be read.
+    menu: 'none',
+    /**
+     * THE THREE CONTROLS ARE THE POINT. `--hud-control-touch` (hud.css:187) gives
+     * `.hud-pause-btn`, `.hud-fire-btn` and `.hud-mine-btn` a 56px minimum in both
+     * dimensions, and issue #633 recorded that nothing asserted it. Nothing COULD:
+     * `screen.settings.touch` was the only state with a touchscreen and it is a pane, and
+     * `hit-sweep.mjs` skips `.hud-touch` by rule.
+     *
+     * Measured before this state existed, in a touch context on a live round: 56x56,
+     * 66.2x56 and 69.5x56, every one fully inside the viewport at 320x568, 390x844 and
+     * 640x400@2x. The floor held; what was missing was a gate that would notice if it
+     * stopped holding.
+     */
+    measure: ['.hud-touch', '.hud-pause-btn', '.hud-fire-btn', '.hud-mine-btn'],
+  }),
+  state({
     id: 'screen.records.stats',
     title: 'Records, Stats tab',
     description: 'Lifetime against the level attempt, with a populated save.',

@@ -8,7 +8,7 @@ import { HIT_EXTRA_STATES, HIT_VIEWPORTS, hitSweepExclusion, hitSweepStates } fr
 /**
  * Issue #710: the `visual` gate sweeps menu hit targets, and WHICH surfaces it sweeps is
  * decided here rather than in `verify.mjs`, which runs on import. The population below is
- * the screen-state catalogue as it stands: 49 states, 16 excluded, 33 swept, plus 1 extra.
+ * the screen-state catalogue as it stands: 50 states, 17 excluded, 33 swept, plus 1 extra.
  */
 
 /** Every excluded catalogue state, by the rule that removes it. */
@@ -40,13 +40,19 @@ const EXCLUDED = {
     'screen.boot-loading',
     'screen.launch',
     'screen.practice',
+    // Issue #957. The touchscreen twin of the practice board, and the only state that shows
+    // the driving controls. Excluded for the SAME reason and a second one: this sweep's
+    // collector skips `.hud-touch` deliberately, and its floor is 44 px, which is the wrong
+    // number for a control sized by `--hud-control-touch` at 56. The 56 px floor is asserted
+    // in `hud.css.test.ts` instead, and the boxes are pinned by this state's own baseline.
+    'screen.practice.touch',
   ],
 };
 
 describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
   it('excludes exactly the developer, no-script, match-failure, played-ending and menu-less states, each for its rule', () => {
     // Negative controls, one per rule: deleting any of the five clauses in hitSweepExclusion
-    // lets that rule's states through -- 7, 1, 1, 4 and 3 -- and this map no longer matches.
+    // lets that rule's states through -- 7, 1, 1, 4 and 4 -- and this map no longer matches.
     // Recounted off the map below rather than edited down from the old line, which said
     // "five clauses ... 7, 2, 1, 1 and 4": six rules by then, with issue #841's menu-less
     // three missing from a list that still read as complete.
@@ -86,6 +92,11 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // the same kind of evidence: each draws one control, a focused Reload button, measured at
     // 96.8x46.8 CSS px in all four viewports against the 44 px floor. They were excluded
     // before because this driver could not produce them, not because there was nothing there.
+    //
+    // STILL 34 after issue #957's `screen.practice.touch`, and the catalogue grew to 50: the
+    // new state declares no menu, so it joins the exclusion above rather than this list. Its
+    // controls are driving controls, which this collector skips on purpose and whose floor is
+    // 56 px rather than the 44 this sweep enforces.
     expect(hitSweepStates()).toHaveLength(34);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
