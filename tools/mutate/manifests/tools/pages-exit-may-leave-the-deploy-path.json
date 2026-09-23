@@ -1,0 +1,15 @@
+{
+  "id": "pages-exit-may-leave-the-deploy-path",
+  "file": "tools/devtools-pages/check.mjs",
+  "find": "  if (to.pathname !== from.pathname) {",
+  "replace": "  if (to.pathname !== from.pathname && false) {",
+  "expect": "killed",
+  "why": "Stops checking that Exit stayed on the deploy path. `exitDeveloperMode` composes `location.pathname` with the stripped search; a version that assumed the origin root would land on \"/\" -- fine on the root serve every other tool uses, and a 404 on Pages, which is precisely the class of defect this whole check exists for.",
+  "tests": [
+    "tools/devtools-pages/check.test.ts"
+  ],
+  "killedBy": [
+    "exitContractFailures: judging where Exit landed FAILS when the exit leaves the deploy path",
+    "exitContractFailures: judging where Exit landed reports every breach at once rather than stopping at the first"
+  ]
+}

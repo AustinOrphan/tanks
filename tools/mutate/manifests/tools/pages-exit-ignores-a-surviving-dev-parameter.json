@@ -1,0 +1,15 @@
+{
+  "id": "pages-exit-ignores-a-surviving-dev-parameter",
+  "file": "tools/devtools-pages/check.mjs",
+  "find": "    if (to.searchParams.has(name)) {",
+  "replace": "    if (false && to.searchParams.has(name)) {",
+  "expect": "killed",
+  "why": "Stops noticing that Exit Developer Mode left a developer parameter in the address. The RULE is pinned elsewhere (`developerExitSearch` has its own describe block in src/game/dev-config.test.ts); what this judges is the URL a browser really landed on, which is the only thing that can catch the rule being right and `exitDeveloperMode`'s wiring to `location.assign` being wrong. Without it the journey would report a clean exit from a page still in developer mode.",
+  "tests": [
+    "tools/devtools-pages/check.test.ts"
+  ],
+  "killedBy": [
+    "exitContractFailures: judging where Exit landed FAILS when a developer parameter survives the exit",
+    "exitContractFailures: judging where Exit landed reports every breach at once rather than stopping at the first"
+  ]
+}

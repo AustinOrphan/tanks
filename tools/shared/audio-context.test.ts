@@ -110,6 +110,8 @@ const GUARDED: Record<string, string[]> = {
   'screens/record.mjs': ['    await context.addInitScript(audioContextOverrideSource());'],
   'uikit/forced-colors.mjs': ['    await page.addInitScript(audioContextOverrideSource());'],
   'uikit/primitive-states.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
+  // FOUR spaces: the install sits inside this driver's `try`, like audio/render.mjs's.
+  'devtools-pages/journey.mjs': ['    await context.addInitScript(audioContextOverrideSource());'],
   'visual/hit-sweep.mjs': ['  await context.addInitScript(audioContextOverrideSource());'],
   'visual/roundtrip.mjs': ['  await page.addInitScript(audioContextOverrideSource());'],
   // TWO, and that is the point of listing sites rather than counting calls: the clearance

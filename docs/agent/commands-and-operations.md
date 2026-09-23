@@ -19,7 +19,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability and the bundle budget | under 10 seconds |
 | `npm run lint:css` | Parse integrity of every shipped stylesheet; also enforced inside `npm run test:unit` | under 1 second |
-| `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, and the session-lifecycle round trip | roughly 55–130 seconds after browser setup |
+| `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, the session-lifecycle round trip, and Developer Tools on a Pages-shaped serve | roughly 55–130 seconds after browser setup |
 | `npm run verify:full` | Complete core composite: quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
 
 The figures are approximate measurements/bands from a warm Node 24 Linux checkout on
@@ -275,6 +275,7 @@ npm run portability                                        # inspect an existing
 npm run bundle:budget                                      # weigh an existing dist/ against the recorded ceilings
 npm run visual                                             # inspect an existing dist/ in Chromium
 npm run roundtrip                                          # session lifecycle census in Chromium
+npm run devtools:pages                                     # Developer Tools on a Pages-shaped (subdirectory) serve
 ```
 
 `npm run capture` (`tools/capture/`) puts three producers behind one versioned, reviewed
