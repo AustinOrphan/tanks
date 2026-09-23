@@ -1,0 +1,14 @@
+{
+  "id": "hit-sweep-ignores-the-catalogue-webgl-mode",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  if (state.webgl !== 'ok') await context.addInitScript(webglOverrideSource(state.webgl));\n",
+  "replace": "  // the catalogue's webgl mode is not applied\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "This driver navigates for itself, separately from `captureState`, so a catalogue field reaches it only when someone says so here -- issue #781's `entry` and issue #844's `touch` were each forgotten the same way. Without the override the two branded startup-failure pages boot normally under this driver and time out on `[role=\"alert\"]`, which is why they were excluded from the sweep rather than measured; with it each reports one control, a Reload button at 96.8x46.8 CSS px in all four viewports. Replaces `hit-sweep-sweeps-startup-failure-pages`, which mutated the exclusion this removed.",
+  "killedBy": [
+    "hit-sweep.mjs: the catalogue WebGL mode this driver must honour installs the WebGL override for a non-ok state, before it navigates"
+  ]
+}

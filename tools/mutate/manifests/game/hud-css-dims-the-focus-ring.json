@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-dims-the-focus-ring",
+  "file": "src/game/hud.css",
+  "find": "  --hud-focus-color: #7fd0ff;\n",
+  "replace": "  --hud-focus-color: #3a4048;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #921. The replacement is a grey close to the panel grounds this ring is drawn over, which is the 'high-contrast' half of the direction's rule failing while the ring is still 2px, still offset, and still present in every block the existing assertions read. A separate entry from the width one because they are separate regressions with the same blind spot.",
+  "killedBy": [
+    "hud.css is syntactically whole pins what the focus ring is made of, not only that there is one"
+  ]
+}

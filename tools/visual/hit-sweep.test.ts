@@ -8,7 +8,7 @@ import { HIT_EXTRA_STATES, HIT_VIEWPORTS, hitSweepExclusion, hitSweepStates } fr
 /**
  * Issue #710: the `visual` gate sweeps menu hit targets, and WHICH surfaces it sweeps is
  * decided here rather than in `verify.mjs`, which runs on import. The population below is
- * the screen-state catalogue as it stands: 49 states, 18 excluded, 31 swept, plus 1 extra.
+ * the screen-state catalogue as it stands: 49 states, 16 excluded, 33 swept, plus 1 extra.
  */
 
 /** Every excluded catalogue state, by the rule that removes it. */
@@ -21,10 +21,6 @@ const EXCLUDED = {
     'screen.devtools.actions',
     'screen.devtools.diagnostics',
     'screen.devtools.controller-selftest',
-  ],
-  'a startup failure page, which has no menu to press': [
-    'screen.startup.unsupported-render',
-    'screen.startup.probe-blocked',
   ],
   'the no-script page: the collector runs as page script': ['screen.no-script'],
   'the match failure overlay, owned by its own capture': ['screen.startup.match-failed'],
@@ -48,9 +44,12 @@ const EXCLUDED = {
 };
 
 describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
-  it('excludes exactly the developer, startup-failure, no-script, match-failure and played-ending states, each for its rule', () => {
+  it('excludes exactly the developer, no-script, match-failure, played-ending and menu-less states, each for its rule', () => {
     // Negative controls, one per rule: deleting any of the five clauses in hitSweepExclusion
-    // lets that rule's states through -- 7, 2, 1, 1 and 4 -- and this map no longer matches.
+    // lets that rule's states through -- 7, 1, 1, 4 and 3 -- and this map no longer matches.
+    // Recounted off the map below rather than edited down from the old line, which said
+    // "five clauses ... 7, 2, 1, 1 and 4": six rules by then, with issue #841's menu-less
+    // three missing from a list that still read as complete.
     const actual: Record<string, string[]> = {};
     for (const state of SCREEN_STATES) {
       const reason = hitSweepExclusion(state);
@@ -82,7 +81,12 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // excluded, on evidence: the card offers a Reload button, and a real capture measured it at
     // 95x47 CSS px, clearing the 44px floor this sweep exists to enforce. Excluding them would
     // have left the only control on a page a player can actually land on unmeasured.
-    expect(hitSweepStates()).toHaveLength(32);
+    //
+    // 34 since the two branded startup-failure pages joined them, for that same reason and on
+    // the same kind of evidence: each draws one control, a focused Reload button, measured at
+    // 96.8x46.8 CSS px in all four viewports against the 44 px floor. They were excluded
+    // before because this driver could not produce them, not because there was nothing there.
+    expect(hitSweepStates()).toHaveLength(34);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 
@@ -135,6 +139,50 @@ describe('hit-sweep.mjs: removing the AudioContext constructor before boot', () 
     expect(at, 'the override call was not found').toBeGreaterThan(-1);
     expect(firstGoto, 'no navigation was found').toBeGreaterThan(-1);
     expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
+  });
+});
+
+/**
+ * The catalogue's `webgl` field reaches this driver, which is the third field to have needed
+ * saying: issue #781's `entry` and issue #844's `touch` were each added to the catalogue,
+ * honoured by `captureState`, and forgotten here, because the two navigate separately.
+ *
+ * `webgl` was forgotten differently, and worse. The other two failed loudly -- a card that
+ * never appeared, a pane missing its touch-only controls. This one was papered over by an
+ * EXCLUSION whose stated reason was about the page ("a startup failure page, which has no
+ * menu to press") rather than about the driver, so the two branded failure pages read as
+ * deliberately out of scope for the sweep for as long as the rule stood. They are not: each
+ * draws exactly one control, and `boot.ts` focuses it.
+ *
+ * Asserted against the source for the same reason the AudioContext case above is: nothing a
+ * unit test can construct drives a Playwright context, and the alternative -- trusting the
+ * `visual` gate to notice -- is what the exclusion prevented for the whole life of the rule.
+ */
+describe('hit-sweep.mjs: the catalogue WebGL mode this driver must honour', () => {
+  it('installs the WebGL override for a non-ok state, before it navigates', () => {
+    const src = readFileSync(new URL('./hit-sweep.mjs', import.meta.url), 'utf8');
+    // CONDITIONAL, unlike the AudioContext override above, and the condition is pinned:
+    // `webglOverrideSource('ok')` is not a no-op -- steps.mjs falls through to the branch
+    // that returns null from `getContext('webgl2')` -- so installing it unconditionally
+    // would break every other swept state rather than fixing these two.
+    const call =
+      /^ {2}if \(state\.webgl !== 'ok'\) await context\.addInitScript\(webglOverrideSource\(state\.webgl\)\);$/m;
+    expect(src, 'the WebGL override is gone, unguarded, or no longer on its own line').toMatch(call);
+    const at = src.search(call);
+    const firstGoto = src.indexOf('.goto(');
+    expect(at, 'the override call was not found').toBeGreaterThan(-1);
+    expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
+  });
+
+  it('has states that need it, so the line above is not guarding an empty set', () => {
+    // The negative control the regex alone cannot be: a guard for a condition no swept state
+    // meets would pass every assertion above while measuring nothing. Deleting either page
+    // from the catalogue -- or restoring the exclusion -- empties this list.
+    const needOverride = hitSweepStates().filter((s) => s.webgl !== undefined && s.webgl !== 'ok');
+    expect(needOverride.map((s) => s.id)).toEqual([
+      'screen.startup.unsupported-render',
+      'screen.startup.probe-blocked',
+    ]);
   });
 });
 

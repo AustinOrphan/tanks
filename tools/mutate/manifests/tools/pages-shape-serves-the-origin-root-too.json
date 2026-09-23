@@ -1,0 +1,15 @@
+{
+  "id": "pages-shape-serves-the-origin-root-too",
+  "file": "tools/devtools-pages/check.mjs",
+  "find": "  if (!path.startsWith(prefix)) return null;",
+  "replace": "  if (!path.startsWith(prefix)) return path;",
+  "expect": "killed",
+  "why": "Serves origin-absolute requests instead of refusing them, which turns this check back into the root serve every other browser tool here already does. A build whose `base` stopped being relative asks for /assets/... and would then be answered, so the one deployment shape GitHub Pages actually uses would pass while broken. Observed live: rewriting index.html's three \"./assets/\" references to \"/assets/\" makes the real check fail with \"the app did not boot under /tanks/\" and both 404s named -- that failure is what this mutation deletes.",
+  "tests": [
+    "tools/devtools-pages/check.test.ts"
+  ],
+  "killedBy": [
+    "stripPrefix: the deploy shape REFUSES an origin-absolute asset path, which is the whole point of the prefix",
+    "stripPrefix: the deploy shape is not fooled by a sibling path that merely starts like the prefix"
+  ]
+}

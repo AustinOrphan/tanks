@@ -1,0 +1,14 @@
+{
+  "id": "particles-draw-for-a-refusal",
+  "file": "src/render/particles.ts",
+  "find": "        case 'fire-blocked':",
+  "replace": "        case 'fire-blocked':\n          burst(0, 0, 5, 0xffffff, 4, 0.18, 0.6);\n          break;",
+  "expect": "killed",
+  "tests": [
+    "src/render/particles.test.ts"
+  ],
+  "why": "Draws debris for a shot that never left the barrel. A refusal is not an impact -- the blocked-fire vocabulary is a HUD cue and a sound -- so particles here would read as a shot that did fire. This is the direction the old hand-kept list could not see at all: `fire-blocked` was named in neither the switch, nor its comment, nor the five-event test, so a burst added here changed nothing any assertion was watching. The sweep now walks the whole union and compares what drew against what should.",
+  "killedBy": [
+    "particles: which events burst, and how much draws for exactly the events it means to, swept across the whole SimEvent union"
+  ]
+}

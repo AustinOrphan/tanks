@@ -1,0 +1,16 @@
+{
+  "id": "pages-exit-may-drop-an-unrelated-parameter",
+  "file": "tools/devtools-pages/check.mjs",
+  "find": "    if (to.searchParams.get(name) !== value) {",
+  "replace": "    if (to.searchParams.get(name) !== value && false) {",
+  "expect": "killed",
+  "why": "Stops checking that Exit PRESERVED everything that was not a developer parameter. #238 requires it, and the natural wrong implementation -- rebuilding the query from scratch with only the parameters you recognise -- passes every \"is dev gone\" assertion while silently breaking a deep link or a router's own parameters. This is the half of the contract that fails quietly.",
+  "tests": [
+    "tools/devtools-pages/check.test.ts"
+  ],
+  "killedBy": [
+    "exitContractFailures: judging where Exit landed FAILS when an unrelated parameter is dropped",
+    "exitContractFailures: judging where Exit landed FAILS when an unrelated parameter is altered rather than dropped",
+    "exitContractFailures: judging where Exit landed reports every breach at once rather than stopping at the first"
+  ]
+}

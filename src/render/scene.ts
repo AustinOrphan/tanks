@@ -68,6 +68,44 @@ function gradientPixels(): Uint8ClampedArray<ArrayBuffer> {
  * comment on this), so a preview built without this would look worse than the tank it is
  * supposed to be showing faithfully.
  */
+/**
+ * The PMREM cube size this gradient is convolved into (issue #909). three's default is 256.
+ *
+ * WHY IT IS NOT THE DEFAULT. The source is a 1x64 vertical gradient: it has no horizontal
+ * detail and very little vertical detail, so a 256 cube cannot hold information the input
+ * does not carry. It only costs time -- and on a software rasteriser that time is the single
+ * largest thing in the GL harness (issue #867 attributed ~4/5 of its post-load phase to this
+ * one call, 100 environment maps per run).
+ *
+ * MEASURED, bounded by a blocking readback, medians of 3 rounds per size on this box,
+ * `three` 0.186.0. "delta" is the max per-channel difference over a 96x96 render of a metal
+ * sphere lit only by the map, against the same sphere at size 256:
+ *
+ *   size   output      median ms   delta, shipped material   delta, mirror
+ *    256   768x1024      3,142           0                        0
+ *    128   384x512       1,011           1                        1
+ *     64   336x256         461           1                        1
+ *     32   336x128         328           1                        2
+ *     16   336x64          288           2                        2
+ *
+ * The scale those deltas are read against: the map moves that sphere by up to **92**, so a
+ * delta of 1 is 1% of the effect the environment has at all.
+ *
+ * "shipped material" is roughness 0.30 / metalness 0.70 -- the SHARPEST material in
+ * `render/entities.ts`, because a coarser environment shows first on sharp reflections.
+ * "mirror" is 0.05 / 1.0, far sharper than anything in the tree, and it does not move either.
+ *
+ * THE CONTROL THAT MAKES THOSE NUMBERS MEAN SOMETHING. A sweep where nothing changes has
+ * either found that nothing matters or found nothing. Running the same 256-against-64
+ * comparison over a DETAILED environment -- an 8x8 checkerboard -- gives a max delta of
+ * **94**, the same order as the whole map's effect. So the probe sees resolution perfectly
+ * well; a delta of 1 here is a fact about the gradient, not about the measurement.
+ *
+ * 64 rather than 16 leaves headroom: if this environment ever gains real detail, the number
+ * to revisit is this one, and the table above says what each step costs.
+ */
+const ENV_MAP_SIZE = 64;
+
 export function createEnvironmentMap(renderer: THREE.WebGLRenderer): THREE.Texture {
   const envScene = new THREE.Scene();
   const grad = new THREE.DataTexture(gradientPixels(), 1, ENV_STEPS, THREE.RGBAFormat);
@@ -75,7 +113,9 @@ export function createEnvironmentMap(renderer: THREE.WebGLRenderer): THREE.Textu
   grad.mapping = THREE.EquirectangularReflectionMapping;
   envScene.background = grad;
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const envMap = pmrem.fromScene(envScene).texture;
+  // The 5th argument is three 0.186's options bag; the three before it are its documented
+  // defaults (sigma 0, near 0.1, far 100) and are passed only to reach `size`.
+  const envMap = pmrem.fromScene(envScene, 0, 0.1, 100, { size: ENV_MAP_SIZE }).texture;
   grad.dispose();
   pmrem.dispose();
   return envMap;

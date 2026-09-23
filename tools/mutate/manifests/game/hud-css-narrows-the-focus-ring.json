@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-narrows-the-focus-ring",
+  "file": "src/game/hud.css",
+  "find": "  --hud-focus-width: 2px;\n",
+  "replace": "  --hud-focus-width: 1px;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Issue #921. 1px is outside the 2-3px range the UI/UX direction fixes for the focus ring, and every existing focus assertion in this file looks for `outline:` inside a block -- which a 1px ring still satisfies, since all three rules draw from this one token. The ring narrows on every focusable control at once and no gate notices.",
+  "killedBy": [
+    "hud.css is syntactically whole pins what the focus ring is made of, not only that there is one"
+  ]
+}

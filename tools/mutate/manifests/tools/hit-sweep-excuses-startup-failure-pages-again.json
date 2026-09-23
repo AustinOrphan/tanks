@@ -1,0 +1,16 @@
+{
+  "id": "hit-sweep-excuses-startup-failure-pages-again",
+  "file": "tools/visual/hit-sweep.mjs",
+  "find": "  if (state.javascript === 'off') return 'the no-script page: the collector runs as page script';\n",
+  "replace": "  if (state.webgl !== 'ok') return 'a startup failure page, which has no menu to press';\n  if (state.javascript === 'off') return 'the no-script page: the collector runs as page script';\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/hit-sweep.test.ts"
+  ],
+  "why": "Puts back the exclusion that kept the two branded startup-failure pages out of the sweep. The driver would still apply the WebGL override, so nothing would fail -- the states would simply stop being measured, which is the shape the original defect had. Kills the exclusion-map case, the swept-list case and the empty-set case, and that last one is the point: it is what stops the override guard beside it from passing while guarding a set with nothing in it.",
+  "killedBy": [
+    "hit-sweep.mjs: which surfaces the visual gate sweeps excludes exactly the developer, no-script, match-failure, played-ending and menu-less states, each for its rule",
+    "hit-sweep.mjs: which surfaces the visual gate sweeps sweeps every other catalogue state, the endings included, then the extra surface",
+    "hit-sweep.mjs: the catalogue WebGL mode this driver must honour has states that need it, so the line above is not guarding an empty set"
+  ]
+}

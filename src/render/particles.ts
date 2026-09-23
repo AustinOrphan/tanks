@@ -143,9 +143,39 @@ export function createParticleSystem(scene: THREE.Scene, rng: () => number = Mat
           // for a respawn's look now. This used to draw an ad-hoc cyan burst here;
           // removed by #201.
           break;
-        // 'mine-dropped', 'mine-armed', 'win', 'lose' produce no particles.
-        default:
+        // EVERY REMAINING KIND, NAMED, and none of them draws anything. Listing them costs
+        // three lines and buys the guard below: with a `default` here, a new SimEvent kind gets
+        // no visual and nothing objects, which for a criterion about information surviving a
+        // muted game is exactly backwards (issue #929).
+        //
+        // The comment this replaces said "'mine-dropped', 'mine-armed', 'win', 'lose' produce
+        // no particles" and had fallen three behind the union -- `mine-triggered`,
+        // `mine-fuse-warning` and `fire-blocked` were unlisted and unremarked, which is the
+        // drift a compile error prevents and a comment cannot.
+        case 'mine-dropped':
+        case 'mine-armed':
+          // A mine's life before it goes off is the MINE's own business: `entities.ts` draws
+          // the body and its arming tell. A burst here would announce a hidden thing.
+        case 'mine-triggered':
+        case 'mine-fuse-warning':
+          // The fuse is a sound and a light on the mine, not a spray of particles: the point of
+          // the warning is that the mine is about to detonate, and `mine-detonate` below is the
+          // burst that says it did.
+        case 'fire-blocked':
+          // A refusal is not an impact. The blocked-fire vocabulary is a HUD cue and a sound
+          // (see `cueDrives`), and drawing debris for a shot that never left the barrel would
+          // read as a shot that did.
+        case 'win':
+        case 'lose':
+          // The match is over and the outcome panel owns the screen.
           break;
+        default: {
+          // Exhaustiveness guard: a new SimEvent kind fails to compile here, the same
+          // discipline audio/director.ts and game/haptics.ts already use. This layer was the
+          // odd one out, and it is the one whose absence is hardest to notice.
+          const _exhaustive: never = ev;
+          return _exhaustive;
+        }
       }
     }
   }
