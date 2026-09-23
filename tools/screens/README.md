@@ -87,6 +87,28 @@ One browser and one server serve the whole run, and each capture gets a fresh br
 `--states` and `--layouts` take comma-separated ids and refuse an unknown one. `--out` must not exist
 yet.
 
+**And `index.html`, which is how a person reads it** (issue #936). A full sweep is 49 states by
+9 layouts, so about 441 PNGs plus their reports — not reviewable in a file browser. The sweep
+writes a states-by-layouts grid beside them: one row per state with its description, one column
+per layout, each cell captioned with the selectors that state measured and their size. A cell
+whose capture failed is drawn with its error rather than left out, and a state or layout the
+sweep did not cover reads as absent, so a partial run cannot pass for a complete one.
+
+It is plain HTML with no script and every image `loading="lazy"`, and it fits nine columns
+inside 1920 px — it is meant to be opened on the TV itself for the couch-distance pass, which
+is one scroll instead of a file browse.
+
+For a sweep already on disk, or after the renderer changes, regenerate it without
+re-photographing anything:
+
+```sh
+node tools/screens/index-page-run.mjs tmp/sweep/base
+```
+
+The renderer (`index-page.mjs`) is pure and unit-tested; `sweep.mjs` feeds it the reports it
+already holds, and `index-page-run.mjs` reads the same values back off disk. Measured on a real
+4-capture sweep: the two paths produce a byte-identical page.
+
 **How compare classifies each state and layout.**
 
 | Outcome | Meaning |
