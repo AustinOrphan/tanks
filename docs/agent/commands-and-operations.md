@@ -17,7 +17,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run lint:workflows` | actionlint with shellcheck over every `.github/workflows` file, after its known-bad fixtures | under 1 second warm; about 1 second on the first run, which downloads |
 | `npm run mutate:smoke` | One representative real mutation-harness path used by floor CI | under 5 seconds |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
-| `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
+| `npm run verify:build` | Production build, then built-output portability and the bundle budget | under 10 seconds |
 | `npm run lint:css` | Parse integrity of every shipped stylesheet; also enforced inside `npm run test:unit` | under 1 second |
 | `npm run verify:visual` | Build/portability, GL tests, Chromium trace, screenshot checks, and the session-lifecycle round trip | roughly 55–130 seconds after browser setup |
 | `npm run verify:full` | Complete core composite: quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
@@ -272,6 +272,7 @@ npm run test:gl                                            # renderer constructi
 npm run trace:browser -- --all                              # golden trace in three Playwright engines
 npm run trace:safari                                       # real Safari on supported macOS
 npm run portability                                        # inspect an existing dist/
+npm run bundle:budget                                      # weigh an existing dist/ against the recorded ceilings
 npm run visual                                             # inspect an existing dist/ in Chromium
 npm run roundtrip                                          # session lifecycle census in Chromium
 ```

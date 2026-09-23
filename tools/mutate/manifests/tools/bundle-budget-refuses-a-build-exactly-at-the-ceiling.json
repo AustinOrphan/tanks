@@ -1,0 +1,14 @@
+{
+  "id": "bundle-budget-refuses-a-build-exactly-at-the-ceiling",
+  "file": "tools/bundle-budget/check.mjs",
+  "find": "if (actual > ceiling) {",
+  "replace": "if (actual >= ceiling) {",
+  "expect": "killed",
+  "why": "Turns the ceiling exclusive. The one build that must never fail is the one sitting exactly on a number somebody chose deliberately -- and that is also the build a ceiling gets set to when someone raises it to today`s size, so this mutation makes the gate fail immediately after every legitimate raise. The overage arithmetic in the message would also report 0 B over, which reads as a bug rather than a policy.",
+  "tests": [
+    "tools/bundle-budget/check.test.ts"
+  ],
+  "killedBy": [
+    "bundle budget: what it refuses is an inclusive ceiling: exactly at the budget passes, one byte over fails"
+  ]
+}
