@@ -229,6 +229,38 @@ check('an environment map exists, so metalness is not just darkness', () => {
   return null;
 });
 
+check('the environment map is convolved at the SMALL size, not three\'s default (issue #909)', () => {
+  // scene.ts passes `{ size: 64 }` to `PMREMGenerator.fromScene`, whose default is 256. That
+  // is the single largest cost in this harness: at 256 the call is ~3,140 ms against ~480 ms
+  // at 64, and this page builds 100 environment maps, so the default put ~265 s on a run --
+  // measured, 393.5 s inside check bodies against 128.9 s, same box, same session.
+  //
+  // PINNED BY THE OUTPUT SIZE, not by reading the constant: the option could be dropped, or
+  // three could stop honouring it, and either way the map silently returns to 256 with only
+  // the clock to show it. `fromScene` at 64 produces a 336x256 cubeUV target here and at 256
+  // a 768x1024 one, so height is the discriminator -- and it fails in the direction that
+  // matters, since a LARGER map is the regression.
+  //
+  // Why this is not a mutation manifest entry: `tools/mutate` refuses an entry whose declared
+  // tests cannot reach the file, and scene.ts is unreachable under vitest -- it builds a
+  // WebGLRenderer. This harness is where its coverage lives (see this file's header).
+  const ctx = fresh();
+  const env = ctx.scene.environment;
+  const image = (env?.image ?? {}) as { width?: number; height?: number };
+  const width = Number(image.width ?? 0);
+  const height = Number(image.height ?? 0);
+  ctx.dispose();
+  if (!env) return 'scene.environment is null, so there is no map to size';
+  if (width === 0 || height === 0) {
+    return `the environment map reports no dimensions (${width}x${height}); the probe cannot judge it`;
+  }
+  if (height > 512) {
+    return `the environment map is ${width}x${height} -- that is three's 256 default (768x1024), `
+      + 'so the `size` option in scene.ts\'s createEnvironmentMap is no longer taking effect';
+  }
+  return null;
+});
+
 check('dispose detaches every light and clears the environment', () => {
   // The sun was already disposed; fill, rim and the generated env map are new and are
   // exactly the kind of thing that leaks silently.

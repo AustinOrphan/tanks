@@ -210,9 +210,30 @@ try {
   // on 2026-09-20 (103.9 s -> 273.5 s, 2.63x). Same instrument, same box, different day and
   // different load. Treat the ratio as the contrast and nothing here as a per-machine cost.
   //
-  // WHY 600s SURVIVES THAT CORRECTION. A whole run on 0.186 is about 48s to `load` plus 218s
-  // to results, so ~266s; 600s is ~2.3x that, which is the margin a hang ceiling wants and
-  // matches the guard below. The number was right; only the reason for it was not.
+  // AND THEN IT WAS FIXED (issue #909). `createEnvironmentMap` now asks PMREM for a 64 cube
+  // instead of three's default 256 -- the source is a 1x64 gradient, which cannot fill a 256
+  // one. The environment map's share of this page went with it:
+  //
+  //                                     size 256       size 64
+  //   summed time inside check bodies    393.5 s        128.9 s
+  //   the `envMap` phase, per map        3,143 ms        485 ms
+  //
+  // Same box, same session, ten minutes apart, 94 of 94 passing in both. The 264.6 s saved is
+  // what the attribution above predicted (100 maps x 2.65 s), which is the first independent
+  // confirmation that the attribution was right rather than merely consistent. A check in
+  // `harness.ts` now pins the map's OUTPUT SIZE, because the option could be dropped or three
+  // could stop honouring it and only the clock would show it.
+  //
+  // WHY 600s SURVIVES ALL OF THAT. Before #909 a whole run on 0.186 was about 48s to `load`
+  // plus 218s to results, ~266s, and 600s was ~2.3x it. Timed end to end after #909, on this
+  // box with a WARM vite dependency cache: 131 s wall for the whole command, 129.6 s of that
+  // inside check bodies. So the ceiling is now a much larger multiple of a good run.
+  //
+  // It should still not be lowered to match. The 48 s load above was measured on a COLD cache
+  // with `vite optimize --force`, which this change does not touch -- it moves the post-load
+  // phase only -- so a first run after a dependency bump is still minutes longer than 131 s.
+  // The ceiling is for a HANG, and the spread it has to tolerate (see the guard below: 113s,
+  // 175s and 411s on one developer machine) is unchanged.
   //
   // The LOAD phase is a DEVELOPMENT SERVER cost, not a shipped one: the production build
   // tree-shakes the same import down to a 1.17 MB bundle, and `npm run visual` (which runs
