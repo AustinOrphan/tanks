@@ -1,0 +1,14 @@
+{
+  "id": "bundle-budget-passes-an-empty-build",
+  "file": "tools/bundle-budget/check.mjs",
+  "find": "if (measured.js.count === 0) {",
+  "replace": "if (measured.js.count < 0) {",
+  "expect": "killed",
+  "why": "Removes the non-vacuity guard, which is the one failure a size budget is most likely to have: a build that emitted no JavaScript weighs nothing and is therefore under every ceiling. tools/portability/check.mjs carries the same guard because its own predecessor passed on an empty dist/ -- a shell `! grep` over a non-matching glob exits 0. Without this, a broken build reports \"within budget\" and the gate is worse than nothing, because it reads as evidence.",
+  "tests": [
+    "tools/bundle-budget/check.test.ts"
+  ],
+  "killedBy": [
+    "bundle budget: what it refuses REFUSES a build with no JavaScript, which is under every ceiling"
+  ]
+}

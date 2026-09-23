@@ -240,6 +240,13 @@ jobs:
       - name: Assert the build is subpath-portable
         run: npm run portability
 
+      # Issue #945. Separate from the portability step beside it because the two answer
+      # different questions about the same build -- one asks whether the asset URLs survive
+      # a sub-path, the other whether the bundle has quietly grown. The ceilings and the
+      # baseline they were set from live in tools/bundle-budget/check.mjs.
+      - name: Weigh the build against the bundle budget
+        run: npm run bundle:budget
+
       # Carried over from ci.yml for the same reason as the steps above: it gates
       # nothing today, and the deploy is what makes the result public.
       - name: Audit production dependencies

@@ -99,6 +99,13 @@ jobs:
       - name: Assert the build is subpath-portable
         run: npm run portability
 
+      # Issue #945. Separate from the portability step beside it because the two answer
+      # different questions about the same build -- one asks whether the asset URLs survive
+      # a sub-path, the other whether the bundle has quietly grown. The ceilings and the
+      # baseline they were set from live in tools/bundle-budget/check.mjs.
+      - name: Weigh the build against the bundle budget
+        run: npm run bundle:budget
+
       # Dev-only advisories (vite/vitest dev-server CVEs) cannot reach a static
       # bundle, so gating on them would be a permanent, non-actionable red.
       - name: Audit production dependencies
@@ -283,6 +290,13 @@ jobs:
       # capture taken here describes the bundle Pages serves from a sub-path.
       - name: Built-output portability
         run: npm run portability
+
+      # Issue #945. Separate from the portability step beside it because the two answer
+      # different questions about the same build -- one asks whether the asset URLs survive
+      # a sub-path, the other whether the bundle has quietly grown. The ceilings and the
+      # baseline they were set from live in tools/bundle-budget/check.mjs.
+      - name: Built-output bundle budget
+        run: npm run bundle:budget
 
       # The numbers alone do not tell you WHAT went wrong; the screenshots do.
       - name: Upload screenshots

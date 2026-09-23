@@ -1,0 +1,14 @@
+{
+  "id": "bundle-budget-weighs-raw-bytes-only",
+  "file": "tools/bundle-budget/check.mjs",
+  "find": "for (const form of ['raw', 'gzip']) {",
+  "replace": "for (const form of ['raw']) {",
+  "expect": "killed",
+  "why": "Drops the gzipped half of the budget, leaving the form nobody waits for. The two do not move together -- this bundle is 3.6x smaller gzipped -- so a change that compresses badly can add tens of kilobytes to what a player downloads while the raw figure barely moves. The killing test builds exactly that case: high-entropy bytes under the raw ceiling and over the gzip one.",
+  "tests": [
+    "tools/bundle-budget/check.test.ts"
+  ],
+  "killedBy": [
+    "bundle budget: what it refuses fails on GZIPPED bytes even when raw is inside the ceiling"
+  ]
+}
