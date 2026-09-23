@@ -23,8 +23,8 @@ const FIXTURE = `{
   },
   "BETA": {
     "aimAccuracy": 0.7,
-    "targetCommitmentTime": 1.5,
-    "nested": { "targetCommitmentTime": 9 }
+    "nested": { "targetCommitmentTime": 9 },
+    "targetCommitmentTime": 1.5
   }
 }
 `;
@@ -88,10 +88,14 @@ describe('patchProfileField: one profile, and only that one', () => {
   });
 
   it('finds the profile s real closing brace, not the first one', () => {
-    // BETA holds a nested object. Scanning for the first `}` would end BETA's block early
-    // and miss its own field -- or, worse, patch the nested copy.
+    // BETA holds a nested object BEFORE its own field, deliberately. Scanning for the first
+    // `}` ends BETA's block at the nested object's brace, so the field that matters is never
+    // reached -- and the mutation that does exactly that SURVIVED an earlier version of this
+    // fixture, which had BETA's own field first and so could not tell the two apart.
     const { patched, count } = patchProfileField(FIXTURE, 'BETA', 'targetCommitmentTime', 4);
-    expect(count).toBe(2); // BETA's own, and the nested one inside BETA's block
+    expect(count, 'BETA has two matches: the nested one and its own').toBe(2);
+    // The discriminating assertion: BETA's OWN field, the one after the nested object.
+    expect(patched).toMatch(/"nested":[^}]*\}[,\s]*"targetCommitmentTime":\s*4/);
     expect(patched).toMatch(/"ALPHA"[\s\S]*?"targetCommitmentTime":\s*1\.5/);
   });
 
