@@ -1,0 +1,14 @@
+{
+  "id": "index-page-drops-an-uncaptured-cell",
+  "file": "tools/screens/index-page.mjs",
+  "find": "          if (result === undefined) return { layout: layout.name, status: 'absent' };\n",
+  "replace": "          if (result === undefined) return { layout: layout.name, status: 'ok', png: '', pageErrors: 0, measured: [] };\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/index-page.test.ts"
+  ],
+  "why": "Issue #936. A partial sweep -- `--states`, `--layouts`, or one stopped part-way -- has a manifest whose results do not cover the grid. Treating an uncaptured pair as a normal cell puts an empty image where a gap belongs, so the page reads as a complete run with a few blank pictures rather than an incomplete one.",
+  "killedBy": [
+    "sweepGrid: the sweep as a states-by-layouts grid marks a missing capture absent rather than dropping the cell"
+  ]
+}

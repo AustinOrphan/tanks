@@ -1,0 +1,16 @@
+{
+  "id": "index-page-captions-a-selector-it-never-found",
+  "file": "tools/screens/index-page.mjs",
+  "find": "  const sized = measured.filter((m) => m.box !== undefined);\n",
+  "replace": "  const sized = measured;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/index-page.test.ts"
+  ],
+  "why": "Issue #936. A state declares the selectors it measures, and one absent from a given screen has no box -- `screen.startup.unsupported-render` declares three and a pane state can declare five. Without the filter the caption reaches into a box that is not there. NOTE the shape of the kill: it THROWS rather than mis-captioning, so the three failures are one cause and not three independent signals -- every test whose fixture includes an unmeasured selector fails together. That is also what the regression would do in production, loudly, which is the better of the two failure modes.",
+  "killedBy": [
+    "renderIndexPage: the page a reviewer opens points every cell at the png the sweep wrote, lazily",
+    "renderIndexPage: the page a reviewer opens captions a cell with the selectors that were measured and their size",
+    "renderIndexPage: the page a reviewer opens declares one grid column per layout, plus the state column"
+  ]
+}

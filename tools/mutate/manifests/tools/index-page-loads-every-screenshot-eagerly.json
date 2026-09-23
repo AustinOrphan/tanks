@@ -1,0 +1,14 @@
+{
+  "id": "index-page-loads-every-screenshot-eagerly",
+  "file": "tools/screens/index-page.mjs",
+  "find": " loading=\"lazy\">`,\n",
+  "replace": ">`,\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/index-page.test.ts"
+  ],
+  "why": "Issue #936. A full sweep is about 441 PNGs at up to 2560x1440. Decoding all of them on open is what makes a page like this unusable on the device it exists for -- a TV browser during the couch-distance pass -- and the failure looks like a slow page rather than a bug, so nothing else would attribute it.",
+  "killedBy": [
+    "renderIndexPage: the page a reviewer opens points every cell at the png the sweep wrote, lazily"
+  ]
+}
