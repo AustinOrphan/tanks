@@ -1,0 +1,14 @@
+{
+  "id": "hud-leaks-the-modal-focus-trap",
+  "file": "src/game/hud.ts",
+  "find": "      document.removeEventListener('focusin', onModalFocusIn, true);\n",
+  "replace": "      // the modal focus trap is left registered\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Issue #921. The capture-phase `focusin` listener that traps focus inside an open modal outlives the HUD that registered it, so it keeps dragging focus toward an overlay that is no longer on the page. Registered four lines from the `keydown` listener and torn down two lines from it, and only the keydown half had a test.",
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) removes its own capture-phase document focusin listener on dispose"
+  ]
+}
