@@ -491,25 +491,30 @@ pages run with every job SKIPPED, not a red run: if the site looks stale, check 
 went red before assuming the deploy is broken.
 
 **`workflow_dispatch` is the ungated path, and it stays that way** — it exists to
-re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
-`ci.yml`'s 14 checking steps** (`verify`: 7, `mutation`: 2, `visual`: 5), **not the
+re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **6 of
+`ci.yml`'s 15 checking steps** (`verify`: 8, `mutation`: 2, `visual`: 5), **not the
 `visual` job and not any mutation step**, so a manual deploy can still publish a render
 regression that only `tools/gl/` and `tools/visual/` catch, and a stale
-`tools/mutate/manifests/`. Those five steps are duplicated work on the automatic path;
+`tools/mutate/manifests/`. Those six steps are duplicated work on the automatic path;
 they are kept because deleting them would leave the manual path checking nothing.
 (Denominator: the named steps of `ci.yml`'s three checking jobs that check something —
 that can fail because of the tree — rather than set up the runner, so `checkout`,
 `setup-node`, `npm ci`, BOTH Playwright steps (`Install Playwright` and `Install
 chromium` are separate named steps), the browser cache and `Upload screenshots` are all
-excluded. `verify` contributes 7: Lint workflows, Typecheck, Test, Mutation harness smoke, Build,
-portability, audit. `mutation` contributes 2: the affected-entries and the full Mutation
+excluded. `verify` contributes 8: Lint workflows, Typecheck, Test, Mutation harness smoke, Build,
+portability, bundle budget, audit. `mutation` contributes 2: the affected-entries and the full Mutation
 manifest (a pull request runs the first and a push the second, but each is its own named
-check; the job runs four times, as shards, and each step is still one check). `visual`
-contributes 5 — Build, GL tests, Baseline trace, Visual check, Session lifecycle round
-trip — but its `Build` runs the same `npm run build` already counted, so it adds 4, for 12
-distinct. The `verify-current` fan-in's one step reads the other jobs' results and checks
-nothing in the tree, so it is not counted. The deploy runs 5 of them, all from `verify`:
-Typecheck, Test, Build, portability, audit.) The construction is written out, and since issue #693
+check; the job runs four times, as shards, and each step is still one check). `visual` has
+8 named checking steps — Build, GL tests, Baseline trace, Visual check, Session lifecycle
+round trip, Screen gate, Built-output portability, Built-output bundle budget — but three of
+them run commands `verify` already counted (`npm run build`, `npm run portability`,
+`npm run bundle:budget`), so it adds 5, for 15 distinct. (That sentence read "contributes 5
+… adds 4, for 12 distinct" until it was recomputed here: it predated the Screen gate and the
+second built-output step, and the bolded figure above — which the test does check — had
+stayed right while this explanation of it drifted.) The `verify-current` fan-in's one step
+reads the other jobs' results and checks nothing in the tree, so it is not counted. The
+deploy runs 6 of them, all from `verify`: Typecheck, Test, Build, portability, bundle
+budget, audit.) The construction is written out, and since issue #693
 recomputed from the workflow files by `tools/workflows.test.ts`, because the bare number
 kept going stale unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule
 over that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest`
