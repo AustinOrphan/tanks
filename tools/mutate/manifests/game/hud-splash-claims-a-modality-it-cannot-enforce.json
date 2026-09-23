@@ -1,0 +1,14 @@
+{
+  "id": "hud-splash-claims-a-modality-it-cannot-enforce",
+  "file": "src/game/hud.ts",
+  "find": "    <div class=\"hud-splash hud-splash--hidden\" role=\"dialog\"\n",
+  "replace": "    <div class=\"hud-splash hud-splash--hidden\" role=\"dialog\" aria-modal=\"true\"\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #920. Puts the claim back exactly as it stood. `aria-modal=\"true\"` tells assistive technology that everything outside the element is unavailable, and `applyModalIsolation` is what makes that true -- it runs for an overlay LAYER, and the splash is a `setState` surface, so it was never reached. This is the restored defect, not a hypothetical one, and it is silent: the attribute reads correct to anyone inspecting the markup.",
+  "killedBy": [
+    "HUD landmarks (issue #629) claims aria-modal only on the two overlays that are really isolated"
+  ]
+}
