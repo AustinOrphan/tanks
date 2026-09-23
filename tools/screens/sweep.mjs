@@ -27,6 +27,7 @@ import { dirname, resolve } from 'node:path';
 import { SCREEN_STATES } from './states.mjs';
 import { captureState, launchBrowser, serve } from './capture.mjs';
 import { LAYOUTS, MANIFEST, capturePaths, select, sweepManifest } from './sweep-plan.mjs';
+import { captureKey, renderIndexPage, sweepGrid } from './index-page.mjs';
 
 function arg(/** @type {string} */ name) {
   const i = process.argv.indexOf(`--${name}`);
@@ -68,6 +69,8 @@ async function main() {
   const server = await serve(dist);
   const base = `http://127.0.0.1:${server.address().port}/`;
   const results = [];
+  /** Measured boxes per capture, for the index page written at the end. */
+  const boxes = {};
   const total = states.length * layouts.length;
   const source = sourceDescription(dist);
   await mkdir(out, { recursive: true });
@@ -86,6 +89,11 @@ async function main() {
           const sha256 = createHash('sha256').update(png).digest('hex');
           const measurementsSha256 = createHash('sha256').update(JSON.stringify(report.producer.measurements)).digest('hex');
           results.push({ state: state.id, layout: layout.name, ok: true, sha256, measurementsSha256, pageErrors: report.producer.pageErrors.length });
+          // Kept for the index page (issue #936), from the report already in hand. Reading
+          // the 441 reports back off disk afterwards would be the same data at 441 extra
+          // reads; `index-page-run.mjs` does that only because an OLD sweep has no other
+          // source for it.
+          boxes[captureKey(state.id, layout.name)] = report.producer.measurements;
           console.log(`[${results.length}/${total}] ${state.id} ${layout.name} ${sha256.slice(0, 12)} ${Date.now() - started}ms`);
         } catch (error) {
           const message = error instanceof Error ? error.message.split('\n')[0] : String(error);
@@ -102,7 +110,15 @@ async function main() {
 
   await writeManifest(true);
   const manifest = sweepManifest({ dist, source, options, states, layouts, results, complete: true });
+  // The page a person actually reads (issue #936). Written even when captures failed, and
+  // ESPECIALLY then: a failed cell is drawn with its error, so the page says what is missing
+  // instead of quietly having fewer pictures in it.
+  await writeFile(
+    resolve(out, 'index.html'),
+    renderIndexPage(sweepGrid(manifest, SCREEN_STATES, boxes), manifest),
+  );
   console.log(`${manifest.captures - manifest.failed} of ${manifest.captures} captures written to ${outArg}; ${manifest.failed} failed`);
+  console.log(`Open ${outArg}/index.html to review them as a grid.`);
   if (manifest.failed > 0) process.exit(1);
 }
 
