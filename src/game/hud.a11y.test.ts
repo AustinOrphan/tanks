@@ -89,6 +89,38 @@ describe('HUD landmarks (issue #629)', () => {
     expect(root.querySelector('.hud-confirm')?.getAttribute('role')).toBe('alertdialog');
   });
 
+  /**
+   * Issue #920. `aria-modal="true"` says everything outside this element is unavailable.
+   * `applyModalIsolation` is what makes that true, and it runs for an OVERLAY LAYER --
+   * `OVERLAY_LAYERS` holds exactly `confirm-new-campaign` and `match-failed`, whose
+   * containers are `.hud-confirm` and `.hud-alert`.
+   *
+   * The splash carried the claim and is a `setState` surface, not a layer, so isolation
+   * never reached it. Measured before dropping it: driving the built page to
+   * `screen.launch` and reading everything visible outside `.hud-splash` found 0 focusable
+   * controls and 0 visible regions in a player session, and exactly one -- the DEV badge --
+   * under `?dev=1`. So the claim was about an empty set, and dropping it was cheaper than
+   * extending isolation to a non-layer.
+   *
+   * THE SET IS THE ASSERTION, not the splash alone: a per-element check would pass the next
+   * time someone adds `aria-modal` to a pane that cannot be isolated, which is the mistake
+   * this is here to stop repeating.
+   */
+  it('claims aria-modal only on the two overlays that are really isolated', () => {
+    const { root } = mount();
+    const claiming = Array.from(root.querySelectorAll('[aria-modal]')).map((el) => el.className);
+    expect(claiming.sort()).toEqual([
+      'hud-alert hud-alert--hidden',
+      'hud-confirm hud-confirm--hidden',
+    ]);
+
+    const splash = root.querySelector('.hud-splash');
+    expect(splash?.hasAttribute('aria-modal'), 'the splash claims a modality nothing enforces').toBe(false);
+    // ...and it is still announced as a dialog with a name, which is what the role was for.
+    expect(splash?.getAttribute('role')).toBe('dialog');
+    expect(accessibleName(splash as HTMLElement)).not.toBe('');
+  });
+
   it('keeps exactly one aria-live region, and it is the toasts', () => {
     // Untested until now, and the count is the assertion. Live regions compete: a second
     // one added casually (a status line, a countdown) makes both unreliable, and the

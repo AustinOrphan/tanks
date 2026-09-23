@@ -1833,8 +1833,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
          THE TWO DIALOGS ARE DELIBERATELY EXCLUDED. \`.hud-splash\` is a \`dialog\` and
          \`.hud-confirm\` an \`alertdialog\`; both already declare a stronger role that a
-         region would overwrite, and \`.hud-confirm\` backs its \`aria-modal\` with real
-         \`inert\` isolation (issue #327/#628). Do not sweep them into the pattern below.
+         region would overwrite. Only \`.hud-confirm\` claims \`aria-modal\`, and it backs the
+         claim with real \`inert\` isolation (issue #327/#628); the splash dropped the claim
+         in issue #920 rather than acquiring machinery for it. Do not sweep either into the
+         pattern below.
 
          NOT DONE HERE, and the reasoning is worth keeping: the RECORDS TAB ROWS are not
          \`role="tablist"\`. See their own comment -- Stats and Achievements are separate
@@ -1926,7 +1928,24 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          would understate that. route-host.ts owns the listeners.
          role/aria-label because a screen reader is otherwise told nothing about a
          screen that is blocking the entire game behind it. -->
-    <div class="hud-splash hud-splash--hidden" role="dialog" aria-modal="true"
+    <!-- NO \`aria-modal\`, deliberately (issue #920). It was here, and nothing backed it.
+         \`aria-modal="true"\` tells assistive technology that everything outside this element
+         is unavailable; \`applyModalIsolation\` is what makes that true, and it runs for an
+         overlay LAYER. The splash is a \`setState\` surface, not a layer, so it was never
+         reached -- the same shape of false promise \`.hud-confirm\` had before issue #628,
+         and the one the region comment above names.
+
+         DROPPED RATHER THAN BACKED, on a measurement: at Launch there is nothing outside
+         this element for the claim to be about. Driving the built page to \`screen.launch\`
+         and reading everything visible outside \`.hud-splash\` found 0 focusable controls and
+         0 visible regions in a player session, and exactly one in a \`?dev=1\` session -- the
+         DEV badge. Extending isolation to a non-layer to hide one developer-only button is
+         more machinery than the claim was ever worth.
+
+         \`role="dialog"\` STAYS, and so does the label: a screen reader is otherwise told
+         nothing about a screen that is blocking the entire game behind it. A dialog that
+         does not claim to be modal is an honest dialog. -->
+    <div class="hud-splash hud-splash--hidden" role="dialog"
          aria-label="Tanks! title screen. Press any key to begin.">
       <h1 class="hud-splash-title">TANKS!</h1>
       <p class="hud-splash-hint">Press any key or tap to begin</p>
