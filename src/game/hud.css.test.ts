@@ -3157,3 +3157,184 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     }
   });
 });
+
+/**
+ * No state may speak in hue alone (issue #926, criterion 3 of issue #327).
+ *
+ * WHY A SWEEP AND NOT ANOTHER PIN. Every non-colour guard in this file is per-instance: the
+ * stock marks, the shape treatments, the spawn ring. Not one of them would notice the NEXT
+ * state shipped with colour as its only channel, and issue #630 records that no contrast or
+ * luminance assertion exists anywhere in `src/` or `tools/`. This turns the one-off audit sweep
+ * that produced issue #327's split into a standing gate.
+ *
+ * IT FAILS CLOSED, which is the whole design. The population is every rule carrying a `--`
+ * modifier or a state pseudo-class -- not a list of the modifiers someone judged to be states.
+ * A new modifier therefore joins the swept set automatically, and if its rule is colour-only it
+ * fails until a person either gives the state a second channel or writes it into the allowlist
+ * below with a reason. The opposite shape -- enumerating the modifiers that count -- is what
+ * lets a new state join by omission, which is the failure mode this exists to prevent.
+ */
+describe('hud.css: no state is carried by colour alone (issue #926)', () => {
+  const text = stripComments(css);
+
+  /** Properties whose whole contribution is hue. A control that changes only these is invisible
+   *  in greyscale, under forced colours, and to a player with a colour-vision difference. */
+  const COLOUR_PROPS = new Set([
+    'color', 'background', 'background-color', 'border-color', 'border-top-color',
+    'border-bottom-color', 'border-left-color', 'border-right-color', 'outline-color',
+    'fill', 'stroke', 'text-decoration-color', 'caret-color', 'accent-color',
+    'column-rule-color', 'text-emphasis-color',
+  ]);
+
+  /**
+   * A PATTERN IS A SECOND CHANNEL, so a background that paints one is not colour-only. Measured:
+   * `.ui-app-ground--felt` and `.hud-versus-map-canvas--random` both declare nothing but
+   * `background`, and both are `repeating-linear-gradient` -- visible texture that survives
+   * greyscale. A plain `linear-gradient` between two hues is NOT a pattern and stays colour.
+   */
+  const paintsAPattern = (value: string): boolean => /repeating-(linear|radial|conic)-gradient|url\(/i.test(value);
+
+  /** A custom property is whatever its value is: `--hud-font` is a typeface, not a colour. */
+  const isColourValue = (value: string): boolean =>
+    /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|color-mix\(|\btransparent\b|\bcurrentcolor\b/i.test(value) ||
+    /var\(--[a-z0-9-]*(color|bg|ink|tint|shade|accent|gold|danger)/i.test(value);
+
+  /**
+   * The forced-colors block is the ANSWER, not another question. Rules inside it exist to give
+   * the system palette back to states that would otherwise vanish, so sweeping them reports the
+   * remedy as the defect -- the same trap the reduced-motion sweep above records hitting on its
+   * first run. Measured: without this, `.hud-swatch:not(.ui-selectable--on)` is reported for
+   * declaring only `border-color: CanvasText`, which is precisely the fix issue #351 landed.
+   */
+  const forcedColorsBlock = ((): [number, number] => {
+    const start = text.indexOf('@media (forced-colors: active)');
+    expect(start, 'the forced-colors block is gone; this sweep would report its rules').toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = text.indexOf('{', start); i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}' && --depth === 0) return [start, i];
+    }
+    throw new Error('the forced-colors block is unclosed');
+  })();
+
+  interface StateRule {
+    readonly selector: string;
+    readonly declarations: readonly { prop: string; value: string }[];
+  }
+
+  /** Every rule whose selector carries a modifier or a state pseudo-class, outside forced colours. */
+  function stateRules(): StateRule[] {
+    const out: StateRule[] = [];
+    for (const m of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = m[1].trim().replace(/\s+/g, ' ');
+      if (selector.startsWith('@') || /^\d+%/.test(selector) || selector === 'from' || selector === 'to') continue;
+      const at = m.index ?? 0;
+      if (at > forcedColorsBlock[0] && at < forcedColorsBlock[1]) continue;
+      const stateful = /--[a-z0-9-]+/.test(selector) ||
+        /:hover|:focus|:active|:checked|:disabled|\[aria-pressed|\[aria-current|\[disabled/.test(selector);
+      if (!stateful) continue;
+      const declarations = [...m[2].matchAll(/(?:^|;)\s*(--[a-z0-9-]+|[a-z-]+)\s*:\s*([^;]+)/g)]
+        .map((d) => ({ prop: d[1], value: d[2].trim() }));
+      if (declarations.length === 0) continue;
+      out.push({ selector, declarations });
+    }
+    return out;
+  }
+
+  const isColourOnly = (rule: StateRule): boolean =>
+    rule.declarations.every(({ prop, value }) => {
+      if (paintsAPattern(value)) return false;
+      if (prop.startsWith('--')) return isColourValue(value);
+      return COLOUR_PROPS.has(prop);
+    });
+
+  /**
+   * The reviewed exceptions, each with the second channel that makes it one. `reinforcedBy` is
+   * asserted against the tree below, so an entry whose reason stops being true FAILS rather than
+   * sitting here as a stale excuse -- an allowlist nobody rechecks is how the per-instance pins
+   * this replaces went stale in the first place.
+   */
+  const ALLOWED: Record<string, { why: string; reinforcedBy?: RegExp; source?: 'css' | 'hud' }> = {
+    // POINTER AFFORDANCES. Hover and press feedback answer "where is my cursor", which a player
+    // using a pointer can already see, and neither conveys state that has to be decoded. They
+    // also cannot be reached without a pointer at all, so no keyboard or pad user depends on
+    // reading them. The control's real state is carried by its own `--on`/`--active` rule.
+    '.ui-btn:hover:not(:disabled)': { why: 'pointer hover feedback, not state' },
+    '.ui-btn--primary:hover:not(:disabled)': { why: 'pointer hover feedback, not state' },
+    '.ui-btn--danger:hover:not(:disabled)': { why: 'pointer hover feedback, not state' },
+    '.ui-selectable:not(.ui-selectable--on):hover:not(:disabled)': { why: 'pointer hover feedback, not state' },
+    '.hud-rotate-btn:hover:not(:disabled)': { why: 'pointer hover feedback, not state' },
+    '.hud-rotate-btn:active': { why: 'momentary press feedback, not state' },
+
+    // THE SELECTED RING, reinforced by a drawn check. `.ui-selectable--on::after` paints a 20px
+    // badge with `content: ''`, so selection is a SHAPE appearing beside the control as well as
+    // a white border -- issue #630's treatment, which this entry is pinned to.
+    '.ui-selectable--on': {
+      why: 'the ::after check badge draws selection as a shape',
+      reinforcedBy: /\.ui-selectable--on::after\s*\{[^}]*content:\s*''/,
+      source: 'css',
+    },
+
+    // A VARIANT, not a state: a danger button is always one, and its label says what it does
+    // ("Reset stats"). Nothing changes here in response to the player.
+    '.ui-btn--danger': { why: 'a permanent variant whose label carries the meaning' },
+
+    // STATES WHOSE TEXT CHANGES WITH THEM. Each is pinned to the line in hud.ts that writes the
+    // other channel, so deleting the relabel fails here as well as wherever it is tested.
+    '.hud-mute--active': {
+      why: 'the label flips Mute/Muted and aria-pressed flips with it',
+      reinforcedBy: /settingsMuteBtn\.textContent = `\$\{muted \? 'Muted' : 'Mute'\}/,
+      source: 'hud',
+    },
+    '.hud-danger--armed': {
+      why: 'arming relabels the same button "Really reset?"',
+      reinforcedBy: /armedLabel = 'Really reset\?'/,
+      source: 'hud',
+    },
+    '.hud-shells--full': {
+      why: 'the element reads "shells N/cap", so the cap is a number on screen',
+      reinforcedBy: /shellsEl\.textContent = `shells \$\{info\.inFlight\}\/\$\{info\.cap\}`/,
+      source: 'hud',
+    },
+
+    // DEVELOPER-ONLY SURFACES, behind ?dev=1 and never in front of a player. They are also
+    // notes whose TEXT is the message; the colour grades it.
+    '.hud-devcfg-note--rejected': { why: 'a developer pane, and the note text is the message' },
+    '.hud-devcfg-note--gate-closed': { why: 'a developer pane, and the note text is the message' },
+    '.hud-devcfg-note--bundle-forced, .hud-devcfg-note--context-inert, .hud-devcfg-note--inverted-default':
+      { why: 'a developer pane, and the note text is the message' },
+    '.hud-selftest-channel--down .hud-selftest-channel-fill':
+      { why: 'a developer pane, and the fill bar states the value by width' },
+  };
+
+  it('finds the state-rule population it is about', () => {
+    // Vacuity guard, in the shape the reduced-motion sweep above uses: every assertion below is
+    // a filter over this list and all of them pass trivially on an empty one, which a regex that
+    // stopped matching would quietly produce.
+    const rules = stateRules();
+    expect(rules.length, 'no state rules parsed out of hud.css').toBeGreaterThan(100);
+    expect(rules.some((r) => r.selector === '.ui-selectable--on'), 'the selected ring is not in the sweep').toBe(true);
+    expect(rules.some((r) => r.selector.includes(':hover')), 'no hover rule is in the sweep').toBe(true);
+  });
+
+  it('gives every state a channel besides hue, or names it as a reviewed exception', () => {
+    const offenders = stateRules().filter(isColourOnly).map((r) => r.selector).filter((s) => !(s in ALLOWED));
+    expect(offenders, 'a state changes colour and nothing else; give it a second channel or review it into ALLOWED').toEqual([]);
+  });
+
+  it('keeps the allowlist honest: every entry is still colour-only, and still reinforced', () => {
+    // BOTH DIRECTIONS. An entry that no longer matches any rule is dead weight that makes the
+    // list look more considered than it is; an entry whose stated second channel has been
+    // deleted is worse, because it excuses a state that has genuinely become colour-only.
+    const colourOnly = new Set(stateRules().filter(isColourOnly).map((r) => r.selector));
+    for (const selector of Object.keys(ALLOWED)) {
+      expect(colourOnly.has(selector), `${selector} is no longer a colour-only state rule; drop its ALLOWED entry`).toBe(true);
+    }
+    for (const [selector, entry] of Object.entries(ALLOWED)) {
+      if (!entry.reinforcedBy) continue;
+      const haystack = entry.source === 'hud' ? hudSource : text;
+      expect(haystack, `${selector} is allowed because "${entry.why}", and that is no longer in the tree`)
+        .toMatch(entry.reinforcedBy);
+    }
+  });
+});

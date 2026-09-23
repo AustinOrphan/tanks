@@ -1,0 +1,14 @@
+{
+  "id": "hud-ships-a-colour-only-state",
+  "file": "src/game/hud.css",
+  "find": ".hud-mute--active {",
+  "replace": ".hud-topbar--warning {\n  color: #ffb000;\n}\n\n.hud-mute--active {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Ships the next colour-only state, which is the whole thing this guard exists for: a topbar warning whose only channel is an amber hue, invisible in greyscale, under forced colours, and to a player with a colour-vision difference. Every other non-colour assertion in this file is per-instance and would pass -- the stock marks, the shape treatments and the spawn ring all still hold, because none of them knows about a state that did not exist when they were written. The sweep fails closed instead: a new modifier joins the swept population automatically and has to earn either a second channel or a reviewed allowlist entry.",
+  "killedBy": [
+    "hud.css: no state is carried by colour alone (issue #926) gives every state a channel besides hue, or names it as a reviewed exception"
+  ]
+}

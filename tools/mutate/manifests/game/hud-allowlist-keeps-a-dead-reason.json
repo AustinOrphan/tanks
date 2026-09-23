@@ -1,0 +1,14 @@
+{
+  "id": "hud-allowlist-keeps-a-dead-reason",
+  "file": "src/game/hud.ts",
+  "find": "    settingsMuteBtn.textContent = `${muted ? 'Muted' : 'Mute'}${hint}`;",
+  "replace": "    settingsMuteBtn.textContent = `Mute${hint}`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "Stops the mute button relabelling itself, which turns `.hud-mute--active` into a genuinely colour-only state while its allowlist entry still says the label carries it. An allowlist nobody rechecks is exactly how the per-instance pins this sweep replaces went stale, so every entry that claims a second channel is asserted against the tree: the reason has to stay true or the entry fails. Note the mutation is in hud.ts and the test is in hud.css.test.ts -- the guard deliberately reaches across, because the state is in the stylesheet and the channel that excuses it is not.",
+  "killedBy": [
+    "hud.css: no state is carried by colour alone (issue #926) keeps the allowlist honest: every entry is still colour-only, and still reinforced"
+  ]
+}
