@@ -14,7 +14,8 @@ import {
   type SpawnAnimId,
 } from './customization';
 import { GAME_TANK_DEFS } from '../sim/config/roster';
-import { distance } from './colour-distance';
+import { distance, overFelt } from './colour-distance';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from './identity';
 
 describe('the palette', () => {
   it('keeps every swatch PERCEPTUALLY clear of every enemy identity', () => {
@@ -42,6 +43,62 @@ describe('the palette', () => {
         ).toBeGreaterThan(12);
       }
     }
+  });
+
+  it('keeps every swatch a NOTICEABLE step from every player identity colour (issue #586)', () => {
+    // The gap this closes, and why the floor is 1 rather than the 12 above.
+    //
+    // The test above compares swatches to ENEMY kinds. Nothing compared them to the PLAYER
+    // identity palettes -- grepped before writing this: of the eight test files that mention
+    // `PALETTE`, only `dependency-direction.test.ts` and `loop.test.ts` also name
+    // `IDENTITY_RING_COLORS` or `TEAM_COLORS`, and neither compares them perceptually.
+    //
+    // MEASURED, composited over the felt the way `makeIdentityRing` actually draws the ring
+    // (`overFelt`, the same helper #579 added), over all 7 x 6 = 42 pairs:
+    //
+    //   1.1706  ring1 #ff8a1e vs orange #e08a2e   <- the minimum
+    //   2.7763  teamA #ff3b3b vs red    #d64545
+    //   5.2794  ring3 #9d3bff vs purple #8a5ad6
+    //   8.3668  ring2 #ff4d2e vs red    #d64545
+    //
+    // So 4 of 42 pairs sit below the 12 the enemy guard uses, and ONE sits below the 2.09 that
+    // issue #579 treated as a defect worth re-picking team B over. That asymmetry is real and
+    // it was ruled on: the ring says WHO and the hull says WHAT STYLE, so a player carrying an
+    // orange ring over an orange hull is tolerated and ring 1 is NOT re-picked -- its
+    // blue/orange axis was chosen to survive protanopia, deuteranopia and tritanopia, and
+    // spending that argument to buy 1 unit of distance against one paint is the worse trade.
+    //
+    // WHAT THE FLOOR IS FOR, then: not adequacy, but preventing the tolerated collision from
+    // becoming an identity. 1.0 is CIEDE2000's just-noticeable difference, so this says the two
+    // must stay distinguishable AT ALL. Deliberately not raised to look safer -- the same
+    // reasoning the enemy guard above records for its 12 against a measured 13.60. Measured
+    // here: 0 of 42 pairs are below 1, and the margin on the tightest is 0.17.
+    const identities: [string, number][] = [
+      ...IDENTITY_RING_COLORS.map((c, i) => [`ring${i}`, c] as [string, number]),
+      ...TEAM_COLORS.map((c, i) => [`team${'ABC'[i]}`, c] as [string, number]),
+    ];
+    expect(identities, '4 ring colours + 3 team colours').toHaveLength(7);
+    let pairs = 0;
+    let tightest = Infinity;
+    let tightestPair = '';
+    for (const [name, colour] of identities) {
+      // The ring is translucent over the felt; the hull paint is opaque. Comparing the raw
+      // ring hex instead would read 6.09 for the tightest pair and hide the real margin.
+      const drawn = overFelt(colour);
+      for (const swatch of PALETTE) {
+        pairs += 1;
+        const d = distance(drawn, parseInt(swatch.hex.slice(1), 16));
+        if (d < tightest) { tightest = d; tightestPair = `${name} vs ${swatch.id}`; }
+        expect(d, `${name} vs ${swatch.id} is not a noticeable step`).toBeGreaterThan(1);
+      }
+    }
+    expect(pairs, '7 identity colours x 6 swatches').toBe(42);
+    // The tightest pair is pinned by NAME, not just by floor: if a future re-pick moves the
+    // collision to a different pair, that is a change worth reading about rather than one that
+    // quietly keeps passing. The value is deliberately loose (2 d.p. would fail on a rounding
+    // change in `overFelt`); the pair identity is the part that matters.
+    expect(tightestPair, 'the tolerated collision is ring1 vs orange').toBe('ring1 vs orange');
+    expect(tightest).toBeLessThan(1.5);
   });
 
   it('keeps every shipped KIND perceptually clear of every other kind', () => {
