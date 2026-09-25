@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-group-rate-uses-the-run-total",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "    const aiTicks = ticksByGroup[group] ?? 0;",
+  "replace": "    const aiTicks = Object.values(ticksByGroup).reduce((a, b) => a + b, 0);",
+  "expect": "killed",
+  "why": "Divides every per-profile rate by the whole run's AI-ticks instead of that profile's own. This is the dilution issue #908 exists to remove: over seeds 1-40 at 1800 ticks the five reachable profiles own 12.4% to 26.6% of the measurable ticks, so a pooled denominator understates a single-profile change four- to eight-fold -- and it does it quietly, because every row still looks like a rate.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "groupRows divides each group by its OWN AI-ticks, not by the run total"
+  ]
+}
