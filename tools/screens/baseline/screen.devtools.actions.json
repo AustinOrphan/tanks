@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 547,
+        "x": 549,
         "y": 660,
-        "w": 186,
+        "w": 182,
         "h": 44
       },
       "text": "Restart with Same Seed",
@@ -38,7 +38,7 @@
         "opacity": "1",
         "color": "rgb(255, 180, 180)",
         "background-color": "rgba(255, 90, 90, 0.18)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 585,
+        "x": 586,
         "y": 716,
-        "w": 110,
+        "w": 108,
         "h": 44
       },
       "text": "Reroll Seed",
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(255, 180, 180)",
         "background-color": "rgba(255, 90, 90, 0.18)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 552,
+        "x": 553,
         "y": 772,
-        "w": 177,
+        "w": 173,
         "h": 44
       },
       "text": "Restart Current Round",
@@ -80,7 +80,7 @@
         "opacity": "1",
         "color": "rgb(255, 180, 180)",
         "background-color": "rgba(255, 90, 90, 0.18)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -92,7 +92,7 @@
       "box": {
         "x": 605,
         "y": 1044,
-        "w": 70,
+        "w": 69,
         "h": 44
       },
       "text": "Back",
@@ -101,7 +101,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

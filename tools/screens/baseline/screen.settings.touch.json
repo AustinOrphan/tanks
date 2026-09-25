@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 296,
+        "x": 302,
         "y": 221,
-        "w": 90,
+        "w": 88,
         "h": 44
       },
       "text": "Aim: Stick",
@@ -38,7 +38,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 396,
+        "x": 401,
         "y": 221,
-        "w": 120,
+        "w": 118,
         "h": 44
       },
       "text": "Fire: Tap to fire",
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

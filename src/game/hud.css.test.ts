@@ -3638,3 +3638,73 @@ describe('hud.css: no reduced-motion cue is carried by colour alone (issue #924)
     expect(applied, 'the ring sits on the glyph instead of around it').toMatch(/outline-offset:/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// THE TYPE SCALE (issue #971)
+//
+// A reader who raises their browser's font size must move this interface. Before the scale
+// NOTHING moved, and the measurement is worth keeping because a declaration count is a smell
+// while this is the symptom: sampling the visible, directly-text-bearing descendants of
+// `.hud-panel`, `.hud-topbar` and `.hud-hud` on the built main menu and driving the root font
+// size from 16px to 32px left 11 of 11 of them at their original size. After, 11 of 11 follow
+// at exactly 2.00x.
+//
+// The other half was bigger and is the reason `.ui-btn` is asserted separately below: a
+// <button>'s UA `font` shorthand sets SIZE as well as family, and `.ui-btn` inherited family
+// only -- deliberately, to avoid flattening the per-control sizes. So every control that named
+// no size of its own kept Chromium's 13.3333px button default, which is absolute. Measured over
+// the buttons PRESENT IN THE DOM on that page (many sit inside closed panes, so this is a DOM
+// population and not an on-screen one): 267 of 277 computed to 13.3333px before, 15 after.
+//
+// The 15 that remain are `.hud-rotate-btn` and `.hud-swatch`. Their font-size is inert, which
+// was checked rather than assumed: neither carries text, and both size on
+// `width`/`height: var(--hud-control-min)` with no `em` anywhere, so the value anchors nothing.
+// They are left alone rather than given a size they would not use.
+// ---------------------------------------------------------------------------
+
+describe('hud.css type scales with the reader (issue #971)', () => {
+  /** Every `font-size` declaration in the stylesheet, with its value, comments stripped. */
+  function fontSizeValues(): string[] {
+    return [...stripComments(css).matchAll(/font-size\s*:\s*([^;}]+)[;}]/g)]
+      .map((m) => m[1].trim());
+  }
+
+  it('declares no font-size in px, over a stated population', () => {
+    const values = fontSizeValues();
+    // Non-vacuity: an empty match set would pass the px check while measuring nothing, and
+    // `css` itself reads "" unless vite's `test.css` is on (see the top of this file).
+    expect(values.length, 'no font-size declarations found; this test would pass vacuously')
+      .toBeGreaterThan(40);
+    const px = values.filter((v) => /\d(\.\d+)?px/.test(v));
+    expect(px, `${px.length} of ${values.length} font-size declarations still use px`).toEqual([]);
+  });
+
+  it('spends every step of the scale, and each step is a whole number of px at the default', () => {
+    const declared = [...stripComments(css).matchAll(/--hud-type-(\d+)\s*:\s*([0-9.]+)rem\s*;/g)]
+      .map((m) => ({ step: m[1], rem: Number(m[2]) }));
+    expect(declared.length, 'no --hud-type-* steps found').toBeGreaterThan(0);
+    for (const { step, rem } of declared) {
+      // A step used nowhere names a size that is not a step. Counted in the stylesheet text,
+      // because that is where a token is spent.
+      const uses = [...stripComments(css).matchAll(new RegExp(`var\\(--hud-type-${step}\\)`, 'g'))];
+      expect(uses.length, `--hud-type-${step} is declared but never used`).toBeGreaterThan(0);
+      // The scale RENAMES today's sizes rather than re-proportioning them, so every step must
+      // still land on a whole px at the 16px default. This is what makes the conversion a
+      // no-op for a reader who changed nothing, and it fails the moment someone re-tunes a
+      // step without deciding to move pixels.
+      const px = rem * 16;
+      expect(Number.isInteger(px), `--hud-type-${step} is ${rem}rem = ${px}px, not a whole px`)
+        .toBe(true);
+    }
+  });
+
+  it('gives .ui-btn its own font-size, so a control with no size variant is not left on the UA default', () => {
+    // The 267-of-277 case above. Asserted on the base block's text rather than on a computed
+    // value, because jsdom applies no UA button font and so cannot see the default this fixes.
+    const base = stripComments(css).match(/\.ui-btn\s*\{([^}]*)\}/);
+    expect(base, 'the .ui-btn base rule is gone').not.toBeNull();
+    expect(base![1], '.ui-btn declares no font-size; every control without a size variant '
+      + 'falls back to the UA button default, which is absolute')
+      .toMatch(/font-size\s*:/);
+  });
+});

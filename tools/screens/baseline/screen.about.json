@@ -51,7 +51,7 @@
         "x": 296,
         "y": 215,
         "w": 688,
-        "h": 46
+        "h": 44
       },
       "text": "Project websiteOpens a new tabTanks! GitHub repositoryOpens a new tab",
       "style": {
@@ -70,7 +70,7 @@
       "visible": true,
       "box": {
         "x": 296,
-        "y": 618,
+        "y": 616,
         "w": 688,
         "h": 44
       },
@@ -80,7 +80,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

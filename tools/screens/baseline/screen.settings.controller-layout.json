@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 558,
+        "x": 560,
         "y": 193,
-        "w": 164,
+        "w": 161,
         "h": 44
       },
       "text": "Sticks: Recommended",
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 557,
+        "x": 559,
         "y": 247,
-        "w": 166,
+        "w": 162,
         "h": 252
       },
       "text": "Fire: RT / R2Mine: LT / L2Confirm: A / CrossBack: B / CirclePause: Menu / Options",
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 553,
+        "x": 555,
         "y": 509,
-        "w": 173,
+        "w": 170,
         "h": 44
       },
       "text": "Reset to Recommended",
@@ -101,7 +101,7 @@
         "opacity": "0.45",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

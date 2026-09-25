@@ -28,7 +28,7 @@
       "visible": true,
       "box": {
         "x": 486,
-        "y": 271,
+        "y": 270,
         "w": 309,
         "h": 72
       },
@@ -49,9 +49,9 @@
       "visible": true,
       "box": {
         "x": 515,
-        "y": 413,
+        "y": 412,
         "w": 250,
-        "h": 49
+        "h": 51
       },
       "text": "Start New Campaign",
       "style": {

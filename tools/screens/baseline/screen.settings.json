@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 527,
+        "x": 529,
         "y": 489,
-        "w": 96,
+        "w": 94,
         "h": 44
       },
       "text": "Reset stats",
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(255, 180, 180)",
         "background-color": "rgba(255, 90, 90, 0.18)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 633,
+        "x": 634,
         "y": 489,
-        "w": 119,
+        "w": 117,
         "h": 44
       },
       "text": "Reset progress",
@@ -80,7 +80,7 @@
         "opacity": "1",
         "color": "rgb(255, 180, 180)",
         "background-color": "rgba(255, 90, 90, 0.18)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
