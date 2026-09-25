@@ -1,0 +1,15 @@
+{
+  "id": "versus-room-ratio-gates-a-count-no-one-is-offered",
+  "file": "src/sim/config/data/versus-catalog.json",
+  "find": "      \"players\": [\n        3\n      ],",
+  "replace": "      \"players\": [\n        3,\n        4\n      ],",
+  "expect": "killed",
+  "why": "Offers vs-tri-01 to a fourth player, which is the state the room-ratio guard used to assume. That board scores 96.333 open floor per player at its offered N=3 and 72.25 at N=4, against a bound of 72 -- so admitting N=4 moves the tightest offered ratio from 24.33 cells of headroom to 0.25. This proves the guard reads its population from the validated catalogue rather than from a hardcoded count list: before issue #722 it swept all 24 shipped combinations and reported the N=4 figure as the headline, which is the reading #418 was filed against. Measured with this mutation applied: the offered block fails on both its population (19, not 18) and its label, and the all-24 block fails its control assertion because the shipped and offered tightest become equal.",
+  "tests": [
+    "src/sim/versus-board.test.ts"
+  ],
+  "killedBy": [
+    "evaluateVersusBoard: the shipped-arena sweep the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin at every count a board is OFFERED at -- the tightest is vs-tri-01 at N=3",
+    "evaluateVersusBoard: the shipped-arena sweep records the tightest ratio across all 24 shipped combinations, including the 6 no one is offered"
+  ]
+}
