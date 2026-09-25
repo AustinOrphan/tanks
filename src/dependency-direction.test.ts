@@ -868,3 +868,112 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
     expect(scan('./presentation/identity.ts', `// window, document, navigator, localStorage\nexport const x = 1;\n`)).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// THE DEVELOPER-MODULE RATCHET (issue #946)
+//
+// #946 wants an ordinary production URL to request no developer chunk at all. A chunk is
+// only splittable if nothing on an ordinary path imports it for VALUE, so this counts those
+// imports and pins the count. The number must only ever go DOWN.
+//
+// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds eight of them today, one edge
+// per module, and they are the developer surfaces it still renders inline -- the developer
+// menu (`devtools-menu`, `dev-config-menu`, `dev-config`), its actions, its diagnostics and
+// its exports, plus the controller self-test and the arena schematic. The route out is #556's
+// per-surface pane extraction, which `customize-pane.ts` and `controllers-pane.ts` have
+// already taken; they are not an oversight for this guard to ban. An inventory fails on a NEW
+// edge while recording what the remaining ones wait on, which `toBe(0)` could not do.
+//
+// EXACT equality, not `<=`, AND THAT IS THIS GUARD'S NON-VACUITY CHECK. The scan below is a
+// text match like the layer scan above, so it can stop matching; unlike the layer scan it
+// needs no fixture suite to notice, because the pinned counts are non-zero. A regex that
+// went blind, or a developer module renamed out of the list, drives the count to zero and
+// fails here -- where `<=` would pass while measuring nothing.
+//
+// TYPE-ONLY IMPORTS ARE FREE and are not counted: `import type { X } from './dev-x'` emits
+// no runtime edge and does not put the module in the bundle. A LEADING `import type` is the
+// only free form -- `import { value, type T }` still pulls the module in and is counted,
+// matching the conservatism the header above documents for the layer scan. A dynamic
+// `import('./dev-x')` is also uncounted, because that lazy seam is what #946 is asking for.
+//
+// SHAPES NOT SWEPT, measured over `src/` excluding tests when this guard was written: a
+// re-export (`export ... from './dev-x'`) would be a value edge and is not matched -- there
+// are 0 of them under src/; a bare `import './dev-x'` is not matched either -- the only bare
+// import under src/ is `./hud.css`. Extend the scan rather than trust the green if one
+// appears.
+//
+// Measured when this guard was written: 11 edges, down from 13. The two that went were
+// `loop.ts` and `route-host.ts` reaching into `dev-diagnostics.ts` for `readBuildIdentity`
+// alone, which moved to `build-identity.ts` because ordinary paths call it. That left
+// `route-host.ts` with no developer value edge at all.
+// ---------------------------------------------------------------------------
+
+/** The developer-only modules #946 names, by basename: the developer surface, then gallery. */
+const DEV_ONLY_MODULES: readonly string[] = [
+  'devtools-menu', 'dev-config', 'dev-config-menu', 'dev-actions', 'dev-exports',
+  'dev-diagnostics', 'controller-selftest', 'arena-schematic',
+  'gallery-workbench', 'gallery-selection', 'gallery-command', 'moments', 'moment-scene',
+  'subjects', 'workbench-scene',
+];
+
+/**
+ * Value edges into that set, per importing file, as they stand. Only ever remove an entry or
+ * lower a count here: adding one means an ordinary module started pulling a developer module
+ * into the bundle, which is the thing #946 exists to stop.
+ */
+const DEV_VALUE_EDGES: Readonly<Record<string, number>> = {
+  // The developer surfaces hud.ts still renders inline; see the note above.
+  './game/hud.ts': 8,
+  // `developerExitSearch` from dev-config, `surfaceName` from dev-exports, and the gallery
+  // workbench catalog and factory.
+  './game/loop.ts': 3,
+};
+
+describe('developer modules stay off ordinary paths (issue #946)', () => {
+  /** Value imports of a developer module, by importing file. Type-only and dynamic are free. */
+  function devValueEdges(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const path of files) {
+      if (path.endsWith('.test.ts')) continue; // a developer module's own tests are not a path
+      const base = path.split('/').pop()!.replace(/\.ts$/, '');
+      if (DEV_ONLY_MODULES.includes(base)) continue; // developer -> developer is not an edge
+      const code = stripComments(rawModules[path]);
+      for (const target of DEV_ONLY_MODULES) {
+        const re = new RegExp(`import(\\s+type)?\\s[^;]*?from\\s+'[^']*?/?${target}'`, 'g');
+        for (const m of code.matchAll(re)) {
+          if (m[1] !== undefined) continue; // a LEADING `type` carries nothing at runtime
+          (out[path] ??= []).push(target);
+        }
+      }
+    }
+    return out;
+  }
+
+  it('the inventory of developer value edges matches the pin exactly', () => {
+    const found = devValueEdges();
+    const counts: Record<string, number> = {};
+    for (const [file, targets] of Object.entries(found)) counts[file] = targets.length;
+    expect(counts, `edges found:\n${JSON.stringify(found, null, 2)}`).toEqual(DEV_VALUE_EDGES);
+    for (const file of Object.keys(DEV_VALUE_EDGES)) {
+      expect(file in rawModules, `${file} is pinned but no longer exists`).toBe(true);
+    }
+  });
+
+  it('every developer module named in the list still exists, so the scan cannot go quiet', () => {
+    // Without this, renaming a developer module would drop its edges from the count silently;
+    // the pin above would then fail for the wrong reason, or -- if the rename took the last
+    // edge -- a future pin of {} would pass for the wrong reason.
+    for (const name of DEV_ONLY_MODULES) {
+      expect(
+        files.some((path) => path.endsWith(`/${name}.ts`)),
+        `no file named ${name}.ts -- rename it in DEV_ONLY_MODULES or drop it`,
+      ).toBe(true);
+    }
+  });
+
+  it('route-host.ts holds NO developer value edge, which the build-identity split bought', () => {
+    // Stated on its own because it is the property that move was for: `route-host.ts` still
+    // names developer modules, and every one of them is type-only now.
+    expect(devValueEdges()['./game/route-host.ts'] ?? []).toEqual([]);
+  });
+});

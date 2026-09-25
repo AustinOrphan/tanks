@@ -1,0 +1,15 @@
+{
+  "id": "dev-module-ratchet-counts-type-only-imports",
+  "file": "src/dependency-direction.test.ts",
+  "find": "          if (m[1] !== undefined) continue; // a LEADING `type` carries nothing at runtime",
+  "replace": "          if (m[1] === undefined) continue; // a LEADING `type` carries nothing at runtime",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) the inventory of developer value edges matches the pin exactly",
+    "developer modules stay off ordinary paths (issue #946) route-host.ts holds NO developer value edge, which the build-identity split bought"
+  ],
+  "why": "The #946 ratchet stops telling a runtime edge from a type-only one: the comparison inverts, so `import type { X } from './dev-x'` is counted as pulling the developer module into the bundle and a real value import is not. This is the distinction the whole guard rests on -- a developer chunk is splittable only if nothing on an ordinary path imports it for VALUE. Under the mutation hud.ts and loop.ts report their type-only imports instead of their value ones, and route-host.ts appears with the three it spells `import type`, which is why both named tests fail. The clean tree cannot absorb it in either direction, because the pin is exact and its counts are non-zero. `every developer module named in the list still exists` passes either way, as it must: it reads the list, not the classifier."
+}

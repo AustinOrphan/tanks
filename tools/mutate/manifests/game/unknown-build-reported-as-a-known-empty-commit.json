@@ -1,11 +1,11 @@
 {
   "id": "unknown-build-reported-as-a-known-empty-commit",
-  "file": "src/game/dev-diagnostics.ts",
+  "file": "src/game/build-identity.ts",
   "find": "  return raw === '' ? { commit: '', known: false } : { commit: raw, known: true };",
   "replace": "  return { commit: raw, known: true };",
   "expect": "killed",
   "tests": [
-    "src/game/dev-diagnostics.test.ts"
+    "src/game/build-identity.test.ts"
   ],
   "killedBy": [
     "readBuildIdentity says unknown rather than inventing a version reports an absent variable as unknown, not as an empty commit",
