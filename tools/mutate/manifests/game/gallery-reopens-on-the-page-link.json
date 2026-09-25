@@ -1,13 +1,13 @@
 {
   "id": "gallery-reopens-on-the-page-link",
   "file": "src/game/route-ui.ts",
-  "find": "      galleryValue = formatGallerySelection(gallery.selection, deps.galleryWorkbench.catalog);",
-  "replace": "      void formatGallerySelection;",
+  "find": "      galleryValue = formatGallery(gallery.selection, deps.galleryWorkbench.catalog);",
+  "replace": "      void formatGallery;",
   "expect": "killed",
   "tests": [
     "src/game/route-ui.test.ts"
   ],
-  "why": "The pane reopens on the selection it last showed. Re-reading the page link on every open throws away a selection built by hand whenever Back is pressed.",
+  "why": "The pane reopens on the selection it last showed. Re-reading the page link on every open throws away a selection built by hand whenever Back is pressed. The formatter is captured from the pane s lazily-imported module in issue #946 rather than statically imported, so the call site reads formatGallery; the defect it guards is unchanged.",
   "killedBy": [
     "the gallery workbench is mounted with its pane and released with it (issue #730) reopens on the selection it last showed, not on the page link"
   ]

@@ -860,6 +860,67 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     expect(view(root).classList.contains('hud-controllers--hidden')).toBe(true);
     expect(closes).toBe(1);
   });
+
+  /**
+   * The Controllers section of About & Legal, as text: the `h2` whose heading is "Controllers"
+   * plus every following sibling up to the next `h2`. Read this way rather than by a class of
+   * its own, because the section deliberately reuses `.hud-about-subtitle`/`-subline`/`-line`
+   * -- adding a fourth class would mean touching four selector inventories in hud.css.test.ts
+   * for no styling difference.
+   */
+  const controllerHelp = (root: HTMLElement): string => {
+    const about = root.querySelector('.hud-about') as HTMLElement;
+    const heads = Array.from(about.querySelectorAll('h2'));
+    const start = heads.find((h) => (h.textContent ?? '').trim() === 'Controllers');
+    expect(start, 'About & Legal has no Controllers section').toBeDefined();
+    const out: string[] = [];
+    for (let n = start!.nextElementSibling; n && n.tagName !== 'H2'; n = n.nextElementSibling) {
+      out.push(n.textContent ?? '');
+    }
+    return out.join(' ');
+  };
+
+  it('About & Legal explains the Gamepad API boundary, while the pane keeps its one line (issue #597)', () => {
+    const { root } = mount();
+    const help = controllerHelp(root);
+    // The three facts the issue's scope asks a help destination to carry.
+    expect(help, 'the browser boundary').toContain('Gamepad API');
+    expect(help, 'why a controller may not be listed').toMatch(/press a button/i);
+    expect(help, 'visible-but-unreadable is distinct from absent').toMatch(/not supported/i);
+    expect(help, 'adapters vary, without naming any').toMatch(/adapter/i);
+
+    // ...and the pane is NOT where this went. Its single constant line is unchanged, which is
+    // the half of #597 that shipped in PR #714 and the reason the scope says to point at a
+    // help destination instead of growing the panel.
+    const pane = root.querySelector('.hud-controllers-help') as HTMLElement;
+    expect(pane.textContent).toBe(
+      'Only controllers your browser reports appear here. Not listed? Press a button on it, or reconnect it.',
+    );
+  });
+
+  it('THE HARDWARE-MANUAL GUARD: the help names no product, vendor or adapter model', () => {
+    // This is the assertion the section exists to be held to. The ruling chose generic
+    // Gamepad-API help over waiting for #595 to verify real hardware, and the argument against
+    // that choice was that generic help drifts into a compatibility table the moment someone
+    // adds "except on brand X". #595 owns every product-specific claim; this keeps the boundary
+    // mechanical instead of relying on a reviewer noticing.
+    //
+    // NOTE on what is NOT in the list: bare "switch". The copy says "an adapter with a mode
+    // switch", so banning that word would fail on correct copy -- the console is banned as
+    // "nintendo" and "switch pro" instead. An assertion that cannot help but fire is worse
+    // than none.
+    const NAMES = [
+      'xbox', 'playstation', 'dualshock', 'dualsense', 'nintendo', 'switch pro',
+      'gamecube', 'wii', 'logitech', '8bitdo', 'mayflash', 'steam deck', 'sony', 'microsoft',
+    ];
+    const { root } = mount();
+    const help = controllerHelp(root).toLowerCase();
+    const found = NAMES.filter((n) => help.includes(n));
+    expect(found, 'a product name here makes this a hardware manual -- that is #595\'s').toEqual([]);
+    // The control for the guard itself: it must be reading real copy, not an empty string.
+    // Without this, deleting the whole section would satisfy the assertion above.
+    expect(help.length, 'the guard must be scanning actual help text').toBeGreaterThan(200);
+  });
 });
 
 /*

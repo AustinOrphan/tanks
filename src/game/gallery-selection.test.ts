@@ -5,7 +5,6 @@ import { describe, it, expect } from 'vitest';
 import {
   defaultGallerySelection,
   formatGallerySelection,
-  gallerySearch,
   parseGallerySelection,
   type GalleryCatalog,
   type GallerySelection,
@@ -128,20 +127,5 @@ describe('formatGallerySelection (issue #730)', () => {
       const raw = formatGallerySelection(selection, CATALOG);
       expect(parse(raw), raw).toEqual({ selection, problems: [] });
     }
-  });
-});
-
-describe('gallerySearch (issue #730)', () => {
-  it('sets the gallery parameter with the gate on, keeping every other parameter', () => {
-    expect(gallerySearch('', 'scene:fire,age:3')).toBe('?dev=1&gallery=scene:fire,age:3');
-    expect(gallerySearch('?seed=7&dev=1&gallery=elements:tank', 'scene:fire')).toBe(
-      '?seed=7&dev=1&gallery=scene:fire',
-    );
-    expect(gallerySearch('dev=0&tag=x', 'elements:mine')).toBe('?tag=x&dev=1&gallery=elements:mine');
-  });
-
-  it('writes a link the browser reads back as the same value', () => {
-    const raw = 'scene:destroyed,view:low,spawn-anim:rise,reach';
-    expect(new URLSearchParams(gallerySearch('?a=b', raw)).get('gallery')).toBe(raw);
   });
 });

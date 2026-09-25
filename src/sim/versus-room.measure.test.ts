@@ -46,6 +46,27 @@ import type { World } from './world';
 //                cramped one.
 //
 // ---------------------------------------------------------------------------
+// SUPERSEDED IN PART, 2026-09-25 -- read this before quoting anything below it. The run
+// recorded here predates #424's and #425's rebuilds of vs-tri-01 and vs-quad-01, and four of
+// its statements no longer describe the tree. The rho figures and the crowding proxies have NOT
+// been re-measured (96 matches at 45 s is about 72 minutes), so they stand as a record of what
+// was measured then, not as current fact. What has been re-measured, from the catalogue and
+// `evaluateVersusBoard` on this revision:
+//
+//   * "vs-quad-01 stays withdrawn from the offered catalogue" is now FALSE.
+//     versus-catalog.json offers it at [4]; #425's rebuild returned it, which is what took the
+//     egress sweep's offered population from 17 back to 18.
+//   * "the 21 offered ones" is the wrong population. The catalogue offers 18 (arena, N)
+//     combinations. 21 is a different count from a different sweep -- the shipped-arena roomOk
+//     loop's CHECKED verdicts, which are the 24 that exist minus vs-duel-01's three.
+//   * "vs-quad-01 @ N=4 ratio 74.00" is stale. It was a 27x17 board then and is 33x27 now,
+//     measuring 152.50.
+//   * "vs-tri-01 at N=4, ratio 72.25 -- the board sitting on the bound" is not an offered
+//     combination: vs-tri-01 is offered at [3] alone, where it scores 96.33. Issue #722 moved
+//     the room guard onto the offered population for exactly this reason, so the "sitting on
+//     the bound" framing below, and the conclusion for #418 that rests on vs-quad-01 being
+//     withdrawn, both need the re-run before they can be relied on.
+// ---------------------------------------------------------------------------
 // WHAT IT MEASURED. 45 s per match, 4 seeds per combination, ffa, over the same 24
 // (arena, N) combinations the room guard itself sweeps -- 96 matches.
 //

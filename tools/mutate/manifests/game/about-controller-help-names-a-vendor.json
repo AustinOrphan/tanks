@@ -1,0 +1,14 @@
+{
+  "id": "about-controller-help-names-a-vendor",
+  "file": "src/game/hud.ts",
+  "find": "<p class=\"hud-about-line\">Adapters differ.",
+  "replace": "<p class=\"hud-about-line\">Adapters differ, except Xbox ones.",
+  "expect": "killed",
+  "why": "Puts a vendor name into About's generic controller help, which is the exact drift the decision on #597 was warned about: it chose generic Gamepad-API help over waiting for #595 to verify real hardware, and the argument against that choice was that generic help becomes a compatibility table as soon as someone writes 'except brand X'. #595 owns every product-specific claim. Measured with this mutation applied by hand: ONLY the guard test fails -- hud.a11y.test.ts, hud.surfaces.test.ts and hud.css.test.ts all stay green -- so the guard is the sole discriminator and nothing else in the tree notices a product name appearing in player-facing help.",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "killedBy": [
+    "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) THE HARDWARE-MANUAL GUARD: the help names no product, vendor or adapter model"
+  ]
+}
