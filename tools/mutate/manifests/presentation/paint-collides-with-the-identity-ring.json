@@ -1,0 +1,16 @@
+{
+  "id": "paint-collides-with-the-identity-ring",
+  "file": "src/presentation/customization.ts",
+  "find": "hex: '#e08a2e'",
+  "replace": "hex: '#e08625'",
+  "expect": "killed",
+  "why": "Moves the orange hull paint onto identity ring 1 AS DRAWN. #e08625 is exactly overFelt(0xff8a1e), the composited colour makeIdentityRing puts on the felt, so the CIEDE2000 distance goes 1.1706 -> 0.0000 and a player's ring becomes indistinguishable from their hull. Issue #586's ruling tolerates the ring being CLOSE to the paint -- the ring says WHO, the hull says WHAT STYLE -- and declines to re-pick ring 1, whose blue/orange axis survives all three common CVD types. What it does not tolerate is the collision becoming identity, which is what this floor of 1.0 (CIEDE2000's just-noticeable difference) exists to stop. NOT redundant with src/render/skins.test.ts's auto-derivation hex pin, which also fires here: that pin catches ANY change to the swatch, so it would equally fire on a legitimate re-pick to a SAFER colour and then be updated, silencing it. Measured: safer re-picks #b5651d and #c9741f score 12.63 and 6.44 against the drawn ring and clear this floor, while the colliding value scores 0. The pin says the hex changed; this says the colours collided.",
+  "tests": [
+    "src/presentation/customization.test.ts",
+    "src/render/skins.test.ts"
+  ],
+  "killedBy": [
+    "the palette keeps every swatch a NOTICEABLE step from every player identity colour (issue #586)",
+    "createSkinTexture accent (the pattern's second tone) is selectable the auto derivation is pinned: changing it is deliberate, never incidental"
+  ]
+}
