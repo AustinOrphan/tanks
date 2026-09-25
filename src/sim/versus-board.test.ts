@@ -112,11 +112,20 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
   // docs/superpowers/plans/2026-08-17-versus-board-rules.md), which is what makes this
   // sweep evidence that shipped boards are roomy rather than evidence the rule is
   // decorative.
-  it('the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin on every shipped combination -- the tightest is vs-tri-01 at N=4', () => {
+  /**
+   * The tightest open-floor-per-player ratio in a population, with the combination that owns it.
+   * `include` decides which (arena, N) pairs the population contains, which is the whole point
+   * of the two blocks below: the bound is enforced over the OFFERED population and merely
+   * reported over the shipped one (issue #722).
+   */
+  function tightestRatio(include: (arenaId: string, n: number) => boolean) {
     let tightest = Infinity;
     let tightestLabel = '';
+    let checked = 0;
     for (const arena of ARENA_DEFS) {
       for (const n of [2, 3, 4] as const) {
+        if (!include(arena.id, n)) continue;
+        checked += 1;
         const verdict = evaluateVersusBoard(arena, n);
         if (verdict.openFloorPerPlayer < tightest) {
           tightest = verdict.openFloorPerPlayer;
@@ -124,31 +133,58 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         }
       }
     }
-    // vs-tri-01 takes this BACK from vs-quad-01 (74.0), which took it from vs-tri-01's
-    // first version, which took it from vs-duel-01, which took it from arena-02 (185.5).
-    // The progression is the point: each board authored FOR versus is smaller and more
-    // furnished than the campaign boards it joins, so the tightest ratio keeps falling.
-    // 27x17 with 149 solid cells, 19 destructible and the two authored spawn letters
-    // leaves 289 open floor; at N=4 that is 72.25.
+    return { tightest, tightestLabel, checked };
+  }
+
+  /** The (arena, N) pairs the catalogue actually offers -- 18 of the 24 that exist. */
+  const isOffered = (arenaId: string, n: number) =>
+    VERSUS_CATALOG.some((e) => e.arenaId === arenaId && (e.players as readonly number[]).includes(n));
+
+  it('the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin at every count a board is OFFERED at -- the tightest is vs-tri-01 at N=3', () => {
+    const { tightest, tightestLabel, checked } = tightestRatio(isOffered);
+    // 18 = five campaign boards x 3 counts, plus vs-duel-01, vs-tri-01 and vs-quad-01 at their
+    // single curated counts. The same population the egress sweep below covers.
+    expect(checked, 'the offered (arena, N) population this sweep covers').toBe(18);
+    expect(tightestLabel).toBe('vs-tri-01 @ N=3');
+    expect(tightest).toBeCloseTo(96.33333, 4);
+    // THE BOUND, over the population the game can actually put a player in. 96.33 is 5.35x
+    // MIN_OPEN_FLOOR_PER_PLAYER and clears the 4x bound by 24.33 cells of open floor.
     //
-    // AND THAT IS THE HEADLINE, not the label change. The previous revision of this
-    // comment said 74.0 "clears the 4x bound (72) by 2 cells of open floor ... and is
-    // also the last one that multiplier will absorb", and asked the next dedicated board
-    // to check the figure BEFORE it was authored. Issue #424's rework of vs-tri-01 checked
-    // it, and the answer is that the warning was right: at 72.25 the bound below has
-    // 0.25 cells of open floor left. The board is not cramped -- it is four times the
-    // stated minimum -- but this constant can no longer absorb another furnished 27x17
-    // board, and #418's re-derivation is now a prerequisite for the next one rather than
-    // an improvement someone might get to.
-    expect(tightestLabel).toBe('vs-tri-01 @ N=4');
-    expect(tightest).toBeCloseTo(72.25, 5);
-    // 4x, down from 6x, itself down from the 10x that held when every board was
-    // campaign-sized. LOWERED ON MEASUREMENT each time, and stated here rather than left
-    // implicit: at 85.5 the previous 6x bound (108) would fail. The gate still discriminates
-    // -- versus-board.test.ts's small-pillar-room fixture fails roomOk outright -- but the
-    // headroom is now 0.25 cells of open floor (72.25 against a bound of 72), so this
-    // assertion is one furnished board away from failing and #418 is where that is settled.
+    // WHY THAT NUMBER IS NOT THE 0.25 THIS COMMENT USED TO REPORT, which is the correction
+    // issue #722 asked for. The previous revision swept all 24 shipped combinations, found
+    // vs-tri-01 @ N=4 at 72.25, and concluded the bound was "one furnished board away from
+    // failing". vs-tri-01 is offered at N=3 ALONE (versus-catalog.json gives it `[3]`), so that
+    // reading came from a combination the game never sets up. Over the offered population the
+    // headroom is two orders of magnitude larger, and the second-tightest offered combination
+    // is vs-quad-01 @ N=4 at 152.5 -- not the 74.0 recorded when it was a 27x17 board, because
+    // #425 rebuilt it at 33x27.
+    //
+    // REVISION POLICY, replacing the "check this figure before authoring the next board" note
+    // that #418 was filed against. This assertion is a description of the offered catalogue and
+    // is expected to move whenever a board or its offered counts change; re-measure it with the
+    // board and state the new figure here. The BOUND is a different thing and is not to be
+    // lowered to accommodate a board: it has already been cut 10x -> 6x -> 4x that way, which
+    // is how a constraint becomes a description. #418 owns replacing the multiplier with a
+    // directly named floor from playtest evidence, and that is still open.
     expect(tightest).toBeGreaterThan(MIN_OPEN_FLOOR_PER_PLAYER * 4);
+  });
+
+  it('records the tightest ratio across all 24 shipped combinations, including the 6 no one is offered', () => {
+    // REPORTED, NOT GATED, and that separation is the point. vs-tri-01 at N=4 scores 72.25 --
+    // 0.25 cells of open floor above the bound -- but nothing offers a three-player board to
+    // four players, so letting it gate CI made a required check turn on a hypothetical. It is
+    // still worth knowing: it is what a 27x17 board WOULD score if a future catalogue offered
+    // one at N=4, and it is the reason #418's re-derivation is worth doing before that happens.
+    const all = tightestRatio(() => true);
+    expect(all.checked, 'every (arena, N) verdict that exists').toBe(24);
+    expect(all.tightestLabel).toBe('vs-tri-01 @ N=4');
+    expect(all.tightest).toBeCloseTo(72.25, 5);
+    // The control that keeps the two blocks honest about each other: the shipped population
+    // CONTAINS the offered one, so its tightest can never be the looser of the two. If these
+    // ever coincide, the six non-offered combinations stopped mattering and the block above is
+    // the only one needed.
+    const offered = tightestRatio(isOffered);
+    expect(all.tightest).toBeLessThan(offered.tightest);
   });
 
   it('0 of 80 spawn pairs share mutual line of sight, across the full sweep', () => {
