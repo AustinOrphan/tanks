@@ -1,0 +1,14 @@
+{
+  "id": "pad-focus-ring-keyed-on-focus-visible",
+  "file": "src/game/hud.css",
+  "find": ".hud--padnav button:focus,\n.hud--padnav [tabindex]:not([tabindex=\"-1\"]):focus {",
+  "replace": ".hud--padnav button:focus-visible,\n.hud--padnav [tabindex]:not([tabindex=\"-1\"]):focus-visible {",
+  "expect": "killed",
+  "why": "The quiet way to undo issue #917 while leaving everything that looks load-bearing intact. The selector, the three ring tokens and the container exclusion all survive this edit, and the rule reads as a tidier sibling of the generic one directly above it -- so a reviewer skimming for a missing ring finds nothing wrong. What it actually does is make the rule a duplicate of that generic rule and restore the defect in full: `:focus-visible` is exactly the thing that cannot see a pad-driven focus move, because a gamepad press is not a DOM input event and `moveFocus` ends in a programmatic `.focus()`. Measured on the built bundle, the difference is a ring at `solid 2px rgb(127, 208, 255)` versus `outline-style: none` on the same control after a pointer route.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css is syntactically whole rings a PAD-driven focus move too, which `:focus-visible` cannot see (issue #917)"
+  ]
+}
