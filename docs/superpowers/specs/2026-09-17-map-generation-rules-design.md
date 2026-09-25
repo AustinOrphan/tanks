@@ -152,7 +152,7 @@ the same shape at all:
 | legal area | 0.65 - 0.78 | 0.28 - 0.47 |
 | corridor share | 0.01 - 0.04 | 0.10 - 0.84 |
 | bottleneck width | 3.33 - 6.00 | 1.33 - 2.67 |
-| longest sightline / diagonal | 0.70 - 0.82 | 0.60 - 0.76 |
+| longest sightline / diagonal | 0.70 - 0.82 | 0.60 - 0.75 |
 | rotational asymmetry | 0.04 - 0.16 | 0.00, 0.00, 0.33 |
 
 The versus boards are **tighter, walled, and either exactly rotationally symmetric or not
@@ -285,12 +285,13 @@ Ordered by how cheaply they could be adopted, all computable on the existing mea
 3 to 6 are issue #822:
 
 1. **One-bounce opening shot** -- measured, currently zero everywhere. Insurance.
-2. **Longest sightline cap at 70% of the board diagonal** (`longest-sightline-cap`, measured
-   from Quake and Halo practice). **Five of the eight shipped boards exceed it**: arena-03 at
-   0.82, arena-04 at 0.80, arena-05 at 0.78, vs-tri-01 at 0.76, arena-02 at 0.72. That is
-   either a real defect in the campaign boards or a cap that does not transfer to a top-down
-   game with no verticality to break a sightline with. It should not be adopted without
-   deciding which.
+2. ~~**Longest sightline cap at 70% of the board diagonal**~~ (`longest-sightline-cap`,
+   measured from Quake and Halo practice). **REJECTED 2026-09-25, issue #819 — do not adopt
+   this, and do not re-derive it from the same literature.** The survey result and the
+   measurement that refutes it are recorded in full under "The sightline cap, and why it was
+   rejected" below. A generator gets no sightline ratio rule; a flight-time floor was weighed
+   as the replacement and also declined, so it is a rejected alternative rather than the
+   successor.
 3. **Dead-end budget** -- `no-leaf-rooms`, `navigability-degree-profile` (dead ends at or
    below 2.5% of navigable positions), `cycle-richness-no-dead-ends`. Not currently measured
    at all; `corridorAreaFraction` is a blunt proxy.
@@ -302,6 +303,60 @@ Ordered by how cheaply they could be adopted, all computable on the existing mea
 6. **Bot jam filter** -- reject a minimum-width corridor that is also an articulation point.
    This game's bots steer reactively with no pathfinding, so it is more relevant here than in
    the games the rule came from.
+
+### The sightline cap, and why it was rejected
+
+**Ruled 2026-09-25 on issue #819: reject the cap, and record why.** Kept here rather than only
+on the issue, because the failure mode being guarded against is a future survey of the same
+literature re-adopting the same rule. Three alternatives were weighed and declined: adopting
+the 70% cap as surveyed, replacing it with a flight-time floor, and watching a bot-vs-bot
+capture before deciding. **The flight-time floor is a rejected alternative, not the
+successor** -- a generator gets no sightline rule at all until something new is decided.
+
+Measured over all 8 shipped boards with `npx vite-node tools/mapgen/calibrate.mjs --json`,
+which reports `longestSightlineRelative`. Flight time is `longestSightline` divided by the
+shipped shell speeds in `src/sim/config/data/balance.json` (normal 6, fast 12, ricochet 4
+units/s), and the multiplier is against a 250 ms reaction:
+
+| board | longest sightline | / diagonal | flight at fast | x 250 ms |
+| --- | ---: | ---: | ---: | ---: |
+| arena-03 | 23.32 | 0.8205 | 1.94 s | 7.77x |
+| arena-04 | 29.73 | 0.7992 | 2.48 s | 9.91x |
+| arena-05 | 29.12 | 0.7828 | 2.43 s | 9.71x |
+| vs-tri-01 | 16.00 | 0.7522 | 1.33 s | 5.33x |
+| arena-02 | 20.40 | 0.7175 | 1.70 s | 6.80x |
+| arena-01 | 20.00 | 0.7036 | 1.67 s | 6.67x |
+| vs-duel-01 | 16.00 | 0.7016 | 1.33 s | 5.33x |
+| vs-quad-01 | 17.09 | 0.6012 | 1.42 s | 5.70x |
+
+**Two numbers this document previously carried were wrong, and are corrected above.**
+vs-tri-01's ratio is **0.7522**, not the 0.76 that appeared both in the rule text and in the
+campaign/VS band table -- so the dedicated-VS band is 0.60 to 0.75. And **seven of the eight
+boards exceed 0.70, not five**: arena-01 at 0.7036 and vs-duel-01 at 0.7016 both clear it, and
+were previously read as compliant because the table rounded them to 0.70. A cap applied to the
+measured value rather than to a two-decimal rendering of it fails all but vs-quad-01.
+
+Three measured reasons the cap does not transfer:
+
+1. **Its own rationale does not survive.** The rule guards against being shot from beyond
+   awareness. Here the awareness window is 1.33 to 2.48 s of *fully visible* travel at the
+   fastest shell -- roughly **5.3x to 9.9x** a 250 ms reaction -- on a board with no fog and no
+   vertical dimension, so the shell is on screen for the whole flight.
+2. **The ratio inverts the ordering it is meant to rank.** vs-tri-01 (0.7522) gives the player
+   1.33 s; arena-04 (0.7992) gives 2.48 s. The board the cap calls worse gives nearly twice as
+   long to react.
+3. **Identical exposure earns different verdicts.** vs-duel-01 and vs-tri-01 have the *same*
+   16.00-unit longest sightline, and the cap separates them -- 0.7016 against 0.7522 -- purely
+   because the boards differ in size. The quantity is wrong, not just the threshold.
+
+**What is still genuinely open is aesthetic, and flight time cannot answer it:** whether long
+lines make a board feel like a shooting gallery. The bot-vs-bot capture #819 originally asked
+for remains the way to judge that; this rejection only removes a static rule that measurement
+contradicts.
+
+**A trap for whoever re-checks this:** `calibrate.mjs`'s printed `sight` column is
+`openSightFraction` (0.35, 0.36, 0.42...), not the ratio. Reading it looks like a refutation of
+the table above. Use `--json` and `longestSightlineRelative`.
 
 ### What the research could not establish
 
@@ -536,11 +591,28 @@ Report it; do not reward it.
 about 30% of wall mass. Seven of eight shipped boards already comply, and the ancestors that
 disagree all give their players a free repeatable destroyer that this game does not.
 
-**5. Settle two open questions before authoring a generator**, because both change what it
-should build: whether the 70%-of-diagonal sightline cap transfers to a game with no
-verticality (issue #819 -- 5 of 8 shipped boards exceed it), and what to do at 3 players,
-where rotational symmetry and a rectangle are incompatible and the literature is silent
-(issue #820).
+**5. Both open questions are now settled**, and neither answer is the one that needed waiting
+for. **#819: the 70%-of-diagonal sightline cap is REJECTED** -- see "The sightline cap, and why
+it was rejected" above; a generator gets no sightline ratio rule, and the flight-time floor
+weighed as its replacement was declined too. **#820: a generated 3-player board takes
+approximate symmetry with a measured tolerance** -- not an inscribed C3 region, and not
+skipping N=3.
+
+That ruling commits work this document does not contain, and one prerequisite is larger than it
+looks. **There is no C3 measure in the tree at all.** `asymmetryRotational` is the fraction of
+cells disagreeing with their image under a **180-degree** rotation (`tools/mapgen/measure.ts`,
+the `symmetry (CELL space)` block), it takes no player count, and it therefore returns the same
+value at N=2, 3 and 4 -- verified by reading `calibrate.mjs --json` across all three counts. So
+a 3-player tolerance cannot be derived from it without first building a measure for the right
+symmetry group, and the exposure measure the ruling also names does not exist either.
+
+What the 180-degree numbers do show is why the ruling's alternatives looked the way they did:
+**vs-tri-01, the only shipped 3-player board, is the worst in the set at 0.3268** while being
+*exactly* mirror-symmetric (`asymmetryMirrorH` 0.000), and the two boards that measure 0.0000
+rotationally are vs-duel-01 and vs-quad-01, where a 180-degree rotation is the natural group. A
+180-degree measure simply does not ask the 3-player question. Whatever tolerance is chosen, the
+shipped range it is derived from spans **0.0000 to 0.3268 over 8 boards** -- not a sample -- and
+that caveat should travel with the number.
 
 **6. Then playtest.** Every claim here is static. A bot-vs-bot capture at normal speed on the
 best board from each ruleset is the cheapest thing that would turn any of this into evidence
