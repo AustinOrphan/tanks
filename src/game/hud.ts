@@ -1250,6 +1250,20 @@ export interface Hud {
    */
   setReducedMotion(on: boolean): void;
   /**
+   * The player's UI scale as a multiplier -- `EffectiveSettings.uiScaleFactor`, so 100 is 1
+   * and 150 is 1.5 (issue #290's criterion 5).
+   *
+   * Pushed from the same `route-host.ts` subscription as `setReducedMotion` and for the same
+   * reason: the player changes this in Settings with the menu open, and a construction
+   * parameter would freeze whichever answer was true at boot.
+   *
+   * It writes ONE custom property on the root; `hud.css` multiplies the type and spacing
+   * scales by it. At 1 the property is REMOVED rather than written, so the default page
+   * carries no inline style and is byte-identical to one built before this existed -- which
+   * is what lets the 46 screen baselines stay untouched.
+   */
+  setUiScale(factor: number): void;
+  /**
    * The versus-kind title screen's Campaign button was clicked -- a bare click
    * passthrough, the exact shape `onVersusOpen`/`onNewGame` already use. `loop.ts`'s
    * one subscriber calls `deps.requestCampaignSession?.()`, `boot.ts`'s symmetric
@@ -1307,6 +1321,10 @@ export type HudFrameKey =
   | 'setModality'
   | 'setBackdrop'
   | 'setReducedMotion'
+  // The player's UI scale (issue #290). Frame rather than route for the same reason
+  // `setReducedMotion` is: it is one property on the root that every surface inherits, and
+  // no single route owns it.
+  | 'setUiScale'
   | 'back'
   | 'act'
   | 'dispose'
@@ -7733,6 +7751,26 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     setMuted(currentMuted); // repaint the hints, nothing else: no surface is re-rendered
   }
 
+  /**
+   * The player's UI scale, as the one custom property `hud.css` multiplies its type and
+   * spacing scales by (issue #290's criterion 5).
+   *
+   * REMOVED rather than written at 1, and that is the whole reason the 46 screen baselines
+   * do not move: a default page then carries no inline style at all, so its markup is
+   * byte-identical to one built before this existed. Writing `--hud-ui-scale: 1` would be
+   * numerically identical and would still change every captured DOM.
+   *
+   * A non-finite or non-positive factor is ignored rather than written. `UI_SCALES` is
+   * 100/125/150 so production cannot produce one, but this property is multiplied into
+   * every size in the interface -- a `NaN` reaching it would collapse the entire HUD to
+   * nothing, which is too large a failure to leave to the caller's good behaviour.
+   */
+  function setUiScale(factor: number): void {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    if (factor === 1) el.style.removeProperty('--hud-ui-scale');
+    else el.style.setProperty('--hud-ui-scale', String(factor));
+  }
+
   setMuted(false);
 
   /**
@@ -7903,6 +7941,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     setState,
     setMuted,
     setModality,
+    setUiScale,
     setVolume,
     setRoundPhase(info: RoundPhaseInfo | null): void {
       if (!info || info.phase === 'live') {

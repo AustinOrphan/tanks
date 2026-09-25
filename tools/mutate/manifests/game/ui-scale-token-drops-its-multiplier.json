@@ -1,0 +1,14 @@
+{
+  "id": "ui-scale-token-drops-its-multiplier",
+  "file": "src/game/hud.css",
+  "find": "  --hud-type-3: calc(0.8125rem * var(--hud-ui-scale));",
+  "replace": "  --hud-type-3: 0.8125rem;",
+  "expect": "killed",
+  "why": "One step quietly exempted from the player's UI scale. This is the shape a tidy-up takes -- `0.8125rem` is the value the step has always had and reads as a simplification of a noisy `calc()`, while every other step keeps its multiplier so the feature still visibly works. A reviewer comparing a 150% capture against a 100% one would see the interface grow and not notice that one size did not. It is pinned because the guard has to count the steps rather than spot-check one: a step that loses its multiplier simply stops matching the scaled pattern, so an assertion written only over the matches would pass on the survivors.",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "hud.css type scales with the reader (issue #971) spends every step of the scale, and each step is a whole number of px at the default"
+  ]
+}

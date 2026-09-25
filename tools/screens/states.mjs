@@ -512,6 +512,33 @@ export const SCREEN_STATES = Object.freeze([
     measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
   }),
   state({
+    id: 'screen.settings.ui-scale',
+    title: 'Settings at 150% UI scale',
+    description:
+      'The same pane for a player who raised the in-game UI scale, which multiplies the '
+      + 'type and spacing scales.',
+    // Issue #843 filed this capture and issue #290 is why it is only now worth taking. The
+    // catalogue could already seed `uiScale`, but NOTHING multiplied by `uiScaleFactor`, so
+    // this state photographed a page byte-identical to `screen.settings` -- measured at the
+    // time, both the measurements and the full-page pixels (sha 1c99be6edd3226e6 at 100 and
+    // at 150). The consumer landed with this state, which is what turns it into evidence.
+    //
+    // The reader defaults every field it is not given (`settings.ts`), so naming only the
+    // one under test keeps the seed about `uiScale` and nothing else.
+    storage: {
+      ...MID_CAMPAIGN,
+      'tanks.settings.v1': JSON.stringify({ version: 1, presentation: { uiScale: 150 } }),
+    },
+    steps: [...PAST_SPLASH, { click: '.hud-settings-open' }, { waitVisible: '.hud-settings' }],
+    // THE SAME FOUR SELECTORS `screen.settings` measures, deliberately, so the two baselines
+    // are a direct before/after of the scale rather than two unrelated pictures. Baselines
+    // record `font-size` and the box, which is exactly where a 1.5x multiplier shows up: if
+    // the consumer is ever removed, these measurements collapse back onto `screen.settings`'s
+    // and this state stops differing from it -- which is the failure this state exists to
+    // catch, and the one it could not catch before the consumer existed.
+    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
+  }),
+  state({
     id: 'screen.settings.touch',
     title: 'Settings on a touchscreen',
     description:
