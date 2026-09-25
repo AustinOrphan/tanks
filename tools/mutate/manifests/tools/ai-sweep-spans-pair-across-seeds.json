@@ -1,0 +1,16 @@
+{
+  "id": "ai-sweep-spans-pair-across-seeds",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "  return `${c.seed ?? 'no-seed'}:${c.tankId}`;",
+  "replace": "  return `${c.tankId}`;",
+  "expect": "killed",
+  "why": "Restores the defect that shipped with #359 and reached its evidence. `measure.mjs` concatenates every seed's changes into one array and `tankId` is unique only within a seed, so keyed by tankId alone one seed's tank 3 closes a span the previous seed's tank 3 opened -- and because each seed restarts the tick counter the span is NEGATIVE. The pairing is reachable because `measure.mjs` records a change only once it has seen the tank before, so a tank's first recorded change in a seed is a switch with a defined `from` rather than an acquisition: measured over seeds 1-40 at 1800 ticks, all 56 of the 56 distinct (seed, tank) pairs began that way. Over that same population a tankId-only key produces 35 negative spans of 102, the worst -1286 ticks. Those spans sat inside `spanTicks` and therefore inside `knobIsWired`'s span signature. It hid for so long because a median absorbs them; one run printing a negative p50 is what exposed it.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "spans are scoped to one seed never pairs one seed s change with another s",
+    "spans are scoped to one seed scopes the by-reason split the same way",
+    "spans are scoped to one seed keeps a seedless change in its own bucket instead of merging every seed"
+  ]
+}

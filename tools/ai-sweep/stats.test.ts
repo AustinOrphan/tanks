@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseSeeds, distribution, heldSpans, summarise, knobIsWired,
-  groupRows, foldToProfiles, profileCoverage,
+  groupRows, foldToProfiles, profileCoverage, heldSpansByEndReason,
 } from './stats.mjs';
 
 describe('parseSeeds', () => {
@@ -263,5 +263,163 @@ describe('profileCoverage', () => {
     // A key present with 0 ticks is the shape a fold produces for a kind that never spawned;
     // reading it as covered would report a row with no evidence behind it as evidence.
     expect(c.silent).toContain('STATIC_BASIC');
+  });
+});
+
+describe('heldSpansByEndReason', () => {
+  // One tank, three completed spans, each ended by a different reason. Built so the three
+  // buckets have DIFFERENT medians: pooling them is exactly the defect this splits.
+  const CHANGES = [
+    { tick: 0, tankId: 1, kind: 'brown', from: undefined, to: 7, reason: 'acquired' },
+    { tick: 200, tankId: 1, kind: 'brown', from: 7, to: 8, reason: 'switched-on-expiry' },
+    { tick: 210, tankId: 1, kind: 'brown', from: 8, to: 9, reason: 'target-lost' },
+    { tick: 500, tankId: 1, kind: 'brown', from: 9, to: 7, reason: 'switched-on-expiry' },
+    { tick: 505, tankId: 1, kind: 'brown', from: 7, to: 8, reason: 'target-lost' },
+  ];
+
+  it('attributes each span to the change that ENDED it, not the one that opened it', () => {
+    const byReason = heldSpansByEndReason(CHANGES);
+    // 0->200 ended by expiry; 200->210 ended by target-lost; 210->500 by expiry; 500->505 by lost.
+    expect(byReason['switched-on-expiry']).toEqual([200, 290]);
+    expect(byReason['target-lost']).toEqual([10, 5]);
+    // THE CONTROL for "ending, not opening". Attributing to the opener would give expiry the
+    // spans that FOLLOW an expiry switch -- [10, 5] -- so these two must not be swappable.
+    expect(byReason['switched-on-expiry']).not.toEqual(byReason['target-lost']);
+  });
+
+  it('accounts for every span the pooled measure counts, and no more', () => {
+    const byReason = heldSpansByEndReason(CHANGES);
+    const split = Object.values(byReason).flat().sort((a, b) => a - b);
+    expect(split).toEqual([...heldSpans(CHANGES)].sort((a, b) => a - b));
+    // Would catch a bucket that silently dropped a reason, or double-counted one: the split has
+    // to be a partition of the pooled list, not merely a subset of it.
+    expect(split).toHaveLength(heldSpans(CHANGES).length);
+  });
+
+  it('separates the expiry median from the pooled one, which is the whole point', () => {
+    const byReason = heldSpansByEndReason(CHANGES);
+    const expiry = distribution(byReason['switched-on-expiry']);
+    const pooled = distribution(heldSpans(CHANGES));
+    // Pooled spans are [200, 10, 290, 5]; the expiry-ended ones are [200, 290]. The pooled
+    // median is dragged down by the two forced drops, which is the effect this fixture stands
+    // in for. Measured over seeds 1-200 at 1800 ticks, all 20 of the 20 profile-and-value cells
+    // (5 reachable profiles x 4 values) put the expiry-ended median above the pooled one, by
+    // 1.50x to 5.66x -- MOBILE_MINE_LAYER at 0.5s reads 279 against 148 -- because rule-5 drops
+    // are 63-88% of all changes and are short by nature.
+    expect(expiry.p50).toBe(290);
+    expect(pooled.p50).toBe(200);
+    expect(expiry.p50).toBeGreaterThan(pooled.p50);
+  });
+
+  it('buckets a change with no reason under `unknown` rather than dropping it', () => {
+    const spans = heldSpansByEndReason([
+      { tick: 0, tankId: 1, kind: 'brown', from: undefined, to: 7, reason: null },
+      { tick: 90, tankId: 1, kind: 'brown', from: 7, to: 8, reason: null },
+    ]);
+    expect(spans.unknown).toEqual([90]);
+    // The control: a dropped span would leave the object empty, which reads as "no holds" --
+    // a measurement -- when the truth is one hold whose reason was not recorded.
+    expect(Object.values(spans).flat()).toHaveLength(1);
+  });
+
+  it('leaves a tank s final open hold uncounted, exactly as the pooled measure does', () => {
+    const spans = heldSpansByEndReason([
+      { tick: 0, tankId: 1, kind: 'brown', from: undefined, to: 7, reason: 'acquired' },
+    ]);
+    expect(Object.values(spans).flat()).toEqual([]);
+    expect(heldSpans([
+      { tick: 0, tankId: 1, kind: 'brown', from: undefined, to: 7, reason: 'acquired' },
+    ])).toEqual([]);
+  });
+});
+
+describe('groupRows reports the expiry-ended spans beside the pooled ones', () => {
+  it('gives each group a distribution over only the spans its threshold ended', () => {
+    const changes = [
+      { tick: 0, tankId: 1, kind: 'brown', from: undefined, to: 7, reason: 'acquired' },
+      { tick: 300, tankId: 1, kind: 'brown', from: 7, to: 8, reason: 'switched-on-expiry' },
+      { tick: 305, tankId: 1, kind: 'brown', from: 8, to: 9, reason: 'target-lost' },
+      { tick: 0, tankId: 2, kind: 'teal', from: undefined, to: 7, reason: 'acquired' },
+      { tick: 40, tankId: 2, kind: 'teal', from: 7, to: 8, reason: 'target-lost' },
+    ];
+    const rows = groupRows({ changes, ticksByGroup: { brown: 1000, teal: 1000 } });
+    const brown = rows.find((r) => r.group === 'brown')!;
+    const teal = rows.find((r) => r.group === 'teal')!;
+    expect(brown.expirySpanTicks.n).toBe(1);
+    expect(brown.expirySpanTicks.p50).toBe(300);
+    // teal's only completed span was FORCED, so it has no expiry-ended spans at all -- reported
+    // as nulls rather than zeros, so "the threshold never acted here" cannot read as "it acted
+    // and the span was 0".
+    expect(teal.expirySpanTicks).toEqual({ n: 0, min: null, p50: null, p90: null, max: null, mean: null });
+    // THE CONTROL. teal's POOLED span exists (40 ticks), so a row that reported the pooled
+    // distribution under the expiry name would show n=1 here instead of n=0.
+    expect(teal.spanTicks.n).toBe(1);
+    expect(teal.spanTicks.p50).toBe(40);
+  });
+});
+
+describe('spans are scoped to one seed', () => {
+  // The defect, in the shape the concatenated stream ACTUALLY takes: two seeds, the same
+  // tankId, and each seed restarting its tick counter.
+  //
+  // Every change here carries a defined `from`, including each seed's first, and that detail is
+  // the whole fixture. `measure.mjs` only records a change once it has seen the tank before, so
+  // a tank's first RECORDED change in a seed is never its acquisition -- it is a switch away
+  // from a target the guard swallowed. Measured over seeds 1-40 at 1800 ticks: all 56 of the 56
+  // distinct (seed, tank) pairs recorded began with a defined `from`, none with an acquisition.
+  //
+  // That is what makes the cross-seed pairing reachable. Keyed by tankId alone, seed 2's
+  // tick-40 change closes the span seed 1 opened at tick 1700 -- a span of -1660. An earlier
+  // version of this fixture opened each seed with `from: undefined`, and a change with no
+  // `from` closes nothing, so it could not pair across seeds and did not discriminate the
+  // defect at all; the mutation harness caught that it was inert.
+  const TWO_SEEDS = [
+    { tick: 100, tankId: 3, seed: 1, kind: 'brown', from: 4, to: 7, reason: 'target-lost' },
+    { tick: 1700, tankId: 3, seed: 1, kind: 'brown', from: 7, to: 8, reason: 'switched-on-expiry' },
+    { tick: 40, tankId: 3, seed: 2, kind: 'brown', from: 5, to: 7, reason: 'target-lost' },
+    { tick: 300, tankId: 3, seed: 2, kind: 'brown', from: 7, to: 9, reason: 'switched-on-expiry' },
+  ];
+
+  it('never pairs one seed s change with another s', () => {
+    const spans = heldSpans(TWO_SEEDS);
+    // Seed 1 held 7 from 100 to 1700 (1600); seed 2 held 7 from 40 to 300 (260). Nothing else.
+    expect(spans).toEqual([1600, 260]);
+    // THE CONTROL: keyed by tankId alone, seed 2's tick-40 change closes seed 1's tick-1700
+    // hold and `assertSpan` throws on the -1660 -- so this call does not merely return a
+    // different list under the defect, it does not return. Both facts are pinned: the spans are
+    // the two real holds, and there are exactly two of them.
+    expect(spans.every((s) => s > 0)).toBe(true);
+    expect(spans).toHaveLength(2);
+  });
+
+  it('scopes the by-reason split the same way', () => {
+    const byReason = heldSpansByEndReason(TWO_SEEDS);
+    expect(byReason['switched-on-expiry']).toEqual([1600, 260]);
+    expect(Object.values(byReason).flat().every((s) => s > 0)).toBe(true);
+  });
+
+  it('REFUSES a negative span rather than reporting it', () => {
+    // Reached by a stream that is out of tick order within one seed -- the other way the pairing
+    // can go wrong. A clamp or a filter here would have let the cross-seed defect keep producing
+    // low medians indefinitely; it was a negative p50 in one run that exposed it.
+    const outOfOrder = [
+      { tick: 900, tankId: 1, seed: 1, kind: 'brown', from: undefined, to: 7, reason: 'acquired' },
+      { tick: 100, tankId: 1, seed: 1, kind: 'brown', from: 7, to: 8, reason: 'switched-on-expiry' },
+    ];
+    expect(() => heldSpans(outOfOrder)).toThrow(/negative held span -800.*tank 1.*seed 1/);
+    expect(() => heldSpansByEndReason(outOfOrder)).toThrow(/negative held span/);
+  });
+
+  it('keeps a seedless change in its own bucket instead of merging every seed', () => {
+    // Older recorded data has no `seed`. It must read as ONE stream and be obviously so, not
+    // average quietly into correctly-keyed numbers.
+    const seedless = [
+      { tick: 10, tankId: 1, kind: 'brown', from: undefined, to: 7, reason: 'acquired' },
+      { tick: 90, tankId: 1, kind: 'brown', from: 7, to: 8, reason: 'switched-on-expiry' },
+    ];
+    expect(heldSpans(seedless)).toEqual([80]);
+    // The control: a seeded change with the same tankId must not close the seedless one's span.
+    const mixed = [...seedless, { tick: 20, tankId: 1, seed: 5, kind: 'brown', from: 8, to: 9, reason: 'target-lost' }];
+    expect(heldSpans(mixed)).toEqual([80]);
   });
 });
