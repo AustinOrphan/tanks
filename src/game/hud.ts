@@ -7731,6 +7731,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (modality === currentModality) return;
     currentModality = modality;
     setMuted(currentMuted); // repaint the hints, nothing else: no surface is re-rendered
+    /* The focus ring's one exception, and the whole of issue #917. `moveFocus` ends in a
+     * programmatic `.focus()`, and a pad button press is not a DOM input event at all --
+     * the Gamepad API is polled -- so the browser's "last interaction" stays whatever the
+     * player last touched. MEASURED on the built bundle: after a mouse click on any
+     * focusable control, every later pad-driven focus move reports
+     * `:focus-visible === false` and computes `outline-style: none`, so a pad player who
+     * clicked once navigates the rest of the session with no visible focus position.
+     * Holding the surface and the control constant and varying only the prior modality
+     * isolates it: the same `.hud-settings-mute`, reached the same way by the same D-pad
+     * press, rings after a keyboard route and does not after a pointer one.
+     *
+     * This class is the narrowest fix that does not disturb the `:focus-visible`
+     * convention the rule below it documents: it is present only while the gamepad is the
+     * settled modality, so a mouse player never matches the widened rule and never sees
+     * the lingering ring that rule exists to prevent. */
+    el.classList.toggle('hud--padnav', modality === 'gamepad');
   }
 
   setMuted(false);
