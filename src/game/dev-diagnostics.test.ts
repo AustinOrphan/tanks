@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  readBuildIdentity,
   pinnedSeedUrl,
   formatDiagnostics,
   type DiagnosticsInput,
@@ -27,32 +26,6 @@ function input(overrides: Partial<DiagnosticsInput> = {}): DiagnosticsInput {
     ...overrides,
   };
 }
-
-describe('readBuildIdentity says unknown rather than inventing a version', () => {
-  it('reports a supplied commit as known', () => {
-    expect(readBuildIdentity({ VITE_BUILD_SHA: 'abc1234' })).toEqual({ commit: 'abc1234', known: true });
-  });
-
-  it('reports an absent variable as unknown, not as an empty commit', () => {
-    // `known: false` is the answer a local build, a dev server and any tree that never went
-    // through the deploy workflow genuinely has. The acceptance criterion is that copied
-    // diagnostics "identify local/unknown builds honestly", so the flag is what a reader
-    // branches on rather than the emptiness of a string.
-    expect(readBuildIdentity({})).toEqual({ commit: '', known: false });
-  });
-
-  it('treats an empty or whitespace value as absent', () => {
-    // An unset variable in a shell substitution arrives as `''`, and a CI step that
-    // interpolated a missing SHA would produce whitespace. Either way the build does not
-    // know its commit, and a report printing "Build: " would be claiming that it did.
-    for (const raw of ['', '   ', '\n']) {
-      expect(readBuildIdentity({ VITE_BUILD_SHA: raw }), JSON.stringify(raw)).toEqual({
-        commit: '',
-        known: false,
-      });
-    }
-  });
-});
 
 describe('the URL a report carries is the canonical one', () => {
   // Exercised through `formatDiagnostics`, not against `canonicalUrl` directly: that helper

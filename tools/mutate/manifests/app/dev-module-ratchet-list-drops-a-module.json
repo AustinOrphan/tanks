@@ -1,0 +1,14 @@
+{
+  "id": "dev-module-ratchet-list-drops-a-module",
+  "file": "src/dependency-direction.test.ts",
+  "find": "  'dev-diagnostics', 'controller-selftest', 'arena-schematic',",
+  "replace": "  'dev-diagnostics', 'controller-selftest',",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) the inventory of developer value edges matches the pin exactly"
+  ],
+  "why": "One developer module falls off the list the #946 ratchet scans, which is how this guard would go quiet in practice: a module renamed, or a name dropped in a merge, leaving a scan that still reports a tidy number for a smaller set. `arena-schematic` is the one hud.ts imports for `arenaSchematic` and `drawArenaSchematic`, so the edge is real and simply stops being counted -- hud.ts reports seven where the tree has eight. The pin catches it only because it is an EXACT comparison on a non-zero count; a `<=` ceiling would have passed. `every developer module named in the list still exists` passes, as it must, and that is the point: it asserts that every module STILL LISTED exists and structurally cannot see one that was removed, so the exactness of the pin is what covers this direction."
+}

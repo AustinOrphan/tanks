@@ -370,10 +370,10 @@ import { DEV_ACTIONS, runDevAction, type DevActionId, type DevActionPort } from 
 import {
   formatDiagnostics,
   pinnedSeedUrl,
-  type BuildIdentity,
   type DiagnosticsInput,
   type SessionDiagnostics,
 } from './dev-diagnostics';
+import type { BuildIdentity } from './build-identity';
 import {
   NO_SESSION_REPLAY_NOTE,
   NO_SESSION_SCREENSHOT_NOTE,

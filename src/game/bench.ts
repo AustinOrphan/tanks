@@ -1,5 +1,6 @@
 import type { RafScheduler } from './driver';
-import type { BuildIdentity, SessionDiagnostics } from './dev-diagnostics';
+import type { SessionDiagnostics } from './dev-diagnostics';
+import type { BuildIdentity } from './build-identity';
 
 /**
  * A FIXED BENCHMARK WORKLOAD AND ITS FRAME-TIME REPORT (issue #734, part of #721).
