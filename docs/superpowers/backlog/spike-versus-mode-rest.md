@@ -147,7 +147,12 @@ shipped boards at 3 player counts, and compared three candidate rulesets plus a 
 generated board" but the narrower "build the chosen ruleset and playtest it", which the spec
 recommends taking in the template-grammar family. The two questions the spec says to settle
 first -- whether the researched sightline cap transfers, and what to do at 3 players -- are
-its own open items rather than this one's.
+its own open items rather than this one's, and **both were ruled on 2026-09-25**: the
+sightline cap is REJECTED (#819, with the measurement that refutes it recorded in the spec so
+the same literature is not re-surveyed into the same rule), and a 3-player generated board
+takes approximate symmetry with a measured tolerance (#820). #820's answer is not free --
+neither the exposure measure it names nor any C3 symmetry measure exists yet -- so what stands
+between this item and a generator is now construction rather than decisions.
 
 **Not scheduled.** Recorded so the one remaining piece of versus mode -- whole-board
 procedural generation, item 6's own residual -- is not mistaken for finished now that 4
