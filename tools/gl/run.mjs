@@ -342,6 +342,35 @@ try {
   // setting it too high is waiting on one that never will. CI's own box is the fast case
   // here, not the slow one, so this does not slow the `visual` job down -- it only stops
   // the local run from lying about why it failed.
+  // ---------------------------------------------------------------------------
+  // WHY THE READBACK SHARE IS NOT RECOVERABLE, so the next reader does not re-derive it
+  // (issue #883, whose own Outcome asks for exactly this if the share cannot be reduced).
+  //
+  // The instrument below reports readPixels at ~61% of check-body time. That is real, and it
+  // is NOT an overhead that can be cut: it is where SwiftShader charges work that the draw
+  // and compile calls only queued. Three whole-harness runs on this box, one variable moved
+  // at a time, all 95 checks passing unless noted:
+  //
+  //   baseline, `high` everywhere            80.1s readback, 5.328 us/pixel
+  //   shadowMapSize 2048 -> 512              79.9s readback, 5.318 us/pixel   (-0.25%)
+  //   antialias true -> false                79.8s readback, 5.311 us/pixel   (-0.37%)
+  //
+  // So the two mechanisms the issue proposed are both disproved. 16x fewer shadow texels
+  // moved it by a quarter of a percent, and removing the MSAA resolve by a third of one --
+  // and the shadow-map run is proof the knob was live rather than inert, because the check
+  // that reads the default mapSize failed with "512, want 2048" while it was applied.
+  //
+  // NOR IS IT THE PIXELS, which rules out narrowing the reads to the region a check asserts.
+  // From the per-call attribution in the same run: a 400x250 read costs 17.90s while an
+  // 800x500 read -- four times the pixels -- costs 2.17s, and two reads of identical size at
+  // the same call site cost 17.90s and 4.07s. The cost is how much was queued since the last
+  // flush, which is why the smallest read can be the dearest.
+  //
+  // The one lever left is FEWER CALLS rather than smaller or cheaper ones. Be careful what it
+  // would buy: the single most expensive call is the first `frame()` of the muzzle-smoke arm
+  // comparison, and that check exists to measure smoke cost, so its drain is the evidence it
+  // was asked for rather than waste. 107 calls at ~0.75s average is the shape of the budget.
+  // ---------------------------------------------------------------------------
   await page.waitForFunction(() => !!window.__glResults, undefined, { timeout: 600000 });
   const results = await page.evaluate(() => window.__glResults);
 
