@@ -2402,6 +2402,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <p class="hud-about-line">Tanks! is a browser arena shooter.</p>
       <p class="hud-about-line">It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local storage and are never sent anywhere.</p>
       <div class="hud-about-links"></div>
+      <!-- CONTROLLERS (issue #597's last criterion). The ruling asked for GENERIC Gamepad-API
+           help now, rather than waiting for #595 to verify particular adapter hardware -- so
+           this names no product, no vendor and no adapter model, and 'hud.controls.test.ts'
+           asserts that absence rather than trusting it. NO BACKTICKS IN THIS COMMENT: the whole
+           block is a template literal, so one would end the string. That guard is the point: the issue's
+           own scope rules out "turning the assignment panel into a hardware manual", and a
+           compatibility table is exactly what this would drift into if someone later added
+           "except brand X". #595 stays the owner of any verified, product-specific claim.
+
+           It lives HERE and not on the controllers pane for the same reason: the pane already
+           carries the one-line boundary ("Only controllers your browser reports appear here"),
+           and the scope says to point at a help destination rather than grow the pane. -->
+      <h2 class="hud-about-subtitle">Controllers</h2>
+      <p class="hud-about-subline">Tanks! reads controllers through your browser's Gamepad API, so it can only offer what the browser reports. Most browsers report a controller only after you press a button on it with this page focused.</p>
+      <p class="hud-about-line">A controller the browser does report can still be unreadable — too few buttons or sticks, or a layout Tanks cannot map. Those are listed as not supported instead of being assigned quietly, so a slot never looks ready while nothing is driving it.</p>
+      <p class="hud-about-line">Adapters differ. Some present a controller in a mode the browser can read and some do not, and an adapter with a mode switch may work in one position and not in another. Tanks cannot tell which from inside the browser.</p>
       <h2 class="hud-about-subtitle">Documents</h2>
       <p class="hud-about-subline">Each one is the full text committed to this repository. Open a document to read it here.</p>
       <div class="hud-legal"></div>
