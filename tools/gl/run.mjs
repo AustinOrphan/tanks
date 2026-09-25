@@ -16,6 +16,78 @@ const PORT = Number(process.env.GL_TEST_PORT ?? 5177);
 const BASE = `http://localhost:${PORT}/`;
 /** Something only THIS harness serves, used to prove we are testing our own build. */
 const MARKER = '__glResults';
+
+/**
+ * Totals every `readPixels` this page makes: calls, wall time, and pixels (issue #883).
+ *
+ * WHY IT IS INSTALLED ALWAYS, not behind a flag. The same reason the per-check timing below
+ * is printed always: it is three lines of output, and a number nobody can see is a number
+ * nobody compares. It is also the only instrument that can hold a before/after honest -- the
+ * run's wall clock moves with the machine's load, and #867 already recorded a 113s / 175s /
+ * 411s spread on one afternoon. Calls and pixels do not move with load at all.
+ *
+ * WHY IT WRAPS BOTH PROTOTYPES, AND ONLY OWN PROPERTIES. three uses a WebGL2 context here, so
+ * wrapping `WebGLRenderingContext` alone risks totalling zero if WebGL2 carries its own
+ * `readPixels` -- and wrapping both unconditionally risks the opposite, double-counting every
+ * WebGL2 call if it merely INHERITS the WebGL1 one. Rather than assert which it is, the loop
+ * wraps a prototype only where `readPixels` is its OWN property, so both shapes total once.
+ *
+ * WHAT IT CANNOT TELL YOU. On SwiftShader the draws and compiles queue and are charged at the
+ * first call that blocks, and in this harness that is `readPixels` (issue #883's own
+ * measurement: `drawElements` over 60,000 calls returns in ~0 ms). So this total is the
+ * synchronisation point, NOT the cost of moving the bytes. A change that reads fewer pixels
+ * moves the pixel count honestly; whether it moves the TIME depends on how much queued work
+ * was waiting behind the read, which is why both are printed.
+ */
+function readbackInstrumentSource() {
+  return `(() => {
+  const stats = { calls: 0, ms: 0, pixels: 0, each: [] };
+  globalThis.__glReadback = stats;
+  stats.wrapped = [];
+  for (const name of ['WebGLRenderingContext', 'WebGL2RenderingContext']) {
+    const Ctor = globalThis[name];
+    if (!Ctor || !Ctor.prototype) continue;
+    // OWN property only -- see the runner's comment. An inherited \`readPixels\` is already
+    // wrapped on the prototype it came from, and wrapping it again would count twice.
+    if (!Object.prototype.hasOwnProperty.call(Ctor.prototype, 'readPixels')) continue;
+    stats.wrapped.push(name);
+    const original = Ctor.prototype.readPixels;
+    Ctor.prototype.readPixels = function (x, y, w, h, ...rest) {
+      const started = performance.now();
+      try {
+        return original.call(this, x, y, w, h, ...rest);
+      } finally {
+        const took = performance.now() - started;
+        stats.ms += took;
+        stats.calls += 1;
+        stats.pixels += w * h;
+        // Per call, because the totals cannot tell "107 reads of 0.76 s each" from "three
+        // reads carrying the whole cost". Those want opposite fixes, and the harness makes
+        // about a hundred calls, so keeping all of them costs nothing.
+        //
+        // "at" is the harness source line this read came from, taken from the stack rather
+        // than by instrumenting check(): it keeps the instrument entirely inside the runner,
+        // and a line number is what a reader needs to go and look. Absent if the stack has no
+        // harness frame, which is a fact about the call, not a failure to record it.
+        // NO BACKTICKS ANYWHERE BELOW: this whole function body is a template literal, and one
+        // in a comment ends the string. That is what broke this file once already.
+        // The FIRST harness frame is the readback helper itself -- every full-canvas read goes
+        // through grab(), so naming it points at one line for all 53 call sites and says
+        // nothing. What a reader needs is the check that called it, so the helpers are skipped
+        // and the next harness frame is taken.
+        let at = null;
+        try {
+          const frames = String(new Error().stack ?? '').split('\\n')
+            .filter((f) => f.includes('harness.ts'))
+            .filter((f) => !/\\bat (grab|readPixel)\\b/.test(f));
+          at = frames.length > 0 ? frames[0].trim().replace(/^at\\s+/, '').slice(-64) : null;
+        } catch { at = null; }
+        stats.each.push({ w: w, h: h, ms: took, at: at });
+      }
+    };
+  }
+})()`;
+}
 /**
  * The three version these timings belong to, read from the INSTALLED package (issue #867).
  * `npm i --no-save three@0.169.0` moves the install and leaves package.json's `^0.186.0`
@@ -90,6 +162,7 @@ try {
   // and which never touches the audio device. Installing it here would therefore change
   // nothing except what a reader has to verify.
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(readbackInstrumentSource());
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(String(e)));
   // `load` is a WEAK readiness signal here and the budget has to reflect that. The harness
@@ -312,6 +385,48 @@ try {
         checks: timed.map((r) => ({ name: r.name, ms: r.ms, pass: r.pass })),
       }, null, 2));
       console.log(`    profile written to ${process.env.GL_PROFILE_OUT}`);
+    }
+  }
+  // WHERE THE READBACK GOES (issue #883). Reported beside the per-check timing because the
+  // two answer different questions: that one says WHICH check is expensive, this one says how
+  // much of the expense is the harness stopping to look at pixels. `pixels` is the part that
+  // does not move with the machine's load, so it is the honest before/after for a change that
+  // narrows what a check reads -- see `readbackInstrumentSource` for what the time does and
+  // does not mean on SwiftShader.
+  const readback = await page.evaluate(() => globalThis.__glReadback ?? null);
+  if (readback === null) {
+    console.log('\n  readback: NOT INSTRUMENTED -- the wrapper did not install, so no share is reported');
+  } else {
+    // Recomputed rather than reusing the block-scoped total above, so this line cannot start
+    // reporting a stale or undefined denominator if that block's shape changes.
+    const bodyMs = timed.reduce((a, r) => a + r.ms, 0);
+    const share = bodyMs > 0
+      ? `${((readback.ms / bodyMs) * 100).toFixed(1)}% of check-body time`
+      : 'no check-body total to compare against';
+    // The wrapped prototypes are named, not counted: an empty list with a non-zero call total
+    // is impossible, and a zero call total with a non-empty list is a real finding (nothing
+    // read back) rather than a broken instrument. Printing which lets the two be told apart.
+    console.log(
+      `\n  readback: ${readback.calls} readPixels call(s), ${(readback.ms / 1000).toFixed(1)}s`
+      + ` (${share}), ${(readback.pixels / 1e6).toFixed(1)}M pixel(s)`
+      + `  [wrapped: ${(readback.wrapped ?? []).join(', ') || 'nothing'}]`,
+    );
+    // THE ARITHMETIC THAT DECIDES WHAT TO FIX (issue #883). If the cost tracked the pixels,
+    // reading a region rather than the whole canvas would recover it. If it does not, the
+    // cost is the queue this read drains and only reading FEWER TIMES, or drawing less before
+    // each read, can move it. The ratio is printed rather than argued so the next person does
+    // not narrow fifty call sites for nothing.
+    const each = readback.each ?? [];
+    if (each.length > 0) {
+      const perPixelUs = (readback.ms * 1000) / Math.max(1, readback.pixels);
+      const biggest = [...each].sort((a, b) => b.ms - a.ms).slice(0, 5);
+      const topMs = biggest.reduce((a, c) => a + c.ms, 0);
+      console.log(`            ${perPixelUs.toFixed(3)} us/pixel over ${each.length} call(s);`
+        + ` the 5 slowest are ${((topMs / readback.ms) * 100).toFixed(1)}% of readback time`);
+      for (const c of biggest) {
+        console.log(`              ${(c.ms / 1000).toFixed(2).padStart(6)}s  ${String(c.w)}x${String(c.h)}`
+          + `  ${c.at ?? '(no harness frame)'}`);
+      }
     }
   }
   console.log(
