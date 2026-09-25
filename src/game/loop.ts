@@ -133,7 +133,8 @@ import {
   type RenderOverrides,
   type RenderQuality,
 } from '../render/quality';
-import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
+import type { SessionDiagnostics } from './dev-diagnostics';
+import { readBuildIdentity } from './build-identity';
 import { surfaceName } from './dev-exports';
 import { downloadCanvas, downloadText } from './downloads';
 import { resetDeveloperData, resolveStorage } from './storage';

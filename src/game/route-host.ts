@@ -25,7 +25,8 @@ import type { UiAction } from '../input/ui-actions';
 import { createModalityTracker, type Modality } from './modality';
 import type { VersusConfig } from './versus-config';
 import type { Assignment, SlotSource } from '../input/assignment';
-import { readBuildIdentity, type SessionDiagnostics } from './dev-diagnostics';
+import type { SessionDiagnostics } from './dev-diagnostics';
+import { readBuildIdentity } from './build-identity';
 import type { DevActionPort } from './dev-actions';
 import type { DevExportPort } from './dev-exports';
 

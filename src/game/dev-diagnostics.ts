@@ -1,5 +1,9 @@
 import { FLAG_REGISTRY, type DevFlags } from './devflags';
 import { canonicalDevSearch, explainDevConfig, type DevConfigNote } from './dev-config';
+// The TYPE only, and from the module that now owns it (issue #946). `readBuildIdentity` moved to
+// `build-identity.ts` because ordinary paths call it; this module is developer surface and pulls
+// `devflags`'s registry and `dev-config.ts` in with it, so it must not sit on an ordinary path.
+import type { BuildIdentity } from './build-identity';
 
 /**
  * WHAT A RUNNING DEVELOPER SESSION IS, as text somebody else can act on (issue #247).
@@ -28,42 +32,6 @@ import { canonicalDevSearch, explainDevConfig, type DevConfigNote } from './dev-
  * below, and the query string is the one the page was opened with, canonicalised through the
  * same model the game parses it with.
  */
-
-/**
- * Which build produced the page.
- *
- * `known: false` is a first-class answer, not a fallback dressed as one. A developer build,
- * a local `npm run dev`, and anything served from a tree that never went through the
- * deploy workflow genuinely have no commit to name, and the acceptance criterion is that
- * copied diagnostics "identify local/unknown builds honestly" -- so this says unknown rather
- * than inventing a version string or quietly printing an empty field.
- */
-export interface BuildIdentity {
-  /** The commit the bundle was built from, or `''` when nothing supplied one. */
-  readonly commit: string;
-  readonly known: boolean;
-}
-
-/** The shape `import.meta.env` presents to this module. Injected so nothing here is build-time. */
-export interface BuildEnv {
-  readonly VITE_BUILD_SHA?: string;
-}
-
-/**
- * Read the build identity out of the bundle's environment.
- *
- * `VITE_`-prefixed because that is the only prefix Vite exposes to client code, and the
- * same mechanism `measure.yml` already uses for `VITE_RUN_MEASURE`. The deploy workflow
- * passes the commit; every other way of running this game does not, and gets `known: false`.
- *
- * A whitespace-only value is treated as absent: an unset variable in a shell substitution
- * usually arrives as `''`, and a build that printed "commit: " would be claiming to know
- * something it does not.
- */
-export function readBuildIdentity(env: BuildEnv): BuildIdentity {
-  const raw = (env.VITE_BUILD_SHA ?? '').trim();
-  return raw === '' ? { commit: '', known: false } : { commit: raw, known: true };
-}
 
 /**
  * The live world, as the game layer sees it at the moment Copy is pressed.

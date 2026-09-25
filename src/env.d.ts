@@ -8,7 +8,7 @@
  *
  * Optional, and that is the contract rather than an oversight: a `npm run dev` server, a
  * local `npm run build`, and any tree that never went through the deploy workflow genuinely
- * have no commit to name. `readBuildIdentity` in `dev-diagnostics.ts` turns its absence into
+ * have no commit to name. `readBuildIdentity` in `build-identity.ts` turns its absence into
  * an explicit unknown, which issue #247 requires a copied report to state honestly rather
  * than paper over with an empty field.
  */
