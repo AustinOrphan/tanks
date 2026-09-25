@@ -1,13 +1,13 @@
 {
   "id": "gallery-workbench-revokes-before-the-download",
-  "file": "src/game/gallery-workbench.ts",
+  "file": "src/game/canvas-still.ts",
   "find": "    link.click();\n    setTimeout(() => URL.revokeObjectURL(url), 0);",
   "replace": "    URL.revokeObjectURL(url);\n    link.click();",
   "expect": "killed",
   "tests": [
-    "src/game/gallery-workbench.test.ts"
+    "src/game/canvas-still.test.ts"
   ],
-  "why": "Issue #731. Releases the object URL before the link is followed, which can cancel the download it names.",
+  "why": "Issue #731. Releases the object URL before the link is followed, which can cancel the download it names. The subject moved from src/game/gallery-workbench.ts to src/game/canvas-still.ts in issue #946, so that wiring can bind it without pulling the gallery pane into every ordinary page load; the id is kept so a `--only` selection written against it still resolves.",
   "killedBy": [
     "downloadCanvasStill (issue #731) encodes the canvas as a PNG and downloads it under the given name"
   ]

@@ -14,7 +14,7 @@
 // what is under test here is what happens on the other side of that callback with no
 // session, so binding these cases to markup would only make them fail for reasons this
 // file is not about.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createRouteUi, type RouteUi, type RouteUiDeps, type StyleSink } from './route-ui';
 import type { Hud } from './hud';
 import { createGameSessionHost } from './session-host';
@@ -764,11 +764,27 @@ describe('the gallery workbench is mounted with its pane and released with it (i
   const link = (f: Fixture): string =>
     f.hud.galleryBody.querySelector<HTMLTextAreaElement>('.hud-gallery-link')?.value ?? '';
 
-  it('mounts from the page link on open, and disposes the handle and empties the body on close', () => {
+  /**
+   * Opens the pane and waits for its body, because the mount is behind a dynamic import
+   * (issue #946).
+   *
+   * Awaits the REAL import rather than injecting a fake loader: the seam the page uses is the
+   * one these tests should be exercising, and a stand-in loader would leave it with no
+   * coverage at all. The wait is bounded by `vi.waitFor`, so a mount that never lands fails
+   * here instead of leaving every later assertion reading an empty body.
+   */
+  const openGallery = async (f: Fixture): Promise<void> => {
+    f.fire('onGalleryOpen');
+    await vi.waitFor(() => {
+      expect(f.hud.galleryBody.childElementCount, 'the pane body was never built').toBeGreaterThan(0);
+    });
+  };
+
+  it('mounts from the page link on open, and disposes the handle and empties the body on close', async () => {
     const { rec, value } = bench('scene:destroyed,view:low,age:4');
     const f = fixture({ galleryWorkbench: value });
     expect(rec.built, 'nothing is built before the pane opens').toEqual([]);
-    f.fire('onGalleryOpen');
+    await openGallery(f);
     expect(rec.built).toHaveLength(1);
     expect(rec.built[0]).toMatchObject({ subject: { kind: 'moment', id: 'destroyed' }, view: 'low' });
     expect(link(f)).toBe('?dev=1&gallery=scene:destroyed,view:low,age:4');
@@ -777,12 +793,12 @@ describe('the gallery workbench is mounted with its pane and released with it (i
     expect(f.hud.galleryBody.childElementCount).toBe(0);
   });
 
-  it('hands the bound still saver to the pane, so Download Still reaches it (issue #731)', () => {
+  it('hands the bound still saver to the pane, so Download Still reaches it (issue #731)', async () => {
     // Would catch: the pane mounted without `saveStill`, which hides the button on the real page.
     const { value } = bench('scene:destroyed');
     const saved: string[] = [];
     const f = fixture({ galleryWorkbench: { ...value, saveStill: (_canvas, name) => saved.push(name) } });
-    f.fire('onGalleryOpen');
+    await openGallery(f);
     const button = f.hud.galleryBody.querySelector<HTMLButtonElement>('.hud-gallery-still');
     if (button === null) throw new Error('the body built no Download Still button');
     expect(button.closest<HTMLElement>('.hud-gallery-stillrow')?.hidden).toBe(false);
@@ -790,25 +806,25 @@ describe('the gallery workbench is mounted with its pane and released with it (i
     expect(saved).toEqual(['gallery-destroyed-frame0-640x400@1x.png']);
   });
 
-  it('reopens on the selection it last showed, not on the page link', () => {
+  it('reopens on the selection it last showed, not on the page link', async () => {
     // Would catch: every open re-reading `initial`, which throws away a selection built by hand.
     const { rec, value } = bench('scene:destroyed');
     const f = fixture({ galleryWorkbench: value });
-    f.fire('onGalleryOpen');
+    await openGallery(f);
     const view = f.hud.galleryBody.querySelector<HTMLSelectElement>('[data-field="view"]');
     if (view === null) throw new Error('the body built no view selector');
     view.value = 'low';
     view.dispatchEvent(new Event('change'));
     f.fire('onGalleryClose');
-    f.fire('onGalleryOpen');
+    await openGallery(f);
     expect(rec.built.at(-1)).toMatchObject({ subject: { kind: 'moment', id: 'destroyed' }, view: 'low' });
     expect(link(f)).toBe('?dev=1&gallery=scene:destroyed,view:low');
   });
 
-  it('teardown disposes a pane that is still open, once', () => {
+  it('teardown disposes a pane that is still open, once', async () => {
     const { rec, value } = bench(null);
     const f = fixture({ galleryWorkbench: value });
-    f.fire('onGalleryOpen');
+    await openGallery(f);
     f.routeUi.disposeGallery();
     f.routeUi.disposeGallery();
     f.fire('onGalleryClose');

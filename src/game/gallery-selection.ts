@@ -244,22 +244,3 @@ export function formatGallerySelection(selection: GallerySelection, catalog: Gal
   if (selection.frame > 0) parts.push(`age:${selection.frame}`);
   return parts.join(',');
 }
-
-/**
- * A page search carrying `value` as its `gallery` parameter, with the developer gate on and
- * every other parameter kept in place. `:` and `,` are left literal -- both are legal in a
- * query -- so the link reads the way the grammar above is written.
- *
- * @param search a `location.search`, with or without the leading `?`.
- */
-export function gallerySearch(search: string, value: string): string {
-  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-  params.delete('gallery');
-  if (params.get('dev') !== '1') {
-    params.delete('dev');
-    params.set('dev', '1');
-  }
-  const rest = params.toString();
-  const encoded = encodeURIComponent(value).replace(/%3A/gi, ':').replace(/%2C/gi, ',');
-  return `?${rest === '' ? '' : `${rest}&`}gallery=${encoded}`;
-}

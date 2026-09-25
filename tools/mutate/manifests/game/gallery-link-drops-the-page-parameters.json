@@ -1,13 +1,13 @@
 {
   "id": "gallery-link-drops-the-page-parameters",
-  "file": "src/game/gallery-selection.ts",
+  "file": "src/game/gallery-link.ts",
   "find": "  const rest = params.toString();",
   "replace": "  const rest = '';",
   "expect": "killed",
   "tests": [
-    "src/game/gallery-selection.test.ts"
+    "src/game/gallery-link.test.ts"
   ],
-  "why": "Copy Link must keep the page's other parameters -- a seed, a storage namespace, a campaign tag -- so the link reopens the same page and not a bare one.",
+  "why": "Copy Link must keep the page's other parameters -- a seed, a storage namespace, a campaign tag -- so the link reopens the same page and not a bare one. The subject moved from src/game/gallery-selection.ts to src/game/gallery-link.ts in issue #946, so that wiring can bind it without pulling the gallery pane into every ordinary page load; the id is kept so a `--only` selection written against it still resolves.",
   "killedBy": [
     "gallerySearch (issue #730) sets the gallery parameter with the gate on, keeping every other parameter"
   ]

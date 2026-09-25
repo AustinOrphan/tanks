@@ -8,7 +8,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ACCENTS, PALETTE, SKINS, SPAWN_ANIMATIONS } from '../presentation/customization';
 import type { GalleryCatalog } from './gallery-selection';
 import {
-  downloadCanvasStill,
   mountGalleryWorkbench,
   type GalleryWorkbenchDeps,
   type GalleryWorkbenchHandle,
@@ -336,43 +335,5 @@ describe('the gallery workbench offers the command line for its selection (issue
   it('hides Download Still when nothing can save one', () => {
     mount(rig('scene:fire'));
     expect(q('.hud-gallery-stillrow').hidden).toBe(true);
-  });
-});
-
-describe('downloadCanvasStill (issue #731)', () => {
-  it('encodes the canvas as a PNG and downloads it under the given name', () => {
-    const canvas = document.createElement('canvas');
-    const encoded: string[] = [];
-    canvas.toBlob = (cb: BlobCallback, type?: string) => {
-      encoded.push(type ?? '');
-      cb(new Blob(['png'], { type: 'image/png' }));
-    };
-    // jsdom implements neither half of the object-URL pair, so both are stood in for, and the
-    // deferred revoke is run here rather than left to fire after the stand-ins are gone.
-    const originalCreate = URL.createObjectURL;
-    const originalRevoke = URL.revokeObjectURL;
-    URL.createObjectURL = vi.fn(() => 'blob:still');
-    const revoked: string[] = [];
-    URL.revokeObjectURL = (url: string) => revoked.push(url);
-    const clicked: { href: string; download: string }[] = [];
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
-      clicked.push({ href: this.href, download: this.download });
-    });
-    vi.useFakeTimers();
-    let revokedBeforeTimers: string[] = [];
-    try {
-      downloadCanvasStill(canvas, 'gallery-fire-frame10-640x400@1x.png');
-      revokedBeforeTimers = [...revoked];
-      vi.runAllTimers();
-    } finally {
-      vi.useRealTimers();
-      click.mockRestore();
-      URL.createObjectURL = originalCreate;
-      URL.revokeObjectURL = originalRevoke;
-    }
-    expect(encoded).toEqual(['image/png']);
-    expect(clicked).toEqual([{ href: 'blob:still', download: 'gallery-fire-frame10-640x400@1x.png' }]);
-    // Released, but only after the click: revoking first would cancel the download it names.
-    expect([revokedBeforeTimers, revoked]).toEqual([[], ['blob:still']]);
   });
 });
