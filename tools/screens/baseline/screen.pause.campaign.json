@@ -28,7 +28,7 @@
       "visible": true,
       "box": {
         "x": 580,
-        "y": 543,
+        "y": 544,
         "w": 120,
         "h": 44
       },
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -70,7 +70,7 @@
       "visible": true,
       "box": {
         "x": 592,
-        "y": 415,
+        "y": 416,
         "w": 97,
         "h": 44
       },

@@ -186,6 +186,34 @@
   --hud-control-min: 44px;
   --hud-control-touch: 56px;
 
+  /* Type scale. Every HUD font-size is `rem` or `em` so that a reader who raises their
+   * browser's font size actually moves this interface. Before this, NOTHING moved: sampling
+   * the visible, directly-text-bearing descendants of `.hud-panel`, `.hud-topbar` and
+   * `.hud-hud` on the main menu and driving the root from 16px to 32px left 11 of 11 of them
+   * at their original size (issue #971).
+   *
+   * THIS SCALE RENAMES TODAY'S SIZES; IT DOES NOT RE-PROPORTION THEM. Each step is the exact
+   * rem equivalent of the px value it replaces at the 16px default -- every one a binary
+   * fraction, so the conversion moves no pixel at default settings and the screen baselines
+   * do not shift. Choosing different proportions is a design decision, and deliberately not
+   * one this commit takes.
+   *
+   * Steps are numbered rather than named, like `--hud-space-*`, and exist only for values
+   * used more than once. The six one-offs stay literal at their call site -- 1rem, 1.0625rem,
+   * 1.1875rem, the 3.5rem title, the 4.5rem splash title and `.hud-count`'s clamp -- because
+   * a token used once names a step that is not a step.
+   *
+   * There is deliberately NO `:root { font-size }`. Pinning it is the classic way to break
+   * exactly the preference this scale exists to honour: rem would then resolve against our
+   * number instead of the reader's. The 25 `em` declarations elsewhere in this file need no
+   * change -- they inherit from these anchors and scale with them. */
+  --hud-type-1: 0.6875rem;
+  --hud-type-2: 0.75rem;
+  --hud-type-3: 0.8125rem;
+  --hud-type-4: 0.9375rem;
+  --hud-type-5: 1.125rem;
+  --hud-type-6: 1.25rem;
+
   /* Safe areas. The floor the touch controls keep off a display edge when the device
    * reports no inset; `max(--hud-safe-inset, env(safe-area-inset-*))` is the pattern.
    * There is deliberately no panel-width token: no two panels in this stylesheet share a
@@ -316,7 +344,8 @@
    * between, not because the face changed.
    *
    * FAMILY only. `font: inherit` would take size and weight too, and those are set per control
-   * (a primary slab at 20px, a tertiary at 15px) -- inheriting them would flatten the scale. */
+   * (a primary slab at --hud-type-6, a tertiary at --hud-type-4) -- inheriting them would
+   * flatten the scale. */
   font-family: inherit;
   min-height: var(--hud-control-min);
   min-width: var(--hud-control-min);
@@ -347,6 +376,31 @@
   border: none;
   border-radius: var(--hud-radius-md);
   font-weight: var(--hud-weight-normal);
+  /* SIZE, though, has to be said out loud, and the note above is why it was missed: refusing
+   * `font: inherit` is not the same as leaving size unset. With family inherited and size not,
+   * the UA `font` shorthand's SIZE survived on every control no per-control rule named -- and
+   * that is most of them. Measured on the built page at 1280x800 under `?dev=1`: 267 of the 277
+   * visible <button> elements computed to 13.3333px, Chromium's own button default, which is an
+   * absolute value and so ignored the reader's font size entirely (issue #971).
+   *
+   * This does NOT flatten the scale the note above protects. It is the base of it: every
+   * per-control rule is more specific and still wins, so a primary slab is still --hud-type-6
+   * and a tertiary still --hud-type-4. What changes is the controls that named no size, which
+   * now sit on a step of the scale instead of on a browser's default.
+   *
+   * It is also the one declaration in this change that moves a recorded pixel, and it moves
+   * more of them than a search for button-ish class names suggests: `screens:check` reports
+   * 22 of 46 states failing and `screens:accept --all` rewrites 30 of 46 baselines. Most
+   * affected selectors are buttons by ROLE rather than by name -- `.hud-diag-copy`,
+   * `.hud-devreset`, `.hud-change-setup`, `.hud-alert-retry`, the various `-back` controls --
+   * which is why the first estimate here, made by grepping for `btn`, was wrong. The recorded
+   * changes are `font-size` 13.3333px -> 13px and box widths narrowing by 3-5px where a
+   * button's text sets its width; no colour or opacity value moves.
+   *
+   * The 0.33px is deliberate: a step of the scale, rather than four decimal places of a UA
+   * default that differs per engine anyway. There is no zero-churn option that also fixes the
+   * scaling -- matching the default in rem would record 13.3328px and move the same baselines. */
+  font-size: var(--hud-type-3);
   background: var(--hud-quiet-fill);
   color: var(--hud-text);
 }
@@ -469,7 +523,7 @@
 .ui-btn--primary {
   border-radius: var(--hud-radius-lg);
   padding: 12px 28px;
-  font-size: 20px;
+  font-size: var(--hud-type-6);
   font-weight: var(--hud-weight-strong);
   background: #4fd06a;
   color: #06340f;
@@ -859,7 +913,7 @@
 }
 
 .hud-stat {
-  font-size: 18px;
+  font-size: var(--hud-type-5);
   font-weight: var(--hud-weight-normal);
   letter-spacing: 0.5px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
@@ -1005,7 +1059,7 @@
   }
 
   .hud-stat {
-    font-size: 13px;
+    font-size: var(--hud-type-3);
     letter-spacing: 0;
     /* "Lives:" and its number belong on one line. Without this each stat wraps inside
      * its own flex item and the row reads as six stacked fragments. */
@@ -1026,7 +1080,7 @@
   }
 
   .hud-stat {
-    font-size: 12px;
+    font-size: var(--hud-type-2);
   }
 }
 
@@ -1251,7 +1305,7 @@
   min-width: var(--hud-control-touch);
   min-height: var(--hud-control-touch);
   padding: 8px 14px;
-  font-size: 15px;
+  font-size: var(--hud-type-4);
   font-weight: var(--hud-weight-strong);
   letter-spacing: 1px;
   background: rgba(216, 221, 230, 0.18);
@@ -1318,7 +1372,7 @@
 
 .hud-splash-title {
   margin: 0;
-  font-size: 72px;
+  font-size: 4.5rem;
   font-weight: var(--hud-weight-strong);
   letter-spacing: 2px;
   color: var(--hud-text-bright);
@@ -1331,7 +1385,7 @@
  * setting as well as the OS one, which this line used to promise and not deliver. */
 .hud-splash-hint {
   margin: 0;
-  font-size: 17px;
+  font-size: 1.0625rem;
   color: #aeb6c2;
   animation: hud-splash-pulse 2s ease-in-out infinite;
 }
@@ -1348,7 +1402,7 @@
 
 .hud-title {
   margin: 0;
-  font-size: 56px;
+  font-size: 3.5rem;
   /* 700, not 900: Plex's axis ends at 700 and a heavier request would be synthesised. */
   font-weight: 700;
   letter-spacing: 2px;
@@ -1357,7 +1411,7 @@
 
 .hud-subtitle {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--hud-type-5);
   opacity: 0.9;
 }
 
@@ -1407,7 +1461,7 @@
 .hud-versus-open,
 .hud-campaign-open {
   margin-top: 2px;
-  font-size: 15px;
+  font-size: var(--hud-type-4);
 }
 
 /* The practice end screen's Choose Level (issue #323) is hidden on every other screen,
@@ -1525,7 +1579,7 @@
  * its neighbours use while keeping its own identity and handlers.
  */
 .hud-new-game--tertiary {
-  font-size: 15px;
+  font-size: var(--hud-type-4);
   opacity: 0.85;
 }
 
@@ -1620,7 +1674,7 @@
 
 .hud-settings-section h2 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--hud-type-3);
   font-weight: var(--hud-weight-normal);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2425,7 +2479,7 @@
    was SMALLER than the paragraph beneath it. */
 .hud-about-subtitle {
   margin: var(--hud-space-2) 0 0;
-  font-size: 18px;
+  font-size: var(--hud-type-5);
   color: var(--hud-text-bright);
 }
 
@@ -2435,7 +2489,7 @@
 .hud-about-subline {
   margin: 0;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--hud-type-3);
   opacity: 0.8;
 }
 
@@ -2458,7 +2512,7 @@
 }
 
 .hud-legal-link-hint {
-  font-size: 11px;
+  font-size: var(--hud-type-1);
   opacity: 0.7;
 }
 
@@ -2487,7 +2541,7 @@
 /* The state IN WORDS beside `aria-expanded` (issue #630's class of defect: a fact carried
    only by a rotating caret is carried only by shape). */
 .hud-legal-toggle-state {
-  font-size: 11px;
+  font-size: var(--hud-type-1);
   opacity: 0.75;
 }
 
@@ -2500,7 +2554,7 @@
   border-radius: var(--hud-radius-sm);
   background: var(--hud-scrim-panel);
   text-align: left;
-  font-size: 13px;
+  font-size: var(--hud-type-3);
   line-height: 1.5;
 }
 
@@ -2513,20 +2567,20 @@
 
 .hud-legal-title {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--hud-type-4);
   color: var(--hud-text-bright);
 }
 
 /* Which file this is, so a reader can go and check it against the repository. */
 .hud-legal-source {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--hud-type-1);
   opacity: 0.7;
 }
 
 .hud-legal-heading {
   margin: var(--hud-space-2) 0 0;
-  font-size: 13px;
+  font-size: var(--hud-type-3);
   color: var(--hud-text-bright);
 }
 
@@ -2560,7 +2614,7 @@
   padding: var(--hud-space-2);
   border-radius: var(--hud-radius-sm);
   background: var(--hud-scrim-pane);
-  font-size: 11px;
+  font-size: var(--hud-type-1);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -2568,7 +2622,7 @@
 .hud-legal-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--hud-type-2);
 }
 
 /*
@@ -3395,7 +3449,7 @@
 .hud-level-btn {
   width: var(--hud-control-min);
   height: var(--hud-control-min);
-  font-size: 18px;
+  font-size: var(--hud-type-5);
   font-weight: var(--hud-weight-strong);
 }
 
@@ -3456,7 +3510,7 @@
   text-align: center;
   pointer-events: none;
   opacity: 0;
-  font-size: 20px;
+  font-size: var(--hud-type-6);
   font-weight: var(--hud-weight-strong);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
@@ -3522,7 +3576,7 @@
   display: flex;
   align-items: center;
   gap: var(--hud-space-3);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: var(--hud-weight-normal);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
@@ -3640,7 +3694,7 @@
   padding: 0 6px;
   border: 1px solid currentColor;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--hud-type-2);
   line-height: 16px;
   pointer-events: none;
   animation: hud-stock-badge var(--hud-duration-slow) ease-out 1 both;
@@ -3805,7 +3859,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: clamp(72px, 20vmin, 240px);
+  font-size: clamp(4.5rem, 20vmin, 15rem);
   font-weight: var(--hud-weight-strong);
   font-variant-numeric: tabular-nums;
   color: var(--hud-text-bright);
@@ -4415,7 +4469,7 @@
  * The intent is the opposite case and that is why it keeps its min-height: it varies card to
  * card WITHIN a row, which is the difference the owner actually reported. */
 .hud-versus-map-config {
-  font-size: 11px;
+  font-size: var(--hud-type-1);
   opacity: 0.75;
 }
 
@@ -4444,7 +4498,7 @@
  * ellipsises today. The clamp is the guarantee that a future board cannot reintroduce the
  * resize, not a licence to write past it. */
 .hud-versus-map-intent {
-  font-size: 11px;
+  font-size: var(--hud-type-1);
   line-height: 1.35;
   opacity: 0.65;
   white-space: normal;
@@ -4675,7 +4729,7 @@
 .hud-versus-setup--header .hud-versus-header h1 {
   flex: 1 1 auto;
   margin: 0;
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 
 /* Start alone at the foot then, capped rather than stretched: full width it becomes a slab

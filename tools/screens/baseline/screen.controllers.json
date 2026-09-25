@@ -71,7 +71,7 @@
       "box": {
         "x": 605,
         "y": 548,
-        "w": 70,
+        "w": 69,
         "h": 44
       },
       "text": "Back",
@@ -80,7 +80,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

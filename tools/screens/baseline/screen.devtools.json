@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 561,
+        "x": 562,
         "y": 268,
-        "w": 158,
+        "w": 155,
         "h": 44
       },
       "text": "Controller Self-Test",
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 568,
+        "x": 569,
         "y": 380,
-        "w": 144,
+        "w": 142,
         "h": 44
       },
       "text": "Copy Diagnostics",
@@ -80,7 +80,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -90,9 +90,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 569,
+        "x": 570,
         "y": 436,
-        "w": 143,
+        "w": 140,
         "h": 44
       },
       "text": "Pin Current Seed",
@@ -101,7 +101,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -113,7 +113,7 @@
       "box": {
         "x": 605,
         "y": 876,
-        "w": 70,
+        "w": 69,
         "h": 44
       },
       "text": "Back",
@@ -122,7 +122,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

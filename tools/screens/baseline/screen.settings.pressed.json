@@ -29,7 +29,7 @@
       "box": {
         "x": 630,
         "y": 221,
-        "w": 96,
+        "w": 94,
         "h": 44
       },
       "text": "Controllers",
@@ -38,7 +38,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.28)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

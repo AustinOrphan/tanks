@@ -50,7 +50,7 @@
       "box": {
         "x": 604,
         "y": 424,
-        "w": 73,
+        "w": 72,
         "h": 44
       },
       "text": "Retry",
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -69,9 +69,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 578,
+        "x": 579,
         "y": 480,
-        "w": 123,
+        "w": 121,
         "h": 44
       },
       "text": "Back to menu",
@@ -80,7 +80,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

@@ -1,0 +1,14 @@
+{
+  "id": "ui-btn-falls-back-to-the-ua-font-size",
+  "file": "src/game/hud.css",
+  "find": "   * scaling -- matching the default in rem would record 13.3328px and move the same baselines. */\n  font-size: var(--hud-type-3);",
+  "replace": "   * scaling -- matching the default in rem would record 13.3328px and move the same baselines. */",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud.css type scales with the reader (issue #971) gives .ui-btn its own font-size, so a control with no size variant is not left on the UA default"
+  ],
+  "why": "The `.ui-btn` primitive stops naming a size, which is the state issue #971 found: a <button>'s UA `font` shorthand carries SIZE as well as family, the primitive inherits family only, and so every control that names no size of its own keeps Chromium's 13.3333px button default -- an absolute value that ignores the reader's font size. Measured over the buttons present in the DOM on the built main menu, 267 of 277 sat on it. The mutation is invisible to every other check in the suite: the stylesheet is still fully relative (the px check beside this one passes), every token still resolves, and jsdom applies no UA button font at all, so a computed-style assertion could not see it either. That is why this case reads the base rule's text rather than a computed value."
+}

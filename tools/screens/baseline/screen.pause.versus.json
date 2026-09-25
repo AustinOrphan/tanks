@@ -28,7 +28,7 @@
       "visible": true,
       "box": {
         "x": 583,
-        "y": 572,
+        "y": 573,
         "w": 115,
         "h": 44
       },
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 578,
-        "y": 370,
-        "w": 125,
+        "x": 579,
+        "y": 371,
+        "w": 123,
         "h": 44
       },
       "text": "Change Setup",
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
@@ -70,7 +70,7 @@
       "visible": true,
       "box": {
         "x": 592,
-        "y": 444,
+        "y": 445,
         "w": 97,
         "h": 44
       },

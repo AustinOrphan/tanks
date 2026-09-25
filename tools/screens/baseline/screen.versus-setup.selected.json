@@ -30,7 +30,7 @@
         "x": 272,
         "y": 340,
         "w": 736,
-        "h": 390
+        "h": 387
       },
       "text": "Arena 12/3/4 players · FFA and TeamsSparse destructibles on a mid-size board; cover is mostly permanent, lanes stay stable.Arena 22/3/4 players · FFA and TeamsDestructible-heavy centre; opens up as a ",
       "style": {
@@ -51,7 +51,7 @@
         "x": 272,
         "y": 340,
         "w": 240,
-        "h": 129
+        "h": 128
       },
       "text": "Arena 12/3/4 players · FFA and TeamsSparse destructibles on a mid-size board; cover is mostly permanent, lanes stay stable.",
       "style": {
@@ -59,7 +59,7 @@
         "opacity": "1",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

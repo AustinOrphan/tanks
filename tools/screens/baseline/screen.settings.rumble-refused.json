@@ -27,9 +27,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 520,
+        "x": 522,
         "y": 221,
-        "w": 100,
+        "w": 98,
         "h": 44
       },
       "text": "Rumble: On",
@@ -38,7 +38,7 @@
         "opacity": "0.45",
         "color": "rgb(216, 221, 230)",
         "background-color": "rgba(216, 221, 230, 0.16)",
-        "font-size": "13.3333px",
+        "font-size": "13px",
         "margin-top": "0px",
         "margin-bottom": "0px"
       }

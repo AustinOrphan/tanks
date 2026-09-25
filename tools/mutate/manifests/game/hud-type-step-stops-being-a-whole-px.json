@@ -1,0 +1,14 @@
+{
+  "id": "hud-type-step-stops-being-a-whole-px",
+  "file": "src/game/hud.css",
+  "find": "  --hud-type-1: 0.6875rem;",
+  "replace": "  --hud-type-1: 0.7rem;",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "hud.css type scales with the reader (issue #971) spends every step of the scale, and each step is a whole number of px at the default"
+  ],
+  "why": "One step of the #971 type scale stops being the exact rem equivalent of the px value it replaced: 0.6875rem is 11px at the 16px default, 0.7rem is 11.2px. The whole claim of that commit is that it RENAMES today's sizes rather than re-proportioning them -- which is what let it move no pixel for a reader who changed nothing, and what makes the 30 accepted baselines attributable to one deliberate declaration instead of to a re-tune nobody reviewed. Under the mutation every `--hud-type-1` control silently drifts 0.2px, which is exactly the size of change that passes review and then shows up as unexplained baseline churn three PRs later. Not caught by the px check beside it: 0.7rem is not px, so the stylesheet still looks fully relative."
+}
