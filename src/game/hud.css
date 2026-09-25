@@ -2921,12 +2921,26 @@
 
 /* The live tank preview -- render/preview.ts draws into this canvas with its OWN
  * WebGL context (see that file's doc comment on why a second context is safe here).
- * Fixed size rather than fluid: it is a close-up of one tank, not a viewport that
- * benefits from filling available space, and a fixed size keeps
- * render/preview.ts's camera framing (fitCameraToArea against PREVIEW_AREA_W/H)
- * predictable rather than re-fitting against an arbitrary box. Widescreen (260x190,
- * not square) because the tank itself is -- HULL_LEN plus the turret and muzzle
- * overhang the nose further than the hull is wide. */
+ * A DECLARED size rather than a fluid one: it is a close-up of one tank, not a viewport
+ * that benefits from filling available space. Widescreen (260x190, not square) because the
+ * tank itself is -- HULL_LEN plus the turret and muzzle overhang the nose further than the
+ * hull is wide.
+ *
+ * THE HEIGHT IS NOT FIXED IN PRACTICE, and an earlier version of this comment claimed the
+ * fixed size keeps the camera framing "predictable rather than re-fitting against an
+ * arbitrary box". It does re-fit: this canvas is a flex item in a column pane, so it shrinks
+ * on the main axis when the pane is short. Measured on the built page, opening Customize at
+ * a 1280px width: 260x190 at viewport height 700 and above, 260x155 at 600, and a floor of
+ * 260x130 from 500 down, where the pane scrolls instead. So the camera is fitted against
+ * aspect 1.37 at desktop height and 2.00 at phone height.
+ *
+ * That is SAFE rather than merely tolerated, which is why the width is left alone:
+ * fitCameraToArea bisects the camera distance until the WHOLE PREVIEW_AREA_W x
+ * PREVIEW_AREA_H (2.4 x 1.8) area fits, so a wider canvas shows more empty space around the
+ * tank and never crops it. framing.ts records the aspect below which that bracket fails as
+ * 0.249; 2.00 is nowhere near it. The width, which does not shrink, is what keeps the tank
+ * from being clipped: measured, the pane overflows horizontally only below a 260px
+ * viewport, so a 320px phone clears it by 30px each side (issue #971). */
 .hud-preview {
   width: 260px;
   height: 190px;
@@ -2939,15 +2953,22 @@
    * carries its own requirement, and so hud.css.test.ts guards it independently.
    *
    * The enclosing .hud-customize is `touch-action: pan-y`; this wins on the canvas
-   * itself, which is the whole point of scoping touch-action per element. (An earlier
-   * version of this comment said the pane was pan-y "because it scrolls". It does not:
-   * the `overflow-y: auto` scrollers in this file are .hud-settings, .hud-about,
-   * .hud-devtools, .hud-devcfg, .hud-selftest, .hud-achievement-list, .hud-controller-rows
-   * and the whole .hud-versus-setup pane, and this pane is not one of them. (Three of those
-   * when this was written; hud.css.test.ts now pins the list, so it cannot fall behind
-   * again without a red test.) The achievement list's own comment gives the real reason -- it keeps a
-   * two-finger gesture on a panel from becoming a zoom trap the board's
-   * `touch-action: none` then cannot undo.)
+   * itself, which is the whole point of scoping touch-action per element.
+   *
+   * THIS PANE DOES SCROLL, and an earlier version of this comment denied it. It said the
+   * pane was not one of the `overflow-y: auto` scrollers and listed eight of them by name;
+   * the shared rule further down this file has since put `justify-content: safe center;
+   * overflow-y: auto` on .hud-panel, .hud-stats, .hud-customize, .hud-achievements,
+   * .hud-levelselect and .hud-controllers, so the reading that comment corrected -- pan-y
+   * because the pane scrolls -- is now simply true. Measured on the built page: at a
+   * viewport 500px tall or shorter this pane's scrollHeight is 575 against a clientHeight
+   * of the viewport, so it really does scroll. No name list is restated here, because the
+   * one that was here is exactly what fell behind: hud.css.test.ts pins all sixteen
+   * scrolling panes in one place, and that list is the thing to read.
+   *
+   * The achievement list's own comment still gives the OTHER reason pan-y rather than none
+   * is wanted -- it keeps a two-finger gesture on a panel from becoming a zoom trap the
+   * board's `touch-action: none` then cannot undo.
    *
    * user-select/tap-highlight: a drag on a canvas is otherwise a text selection on
    * desktop and a grey flash on mobile. */
