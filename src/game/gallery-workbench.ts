@@ -75,7 +75,8 @@ export interface GalleryWorkbenchDeps {
   readonly linkFor?: (value: string) => string;
   /**
    * Saves the canvas's current frame as an image file of the given name (issue #731).
-   * `createBrowserDeps` binds `downloadCanvasStill`. Absent hides Download Still, as an absent
+   * `createBrowserDeps` binds `canvas-still.ts`'s `downloadCanvasStill`, which lives outside this
+   * module so wiring can reach it without pulling the pane in. Absent hides Download Still, as an absent
    * `linkFor` hides Copy Link.
    */
   readonly saveStill?: (canvas: HTMLCanvasElement, fileName: string) => void;
@@ -100,27 +101,6 @@ export const GALLERY_STILL: GalleryStillSize = Object.freeze({
   height: GALLERY_CANVAS.height,
   dpr: 1,
 });
-
-/**
- * Saves `canvas`'s current pixels as a PNG named `fileName` (issue #731).
- *
- * The button is pressed after the drawn frame has been presented. That returns the picture only
- * because the workbench's renderer is created with `preserveDrawingBuffer: true`
- * (`render/gallery/workbench-scene.ts`'s `createWorkbenchRenderer`). Without it the buffer is
- * cleared once the frame is presented, and this would save a blank image; tools/gl/harness.ts's
- * still check fails with that setting off.
- */
-export function downloadCanvasStill(canvas: HTMLCanvasElement, fileName: string): void {
-  canvas.toBlob((blob) => {
-    if (blob === null) return;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  }, 'image/png');
-}
 
 export function sceneOptionsFor(selection: GallerySelection): GalleryWorkbenchSceneOptions {
   return {

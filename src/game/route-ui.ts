@@ -1,6 +1,6 @@
 import type { TankPreview } from '../render/preview';
-import { formatGallerySelection } from './gallery-selection';
-import { mountGalleryWorkbench, type GalleryWorkbenchView } from './gallery-workbench';
+import type { GalleryCatalog, GallerySelection } from './gallery-selection';
+import type { GalleryWorkbenchView } from './gallery-workbench';
 import type { SkinId } from '../presentation/customization';
 import type { GameStateMachine } from './state';
 import type { Hud } from './hud';
@@ -567,12 +567,38 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
    * Absent `deps.galleryWorkbench`, nothing mounts. The HUD hides the entry on such a page,
    * so this is the backstop for a HUD and deps that disagree, not a path a player reaches.
    */
+  /**
+   * The gallery workbench pane, loaded on demand (issue #946).
+   *
+   * WHY A DYNAMIC IMPORT. This pane exists only behind the developer entry, and a static
+   * import puts it -- and `gallery-command.ts` and `gallery-selection.ts` with it -- into the
+   * module graph every ordinary page load walks. The pane's body is built when the pane opens
+   * and thrown away when it closes, so its code has no reason to arrive before that.
+   *
+   * WHY A GENERATION COUNTER. The import is in flight across at least one turn of the event
+   * loop, and a pane can be closed -- or closed and opened again, or torn down -- inside that
+   * window. Without the guard the resolved mount would build a body into a pane nobody is
+   * looking at, and its listeners would outlive the close that was supposed to dispose them,
+   * because `disposeGallery` ran while `gallery` was still null and returned early. Every open
+   * takes a generation and every dispose spends one; a mount that is no longer the current
+   * generation is dropped.
+   *
+   * `formatGallerySelection` is captured at load rather than imported, because `disposeGallery`
+   * runs synchronously on close and cannot await. It is only ever needed when a mount happened,
+   * which is exactly when the module is already resolved.
+   */
   let gallery: GalleryWorkbenchView | null = null;
   let galleryValue: string | null = deps.galleryWorkbench?.initial ?? null;
+  let formatGallery: ((s: GallerySelection, c: GalleryCatalog) => string) | null = null;
+  let galleryGeneration = 0;
   const disposeGallery = (): void => {
+    // Bumped BEFORE the early return, so a dispose that arrives while the import is still in
+    // flight invalidates it. Teardown reaches this directly, without an `onGalleryClose`, and
+    // `gallery` is null in exactly the window where a late mount would do the damage.
+    galleryGeneration += 1;
     if (gallery === null) return;
-    if (deps.galleryWorkbench !== undefined) {
-      galleryValue = formatGallerySelection(gallery.selection, deps.galleryWorkbench.catalog);
+    if (deps.galleryWorkbench !== undefined && formatGallery !== null) {
+      galleryValue = formatGallery(gallery.selection, deps.galleryWorkbench.catalog);
     }
     gallery.dispose();
     gallery = null;
@@ -581,14 +607,21 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     const bench = deps.galleryWorkbench;
     if (bench === undefined) return;
     disposeGallery();
-    gallery = mountGalleryWorkbench(hud.galleryBody, {
-      catalog: bench.catalog,
-      create: bench.create,
-      raf: deps.raf,
-      initial: galleryValue,
-      linkFor: bench.linkFor,
-      saveStill: bench.saveStill,
-    });
+    const generation = (galleryGeneration += 1);
+    void Promise.all([import('./gallery-workbench'), import('./gallery-selection')]).then(
+      ([{ mountGalleryWorkbench }, { formatGallerySelection }]) => {
+        if (generation !== galleryGeneration) return;
+        formatGallery = formatGallerySelection;
+        gallery = mountGalleryWorkbench(hud.galleryBody, {
+          catalog: bench.catalog,
+          create: bench.create,
+          raf: deps.raf,
+          initial: galleryValue,
+          linkFor: bench.linkFor,
+          saveStill: bench.saveStill,
+        });
+      },
+    );
   });
   hud.onGalleryClose(disposeGallery);
 

@@ -122,8 +122,10 @@ import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } from './devflags';
 import { developerExitSearch } from './dev-config';
-import { gallerySearch, type GalleryCatalog } from './gallery-selection';
-import { downloadCanvasStill, type GalleryWorkbenchDeps } from './gallery-workbench';
+import { gallerySearch } from './gallery-link';
+import type { GalleryCatalog } from './gallery-selection';
+import { downloadCanvasStill } from './canvas-still';
+import type { GalleryWorkbenchDeps } from './gallery-workbench';
 import { configFor } from '../sim/config';
 import {
   applyRenderOverrides,

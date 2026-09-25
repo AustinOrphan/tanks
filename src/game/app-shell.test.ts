@@ -129,7 +129,7 @@ describe("createBrowserDeps: the gallery workbench's still saver (issue #731)", 
   it('binds the download that saves the canvas as a PNG', async () => {
     // The wiring `main.ts` ships. Unbound, the pane hides Download Still on the real page while
     // every test that injects its own saver still passes.
-    const { downloadCanvasStill } = await import('./gallery-workbench');
+    const { downloadCanvasStill } = await import('./canvas-still');
     expect(createBrowserDeps(build().shell).galleryWorkbench?.saveStill).toBe(downloadCanvasStill);
   });
 });
