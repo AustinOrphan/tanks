@@ -59,9 +59,31 @@ export function patchField(text, field, value) {
  * @returns {{patched: string, count: number}}
  */
 export function patchProfileField(text, profile, field, value) {
+  const span = profileBlock(text, profile);
+  if (span === null) return { patched: text, count: 0 };
+  const { open, close } = span;
+
+  const block = text.slice(open, close + 1);
+  const { patched: newBlock, count } = patchField(block, field, value);
+  if (count === 0) return { patched: text, count: 0 };
+  return { patched: text.slice(0, open) + newBlock + text.slice(close + 1), count };
+}
+
+/**
+ * The `{ … }` span of one named profile: `open` at its `{`, `close` at its matching `}`.
+ *
+ * Extracted so `patchProfileField` and `readProfileField` cannot disagree about where a
+ * profile ends -- two copies of a brace scan is exactly how a reader and a writer drift apart
+ * and start reporting one profile's value while editing another's.
+ *
+ * @param {string} text
+ * @param {string} profile
+ * @returns {{open: number, close: number} | null} null when the profile or its brace is absent.
+ */
+function profileBlock(text, profile) {
   const keyRe = new RegExp(`"${profile}"\\s*:\\s*\\{`);
   const key = keyRe.exec(text);
-  if (key === null) return { patched: text, count: 0 };
+  if (key === null) return null;
 
   const open = key.index + key[0].length - 1;
   let depth = 0;
@@ -76,12 +98,49 @@ export function patchProfileField(text, profile, field, value) {
       }
     }
   }
-  if (close < 0) return { patched: text, count: 0 };
+  if (close < 0) return null;
+  return { open, close };
+}
 
-  const block = text.slice(open, close + 1);
-  const { patched: newBlock, count } = patchField(block, field, value);
-  if (count === 0) return { patched: text, count: 0 };
-  return { patched: text.slice(0, open) + newBlock + text.slice(close + 1), count };
+/**
+ * Read `field` from ONE named profile, without editing anything (issue #908).
+ *
+ * WHY A READER EXISTS AT ALL. The sweep's read-back check has to know what every profile it
+ * did NOT patch should still say. Before this, the runner could only prove a patch landed
+ * when all eight profiles moved together, and a `--profile` run had no read-back: its own
+ * comment said the count plus the verdict were standing in for one. Reading the shipped
+ * values out of the original text is what lets the parent assert the whole map -- the named
+ * profile moved, the others did not.
+ *
+ * Returns `null` rather than 0 when the profile or the field is absent, because 0 is a legal
+ * `targetCommitmentTime` -- `validate.ts` accepts non-negative and this sweep sweeps it -- and
+ * "absent" must not read as "retarget immediately".
+ *
+ * THE PROFILE'S OWN FIELD, at depth 1 inside its block, never a nested object's copy of the
+ * same name. This is deliberately STRICTER than `patchField`, which rewrites every match in
+ * the block including a nested one (`patch.test.ts` pins that at count 2). The two are not in
+ * conflict: `configFor` resolves the profile's own field, so that is the one a read-back has
+ * to compare, and the nested copy the patcher also moves is not read by anything. A reader
+ * that took the first match would report a nested 9 as the profile's value and then "verify"
+ * an untouched profile against a number that was never its own.
+ *
+ * @param {string} text
+ * @param {string} profile
+ * @param {string} field
+ * @returns {number | null}
+ */
+export function readProfileField(text, profile, field) {
+  const span = profileBlock(text, profile);
+  if (span === null) return null;
+  const block = text.slice(span.open, span.close + 1);
+  const re = new RegExp(`"${field}"\\s*:\\s*(-?[0-9.]+)|[{}]`, 'g');
+  let depth = 0;
+  for (let m = re.exec(block); m !== null; m = re.exec(block)) {
+    if (m[0] === '{') depth += 1;
+    else if (m[0] === '}') depth -= 1;
+    else if (depth === 1) return Number(m[1]);
+  }
+  return null;
 }
 
 /** Every profile id in the file, in file order, for `--profile` to be checked against. */

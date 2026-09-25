@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-read-back-takes-a-nested-copy",
+  "file": "tools/ai-sweep/patch.mjs",
+  "find": "    else if (depth === 1) return Number(m[1]);",
+  "replace": "    else return Number(m[1]);",
+  "expect": "killed",
+  "why": "Reads the first field of that name at any depth, so a nested object's copy is reported as the profile's value. `configFor` resolves the profile's OWN field, so the sweep would then verify an untouched profile against a number the simulation never reads -- and pass. Today ai-profiles.json is flat, which is why the fixture carries the nested case deliberately: the guard has to fail now rather than on the day a profile gains a nested block.",
+  "tests": [
+    "tools/ai-sweep/patch.test.ts"
+  ],
+  "killedBy": [
+    "readProfileField: what the profiles a sweep leaves alone should still say reads the profile s OWN field, not a nested object s copy of it"
+  ]
+}

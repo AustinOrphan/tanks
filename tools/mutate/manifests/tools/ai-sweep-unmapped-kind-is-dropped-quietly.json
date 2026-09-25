@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-unmapped-kind-is-dropped-quietly",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "    if (profile === undefined) throw new Error(`no AI profile for kind '${kind}'`);",
+  "replace": "    if (profile === undefined) continue;",
+  "expect": "killed",
+  "why": "Drops a tank kind the configuration does not describe instead of refusing. The measurement saw that tank and counted its AI-ticks, so dropping it here removes the ticks from every denominator while the changes it made are still grouped -- a profile would read a switch rate over a population that excludes the tank that switched. A kind added to tank-defs.json without an aiProfile is exactly how this arises.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "foldToProfiles refuses a kind the configuration does not map, rather than pooling it under undefined"
+  ]
+}

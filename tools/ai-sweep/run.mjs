@@ -21,8 +21,8 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { summarise, knobIsWired, parseSeeds } from './stats.mjs';
-import { patchField, patchProfileField, profileIds } from './patch.mjs';
+import { summarise, knobIsWired, parseSeeds, groupRows, foldToProfiles, profileCoverage } from './stats.mjs';
+import { patchField, patchProfileField, profileIds, readProfileField } from './patch.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PROFILES_REL = 'src/sim/config/data/ai-profiles.json';
@@ -101,26 +101,45 @@ function main() {
     );
     process.exit(2);
   }
+  // Every profile's SHIPPED value, read before anything is patched. This is what the profiles
+  // a `--profile` run leaves alone must still read back as.
+  const authored = profileIds(original);
+  const shipped = Object.fromEntries(
+    authored.map((id) => [id, readProfileField(original, id, field)]).filter(([, v]) => v !== null),
+  );
   const scope = profile === null ? `${expected} profile(s)` : `profile ${profile} only`;
   console.log(`sweeping ${field} over ${values.join(', ')} -- ${scope}, seeds ${seeds}, ${ticks} ticks each\n`);
 
   const rows = [];
+  /** The raw per-child payloads, kept so the per-profile tables can be built after the loop. */
+  const byValue = [];
   try {
     for (const value of values) {
       const { patched, count } = apply(original, value);
       if (count !== expected) throw new Error(`patched ${count} of ${expected} profiles for ${value}`);
       writeFileSync(PROFILES, patched);
       const raw = measure(seeds, ticks);
-      // The child's own read-back. If this disagrees, the patch did not reach the simulation
-      // and every number from that process is about the wrong configuration.
-      // The child reads ONE profile's resolved value back, so this only proves the patch
-      // landed when every profile moved together. With --profile the child may legitimately
-      // report a profile that was deliberately left alone, so the check that the patch is
-      // real is the count above plus `knobIsWired` over the rows.
-      if (profile === null && raw.observedCommitmentTime !== value && field === 'targetCommitmentTime') {
-        throw new Error(`asked for ${field}=${value} but the simulation read ${raw.observedCommitmentTime}`);
+      // The child's own read-back, over EVERY profile. If any entry disagrees with what this
+      // run asked for, the patch did not reach the simulation the way it was meant to and the
+      // numbers from that process are about the wrong configuration.
+      //
+      // This used to read one profile, which proved a patch landed only when all of them moved
+      // together and left `--profile` with no read-back at all. Asserting the whole map checks
+      // both halves of a single-profile run: the named profile moved, and the other seven did
+      // not -- a patch that leaked into a neighbour is exactly the failure that would make a
+      // "personality difference" really a global rebalance.
+      if (field === 'targetCommitmentTime') {
+        for (const [id, observed] of Object.entries(raw.observedCommitmentByProfile ?? {})) {
+          const want = profile === null || id === profile ? value : shipped[id];
+          if (want !== undefined && observed !== want) {
+            throw new Error(
+              `${field}=${value}: profile ${id} should have read ${want} and the simulation read ${observed}`,
+            );
+          }
+        }
       }
       rows.push(summarise({ value, changes: raw.changes, aiTicks: raw.aiTicks, pressureSamples: raw.pressureSamples }));
+      byValue.push({ value, raw });
       const r = rows[rows.length - 1];
       console.log(
         `  ${field}=${String(value).padEnd(5)} changes ${String(r.changes).padStart(5)}`
@@ -154,11 +173,62 @@ function main() {
     );
     process.exitCode = 1;
   }
+  // Per-profile attribution (issue #908). A pooled row cannot say WHICH tank changed its
+  // habits, and with `--profile` one profile in eight moved -- diluted by whatever share of
+  // AI-ticks it owns. These tables divide by each profile's own denominator instead.
+  const perValue = byValue.map(({ value, raw }) => {
+    const profileByKind = raw.profileByKind ?? {};
+    const folded = foldToProfiles(raw.ticksByKind ?? {}, raw.sharedByKind ?? {}, profileByKind);
+    return {
+      value,
+      byKind: groupRows({ changes: raw.changes, ticksByGroup: raw.ticksByKind ?? {}, sharedByGroup: raw.sharedByKind ?? {} }),
+      byProfile: groupRows({
+        changes: raw.changes,
+        ticksByGroup: folded.ticks,
+        sharedByGroup: folded.shared,
+        groupOf: (c) => profileByKind[c.kind],
+      }),
+      coverage: profileCoverage(authored, [...new Set(Object.values(profileByKind))], folded.ticks),
+    };
+  });
+
+  if (perValue.length > 0) {
+    // Coverage first, and from the LAST value rather than a union: every child ran the same
+    // seeds, so the sets agree, and reading one is what makes a disagreement visible as a
+    // wrong-looking table rather than hidden by a merge.
+    const cov = perValue[perValue.length - 1].coverage;
+    console.log(`\nprofile coverage: ${cov.covered.length} of ${authored.length} authored profile(s) measured`);
+    if (cov.unreachable.length > 0) {
+      console.log(
+        `  no tank kind carries: ${cov.unreachable.join(', ')}`
+        + ' -- widening --seeds cannot reach these; their value is unfalsifiable until a kind adopts one.',
+      );
+    }
+    if (cov.silent.length > 0) {
+      console.log(`  carried by a kind but absent from these seeds: ${cov.silent.join(', ')} -- widen --seeds.`);
+    }
+    for (const { value, byProfile } of perValue) {
+      console.log(`\n  ${field}=${value} per profile:`);
+      for (const r of byProfile) {
+        console.log(
+          `    ${r.group.padEnd(18)} ticks ${String(r.aiTicks).padStart(7)}`
+          + `  expiry-switches ${String(r.switchesOnExpiry).padStart(5)}`
+          + `  per1k ${String(r.switchesOnExpiryPer1kTicks).padStart(7)}`
+          + `  span p50 ${String(r.spanTicks.p50).padStart(5)}  max ${String(r.spanTicks.max).padStart(5)}`
+          + `  shared p50 ${String(r.sharedTarget.p50).padStart(6)} (n ${r.sharedTarget.n})`,
+        );
+      }
+    }
+  }
+
   // Into `tmp/`, which .gitignore already covers. A generated result at the repository root
   // is one `git add -A` away from being committed as if it were source.
   mkdirSync(`${ROOT}tmp`, { recursive: true });
   const out = arg('out', 'tmp/ai-sweep.json');
-  writeFileSync(`${ROOT}${out}`, `${JSON.stringify({ field, seeds, ticks, rows, wired }, null, 2)}\n`);
+  writeFileSync(
+    `${ROOT}${out}`,
+    `${JSON.stringify({ field, profile, seeds, ticks, shipped, rows, wired, perValue }, null, 2)}\n`,
+  );
   console.log(`wrote ${out}`);
 }
 

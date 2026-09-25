@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-group-spans-span-the-whole-board",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "      spanTicks: distribution(heldSpans(groupChanges)),",
+  "replace": "      spanTicks: distribution(heldSpans(changes)),",
+  "expect": "killed",
+  "why": "Gives every profile the whole board's held spans. The rows still differ from each other in their tick counts and switch counts, so the table looks attributed while the one column a commitment-time decision is actually made from -- how long this profile held its target -- is identical everywhere.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "groupRows scopes held spans to the group, so one kind cannot report another kind s spans"
+  ]
+}

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { patchField, patchProfileField, profileIds } from './patch.mjs';
+import { patchField, patchProfileField, profileIds, readProfileField } from './patch.mjs';
 
 /**
  * Issues #359 and #908. These were unreachable while they lived in `run.mjs`, which calls
@@ -103,5 +103,55 @@ describe('patchProfileField: one profile, and only that one', () => {
     const { patched } = patchProfileField(FIXTURE, 'ALPHA', 'targetCommitmentTime', 4);
     expect(patched).toMatch(/"ALPHA"[\s\S]*?"targetCommitmentTime":\s*4/);
     expect(patched).toMatch(/"BETA"[\s\S]*?"targetCommitmentTime":\s*1\.5/);
+  });
+});
+
+describe('readProfileField: what the profiles a sweep leaves alone should still say', () => {
+  it('reads one profile s shipped value out of the real file', () => {
+    // Every shipped profile carries 1.5 today (#891 records why). The assertion is that the
+    // reader finds the value at all and scopes it to the named profile, not that it is 1.5:
+    // the loop below is what would catch a reader that always returned the first match.
+    for (const id of profileIds(REAL)) {
+      expect(readProfileField(REAL, id, 'targetCommitmentTime'), id).toBe(1.5);
+    }
+  });
+
+  it('reads the profile s OWN field, not a nested object s copy of it', () => {
+    // BETA's nested block carries 9 and BETA itself carries 1.5. A reader that searched the
+    // whole file, or stopped at the first `}`, would return 9 -- and the sweep would then
+    // "verify" an untouched profile against a number that is not its own.
+    expect(readProfileField(FIXTURE, 'BETA', 'targetCommitmentTime')).toBe(1.5);
+    expect(readProfileField(FIXTURE, 'ALPHA', 'targetCommitmentTime')).toBe(1.5);
+  });
+
+  it('returns null for an absent profile or field, never 0', () => {
+    // 0 is a legal targetCommitmentTime -- `validate.ts` accepts non-negative and the sweep
+    // sweeps it -- so a missing value reported as 0 would read as "retarget immediately".
+    expect(readProfileField(REAL, 'NO_SUCH_PROFILE', 'targetCommitmentTime')).toBeNull();
+    expect(readProfileField(REAL, 'STATIC_BASIC', 'noSuchField')).toBeNull();
+  });
+
+  it('reads a real 0 as 0, which is what makes the null above mean something', () => {
+    const zeroed = patchProfileField(FIXTURE, 'ALPHA', 'targetCommitmentTime', 0).patched;
+    expect(readProfileField(zeroed, 'ALPHA', 'targetCommitmentTime')).toBe(0);
+    // THE CONTROL for the previous test: without this, `toBeNull()` would also pass against a
+    // reader that returned null for every falsy value.
+    expect(readProfileField(zeroed, 'BETA', 'targetCommitmentTime')).toBe(1.5);
+  });
+
+  it('agrees with the patcher about where a profile ends', () => {
+    // The two share `profileBlock` for exactly this reason. If they ever disagreed, a sweep
+    // would edit one span and verify another -- so the round trip is asserted rather than
+    // assumed: patch BETA only, then read both back.
+    const patched = patchProfileField(FIXTURE, 'BETA', 'targetCommitmentTime', 4).patched;
+    expect(readProfileField(patched, 'BETA', 'targetCommitmentTime')).toBe(4);
+    expect(readProfileField(patched, 'ALPHA', 'targetCommitmentTime')).toBe(1.5);
+    // And the documented asymmetry, pinned so neither side drifts onto the other: the PATCHER
+    // rewrote the nested copy too (the test above pins that at count 2), while the READER
+    // reports only BETA's own field. `configFor` resolves the profile's own value, so that is
+    // the one the read-back compares; a reader that matched the patcher here would report 4
+    // for a nested block nothing reads.
+    expect(patched).toContain('"nested": { "targetCommitmentTime": 4 }');
+    expect(readProfileField(patched, 'BETA', 'targetCommitmentTime')).not.toBe(9);
   });
 });

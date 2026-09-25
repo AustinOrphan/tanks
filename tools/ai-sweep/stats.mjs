@@ -160,3 +160,124 @@ export function knobIsWired(rows, minExpirySwitches = 10) {
     minExpirySwitches,
   };
 }
+
+/**
+ * One row per GROUP of AI tanks, so a sweep can say which profile moved (issue #908).
+ *
+ * WHY THIS EXISTS. `summarise` pools every bot on the board. That answers "what does this
+ * tunable do" and cannot answer "what would it do if these two tanks differed", which is the
+ * question #908 is about: with `--profile`, seven profiles hold and one moves, and a pooled
+ * row dilutes that one by however small a share of AI-ticks it owns. Measured over seeds
+ * 1-40 at 1800 ticks, the five reachable profiles own between 12.4% and 26.6% of the
+ * measurable AI-ticks, so a pooled row understates a single-profile change roughly four- to
+ * eight-fold.
+ *
+ * ONE FUNCTION, TWO GROUPINGS. `groupOf` decides whether a row is a tank KIND or an AI
+ * PROFILE. Folding by profile has to re-derive the spans rather than average two kinds'
+ * distributions -- `teal` and `yellow` share `MOBILE_MINE_LAYER`, and a median of two medians
+ * is not the median of the union. Passing the grouping in is what keeps that arithmetic in
+ * one place.
+ *
+ * `ticksByGroup` is the denominator and is supplied rather than counted from `changes`: a
+ * group can hold its target for a whole run and record no change at all, and dividing by its
+ * own change count would report that as a missing row rather than as perfect stickiness.
+ *
+ * @param {object} run
+ * @param {readonly (TargetChange & {kind: string})[]} run.changes
+ * @param {Readonly<Record<string, number>>} run.ticksByGroup AI-ticks per group.
+ * @param {Readonly<Record<string, readonly number[]>>} [run.sharedByGroup] Shared-target samples.
+ * @param {(change: TargetChange & {kind: string}) => string} [run.groupOf] Defaults to the kind.
+ * @returns {object[]} One row per group present in `ticksByGroup`, in descending AI-ticks.
+ */
+export function groupRows({ changes, ticksByGroup, sharedByGroup = {}, groupOf = (c) => c.kind }) {
+  /** @type {Map<string, (TargetChange & {kind: string})[]>} */
+  const byGroup = new Map();
+  for (const group of Object.keys(ticksByGroup)) byGroup.set(group, []);
+  for (const c of changes) {
+    const group = groupOf(c);
+    // A change from a group with no recorded ticks is a contradiction, not a row to invent:
+    // every change came from a tank that was alive on the tick it was seen.
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group).push(c);
+  }
+
+  const rows = [];
+  for (const [group, groupChanges] of byGroup) {
+    const aiTicks = ticksByGroup[group] ?? 0;
+    const byReason = {};
+    for (const c of groupChanges) byReason[c.reason ?? 'unknown'] = (byReason[c.reason ?? 'unknown'] ?? 0) + 1;
+    const per1k = (n) => (aiTicks === 0 ? null : +((n * 1000) / aiTicks).toFixed(3));
+    const expiry = byReason['switched-on-expiry'] ?? 0;
+    rows.push({
+      group,
+      aiTicks,
+      changes: groupChanges.length,
+      changesPer1kTicks: per1k(groupChanges.length),
+      switchesOnExpiry: expiry,
+      switchesOnExpiryPer1kTicks: per1k(expiry),
+      byReason,
+      spanTicks: distribution(heldSpans(groupChanges)),
+      sharedTarget: distribution(sharedByGroup[group] ?? []),
+    });
+  }
+  return rows.sort((a, b) => b.aiTicks - a.aiTicks || a.group.localeCompare(b.group));
+}
+
+/**
+ * Fold per-kind AI-ticks and shared-target samples onto their AI profiles.
+ *
+ * Separate from `groupRows` because the denominators and the samples have to be folded before
+ * the arithmetic, not after it, for the same reason the doc there gives.
+ *
+ * @param {Readonly<Record<string, number>>} ticksByKind
+ * @param {Readonly<Record<string, readonly number[]>>} sharedByKind
+ * @param {Readonly<Record<string, string>>} profileByKind
+ */
+export function foldToProfiles(ticksByKind, sharedByKind, profileByKind) {
+  const ticks = {};
+  const shared = {};
+  for (const kind of Object.keys(ticksByKind)) {
+    const profile = profileByKind[kind];
+    // An unmapped kind is dropped LOUDLY rather than pooled under `undefined`: the caller
+    // derives `profileByKind` from the validated catalog, so a gap here means the measurement
+    // saw a tank the configuration does not describe.
+    if (profile === undefined) throw new Error(`no AI profile for kind '${kind}'`);
+    ticks[profile] = (ticks[profile] ?? 0) + ticksByKind[kind];
+    shared[profile] = [...(shared[profile] ?? []), ...(sharedByKind[kind] ?? [])];
+  }
+  return { ticks, shared };
+}
+
+/**
+ * Which authored profiles a seed set can say nothing about, and WHY -- two different reasons.
+ *
+ * REPORTED RATHER THAN LEFT TO THE READER. `ai-profiles.json` authors eight profiles and
+ * `tank-defs.json` maps five of them to a tank kind, so three carry a `targetCommitmentTime`
+ * that no simulation can exercise at all. A sweep that printed five rows and stopped would
+ * read as five-of-five coverage.
+ *
+ * THE TWO REASONS ARE KEPT APART because they call for opposite responses, and pooling them
+ * would hide that:
+ *
+ *  - `unreachable` -- no tank kind carries the profile. Widening the seed set cannot help;
+ *    the value is unfalsifiable until some kind adopts it.
+ *  - `silent` -- a kind carries it, but this seed set never produced one. Widen `--seeds`.
+ *
+ * Ids are NAMED rather than counted, so the gap stays legible when either file changes.
+ *
+ * @param {readonly string[]} authored Every profile id in `ai-profiles.json`.
+ * @param {readonly string[]} reachable Every profile some tank kind carries, per `tank-defs.json`.
+ * @param {Readonly<Record<string, number>>} ticksByProfile Measured AI-ticks per profile.
+ * @returns {{covered: string[], unreachable: string[], silent: string[]}}
+ */
+export function profileCoverage(authored, reachable, ticksByProfile) {
+  const covered = [];
+  const unreachable = [];
+  const silent = [];
+  for (const id of authored) {
+    if ((ticksByProfile[id] ?? 0) > 0) covered.push(id);
+    else if (!reachable.includes(id)) unreachable.push(id);
+    else silent.push(id);
+  }
+  return { covered, unreachable, silent };
+}

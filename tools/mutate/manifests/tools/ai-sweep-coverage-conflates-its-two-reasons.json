@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-coverage-conflates-its-two-reasons",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "    else if (!reachable.includes(id)) unreachable.push(id);\n    else silent.push(id);",
+  "replace": "    else { unreachable.push(id); silent.push(id); }",
+  "expect": "killed",
+  "why": "Reports every uncovered profile under both reasons at once. The runner prints opposite advice for each -- 'widen --seeds' for a profile whose kind simply did not spawn, 'no seed set can reach this' for one no kind carries -- so a reader told both would widen the seed set forever chasing OFFENSIVE_ELITE, which no tank in tank-defs.json carries at all.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "profileCoverage separates \"no tank carries it\" from \"these seeds did not produce one\""
+  ]
+}
