@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-every-span-buckets-as-an-expiry",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "      const key = c.reason ?? 'unknown';",
+  "replace": "      const key = 'switched-on-expiry';",
+  "expect": "killed",
+  "why": "Files every completed span under `switched-on-expiry`, so the split reports the pooled population under the one bucket a tuning decision reads and leaves `target-lost` absent. The counts still look reasonable -- more expiry spans than before, no error -- which is exactly why it needs a test rather than a reviewer: the only visible symptom is a number that got bigger.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "heldSpansByEndReason attributes each span to the change that ENDED it, not the one that opened it"
+  ]
+}

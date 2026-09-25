@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-negative-span-reported-not-refused",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "  if (span < 0) {\n    throw new Error(",
+  "replace": "  if (false) {\n    throw new Error(",
+  "expect": "killed",
+  "why": "Lets a negative held span through instead of refusing it. A span that ends before it starts is a contradiction, and the only reason the cross-seed pairing defect survived from #359 to now is that the numbers it produced were merely low -- a median absorbs them. This guard is what turns the next such pairing into a stop rather than a quietly wrong tuning input.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "spans are scoped to one seed REFUSES a negative span rather than reporting it"
+  ]
+}

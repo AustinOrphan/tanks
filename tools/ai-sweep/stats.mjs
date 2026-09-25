@@ -79,14 +79,108 @@ export function distribution(values) {
  * @returns {number[]}
  */
 export function heldSpans(changes) {
-  /** @type {Map<number, number>} */
+  /** @type {Map<string, number>} */
   const openedAt = new Map();
   const spans = [];
   for (const c of changes) {
-    const prev = openedAt.get(c.tankId);
-    if (prev !== undefined && c.from !== undefined) spans.push(c.tick - prev);
-    if (c.to === undefined) openedAt.delete(c.tankId);
-    else openedAt.set(c.tankId, c.tick);
+    const key = spanKey(c);
+    const prev = openedAt.get(key);
+    if (prev !== undefined && c.from !== undefined) spans.push(assertSpan(c.tick - prev, c));
+    if (c.to === undefined) openedAt.delete(key);
+    else openedAt.set(key, c.tick);
+  }
+  return spans;
+}
+
+/**
+ * The identity a span belongs to: the tank, WITHIN ITS SEED.
+ *
+ * THE BUG THIS FIXES, which predates the per-profile rows and reached #359's own evidence.
+ * `measure.mjs` concatenates every seed's changes into one array, and `tankId` is unique only
+ * within a seed -- its own comment says so. Keyed by `tankId` alone, seed N+1's tank 3 closed a
+ * span opened by seed N's tank 3, and because each seed restarts the tick counter the result
+ * was NEGATIVE. Measured over seeds 1-200 at 1800 ticks before the fix: every one of the five
+ * reachable profiles, at every one of four values, had a minimum span between -1,255 and
+ * -1,570 ticks. Those spans were in `spanTicks` and therefore in `knobIsWired`'s signature too.
+ *
+ * @param {TargetChange & {seed?: number}} c
+ */
+function spanKey(c) {
+  // `seed` absent is its own key rather than a silent merge with every other seed: old data
+  // should read as one bucket and be obvious, not average quietly into the new numbers.
+  return `${c.seed ?? 'no-seed'}:${c.tankId}`;
+}
+
+/**
+ * A span, refused if it is negative.
+ *
+ * LOUD RATHER THAN FILTERED. A negative held span is a contradiction -- a target dropped before
+ * it was taken -- so it cannot be clamped or skipped without hiding whatever produced it. The
+ * cross-seed defect above survived because the numbers it produced were merely low, and a
+ * median absorbed them; the one run that printed a negative p50 is what exposed it.
+ *
+ * @param {number} span
+ * @param {TargetChange & {seed?: number}} c
+ */
+function assertSpan(span, c) {
+  if (span < 0) {
+    throw new Error(
+      `negative held span ${span} ending at tick ${c.tick} for tank ${c.tankId}`
+      + ` (seed ${c.seed ?? 'unrecorded'}): the change stream pairs changes that are not the`
+      + ' same tank, or is not in tick order within one',
+    );
+  }
+  return span;
+}
+
+/**
+ * The same spans, bucketed by the reason that ENDED each one.
+ *
+ * WHY THIS EXISTS: the pooled `heldSpans` above answers a different question, and answers it
+ * much more weakly. `heldSpans` never looks at why a change happened, so its distribution mixes
+ * the spans the threshold CHOSE to end with the ones rule 5 forced -- and rule 5
+ * (`target-selection.ts`: "an invalid target is dropped at once, whatever the span says") is
+ * 63-88% of every change recorded, on both of two disjoint 200-seed sets. Widening the window
+ * removes expiry switches without touching rule-5 drops, so the pooled population becomes ever
+ * more dominated by changes the parameter had no part in.
+ *
+ * Measured over seeds 1-200 at 1800 ticks, with spans correctly keyed by seed and tank: as the
+ * window widens 0.5s -> 6s, `MOBILE_MINE_LAYER`'s pooled median moves 148 -> 241 ticks while its
+ * expiry-ended median moves 279 -> 722. Both rise; the split one rises about three times as far,
+ * because it is not being held down by a growing majority of forced drops.
+ *
+ * A NOTE ON WHAT THIS DOC USED TO CLAIM, because the retraction is the useful part. It said the
+ * pooled median ran BACKWARDS -- shorter as the window widened, in 9 of 10 series, falling by
+ * more than half. That was real output, and it was an artefact of the cross-seed span defect
+ * `spanKey` below now prevents: the impossible negative spans it produced dragged the pooled
+ * medians down. Keyed correctly, the pooled median no longer collapses: 4 of the 5 reachable
+ * profiles end HIGHER at 6s than at 0.5s, and the fifth (`DEFENSIVE_BASIC`) drifts 136 -> 129
+ * ticks. Three of the five dip at one intermediate value, so it is not monotone either -- it is
+ * simply a much blunter instrument than the split. The split is worth having for the reason
+ * above, not as a fix for a backwards number.
+ *
+ * BUCKETED BY THE ENDING CHANGE, not the opening one. A span runs from the change that opened
+ * a target to the change that dropped it, and it is the SECOND one that says whether the policy
+ * chose to let go or was forced to -- attributing to the opener would label a span by an earlier
+ * decision that had nothing to do with how it ended.
+ *
+ * @param {readonly TargetChange[]} changes
+ * @returns {Record<string, number[]>} keyed by reason; `unknown` for a change with none.
+ */
+export function heldSpansByEndReason(changes) {
+  /** @type {Map<string, number>} */
+  const openedAt = new Map();
+  /** @type {Record<string, number[]>} */
+  const spans = {};
+  for (const c of changes) {
+    const id = spanKey(c);
+    const prev = openedAt.get(id);
+    if (prev !== undefined && c.from !== undefined) {
+      const key = c.reason ?? 'unknown';
+      (spans[key] ??= []).push(assertSpan(c.tick - prev, c));
+    }
+    if (c.to === undefined) openedAt.delete(id);
+    else openedAt.set(id, c.tick);
   }
   return spans;
 }
@@ -217,6 +311,11 @@ export function groupRows({ changes, ticksByGroup, sharedByGroup = {}, groupOf =
       switchesOnExpiryPer1kTicks: per1k(expiry),
       byReason,
       spanTicks: distribution(heldSpans(groupChanges)),
+      // The spans the THRESHOLD ended, which is the only column that moves with the parameter
+      // rather than with the mixture -- see `heldSpansByEndReason`. Kept BESIDE the pooled
+      // number rather than replacing it, because the pooled one is what a player experiences
+      // (a hold is a hold, however it ended) and the split one is what a tuning decision needs.
+      expirySpanTicks: distribution(heldSpansByEndReason(groupChanges)['switched-on-expiry'] ?? []),
       sharedTarget: distribution(sharedByGroup[group] ?? []),
     });
   }

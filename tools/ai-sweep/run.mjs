@@ -214,8 +214,12 @@ function main() {
           `    ${r.group.padEnd(18)} ticks ${String(r.aiTicks).padStart(7)}`
           + `  expiry-switches ${String(r.switchesOnExpiry).padStart(5)}`
           + `  per1k ${String(r.switchesOnExpiryPer1kTicks).padStart(7)}`
-          + `  span p50 ${String(r.spanTicks.p50).padStart(5)}  max ${String(r.spanTicks.max).padStart(5)}`
-          + `  shared p50 ${String(r.sharedTarget.p50).padStart(6)} (n ${r.sharedTarget.n})`,
+          + `  span p50 ${String(r.spanTicks.p50).padStart(5)}`
+          // The expiry-ended median is printed next to the pooled one on purpose: seeing them
+          // move in OPPOSITE directions as the window widens is what stops the pooled number
+          // being read as the parameter's effect.
+          + `  expiry-span p50 ${String(r.expirySpanTicks?.p50).padStart(5)} (n ${r.expirySpanTicks?.n ?? 0})`
+          + `  shared p50 ${String(r.sharedTarget.p50).padStart(6)}`,
         );
       }
     }

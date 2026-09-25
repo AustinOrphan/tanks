@@ -81,9 +81,18 @@ function measureSeed(seed, ticks) {
           changes.push({
             tick: world.tick,
             tankId: t.id,
+            // The SEED, because `tankId` is unique only within one. Every seed's changes are
+            // concatenated into one array, so a span keyed by `tankId` alone pairs this seed's
+            // tank 3 with the next seed's tank 3 -- and since each seed restarts the tick
+            // counter, that produces NEGATIVE spans of up to a whole run's length. The `seen`
+            // guard just above is what makes the pairing reachable: it swallows a tank's first
+            // observation, so its first RECORDED change in a seed is a switch carrying a
+            // defined `from`, and a defined `from` is what closes an open span. Measured over
+            // seeds 1-40 at 1800 ticks, all 56 of the 56 distinct (seed, tank) pairs began that
+            // way, and a tankId-only key over them yields 35 negative spans of 102, worst -1286.
+            seed,
             // The tank's KIND, so a change can be attributed to the AI profile that chose it
-            // (#908). Recorded here rather than looked up later: `tankId` is unique only
-            // within a seed, so a parent joining ids to kinds across seeds would mix tanks.
+            // (#908). Recorded here rather than looked up later, for the same reason as `seed`.
             kind: t.kind,
             from: before,
             to: t.aiTargetId,

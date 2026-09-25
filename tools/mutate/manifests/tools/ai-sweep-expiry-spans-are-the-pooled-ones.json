@@ -1,0 +1,14 @@
+{
+  "id": "ai-sweep-expiry-spans-are-the-pooled-ones",
+  "file": "tools/ai-sweep/stats.mjs",
+  "find": "      expirySpanTicks: distribution(heldSpansByEndReason(groupChanges)['switched-on-expiry'] ?? []),",
+  "replace": "      expirySpanTicks: distribution(heldSpans(groupChanges)),",
+  "expect": "killed",
+  "why": "Reports the POOLED span distribution under the expiry-ended name, collapsing the two columns the row exists to contrast. The pooled number mixes the spans the threshold chose to end with the ones rule 5 forced, and rule 5 is 63-88% of every change recorded on each of two disjoint 200-seed sets, so it answers the parameter far more weakly: measured over seeds 1-200 at 1800 ticks, MOBILE_MINE_LAYER's pooled median moves 148 -> 241 ticks across 0.5s -> 6s while its expiry-ended median moves 279 -> 722. Under this mutation both columns print that weaker 148 -> 241 series under two different names, and a tuning decision reading it would still see a plausible rising number.",
+  "tests": [
+    "tools/ai-sweep/stats.test.ts"
+  ],
+  "killedBy": [
+    "groupRows reports the expiry-ended spans beside the pooled ones gives each group a distribution over only the spans its threshold ended"
+  ]
+}
