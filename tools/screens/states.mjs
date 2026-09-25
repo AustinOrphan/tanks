@@ -104,6 +104,10 @@ export const ENTRY_MODES = Object.freeze(['ok', 'refused', 'unparseable']);
  */
 export const STEP_KINDS = Object.freeze([
   'click', 'press', 'waitVisible', 'waitHidden', 'breakWebgl', 'fakeGamepads', 'scroll', 'playUntil',
+  // Issue #917: actuate a button on the pads `{ fakeGamepads }` installed. The fixture alone
+  // cannot press anything -- it is a static array, and `createGamepadMenuPoller` dispatches on
+  // the press->release EDGE -- so a pad-driven surface had no way into this catalogue at all.
+  'padPress',
   // Issue #842: the interactive states `tools/uikit/primitive-states.mjs` produced one-shot.
   // Both VERIFY they engaged rather than assuming it -- a state that silently failed to engage
   // photographs the rest state, and a reviewer cannot tell that picture from a control that
@@ -128,7 +132,7 @@ export const STEP_KINDS = Object.freeze([
  *
  * The VALUES live in the runner, not here: this module is pure data and imports nothing.
  */
-export const GAMEPAD_FIXTURES = Object.freeze(['none', 'mixed']);
+export const GAMEPAD_FIXTURES = Object.freeze(['none', 'idle', 'mixed']);
 
 /** A save two levels into the campaign, so the menu shows Continue and a Levels grid. */
 const MID_CAMPAIGN = Object.freeze({
@@ -377,6 +381,37 @@ export const SCREEN_STATES = Object.freeze([
     description: 'The menu a returning player meets: Continue, the run summary, and the Levels entry.',
     storage: MID_CAMPAIGN,
     steps: PAST_SPLASH,
+    measure: ['.hud-panel', '.hud-title', '.hud-run-summary', '.hud-continue', '.hud-new-game'],
+  }),
+  state({
+    id: 'screen.main-menu.pad-only',
+    title: 'Main Menu reached by controller alone',
+    description:
+      'The menu as a player who never touched a key, a mouse or the screen meets it: the '
+      + 'splash was dismissed with a controller button and nothing else has been pressed.',
+    // THE FIRST STATE IN THIS CATALOGUE WITH NO KEYBOARD OR POINTER INPUT AT ALL, and the
+    // reason `{ padPress }` exists (issue #917). Every other state here starts with
+    // `PAST_SPLASH`, which presses Space -- so the whole catalogue photographed pages whose
+    // last input was a keystroke, and a controller-only session had no representation.
+    //
+    // That distinction is not cosmetic: a browser decides what `:focus-visible` matches from
+    // the last input it saw, and a pad press is not a DOM input event at all, so these are
+    // genuinely different pages to the engine that styles them.
+    storage: MID_CAMPAIGN,
+    steps: [
+      // A SILENT pad. `mixed` ships with button 7 already down and the poller dispatches
+      // that on its first read, which dismissed the splash on its own -- measured, by running
+      // this state with the press removed and watching it pass anyway.
+      { fakeGamepads: 'idle' },
+      // Confirm. The splash takes any input, and a pad is the one it has never been shown
+      // taking here -- `{ fakeGamepads }` alone could not press it, because the fixture is a
+      // static array and the menu poller dispatches on the press->release edge.
+      { padPress: { button: 0 } },
+      { waitHidden: '.hud-splash' },
+    ],
+    // The same five selectors `screen.main-menu` measures, on the same seeded storage, so the
+    // two are a direct comparison: identical measurements say the menu a controller player
+    // reaches is the menu everyone else reaches, which is the claim worth pinning.
     measure: ['.hud-panel', '.hud-title', '.hud-run-summary', '.hud-continue', '.hud-new-game'],
   }),
   state({

@@ -52,6 +52,7 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `gallery.drive.normal` | `drive` | `capture.mp4`, `preview.gif` | ticks 0–29, one frame per 60 Hz tick |
 | `gallery.ai-last-seen.normal` | `ai-last-seen` | `capture.mp4`, `preview.gif` | ticks 0–164, one frame per 60 Hz tick |
 | `screen.main-menu` | `screen.main-menu` | `capture.png` | still |
+| `screen.main-menu.pad-only` | `screen.main-menu.pad-only` | `capture.png` | still |
 | `screen.main-menu.fresh` | `screen.main-menu.fresh` | `capture.png` | still |
 | `screen.levels` | `screen.levels` | `capture.png` | still |
 | `screen.records.stats` | `screen.records.stats` | `capture.png` | still |

@@ -364,6 +364,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.main-menu.pad-only",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.main-menu.pad-only"
+    },
+    "fixture": {
+      "id": "screen.main-menu.pad-only",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Main Menu reached by controller alone",
+    "description": "The Main Menu as a player who never touched a key, a mouse or the screen meets it: the Launch splash was dismissed with a controller button. Its five measured selectors are identical to the keyboard-reached capture of the same menu.",
+    "altText": "Screenshot of the Tanks! main menu, reached using only a game controller, showing Continue, the run summary and the new-game entry.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.main-menu.fresh",
     "producer": {
       "kind": "screen",
@@ -1188,7 +1237,7 @@
       "events": [],
       "allowUnexpectedEvents": true
     },
-    "title": "Developer Configuration — Sandbox",
+    "title": "Developer Configuration \u2014 Sandbox",
     "description": "The Sandbox group scrolled into view: the tank multiset built by a count per kind.",
     "altText": "Screenshot of the Tanks! developer configuration menu, Sandbox group.",
     "timeoutMs": 60000,

@@ -97,7 +97,13 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // new state declares no menu, so it joins the exclusion above rather than this list. Its
     // controls are driving controls, which this collector skips on purpose and whose floor is
     // 56 px rather than the 44 this sweep enforces.
-    expect(hitSweepStates()).toHaveLength(34);
+    // 35 since issue #917's `screen.main-menu.pad-only`. It is the Main Menu, so it carries a
+    // menu and joins this list rather than the exclusion above -- and it is the one member
+    // reached with no keyboard and no pointer, which is the session a controller player
+    // actually has. Its five measured selectors are identical to `screen.main-menu`'s, so it
+    // adds a second sweep of the same controls from a different input history rather than new
+    // surface area.
+    expect(hitSweepStates()).toHaveLength(35);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 
