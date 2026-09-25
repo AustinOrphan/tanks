@@ -1,0 +1,15 @@
+{
+  "id": "versus-fourth-human-shares-a-pad",
+  "file": "src/game/versus-setup.ts",
+  "find": "padIndex: pads[nextPad++]",
+  "replace": "padIndex: pads[Math.min(nextPad++, 1)]",
+  "expect": "killed",
+  "why": "Binds a THIRD human slot to the SECOND pad, so two players drive their own tanks from one physical controller. This is the mutation that proved versus-matrix.test.ts closes a real gap rather than restating covered ground: with it applied, five test files stayed GREEN -- hud.navigation, loop, versus-setup, input/assignment and controllers-pane. It survived for a measurable reason. No case in the repository needed a third pad: the closest, versus-setup.test.ts's 'gives slot 0 this device and later human slots the connected pads in order', uses three slots and TWO pads, where Math.min(nextPad, 1) is the identity. Reaching it takes four humans and three pads. For contrast, the nearby mutation that withholds the third pad entirely (nextPad < 2) is killed by SEVEN existing tests, because a slot resolving to 'none' is thoroughly asserted -- a slot resolving to the WRONG device was not.",
+  "tests": [
+    "src/game/versus-matrix.test.ts"
+  ],
+  "killedBy": [
+    "the VS setup-to-session matrix (issue #969) never binds two slots to one device, across every mode x player-count x role mix",
+    "the VS setup-to-session matrix (issue #969) gives a fourth human the third pad, which is the case no other test reaches"
+  ]
+}
