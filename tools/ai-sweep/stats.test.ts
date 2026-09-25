@@ -5,7 +5,10 @@
 // is what holds it honest -- in particular the verdict, which exists to stop the sweep
 // publishing a comparison it has no basis for.
 import { describe, it, expect } from 'vitest';
-import { parseSeeds, distribution, heldSpans, summarise, knobIsWired } from './stats.mjs';
+import {
+  parseSeeds, distribution, heldSpans, summarise, knobIsWired,
+  groupRows, foldToProfiles, profileCoverage,
+} from './stats.mjs';
 
 describe('parseSeeds', () => {
   it('expands ranges and lists, and refuses what it cannot read', () => {
@@ -123,5 +126,142 @@ describe('knobIsWired', () => {
 
   it('never calls a single row comparable, because one row is not a comparison', () => {
     expect(knobIsWired([row(1.5, 999, 90, 300)]).comparable).toBe(false);
+  });
+});
+
+// Per-profile attribution (issue #908). These exist because a pooled row cannot answer the
+// question that issue is about -- "what would it do if these two tanks differed" -- and the
+// ways a per-group report goes quietly wrong are all arithmetic: the wrong denominator, a
+// group folded by averaging its parts, a missing group read as a missing measurement.
+describe('groupRows', () => {
+  /** Two kinds interleaved, so a row that forgot to filter by group would show it. */
+  const CHANGES = [
+    { tick: 10, tankId: 1, kind: 'brown', from: undefined, to: 7, reason: null },
+    { tick: 12, tankId: 2, kind: 'teal', from: undefined, to: 7, reason: null },
+    { tick: 100, tankId: 1, kind: 'brown', from: 7, to: 8, reason: 'switched-on-expiry' },
+    { tick: 30, tankId: 2, kind: 'teal', from: 7, to: 9, reason: 'switched-on-expiry' },
+    { tick: 60, tankId: 2, kind: 'teal', from: 9, to: 7, reason: 'target-lost' },
+  ];
+
+  it('divides each group by its OWN AI-ticks, not by the run total', () => {
+    const rows = groupRows({ changes: CHANGES, ticksByGroup: { brown: 1000, teal: 4000 } });
+    const brown = rows.find((r) => r.group === 'brown')!;
+    const teal = rows.find((r) => r.group === 'teal')!;
+    // One expiry switch each, on denominators 1000 and 4000.
+    expect(brown.switchesOnExpiry).toBe(1);
+    expect(teal.switchesOnExpiry).toBe(1);
+    expect(brown.switchesOnExpiryPer1kTicks).toBe(1);
+    expect(teal.switchesOnExpiryPer1kTicks).toBe(0.25);
+    // THE CONTROL. Dividing by the pooled 5000 would give both rows 0.2, so equal rates here
+    // would mean the denominator is the run's rather than the group's -- exactly the dilution
+    // that makes a single-profile sweep look like it did nothing.
+    expect(brown.switchesOnExpiryPer1kTicks).not.toBe(teal.switchesOnExpiryPer1kTicks);
+  });
+
+  it('scopes held spans to the group, so one kind cannot report another kind s spans', () => {
+    const rows = groupRows({ changes: CHANGES, ticksByGroup: { brown: 1000, teal: 4000 } });
+    const brown = rows.find((r) => r.group === 'brown')!;
+    const teal = rows.find((r) => r.group === 'teal')!;
+    // brown held 7 from tick 10 to 100: one span of 90. teal held 7 from 12 to 30 and 9 from
+    // 30 to 60: spans 18 and 30.
+    expect(brown.spanTicks.n).toBe(1);
+    expect(brown.spanTicks.p50).toBe(90);
+    expect(teal.spanTicks.n).toBe(2);
+    expect(teal.spanTicks.max).toBe(30);
+    // THE CONTROL. An implementation that passed ALL changes to heldSpans for every group
+    // would give both rows n=3 and the same max. Identical distributions here would mean the
+    // filter is missing and every profile is reporting the whole board.
+    expect(brown.spanTicks.n).not.toBe(teal.spanTicks.n);
+    expect(brown.spanTicks.max).not.toBe(teal.spanTicks.max);
+  });
+
+  it('keeps a group that never changed target, because that is perfect stickiness and not a gap', () => {
+    const rows = groupRows({ changes: CHANGES, ticksByGroup: { brown: 1000, teal: 4000, olive: 2500 } });
+    const olive = rows.find((r) => r.group === 'olive');
+    expect(olive, 'a group with ticks and no changes must still get a row').toBeDefined();
+    expect(olive!.aiTicks).toBe(2500);
+    expect(olive!.changes).toBe(0);
+    expect(olive!.changesPer1kTicks).toBe(0);
+    // Reported as 0 changes over a real denominator, NOT as an empty distribution pretending
+    // to be a measurement: the spans genuinely do not exist.
+    expect(olive!.spanTicks).toEqual({ n: 0, min: null, p50: null, p90: null, max: null, mean: null });
+    // The control for "0 is a measurement here": a group with no ticks at all cannot have a
+    // rate, and reports null rather than 0.
+    const noTicks = groupRows({ changes: [], ticksByGroup: { ghost: 0 } })[0];
+    expect(noTicks.changesPer1kTicks).toBeNull();
+  });
+
+  it('groups by whatever groupOf says, which is how kinds fold onto profiles', () => {
+    const rows = groupRows({
+      changes: CHANGES,
+      ticksByGroup: { SHARED: 5000 },
+      groupOf: () => 'SHARED',
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].group).toBe('SHARED');
+    // Both kinds' expiry switches land in the one row.
+    expect(rows[0].switchesOnExpiry).toBe(2);
+    // The control: the default grouping splits the same changes in two.
+    expect(groupRows({ changes: CHANGES, ticksByGroup: { brown: 1, teal: 1 } })).toHaveLength(2);
+  });
+
+  it('orders rows by AI-ticks so the thinnest evidence is not read first', () => {
+    const rows = groupRows({ changes: CHANGES, ticksByGroup: { brown: 1000, teal: 4000, olive: 2500 } });
+    expect(rows.map((r) => r.group)).toEqual(['teal', 'olive', 'brown']);
+  });
+});
+
+describe('foldToProfiles', () => {
+  it('folds ticks and samples onto the profile before the arithmetic, not after it', () => {
+    // teal and yellow share MOBILE_MINE_LAYER in the shipped tank-defs, which is why folding
+    // has to happen on the inputs: the median of a union is not the median of two medians.
+    const { ticks, shared } = foldToProfiles(
+      { teal: 100, yellow: 300, brown: 50 },
+      { teal: [1, 1, 1], yellow: [0.2], brown: [0.5] },
+      { teal: 'MOBILE_MINE_LAYER', yellow: 'MOBILE_MINE_LAYER', brown: 'STATIC_BASIC' },
+    );
+    expect(ticks).toEqual({ MOBILE_MINE_LAYER: 400, STATIC_BASIC: 50 });
+    expect(shared.MOBILE_MINE_LAYER).toEqual([1, 1, 1, 0.2]);
+    // THE CONTROL. The union's median is 1; averaging the two kinds' medians (1 and 0.2) gives
+    // 0.6. A distribution taken over the folded samples must therefore read 1 here, and a 0.6
+    // would mean the fold happened after the arithmetic.
+    expect(distribution(shared.MOBILE_MINE_LAYER).p50).toBe(1);
+    expect(distribution(shared.MOBILE_MINE_LAYER).p50).not.toBe(0.6);
+  });
+
+  it('refuses a kind the configuration does not map, rather than pooling it under undefined', () => {
+    expect(() => foldToProfiles({ mauve: 10 }, {}, { brown: 'STATIC_BASIC' })).toThrow(/no AI profile for kind 'mauve'/);
+  });
+
+  it('carries a kind with no samples as an empty list, not as a missing profile', () => {
+    const { ticks, shared } = foldToProfiles({ brown: 40 }, {}, { brown: 'STATIC_BASIC' });
+    expect(ticks).toEqual({ STATIC_BASIC: 40 });
+    // The ticks are real even when no sample was taken: the tank was alive and target-less.
+    expect(shared.STATIC_BASIC).toEqual([]);
+  });
+});
+
+describe('profileCoverage', () => {
+  const AUTHORED = ['STATIC_BASIC', 'MOBILE_MINE_LAYER', 'RICOCHET_SNIPER', 'BERSERKER_ROCKET'];
+  const REACHABLE = ['STATIC_BASIC', 'MOBILE_MINE_LAYER', 'RICOCHET_SNIPER'];
+
+  it('separates "no tank carries it" from "these seeds did not produce one"', () => {
+    const c = profileCoverage(AUTHORED, REACHABLE, { STATIC_BASIC: 500, MOBILE_MINE_LAYER: 200 });
+    expect(c.covered).toEqual(['STATIC_BASIC', 'MOBILE_MINE_LAYER']);
+    // RICOCHET_SNIPER has a kind and got no ticks: widening the seeds can fix that.
+    expect(c.silent).toEqual(['RICOCHET_SNIPER']);
+    // BERSERKER_ROCKET has no kind at all: no seed set can reach it.
+    expect(c.unreachable).toEqual(['BERSERKER_ROCKET']);
+    // THE CONTROL for keeping them apart: pooling both into one list would make these equal,
+    // and the runner prints opposite advice for each ("widen --seeds" vs "cannot be reached").
+    expect(c.silent).not.toEqual(c.unreachable);
+  });
+
+  it('counts a profile covered only on a POSITIVE tick count, not on the key existing', () => {
+    const c = profileCoverage(AUTHORED, REACHABLE, { STATIC_BASIC: 0 });
+    expect(c.covered).toEqual([]);
+    // A key present with 0 ticks is the shape a fold produces for a kind that never spawned;
+    // reading it as covered would report a row with no evidence behind it as evidence.
+    expect(c.silent).toContain('STATIC_BASIC');
   });
 });
