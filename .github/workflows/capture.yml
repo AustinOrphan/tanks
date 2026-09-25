@@ -52,10 +52,12 @@ on:
         required: true
         type: choice
         options:
+          - flow.campaign-round.docs
           - flow.campaign-roster.pp1roles-off
           - flow.campaign-roster.pp1roles-on
           - flow.campaign-round.pp1roles-off
           - flow.campaign-round.pp1roles-on
+          - flow.versus-round.docs
           - gallery.ai-last-seen.normal
           - gallery.ai-tracking.normal
           - gallery.drive.normal

@@ -109,6 +109,11 @@ describe('capture recipe schema', () => {
       // puts the on-screen driving controls on the page. Appended rather than placed beside
       // `screen.practice`, because this list is asserted in the order the file carries.
       'screen.practice.touch',
+      // Issue #258's documentation profile: the same campaign flow and the versus flow at
+      // 640x400 for 8 s at 15 fps, with a GIF preview beside the MP4. Appended, because this
+      // list is asserted in the order the file carries.
+      'flow.campaign-round.docs',
+      'flow.versus-round.docs',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });

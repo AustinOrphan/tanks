@@ -105,6 +105,8 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `flow.campaign-round.pp1roles-on` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |
 | `flow.campaign-roster.pp1roles-off` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |
 | `flow.campaign-roster.pp1roles-on` | `campaign-round` | `capture.mp4` | one round at 30 fps, 60 s ceiling |
+| `flow.campaign-round.docs` | `campaign-round` | `capture.mp4`, `preview.gif` | documentation profile: 640x400, 8 s at 15 fps |
+| `flow.versus-round.docs` | `versus-round` | `capture.mp4`, `preview.gif` | documentation profile: 640x400, 8 s at 15 fps |
 
 The `screen.*` recipes are the `screen` producer (issue #561): they boot the BUILT page
 into a named application state from [`tools/screens/states.mjs`](../screens/states.mjs) and
