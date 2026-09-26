@@ -2,22 +2,21 @@ import type { AiTargetPerception, ArenaGeometry, GameMode, UnarmedTrigger } from
 
 /**
  * The rules a world is played under: every value that is fixed for the life of one
- * `World` and read by the simulation as a POLICY -- which win/lose body runs, what may
+ * `World` and read by the simulation as a policy -- which win/lose body runs, what may
  * harm whom, what a mine reacts to, how much of the board an AI may consider. Resolved
- * ONCE, before the world exists (`resolveWorldRules` below, the only place a default is
+ * once, before the world exists (`resolveWorldRules` below, the only place a default is
  * chosen), frozen, and carried across every tick's clone as one reference (issue #472).
  *
- * Every field is required and `readonly`. That is the point rather than a style choice:
- * #471 was a rule that lived on `World` as an OPTIONAL field, read as `?? 'full'`, and
- * omitted from `cloneWorld`'s field-by-field copy -- the dropped value surfaced as the
- * shipped default from tick 1, and neither TypeScript (an optional field is legally
- * absent) nor any consumer (the fallback hid it) could see the difference. With the
- * rules resolved here, a `World` that exists carries a complete, valid rule set; a
- * consumer reads `world.rules.x` with no fallback; and adding a rule means adding it to
- * this interface and to `resolveWorldRules`, where an omission is a compile error and
- * every hand-built rules literal in the tree fails typecheck until it names the new key.
+ * Every field is required and `readonly`. That is the point rather than a style choice: an
+ * optional rule read as `?? default` and dropped by a clone surfaces as the shipped default,
+ * and neither TypeScript (an optional field is legally absent) nor any consumer (the
+ * fallback hides it) can see the difference (#471). With the rules resolved here, a `World`
+ * that exists carries a complete, valid rule set; a consumer reads `world.rules.x` with no
+ * fallback; and adding a rule means adding it to this interface and to
+ * `resolveWorldRules`, where an omission is a compile error and every hand-built rules
+ * literal in the tree fails typecheck until it names the new key.
  *
- * `seed` is deliberately NOT here. It is fixed for the life of a world too, but it is the
+ * `seed` is deliberately not here. It is fixed for the life of a world too, but it is the
  * entropy key rather than a policy: it does not change what the sim does with a draw, it
  * chooses the draw. It is required and typechecked already, so it carries none of the
  * optional-field hazard this boundary exists to remove.
@@ -25,16 +24,15 @@ import type { AiTargetPerception, ArenaGeometry, GameMode, UnarmedTrigger } from
 export interface WorldRules {
   /**
    * Which win/lose rule this world's `resolveStatus` dispatches to, and which spawn set
-   * `loadArena` built it from -- the n-player arc's PR 4 (FFA + teams). See GameMode
-   * (types.ts). `'campaign-coop'` is the shipped rule: `resolveStatus`'s dispatch routes
-   * it into the ORIGINAL guard-first body, byte-untouched, which is the whole trace
-   * argument -- every call site that never passes `mode` keeps producing today's world.
+   * `loadArena` built it from. See GameMode (types.ts). `'campaign-coop'` is the shipped
+   * rule and the default, so every call site that never passes `mode` -- including the
+   * golden trace's -- gets the campaign win/lose rules.
    */
   readonly mode: GameMode;
   /**
    * Whether a shell or mine blast harms a teammate -- meaningful only in `'teams'` mode.
-   * Default false (protect teammates by default; see the arc design's "Owner forks"
-   * section for the rationale and the named absence of a settled genre convention).
+   * Default false: protect teammates by default, a named feel choice rather than a settled
+   * genre convention (docs/superpowers/plans/2026-08-17-versus-modes.md).
    * Self-disabling outside `'teams'` by construction: the friendly-fire gate in
    * bullets.ts/mines.ts also requires both tanks to carry a `team`, which `loadArena`
    * only ever stamps when `mode === 'teams'` -- so this field is inert in
@@ -54,18 +52,14 @@ export interface WorldRules {
    * wall and be forgotten", which reads as exploitable rather than beatable.
    *
    * `'line-of-sight'` restores the bound, behind `?dev=1&aiPerception=los`, so the
-   * experiment stays runnable. Measured before the ruling: the bound was never once
-   * reached by a banking profile (grey and teal, 0.00% of live ticks) and left a
-   * non-banking one with no target for most of its life (brown 44.78%, olive 77.79%),
-   * because an LOS-only reading deletes bank shots and had to be widened for any profile
-   * with `bankShotWeight > 0`.
+   * experiment stays runnable. It never binds a banking profile (an LOS-only reading
+   * deletes bank shots, so any profile with `bankShotWeight > 0` is widened past it);
+   * measured before the ruling, it left non-banking brown and olive without a target on
+   * 44.78% and 77.79% of live ticks.
    *
-   * SELECTION ONLY. Aiming and firing still require a real line of sight (`hasSolution`),
+   * Selection only. Aiming and firing still require a real line of sight (`hasSolution`),
    * so full awareness does not let a turret track a target through a wall -- it decides
    * who the tank is fighting, not what it can shoot.
-   *
-   * Required here, where it used to be optional on `World` and read as `?? 'full'` --
-   * see this interface's own doc comment for what that cost (#471).
    */
   readonly aiTargetPerception: AiTargetPerception;
   /**
@@ -94,10 +88,10 @@ export interface WorldRules {
    *
    * Default true -- the adopted lean (2026-08-14): "Spawn at hull center might be the
    * way to go but im not certain. Maybe set that up but also have it be flippable."
-   * `false` restores today's shipped behaviour, where the muzzle can spawn already
-   * inside a neighbour's hit circle -- the triage that motivated this switch measured
-   * the harmful variant as a ~0.5-3 degree tangent-escape sliver at exact minimum
-   * separation. See bullets.ts's muzzlePoint.
+   * `false` is the earlier behaviour, where the muzzle can spawn already inside a
+   * neighbour's hit circle -- the triage that motivated this switch measured the harmful
+   * variant as a ~0.5-3 degree tangent-escape sliver at exact minimum separation. See
+   * bullets.ts's muzzlePoint.
    */
   readonly muzzleClearsTanks: boolean;
   /**
@@ -106,28 +100,28 @@ export interface WorldRules {
    * is the "shared attempts" ruling (owner, 2026-08-16) -- one player dying alone costs
    * nothing and the survivor fights on, and only a full wipe (every player dead at
    * once) spends a life and restarts the WHOLE arena via resetArena, exactly the 1P
-   * death experience generalized to "nobody is left standing." FALSE restores the
-   * shipped POOL model (docs/superpowers/plans/2026-08-15-coop-semantics.md): every
-   * player death drains the shared pool by one and schedules that one tank's own
-   * per-tank respawn, leaving the rest of the board untouched.
+   * death experience generalized to "nobody is left standing." FALSE restores the POOL
+   * model (docs/superpowers/plans/2026-08-15-coop-semantics.md): every player death drains
+   * the shared pool by one and schedules that one tank's own per-tank respawn, leaving the
+   * rest of the board untouched.
    *
    * A World construction switch, never a runtime flag read inside src/sim/ -- see
-   * game/devflags.ts's `coopPool`, which is the ONLY thing that ever passes `false`.
+   * game/devflags.ts's `coopPool`, the game's only way to pass `false`.
    */
   readonly coopAttempts: boolean;
   /**
    * The grid this world's walls were built from -- see ArenaGeometry's own doc comment
-   * (types.ts). Populated by loadArena (arena.ts); `null` for a world built straight from
-   * raw tanks/walls/spawns arrays with no grid behind it (most of world.test.ts's
-   * fixtures, sandbox.ts's dev worlds, render/preview.ts's prop). `null` rather than
-   * optional: absence is a RESOLVED answer here, stated by the creation boundary, not a
-   * field a clone can forget.
+   * (types.ts). Populated by loadArena (arena.ts), including for sandbox.ts's dev worlds;
+   * `null` for a world built straight from raw tanks/walls/spawns arrays with no grid
+   * behind it (most of world.test.ts's fixtures, render/preview.ts's prop). `null` rather
+   * than optional: absence is a resolved answer here, stated by the creation boundary, not
+   * a field a clone can forget.
    *
    * Read only by world.ts's respawnPos, to pick a versus respawn cell with
    * pickVersusSpawnCell (versus-spawns.ts). `null` degrades to the tank's own authored
    * spawn -- see respawnPos's own comment -- rather than throwing. A reference, never
    * deep-cloned: the grid strings and legend never mutate after loadArena builds them
-   * (only Wall.destroyed, which lives on `World.walls`, changes mid-round), and since #472
+   * (only Wall.destroyed, which lives on `World.walls`, changes mid-round), and
    * ArenaGeometry's fields are `readonly` (types.ts), so that is enforced by the type --
    * the freeze below is shallow and would not reach this object on its own.
    */

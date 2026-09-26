@@ -9,14 +9,14 @@ import { LIVES } from './constants';
 /**
  * The dev sandbox: an open floor whose contents come from plain options.
  *
- * This file is PURE -- options in, Arena/World out. The query-string parsing that
+ * This file is pure -- options in, Arena/World out. The query-string parsing that
  * produces the options lives in the game layer (devflags), the same route `seed` takes,
  * so runtime flags never enter src/sim/ and a sandbox session replays exactly.
  */
 export interface SandboxOptions {
-  /** Enemy kinds to spawn, any multiset. Default: the classic trio (brown, grey, teal) -- deliberately NOT every kind, so existing sandbox links keep meaning what they meant. */
+  /** Enemy kinds to spawn, any multiset. Default: the classic trio (brown, grey, teal) -- deliberately not every kind, so existing sandbox links keep meaning what they meant. */
   tanks?: TankKind[];
-  /** Weapons off for every enemy. Default TRUE: the sandbox is scenery until asked. */
+  /** Weapons off for every enemy. Default true: the sandbox is scenery until asked. */
   disarmed?: boolean;
   /** Interior wall cells to scatter, seeded. Default 0: open floor. */
   walls?: number;
@@ -30,7 +30,7 @@ export interface SandboxOptions {
  * same place -- a sandbox exists to make observations repeatable.
  *
  * Authored in cells of `SANDBOX_AUTHORED_CELL` world units and rescaled to whatever
- * resolution ARENA_01 currently uses -- see `blockScale`. They are NOT grid indices.
+ * resolution ARENA_01 currently uses -- see `blockScale`. They are not grid indices.
  */
 export const SANDBOX_ENEMY_ANCHORS: ReadonlyArray<readonly [number, number]> = [
   [1, 2], [9, 2], [3, 1], [7, 1], [5, 2], [1, 3], [9, 3], [3, 3], [7, 3], [5, 1],
@@ -40,14 +40,14 @@ const PLAYER_CELL: readonly [number, number] = [5, 7];
 
 /**
  * The cell size the anchors above and the wall/clearance sizes below were authored
- * against. The sandbox borrows ARENA_01's dimensions, so when the shipped arenas were
- * re-expressed at a finer cell size every one of those numbers silently changed meaning:
- * the board stayed 22x18 world units while the anchors, read as raw indices, collapsed
- * into its top-left ninth, and `walls=N` started scattering sub-tank-sized pillars. All
- * of it passed `sandbox.test.ts`, which pins grid characters and never world geometry.
+ * against. The sandbox borrows ARENA_01's dimensions, so read as raw indices at a finer
+ * cell size those numbers silently change meaning: the anchors collapse into the board's
+ * top-left corner and `walls=N` scatters sub-tank-sized pillars.
  *
  * Everything here is therefore expressed in these units and scaled through `blockScale`,
- * so the next resolution change moves the sandbox with the arenas instead of past them.
+ * so a resolution change moves the sandbox with the arenas instead of past them.
+ * `sandbox.test.ts` pins the resulting world positions and wall sizes, not just grid
+ * characters.
  */
 const SANDBOX_AUTHORED_CELL = 2;
 
@@ -57,10 +57,9 @@ function blockScale(cellSize: number): number {
 }
 
 /**
- * An authored cell's index in today's grid: its CENTRE sub-cell, which is what keeps the
+ * An authored cell's index in today's grid: its centre sub-cell, which is what keeps the
  * world position identical across a rescale (`(k*c + (k-1)/2 + 0.5) * cellSize` is
- * `(c + 0.5) * SANDBOX_AUTHORED_CELL` for odd k). Odd k is the same property the arena
- * upscale relied on to leave every shipped spawn where it was.
+ * `(c + 0.5) * SANDBOX_AUTHORED_CELL` for odd k).
  */
 function scaleCell([c, r]: readonly [number, number], k: number): readonly [number, number] {
   const off = (k - 1) >> 1;
@@ -73,7 +72,7 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   teal: 'T',
   olive: 'O',
   // 'N' because grey already holds 'G'. Re-lettering grey would rewrite every
-  // shipped grid, so the newcomer takes the free letter -- see SPAWN_LETTERS,
+  // campaign grid, so the newcomer takes the free letter -- see SPAWN_LETTERS,
   // which this table must agree with.
   green: 'N',
   yellow: 'Y',
@@ -82,8 +81,8 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
 /**
  * Within one authored block of any spawn cell: walls may not crowd a tank at birth.
  * `reach` is in today's cells, so the world-space clearance is the same whatever the
- * resolution -- as a raw Chebyshev-1 it shrank with the cells and stopped clearing a
- * tank's own hull.
+ * resolution -- a raw Chebyshev-1 would shrink with the cells and stop clearing a tank's
+ * own hull.
  */
 function nearSpawn(
   c: number,
@@ -154,7 +153,7 @@ export function sandboxArena(opts: SandboxOptions): Arena {
   // Scatter walls: seeded shuffle of the eligible cells, then take placements one at a
   // time, skipping any that would seal a pocket. Refusing loudly beats returning fewer
   // than asked -- a silent cap reads as "the board has 12 walls" when it has 7.
-  // A "wall" is one AUTHORED block (k x k of today's cells), not one cell: at k=3 a single
+  // A "wall" is one authored block (k x k of today's cells), not one cell: at k=3 a single
   // cell is 0.667 units against a 1.0 tank diameter, which is a pillar rather than the
   // cover this knob exists to place.
   const wanted = opts.walls ?? 0;
@@ -181,10 +180,10 @@ export function sandboxArena(opts: SandboxOptions): Arena {
     const paint = (bc: number, br: number, ch: string): void => {
       for (let r = br; r < br + k; r++) for (let c = bc; c < bc + k; c++) cells[r][c] = ch;
     };
-    // A block may not touch one already placed. `loadArena` merges adjacent SOLID cells
-    // into maximal rectangles, so two blocks side by side load as ONE wall and `walls=N`
-    // quietly yields fewer than N entities -- which is exactly what `levels.test.ts`'s
-    // "scatters the requested walls" caught the first time these became 3x3 blocks.
+    // A block may not touch one already placed. `loadArena` merges adjacent solid cells
+    // into maximal rectangles, so two blocks side by side load as one wall and `walls=N`
+    // quietly yields fewer than N entities; `levels.test.ts`'s "scatters the requested
+    // walls" pins the count.
     const touchesPlaced = (bc: number, br: number): boolean => {
       for (let r = br - 1; r <= br + k; r++) {
         for (let c = bc - 1; c <= bc + k; c++) {
@@ -211,10 +210,9 @@ export function sandboxArena(opts: SandboxOptions): Arena {
 }
 
 /**
- * `rules` replaces the four trailing rule positionals this took (issue #493). Every one was
- * added as "trailing and optional, same precedent", and the precedent was the problem: a
- * caller naming the last of them carried three `undefined`s to reach it. A rule added to
- * `WorldRules` now grows `WorldRulesInit` and no signature here.
+ * Rules arrive as one `WorldRulesInit` object rather than trailing optional positionals
+ * (issue #493), which made a caller naming the last one carry an `undefined` for each
+ * before it. A rule added to `WorldRules` grows `WorldRulesInit` and no signature here.
  */
 export function createSandboxWorld(opts: SandboxOptions, rules: WorldRulesInit = {}): World {
   const loaded = loadArena(sandboxArena(opts));
@@ -225,7 +223,7 @@ export function createSandboxWorld(opts: SandboxOptions, rules: WorldRulesInit =
     }
   }
   // `arenaGeometry` off `rules` for the same reason `createWorldFor` takes it off: it is a
-  // `WorldRulesInit` key that `loadArena` DERIVES, so a caller deriving rules from an
+  // `WorldRulesInit` key that `loadArena` derives, so a caller deriving rules from an
   // existing world would otherwise stamp that world's geometry onto this one.
   const worldRules: WorldRulesInit = { ...rules };
   delete worldRules.arenaGeometry;

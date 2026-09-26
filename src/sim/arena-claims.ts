@@ -8,7 +8,7 @@ import { SPAWN_LETTERS } from './config/arena-types';
 
 /**
  * Evaluates an arena's declared design claims (config/arena-types.ts) against the
- * sim's OWN geometry -- lineOfSight, the same function the AI uses -- so a claim
+ * sim's own geometry -- lineOfSight, the same function the AI uses -- so a claim
  * means exactly what the game means by it.
  *
  * Test-facing: it imports the AI layer, which is why it lives here rather than in
@@ -18,10 +18,9 @@ import { SPAWN_LETTERS } from './config/arena-types';
 
 /**
  * The world-space centre of a grid cell, matching loadArena's spawn placement
- * (`(c + 0.5) * cellSize`, arena.ts). Exported with its inverse below because
- * this formula previously existed in three places -- here, loadArena, and a
- * hand-rolled inverse in arena-validation.test.ts -- with nothing pinning them
- * together. `cell-mapping.test.ts` now does.
+ * (`(c + 0.5) * cellSize`, arena.ts). Exported with its inverse below so tests
+ * share one copy of the formula rather than hand-rolling it; the formula also
+ * lives in loadArena, and `cell-mapping.test.ts` pins the copies together.
  */
 export function cellCentre(arena: Arena, [c, r]: readonly [number, number]): Vec2 {
   return { x: (c + 0.5) * arena.cellSize, y: (r + 0.5) * arena.cellSize };
@@ -33,9 +32,9 @@ export function cellOf(arena: Arena, p: Vec2): [number, number] {
 }
 
 /**
- * Every destructible wall destroyed, as a COPY -- the caller's array is left
- * intact. Exported so tests stop open-coding the idiom (three sites did, and
- * they mutated in place, which is a different thing).
+ * Every destructible wall destroyed, as a copy -- the caller's array is left
+ * intact, which an open-coded in-place mutation would not do. Exported so
+ * tests share it rather than open-coding the idiom.
  */
 export function breach(walls: Wall[]): Wall[] {
   return walls.map((w) => (w.kind === 'destructible' ? { ...w, destroyed: true } : w));
@@ -44,7 +43,7 @@ export function breach(walls: Wall[]): Wall[] {
 /**
  * The grid with `marks` overwritten as `*`, for failure messages.
  *
- * An out-of-grid mark is REPORTED, not thrown: this runs on the failure path, so
+ * An out-of-grid mark is reported, not thrown: this runs on the failure path, so
  * a raw TypeError here would bury the failure it was called to explain. Data
  * from arenas.json cannot get here out of range (the validator bounds-checks
  * every claim cell), but a hand-built test claim can.
@@ -69,11 +68,11 @@ export function renderBoard(
 }
 
 /**
- * A cell a tank could EVER stand on: open now, or openable by demolition. The
- * 2026-07-31 balance pass made ARENA_02's middle bar a full destructible barrier --
- * the halves START sealed and the level is about breaching it -- so plain-open
- * connectivity is a design choice, not an invariant. SOLID-sealed pockets remain
- * forbidden: no amount of play opens those.
+ * A cell a tank could ever stand on: open now, or openable by demolition.
+ * ARENA_02's middle bar is a full destructible barrier -- the halves start sealed
+ * and the level is about breaching it -- so plain-open connectivity is a design
+ * choice, not an invariant. Solid-sealed pockets are forbidden: no amount of play
+ * opens those.
  */
 function isBreachable(arena: Arena, r: number, c: number): boolean {
   const kind = arena.legend[arena.grid[r][c]];
@@ -83,12 +82,11 @@ function isBreachable(arena: Arena, r: number, c: number): boolean {
 /**
  * 4-neighbour flood fill over breachable cells; also names what it could not reach.
  *
- * The fill starts at the PLAYER's cell, not at the first breachable cell in scan
+ * The fill starts at the player's cell, not at the first breachable cell in scan
  * order. Connectivity is symmetric so the pass/fail answer is identical either way,
- * but the REPORTED set is not: review caught the scan-order version marking the whole
- * play area as "cut off" on the sealed-pocket fixture, because that fixture's sealed
- * cell sorts first and became the fill's origin. Anchoring on the player makes
- * `unreached` mean "cut off from the player", which is the thing worth drawing.
+ * but the reported set is not: filling from a sealed cell that sorts first marks the
+ * whole play area as "cut off". Anchoring on the player makes `unreached` mean "cut
+ * off from the player", which is the thing worth drawing.
  */
 function reachable(arena: Arena): { open: number; reached: number; unreached: Array<[number, number]> } {
   const { rows, cols } = arena;
@@ -134,12 +132,12 @@ function reachable(arena: Arena): { open: number; reached: number; unreached: Ar
 }
 
 /**
- * The rules EVERY arena obeys, whatever it claims: no solid-sealed pockets, no enemy
+ * The rules every arena obeys, whatever it claims: no solid-sealed pockets, no enemy
  * holding a straight line to the player spawn at spawn (Brown never moves, so such a
- * line is a death sentence three seconds into the level), and -- since green shipped --
- * no STATIONARY banking enemy holding a RICOCHET path to it either.
+ * line is a death sentence three seconds into the level), and no STATIONARY banking
+ * enemy holding a ricochet path to it either.
  *
- * Extracted from arena-validation.test.ts so a deliberately broken fixture can be
+ * Lives outside arena-validation.test.ts so a deliberately broken fixture can be
  * fed to it -- inline rules in a describe.each can only ever see arenas that exist.
  */
 export function structuralFailures(arena: Arena): string[] {
@@ -164,28 +162,25 @@ export function structuralFailures(arena: Arena): string[] {
         ]),
       );
     }
-    // A BANKING enemy defeats the rule above by going round the wall that satisfies it.
-    // Before green shipped, every enemy's only path to the spawn was the straight line
-    // lineOfSight tests, so "no spawn sightline" and "no spawn shot" were the same
-    // statement. They are not any more: RICOCHET_SNIPER is stationary, holds a 0.55 bank
-    // weight and a 0.35s reaction, so a bank path onto the spawn is the same death
-    // sentence the direct rule exists to prevent -- and on every respawn, not just once.
+    // A banking enemy defeats the rule above by going round the wall that satisfies it,
+    // so "no spawn sightline" is not "no spawn shot": RICOCHET_SNIPER is stationary, holds
+    // a 0.55 bank weight and a 0.35s reaction, so a bank path onto the spawn is the same
+    // death sentence the direct rule exists to prevent -- and on every respawn, not just once.
     //
     // STATIONARY bankers only, and that restriction is measured, not assumed. Applied to
-    // every banking profile it fails two SHIPPED arenas: on arena-01 the grey at (13, 5)
+    // every banking profile it fails two shipped arenas: on arena-01 the grey at (13, 5)
     // banks onto the spawn off 1 wall and the teal at (11, 7) off 2, and arena-04's two
-    // teals do the same. arena-01 is the oldest level in the game and plays fine, because
-    // grey and teal are MOBILE -- they leave the spawn geometry within about a second, so
-    // the line they hold at tick 0 is a curiosity. A stationary gunner never leaves, so it
-    // holds that line for the whole level and on every respawn. That difference is the
-    // whole rule; widening it to mobile tanks would reject levels the game has shipped.
+    // teals do the same. arena-01 plays fine because grey and teal are mobile -- they
+    // leave the spawn geometry within about a second, so the line they hold at tick 0 is
+    // a curiosity. A stationary gunner never leaves, so it holds that line for the whole
+    // level and on every respawn. That difference is the whole rule; widening it to
+    // mobile tanks would reject levels the game has shipped.
     //
-    // Also gated on the weight, so it costs nothing for kinds that never bank. INTACT
+    // Also gated on the weight, so it costs nothing for kinds that never bank. Intact
     // walls only, matching the direct rule immediately above: arena-02 deliberately opens
     // direct spawn lines once its barrier is breached, so a post-breach rule would
     // contradict a shipped level's design. An arena wanting the post-breach guarantee
-    // declares spawnBlockRobust, which checks both phases AND, since review found
-    // this sentence promising a guarantee the code did not implement, banks too.
+    // declares spawnBlockRobust, which checks both phases, banks included.
     const cfg = configFor(enemy.kind);
     if (cfg.behavior === AIBehavior.STATIONARY
         && cfg.ai.bankShotWeight > 0
@@ -246,37 +241,29 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
           { x: 0, y: claim.nudge }, { x: 0, y: -claim.nudge },
         ];
         // Both wall phases, not just intact: the defect this claim exists to catch
-        // (arena-03's original corner-tangency) was a POST-breach tangency -- with
+        // (arena-03's original corner-tangency) was a post-breach tangency -- with
         // the centre peek destroyed, both browns' lines were blocked only by a
         // single-point tangency that a 0.1-unit nudge opened. Checking intact alone
-        // is silently blind to that. Checking both IS stronger than the bespoke test
-        // this claim type replaced, but not because intact adds detection power on
-        // its own: measured across all 5 arena-01/02/03-and-fixture scenarios --
-        // this switch case only runs where the claim is DECLARED, so arena-02 (which
-        // does not declare it) is measured by its own test in arena-validation.test.ts
-        // rather than here -- 0 failures were intact-only. Breach only ever reveals sightlines, never
-        // hides them, so an intact failure is always also a breached one at the same
-        // enemy/offset. arena-02 fails 12 of its 16 breached-phase checks and 0 of 16
-        // intact -- exactly why it carries no spawnBlockRobust claim: the level's
-        // design is to open sightlines when the centre barrier breaches, not to
-        // survive it. The actual gain over the deleted test is the 4 cardinal
-        // offsets here versus its 2 (±x), run on every claiming arena; the intact
-        // phase's value is labelling which wall state a failure lives in, not
-        // catching anything breached alone would miss.
+        // is silently blind to that. For sightlines the intact phase adds no
+        // detection: breach only ever reveals sightlines, never hides them, so an
+        // intact failure is always also a breached one at the same enemy/offset
+        // (measured: 0 failures were intact-only). Its value is labelling which wall
+        // state a failure lives in. arena-02 fails 12 of its 16 breached-phase checks
+        // and 0 of 16 intact -- exactly why it carries no spawnBlockRobust claim: the
+        // level's design is to open sightlines when the centre barrier breaches, not
+        // to survive it. Since arena-02 never declares this claim, this case never
+        // runs for it; those figures come from arena-validation.test.ts.
         const phases = [
           { name: 'intact', walls } as const,
           { name: 'breached', walls: breached } as const,
         ];
-        // A STATIONARY banker is checked for a RICOCHET onto the nudged spawn as well as
+        // A STATIONARY banker is checked for a ricochet onto the nudged spawn as well as
         // a straight line. structuralFailures forbids it a bank onto the spawn with walls
-        // INTACT; this is the post-breach half, and the reason it lives here rather than
+        // intact; this is the post-breach half, and the reason it lives here rather than
         // there is the same reason the direct rule stops at intact -- arena-02 opens spawn
         // lines on purpose when its barrier goes, so a universal post-breach rule would
         // reject a shipped level. Declaring spawnBlockRobust is how an arena opts in to
-        // the stronger guarantee. Written after review found the comment here promising
-        // exactly this escape hatch while the code checked lineOfSight only, so an arena
-        // could declare the claim and still hand green a post-breach ricochet onto the
-        // respawn point. Costs nothing for the four kinds that never bank and for every
+        // the stronger guarantee. Costs nothing for kinds that never bank and for every
         // mobile one.
         for (const enemy of spawns.filter((s) => s.kind !== 'player')) {
           const cfg = configFor(enemy.kind);

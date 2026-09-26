@@ -8,7 +8,7 @@ import { VERSUS_CATALOG } from './config/versus-catalog';
 
 /**
  * Deterministic geometry validators for the VS arena catalog (issue #270): prove
- * every DECLARATION a `versus-catalog.json` entry makes -- supported player counts
+ * every declaration a `versus-catalog.json` entry makes -- supported player counts
  * and modes, advertised variants -- against the real spawn/sightline machinery,
  * and report each violation as one line naming the exact entry, player count,
  * mode, variant, and failed rule.
@@ -18,16 +18,15 @@ import { VERSUS_CATALOG } from './config/versus-catalog';
  * -- does the geometry actually deliver what the entry advertises? It runs in
  * tests (versus-catalog-rules.test.ts's sweep), not in the shipped path: the
  * shipped menu trusts the declarations precisely because the sweep pins them to
- * measured ground truth in CI. That replaces the pane's old per-render
- * `versusBoardCatalog()` sweep (~15 `loadArena` calls) with a data read.
+ * measured ground truth in CI.
  *
- * IMPORT GRAPH: imports `arena.ts`, `versus-board.ts`, `versus-variants.ts` and
- * `config/versus-catalog.ts`. Nothing under `src/sim/` imports this module
- * (grepped at the point it was written), so none of those edges can close a
- * cycle. Everything here is a pure function of validated static data.
+ * Import graph: imports `arena.ts`, `versus-board.ts`, `versus-variants.ts`,
+ * `versus-spawns.ts` and `config/versus-catalog.ts`. No production module imports
+ * this one, so none of those edges can close a cycle. Everything here is a pure
+ * function of validated static data.
  */
 
-/** Everything #225's authoritative clearance rule will need when it lands. */
+/** Everything a spawn-clearance rule (issue #225) receives. */
 export interface SpawnClearanceContext {
   readonly arena: Arena;
   readonly grid: string[];
@@ -38,19 +37,18 @@ export interface SpawnClearanceContext {
 /**
  * The #225 consumption seam: an injectable rule receiving the real picked spawn
  * positions for one declared player count on the authored grid, returning
- * human-readable violations (empty = clean). Defaults to the REAL rule
+ * human-readable violations (empty = clean). Defaults to the real rule
  * (`defaultClearanceRule` below, issue #312); inject to override.
  */
 export type SpawnClearanceRule = (ctx: SpawnClearanceContext) => string[];
 
 /**
- * The DEFAULT clearance rule (issue #312): #225's real
- * `versusSpawnClearanceFailures`, wired now that both halves are merged. Spawn
- * positions are already clearance-filtered at pick time (#225), so on healthy
- * boards this re-verifies to zero lines; a board whose eligible pool empties
- * (the picker's documented fallback) is exactly what it surfaces in the sweep.
- * Still injectable: tests and future policies override via
- * `VersusCatalogRuleOptions.clearanceRule`.
+ * The default clearance rule (issue #312): #225's real
+ * `versusSpawnClearanceFailures`. Spawn positions are already clearance-filtered
+ * at pick time (#225), so on healthy boards this re-verifies to zero lines; a
+ * board whose eligible pool empties (the picker's documented fallback) is exactly
+ * what it surfaces in the sweep. Injectable: tests and future policies override
+ * via `VersusCatalogRuleOptions.clearanceRule`.
  */
 const defaultClearanceRule: SpawnClearanceRule = (ctx) =>
   versusSpawnClearanceFailures(
@@ -103,11 +101,11 @@ function playerPositions(arena: Arena, playerCount: number): { x: number; y: num
 
 /**
  * Spawn cells not reachable from the P cell through non-solid cells. Destructible
- * cells COUNT as traversable here: they are breachable, so a spawn behind them is
+ * cells count as traversable here: they are breachable, so a spawn behind them is
  * eventually reachable -- the same solid/breachable distinction
  * `arena-claims.ts`'s sealed-pocket rule draws. What this catches is the case
  * `evaluateVersusBoard` cannot see: the maximin picker gladly places a spawn
- * across a fully SOLID divider (distance is exactly what it maximises, and the
+ * across a fully solid divider (distance is exactly what it maximises, and the
  * divider even grants concealment), leaving two players who can never meet.
  */
 function unreachableSpawnCells(
@@ -184,15 +182,11 @@ export function versusCatalogEntryFailures(
     // criteria, one evaluation per N (geometry is mode-independent; see
     // versus-board.ts's 'ffa'-stands-for-both note), reported per declared mode.
     const authored = evaluateVersusBoard(arena, n);
-    // Hoisted, not memoised (issue #664). This was called twice per (entry, N) with
-    // identical arguments -- once here and once for the clearance rule below -- and each
-    // call runs a full `loadArena` spawn placement, the single most expensive thing in
-    // this sweep. A local is the whole fix: same values, same order, no cache and no
-    // module state, so nothing about determinism changes. A MEMO would have been the
-    // wrong tool here even though it is faster still: this file's own
-    // "two runs on the same entry are deep-equal" test, and the two catalog sweeps that
-    // deliberately reach the same answer by different routes, all become vacuous the
-    // moment a cache returns the first run's object to the second.
+    // One placement per (entry, N), shared with the clearance rule below (issue #664):
+    // each call runs a full `loadArena` spawn placement, the single most expensive thing
+    // in this sweep. A local, not a memo: versus-catalog-rules.test.ts's "two runs on the
+    // same entry are deep-equal" test becomes vacuous the moment a cache returns the
+    // first run's object to the second.
     const positions = playerPositions(arena, n);
     const unreachable = unreachableSpawnCells(arena, positions);
 

@@ -4,42 +4,39 @@ import type { BotDifficulty } from '../types';
 /**
  * Per-bot competence presets for versus (issue #267).
  *
- * THE BINDING MODEL, which both this issue and #223 state in the same words: a difficulty
- * preset is an *orthogonal competence modifier applied over the tank type's authored AI
- * profile*. The profile keeps personality -- behaviour, aggression, preferred and minimum
- * distance, retreat tendency, movement and shot commitment, direct-vs-bank preference,
- * mine tendency, weapons. Difficulty may only make a bot better or worse at the things it
- * is already trying to do.
+ * The binding model, which both this issue and #223 state: a difficulty preset is an
+ * *orthogonal competence modifier applied over the tank type's authored AI profile*. The
+ * profile keeps personality -- behaviour, aggression, preferred and minimum distance, retreat
+ * tendency, movement and shot commitment, direct-vs-bank preference, mine tendency, weapons.
+ * Difficulty may only make a bot better or worse at the things it is already trying to do.
  *
- * WHY MULTIPLIERS AND NOT VALUES. An absolute table would BE a tank-by-difficulty profile
- * matrix, which both issues forbid by name, and it would silently stop tracking the
- * authored profile the first time anyone retuned it -- `hard` would keep asserting the
- * number it was written with. A multiplier composes: retune the profile and all three
- * difficulties move with it, which is what "over the authored profile" has to mean.
+ * Multipliers, not values: an absolute table would be a tank-by-difficulty profile matrix,
+ * which both issues forbid by name, and it would silently stop tracking the authored profile
+ * the first time anyone retuned it -- `hard` would keep asserting the number it was written
+ * with. A multiplier composes: retune the profile and all three difficulties move with it,
+ * which is what "over the authored profile" has to mean.
  *
- * ALL SIX AXES ARE HERE (#223 landed the other three). `AIProfile` shipped fields for
- * `aimAccuracy`, `reactionTime` and `estimationAccuracy`; #223 added `awarenessDelay`,
- * `safetyMargin` and `hazardRefreshTime`, and they joined `COMPETENCE` exactly as this
- * comment predicted, without the composition changing shape. Nothing else in `AIProfile` is
- * reachable from here, which is the personality/competence split made structural.
+ * All six competence axes are here: `aimAccuracy`, `estimationAccuracy`, `reactionTime`,
+ * `awarenessDelay`, `safetyMargin` and `hazardRefreshTime`. Nothing else in
+ * `AIProfileBalance` is reachable from here, which is the personality/competence split made
+ * structural.
  *
- * TWO COMPOSITION KINDS, and the reason is arithmetic rather than taste. Five axes are
- * scaled MULTIPLICATIVELY, because they are magnitudes with a meaningful zero the profile
+ * Two composition kinds, and the reason is arithmetic rather than taste. Five axes are
+ * scaled multiplicatively, because they are magnitudes with a meaningful zero the profile
  * never authors and a multiplier is what lets a retuned profile carry all three difficulties
- * with it. `safetyMargin` is composed ADDITIVELY because it is SIGNED and authored at 0: a
+ * with it. `safetyMargin` is composed additively because it is signed and authored at 0: a
  * multiplier cannot move zero, so an additive offset is the only composition under which
  * `easy` can cut a corner and `hard` can keep room while `normal` stays exactly the authored
  * value. Both kinds are explicit, bounded and validated, which is what both issues require;
  * neither introduces a per-kind override or a tank-by-difficulty table.
  *
- * THE NUMBERS ARE STILL PROVISIONAL, and the sweep that was missing has since been run --
- * ai/bot-difficulty.measure.test.ts, 16 seeds per arm on vs-duel-01. It reported `easy`
- * separating decisively (0 wins in 16, kill ledger inverted) and `hard` busier but not
- * measurably better at that population, which is recorded on #223 along with the mechanism
- * (the `AI_AIM_SPREAD` anchor, not the accuracy ceiling). Choosing new multipliers needs the
- * normal-speed human read #223 also requires, so the three incumbent columns are unchanged
- * here. What is NOT provisional is the structure: `normal` is exactly identity, the ordering
- * is monotone on every axis, and `hard` cannot reach perfection -- see the bounds below.
+ * The numbers are provisional. ai/bot-difficulty.measure.test.ts (16 seeds per arm on
+ * vs-duel-01) found `easy` separating decisively (0 wins in 16, kill ledger inverted) and
+ * `hard` busier but not measurably better, and records the mechanism: the `AI_AIM_SPREAD`
+ * anchor, not the accuracy ceiling. Choosing new multipliers needs the normal-speed human
+ * read #223 also requires. What is not provisional is the structure: `normal` is exactly
+ * identity, the ordering is monotone on every axis, and `hard` cannot reach perfection --
+ * see the bounds below.
  */
 export type { BotDifficulty };
 
@@ -62,19 +59,17 @@ export function isBotDifficulty(value: unknown): value is BotDifficulty {
 /**
  * How long a versus bot holds its committed opponent, in seconds, per difficulty (issue #891).
  *
- * WHY IT LIVES HERE AND NOT IN `ai-profiles.json`. A versus bot fills a PLAYER slot, and
+ * It lives here and not in `ai-profiles.json` because a versus bot fills a player slot, and
  * `roster.ts` records that the player "carries an (inert) aiProfile only because the schema
  * requires" one -- so `configFor('player').ai.targetCommitmentTime` is a number nobody chose.
  * Reading a bot's commitment span through it would be a value with no owner. This table is the
  * owner: it is bot configuration, in the file that already owns bot competence, which is where
  * #267 would tune it.
  *
- * WHY ALL THREE ARE 1.5. That is exactly `targetCommitmentTime` in all 8 entries of
- * `ai-profiles.json`, so a versus bot commits for the same span the campaign AI already does
- * and this issue changes no timing anywhere. Differentiating the columns is a balance
- * decision, and #891's boundaries exclude difficulty rebalancing -- the table is keyed by
- * difficulty so that decision has somewhere to land, not because it has been made. Equal
- * numbers here are a claim that can be checked by reading them, which is the point.
+ * All three are 1.5, exactly `targetCommitmentTime` in all 8 entries of `ai-profiles.json`, so
+ * a versus bot commits for the same span the campaign AI does. Differentiating the columns is
+ * a balance decision, and #891's boundaries exclude difficulty rebalancing -- the table is
+ * keyed by difficulty so that decision has somewhere to land, not because it has been made.
  */
 export const BOT_TARGET_COMMITMENT_SECONDS: Record<BotDifficulty, number> = {
   easy: 1.5,
@@ -115,10 +110,11 @@ interface CompetenceScale {
 /**
  * The presets.
  *
- * `normal` is all-ones and is additionally short-circuited in `withBotDifficulty`, so it
- * is identity by construction and not merely by arithmetic -- floating-point multiplication
- * by 1 is exact, but relying on that for a "byte-identical no-op" claim is the kind of
- * argument that stops being true the day someone writes 1.0 as 100/100.
+ * `normal` is the identity on every axis (1 for each multiplier, 0 for the additive
+ * `safetyMargin`) and is additionally short-circuited in `withBotDifficulty`, so it is
+ * identity by construction and not merely by arithmetic -- floating-point multiplication
+ * by 1 is exact, but a "byte-identical no-op" claim should not depend on every `normal`
+ * entry staying exactly 1.
  *
  * The asymmetry between `easy` and `hard` is deliberate. `easy` moves further from
  * `normal` than `hard` does, because the shipped player profile (`STATIC_BASIC`: aim 0.55,
@@ -194,7 +190,7 @@ export const MIN_COMPETENCE_HAZARD_REFRESH = 0.1;
  *
  * Symmetric and applied to the RESOLVED value, so it bounds an authored margin plus the
  * preset's offset rather than the offset alone. 0.5 is one TANK_RADIUS: at the top a bot
- * keeps a tank's width of extra room, at the bottom it cuts a tank's width off the radius it
+ * keeps a tank radius of extra room, at the bottom it cuts a tank radius off the radius it
  * would otherwise flee to -- past which "cautious" and "careless" stop being adjustments to
  * a judgment and start being a different judgment.
  */
@@ -205,9 +201,9 @@ const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > 
 /**
  * A resolved config with its competence axes scaled by `difficulty`.
  *
- * Returns the INPUT OBJECT UNCHANGED for `normal` -- referential identity, not an equal
+ * Returns the input object unchanged for `normal` -- referential identity, not an equal
  * copy. That is what lets the no-op claim be checked with `toBe` rather than `toEqual`,
- * and it means a `normal` bot cannot differ from a pre-#267 bot even by object shape.
+ * and it means a `normal` bot cannot differ from the authored profile even by object shape.
  *
  * Everything except `ai` is passed through untouched, which is the profile/competence
  * split made structural: there is no path here that can reach `behavior`, `weapon`,

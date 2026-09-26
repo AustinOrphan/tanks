@@ -7,19 +7,17 @@ import { BOT_TARGET_COMMITMENT_SECONDS } from './bot-difficulty';
 import { TICK_HZ } from '../constants';
 
 /**
- * Sticky opponent selection for a bot filling a versus PLAYER slot (issue #891).
+ * Sticky opponent selection for a bot filling a versus player slot (issue #891).
  *
- * WHY THIS FILE EXISTS. #359 gave the campaign AI a committed opponent held for a
- * deterministic window, and versus bots could not have one: they occupy player slots, so
- * `tank.kind === 'player'`, and `stepAi` skipped every such tank by construction. The bot was
- * driven entirely by `player-profile.ts`, which reassessed its opponent every tick. #359's own
- * last acceptance criterion asks for VS-bot evidence of sticky targeting, and until now that
- * evidence could not exist -- a versus recording with `--flag aiContact` drew an empty overlay.
+ * #359 gives the campaign AI a committed opponent held for a deterministic window, but
+ * versus bots occupy player slots, so `tank.kind === 'player'` and the campaign path
+ * (`commitTarget`, run by `stepAi` for non-player tanks) never reaches them. This file gives
+ * them the same kind of commitment.
  *
- * THE SPLIT BETWEEN WRITE AND READ, and why it is not an accident. `commitBotTarget` is called
+ * The split between write and read, and why it is not an accident. `commitBotTarget` is called
  * by `stepAi`, inside `step`, which is the only place entitled to write simulation state.
  * `committedOpponent` is called by `decidePlayerInput`, which `game/loop.ts` runs to build the
- * input BEFORE `step` -- and which is forbidden from writing to the world at all. So the bot
+ * input before `step` -- and which is forbidden from writing to the world at all. So the bot
  * reads, one tick later, what `stepAi` wrote. The alternative shapes are both closed: keeping
  * the commitment in `PlayerAiState` puts it outside the world, where seeded replay and the
  * contact overlay cannot see it, and returning a commitment from `decidePlayerInput` for
@@ -30,7 +28,7 @@ import { TICK_HZ } from '../constants';
  * The opponent this bot would pick if it had to choose right now: nearest visible, or nearest
  * outright when none is visible.
  *
- * DELIBERATELY THE SAME RULE `assessThreats` USES for `engaged` (`nearestVisible ?? nearest`,
+ * Deliberately the same rule `assessThreats` uses for `engaged` (`nearestVisible ?? nearest`,
  * player-profile.ts, issue #893). The commitment must not be a third opinion sitting beside
  * the threat pass -- that is how movement and firing came to disagree in the first place. It
  * is expressed here rather than shared as code because `assessThreats` also computes the
@@ -66,12 +64,12 @@ export function isBotDriven(tank: Tank): boolean {
  * Advance this bot's commitment. Called by `stepAi`, the one writer of simulation state.
  *
  * The span comes from `BOT_TARGET_COMMITMENT_SECONDS`, which is bot configuration keyed by
- * difficulty -- NOT from `configFor('player').ai.targetCommitmentTime`, which `roster.ts`
- * records as an inert value the schema demands and nobody chose (issue #891, point 1).
+ * difficulty -- not from `configFor('player').ai.targetCommitmentTime`, which `roster.ts`
+ * records as an unread value the schema demands and nobody chose (issue #891, point 1).
  *
  * Distance to the opponent is the cost, where the campaign policy uses distance to the
  * profile's preferred range band. A versus bot has no preferred band that anyone picked --
- * that band lives on the same inert player profile -- so ranking by raw distance is the
+ * the player profile's band goes unread too -- so ranking by raw distance is the
  * honest reading of "materially better", and it agrees with `bestCandidate`'s own
  * nearest-first rule rather than ranking by one measure and selecting by another.
  */
@@ -90,7 +88,7 @@ export function commitBotTarget(world: World, tank: Tank): RetargetReason | null
 /**
  * The opponent a bot is committed to, for the decision that runs a tick after the write.
  *
- * RE-VALIDATED HERE, not trusted. Between `stepAi` writing the commitment and
+ * Re-validated here, not trusted. Between `stepAi` writing the commitment and
  * `decidePlayerInput` reading it, a whole `step` has run: the committed tank may have died,
  * or -- on a stock respawn -- come back. Returning it unchecked is exactly the "stuck on a
  * stale opponent" failure #359's rule 5 forbids, and the write-side check cannot cover a gap

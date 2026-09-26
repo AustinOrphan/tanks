@@ -1,7 +1,7 @@
 // Entity-definition vocabulary. Adopted verbatim from the supplied
 // `tank-enums.ts` (the "wii-play-tanks-config" drop): the enums are unit-agnostic
-// labels, so the SAME set describes both the 9-type reference taxonomy
-// (config/reference/) and the game's shipped 4-kind roster (config/roster.ts).
+// labels, so the same set describes both the 9-type reference taxonomy
+// (config/reference/) and the game's shipped roster (config/roster.ts).
 // Numbers live in a BalanceConstants table, never here.
 //
 // Provenance (issue #783): the drop is first-party. It was written for this project with

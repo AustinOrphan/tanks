@@ -2,20 +2,18 @@ import type { WallKind } from '../types';
 import { createCatalog } from './catalog';
 
 // ---------------------------------------------------------------------------
-// The SECOND entity family on the catalog machinery, which is what makes the
-// pipeline generic rather than tank-shaped: walls. No balance classes yet, so
-// the resolver is the identity -- the definition IS the runtime config. If wall
-// tuning ever grows classes (armour tiers, breach thresholds), this grows a
-// balance table and a real resolver the same way tanks did, without its
-// consumers changing.
+// Walls on the catalog machinery. No balance classes yet, so the resolver only
+// copies -- the definition is the runtime config. If wall tuning ever grows
+// classes (armour tiers, breach thresholds), this grows a balance table and a
+// real resolver the same way tanks did, without its consumers changing.
 //
-// Fidelity: authored to reproduce current behaviour exactly. Colours are the
-// hex the renderer shipped as literals; destructibleByBlast mirrors the
-// `kind === 'destructible'` test the mine system used to hardcode. Whether a
-// blast PASSES a destructible wall on its way to a tank stays the documented
-// build-time constant MINE_BLAST_THROUGH_DESTRUCTIBLE (constants.ts) -- it is a
-// rule of the blast, not a property of one wall kind, and blastReaches already
-// takes it as a parameter.
+// Colours are the hex the renderer shipped as literals; destructibleByBlast
+// mirrors the `kind === 'destructible'` test the mine system used to hardcode.
+//
+// Whether a blast passes a destructible wall on its way to a tank is the
+// build-time constant MINE_BLAST_THROUGH_DESTRUCTIBLE (constants.ts), not a
+// field here: it is a rule of the blast, not a property of one wall kind, and
+// blastReaches takes it as a parameter.
 // ---------------------------------------------------------------------------
 
 export interface WallDefinition {

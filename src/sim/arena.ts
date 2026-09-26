@@ -50,8 +50,8 @@ export { arenaById, ARENA_DEFS };
  * The playable area, in world units. Derived from the same `cols * cellSize`
  * that `loadArena` lays the grid out with, so the two can never drift.
  *
- * Deliberately NOT measurable from the returned walls: `loadArena` rings the
- * arena with boundary walls one cell THICK and OUTSIDE play (see below), so
+ * Deliberately not measurable from the returned walls: `loadArena` rings the
+ * arena with boundary walls one cell thick and outside play (see below), so
  * `max(wall.aabb.maxX)` overstates the arena by a cell in each axis. A renderer
  * that sizes and centres the ground from that reading draws the board
  * off-centre with its own boundary walls hanging over the void.
@@ -60,10 +60,10 @@ export function arenaBounds(arena: Arena): { width: number; height: number } {
   return { width: arena.cols * arena.cellSize, height: arena.rows * arena.cellSize };
 }
 
-// `controlledBy` trailing and optional, so every positional call site (this file's own
-// PASS 1a, and every `makeTank(id, kind, pos, angle)` fixture across the tree) compiles
-// and behaves unchanged. Only stamped when the caller passes it -- see loadArena's PASS
-// 1a/1b split for why that matters to full-object `toEqual` fixtures.
+// `controlledBy` is trailing and optional so positional `makeTank(id, kind, pos, angle)`
+// calls (PASS 1a, and fixtures across the tree) need not pass it. It is only stamped when
+// passed, so a one-player load's tanks carry none (pinned in arena.test.ts) -- which is
+// what full-object `toEqual` fixtures rely on.
 export function makeTank(
   id: number,
   kind: TankKind,
@@ -90,11 +90,11 @@ export function makeTank(
 }
 
 /**
- * Which of the 2 alternating teams a player slot belongs to (n-player arc PR 4).
+ * Which of the 2 alternating teams a player slot belongs to by default.
  * `teamOf(0) = 0` (P1), `teamOf(1) = 1`, `teamOf(2) = 0`, `teamOf(3) = 1` -- 2 teams,
- * alternating by slot. Uneven splits (3v1) are out of scope, a deferred richer mode, not
- * built speculatively. Pure so a future netcode peer can recompute it locally, same
- * reasoning as findCoPlayerSpawnCell's own doc comment.
+ * alternating by slot. A configured split (uneven, or more than two teams) arrives through
+ * loadArena's per-slot `teams` override instead (issue #281). Pure so a future netcode peer
+ * can recompute it locally, same reasoning as findCoPlayerSpawnCell's own doc comment.
  */
 export function teamOf(slot: number): number {
   return slot % 2;
@@ -149,17 +149,13 @@ function findCoPlayerSpawnCell(
 }
 
 /**
- * PASS 1b's original co-player loop (n-player arc PR 4), unchanged since before versus
- * modes existed -- extracted into its own function so campaign-coop's execution stays
- * byte-for-byte identical to before PR 5 while still type-checking. Without this split,
- * a shared body reached only after `mode !== 'ffa' && mode !== 'teams'` narrows `mode`'s
- * type to the single remaining literal `'campaign-coop'`, and this function's own
- * `if (mode === 'teams')` line -- correct and live before the split, since this loop
- * used to run for every mode including 'teams' -- becomes a compile error (TS2367, "no
- * overlap") under that narrowing even though nothing about its BEHAVIOR changed. A fresh
- * function parameter is not narrowed by the caller's control flow, which is the same
- * reason `resolveStatusFfa`/`resolveStatusTeams`/`resolveStatusCoop` (world.ts) are
- * separate functions rather than one shared body with a conditional inside it.
+ * Campaign-coop co-player placement: rings around P1 via findCoPlayerSpawnCell.
+ *
+ * A separate function rather than a shared body after the versus branch, because the
+ * caller's `mode === 'ffa' || mode === 'teams'` check narrows `mode` to `'campaign-coop'`
+ * there, and the `mode === 'teams'` line below would then fail to compile (TS2367). A
+ * parameter is not narrowed by the caller's control flow -- the same reason world.ts keeps
+ * resolveStatusFfa/resolveStatusTeams/resolveStatusCoop separate.
  */
 function placeCampaignCoPlayers(
   grid: string[],
@@ -187,71 +183,49 @@ function placeCampaignCoPlayers(
   return id;
 }
 
-// mergeSolidRuns moved to wall-merge.ts (PR versus-spawns): versus-spawns.ts needed the
-// same maximal-rectangle algorithm for its own wall-geometry build and could not import
-// this file's copy without closing a cycle, so the two carried byte-identical duplicates
-// for one PR. See wall-merge.ts's own doc comment for the full account.
-
 export function loadArena(
   arena: Arena,
   playerCount: number = 1,
-  // Trailing and defaulted, same precedent as playerCount itself: every existing
-  // 1-2-arg call site (dozens across the tree) is untouched. Default 'campaign-coop' is
-  // the shipped rule and the trace argument -- see WorldRules.mode's own doc comment.
+  // Default 'campaign-coop' is the shipped rule and the trace argument -- see
+  // WorldRules.mode's own doc comment.
   mode: GameMode = 'campaign-coop',
-  // Trailing and optional, same precedent again: absent (every existing call site)
-  // means no variant is ever built, which is what keeps campaign-coop -- and
-  // BASELINE_HASH, which only ever drives campaign-coop -- byte-for-byte identical to
-  // before this parameter existed. Only meaningful in combination with mode 'ffa'/
-  // 'teams' (see below); a versus caller that omits it also gets the authored board
-  // unchanged, the same total-degradation posture pickVersusSpawnCell's own zero-
-  // candidate fallback already takes.
+  // Only meaningful with mode 'ffa'/'teams' (see below), where it picks a map variant.
+  // campaign-coop never builds one, so neither it nor BASELINE_HASH (which only ever
+  // drives campaign-coop) depends on this; a versus caller that omits it gets the
+  // authored board unchanged, the same total-degradation posture pickVersusSpawnCell's
+  // own zero-candidate fallback already takes.
   seed?: number,
-  // Trailing and defaulted, same precedent again: every existing call site (none of
-  // which pass a 5th argument today) gets VERSUS_STOCK, byte-identical to before this
-  // parameter existed. Only stamped onto player tanks in 'ffa'/'teams' mode (both
-  // stamping sites below); campaign-coop tanks never carry stockRemaining regardless of
-  // this value. A future per-match setup menu is the only caller that will ever pass a
-  // non-default value.
+  // Only stamped onto player tanks in 'ffa'/'teams' mode (both stamping sites below);
+  // campaign-coop tanks never carry stockRemaining regardless of this value.
   stock: number = VERSUS_STOCK,
-  // Trailing and optional, the same precedent every parameter above it follows: absent
-  // -- which is every existing call site -- means each player's team is derived by
-  // `teamOf(slot)` exactly as before, so campaign-coop and `BASELINE_HASH` are untouched
-  // by this parameter existing (issue #281).
-  //
-  // Indexed BY SLOT, and sparse on purpose: `undefined` at a slot means "no configured
-  // choice, derive it", which is what lets a partially-configured setup and an
-  // unconfigured one take the same path. Only read in `'teams'` mode; an `'ffa'` load
-  // never stamps `Tank.team` at all (see its own doc comment in types.ts), which is why
-  // threading this cannot move FFA behaviour either.
+  // Per-slot team choice (issue #281). Indexed by slot, and sparse on purpose:
+  // `undefined` at a slot means "no configured choice, derive it" by `teamOf(slot)`,
+  // which is what lets a partially-configured setup and an unconfigured one take the
+  // same path. Only read in `'teams'` mode; an `'ffa'` load never stamps `Tank.team` at
+  // all (see its own doc comment in types.ts).
   teams?: readonly (number | undefined)[],
-  // Trailing and optional, same precedent again: absent -- every existing call site --
-  // stamps no `shellCap` at all, so every tank resolves its roster cap exactly as before
-  // and `BASELINE_HASH` is untouched by this parameter existing (issue #358).
+  // False (the default) stamps no `shellCap`/`mineCap`, so every tank resolves its roster
+  // caps (issue #358).
   //
-  // A BOOLEAN, not a table. The arm's values live in `config/pp1-roles.ts` so that changing
+  // A boolean, not a table. The arm's values live in `config/pp1-roles.ts` so that changing
   // them is a one-line edit in one place; threading the table instead would give a caller a
   // way to invent an unapproved roster, which is exactly what the issue's "not permission to
   // retune every tank" note forbids.
   pp1Roles: boolean = false,
-  // Trailing and optional, the same precedent as `teams` directly above, and indexed BY SLOT
-  // in exactly the same sparse way (issue #891): `undefined` at a slot is a human, a value is
-  // a computer opponent at that difficulty. Absent -- which is every existing call site --
-  // stamps nothing, so no tank gains a `botDifficulty`, `stepAi` skips every player-kind tank
-  // exactly as before, and `BASELINE_HASH` is untouched by this parameter existing.
+  // Indexed by slot in the same sparse way as `teams` (issue #891): `undefined` at a slot
+  // is a human, a value is a computer opponent at that difficulty. Absent, no tank gains a
+  // `botDifficulty` and `stepAi` skips every player-kind tank.
   //
   // Only stamped in 'ffa'/'teams'. A campaign-coop board has no bot-filled player slots: its
-  // computer opponents are enemy-kind tanks, which have run committed targeting since #359.
+  // computer opponents are enemy-kind tanks, which already run committed targeting (#359).
   bots?: readonly (BotDifficulty | undefined)[],
 ): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[]; arenaGeometry: ArenaGeometry } {
   const { cols, rows, cellSize, legend } = arena;
 
-  // Validate grid dimensions
   if (arena.grid.length !== rows) {
     throw new Error(`Grid has ${arena.grid.length} rows but Arena declares ${rows} rows`);
   }
 
-  // Validate each row's column count
   for (let r = 0; r < rows; r++) {
     const row = arena.grid[r];
     if (row.length !== cols) {
@@ -259,7 +233,6 @@ export function loadArena(
     }
   }
 
-  // Validate each character is recognized
   for (let r = 0; r < rows; r++) {
     const row = arena.grid[r];
     for (let c = 0; c < cols; c++) {
@@ -270,14 +243,14 @@ export function loadArena(
     }
   }
 
-  // Validation runs against the AUTHORED grid, always -- a variant only ever turns an
+  // Validation runs against the authored grid, always -- a variant only ever turns an
   // already-recognized destructible character into '.', so re-validating it would check
   // nothing new, and a bad authored grid should fail with a message naming the real
   // grid, not a derived one.
   //
-  // VERSUS MAP VARIANTS (guard-first): campaign-coop, and any versus call that omits
-  // `seed`, take the ORIGINAL grid straight through -- byte-for-byte the pre-existing
-  // path. Only mode 'ffa'/'teams' WITH a seed ever calls into versus-variants.ts. See
+  // Versus map variants (guard-first): campaign-coop, and any versus call that omits
+  // `seed`, take the authored grid straight through. Only mode 'ffa'/'teams' with a seed
+  // ever calls into versus-variants.ts. See
   // docs/superpowers/plans/2026-08-17-versus-map-variants.md for the design ruling and
   // the measured sweep DESTRUCTIBLE_REMOVAL_FRACTION was chosen from.
   let grid = arena.grid;
@@ -289,15 +262,12 @@ export function loadArena(
   const tanks: Tank[] = [];
   const spawns: Spawn[] = [];
 
-  // PASS 1a — spawns, UNCHANGED from before playerCount existed. Tank ids must be a
-  // function of the SPAWN ORDER alone. They used to share a counter with walls, which
-  // made every tank's id a function of how many wall cells preceded it -- and tank.id
-  // seeds all four per-tank RNG streams in ai/targeting.ts (wanderMove, aimJitter,
-  // mineInclination, seekMove's retreat draw), so re-slicing the grid silently rerolled
-  // every enemy's behaviour for the whole game. At playerCount 1 this loop, unmodified,
-  // is the entire function body relevant to spawns -- no controlledBy is stamped, so
-  // the returned tanks/spawns stay byte-identical to before this param existed (pinned
-  // by arena.test.ts's regression test above).
+  // PASS 1a — spawns. Tank ids must be a function of the spawn order alone: tank.id seeds
+  // the per-tank RNG streams in ai/ (wanderMove, aimJitter and others), so an id that also
+  // counted wall cells -- as a counter shared with walls would -- lets re-slicing the grid
+  // silently reroll every enemy's behaviour for the whole game. At playerCount 1 this loop
+  // is the entire function body relevant to spawns, and no controlledBy is stamped
+  // (pinned by arena.test.ts).
   let id = 1;
   let p1Row = -1;
   let p1Col = -1;
@@ -308,25 +278,24 @@ export function loadArena(
     for (let c = 0; c < cols; c++) {
       const kind = SPAWN_LETTERS[grid[r][c]];
       if (!kind) continue;
-      // n-player arc PR 4: versus modes strip every non-player spawn letter rather than
-      // repurposing it -- enemy letters are TYPED (brown/grey/teal/... each with its own
-      // weapon/behavior via resolveTankConfig), so reusing one as a bonus player slot
-      // would silently couple a versus session's player count to whatever roster each
-      // level's CAMPAIGN design happened to author. Player placement in versus modes
-      // uses the same P1-plus-ring machinery below, unmodified.
+      // Versus modes strip every non-player spawn letter rather than repurposing it --
+      // enemy letters are typed (brown/grey/teal/... each with its own weapon/behavior
+      // via resolveTankConfig), so reusing one as a bonus player slot would silently
+      // couple a versus session's player count to whatever roster each level's campaign
+      // design happened to author.
       if (kind !== 'player' && mode !== 'campaign-coop') continue;
       const pos = { x: (c + 0.5) * cellSize, y: (r + 0.5) * cellSize };
       spawns.push({ kind, pos: { ...pos }, angle: 0 });
       const tank = makeTank(id++, kind, pos, 0);
-      // Team is a PLAYER-only concept, stamped only in 'teams' mode -- see Tank.team's
+      // Team is a player-only concept, stamped only in 'teams' mode -- see Tank.team's
       // own doc comment. P1 is always slot 0.
       if (kind === 'player' && mode === 'teams') tank.team = teams?.[0] ?? teamOf(0);
-      // Stock is a PLAYER-only, versus-only concept -- see Tank.stockRemaining's own
+      // Stock is a player-only, versus-only concept -- see Tank.stockRemaining's own
       // doc comment. P1 is stamped here; PASS 1b's ffa/teams branch stamps every
       // co-player the same way.
       if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) tank.stockRemaining = stock;
-      // Bot-drivenness is a PLAYER-only, versus-only concept -- see Tank.botDifficulty's own
-      // doc comment. P1 is slot 0 and is stamped HERE rather than in PASS 1b for the same
+      // Bot-drivenness is a player-only, versus-only concept -- see Tank.botDifficulty's own
+      // doc comment. P1 is slot 0 and is stamped here rather than in PASS 1b for the same
       // reason team is: that branch reaches P1 only to move its spawn position and never
       // rebuilds its tank, so a stamp placed only there would silently skip slot 0.
       if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) {
@@ -338,7 +307,7 @@ export function loadArena(
     }
   }
 
-  // PASS 1b — co-op players, ONLY when playerCount > 1. Runs strictly after PASS 1a,
+  // PASS 1b — additional players, only when playerCount > 1. Runs strictly after PASS 1a,
   // so every enemy's id (and therefore its seeded RNG stream) is identical between
   // playerCount 1 and >1 -- appending at the end, rather than interleaving at the P
   // cell, is what makes that true. Only wall ids (PASS 2, already after all tanks)
@@ -347,22 +316,19 @@ export function loadArena(
     const p1Tank = tanks.find((t) => t.kind === 'player')!;
     p1Tank.controlledBy = 0;
 
-    // n-player arc PR 5: versus modes (ffa/teams) branch off BEFORE the ring search --
-    // a guard-first split, the same shape resolveStatus already uses for its own
-    // four-way mode dispatch (world.ts). campaign-coop falls through to the ELSE below,
-    // which is the ORIGINAL body, byte-for-byte -- this `if` exists only to route
-    // around it, never to alter it. See versus-spawns.ts's module doc comment for why a
-    // bounded ring around P1 is exactly wrong for FFA/teams: every player lands in one
-    // small ring, in mutual point-blank line of sight.
+    // Versus modes (ffa/teams) branch off before the ring search -- a guard-first split,
+    // the same shape resolveStatus uses for its own mode dispatch (world.ts);
+    // campaign-coop takes the else below. See versus-spawns.ts's module doc comment for
+    // why a bounded ring around P1 is exactly wrong for FFA/teams: every player lands in
+    // one small ring, in mutual point-blank line of sight.
     if (mode === 'ffa' || mode === 'teams') {
       // The whole set is chosen at once, P1 included -- a design ruling: versus is
       // symmetric, so no player may inherit the campaign author's `P` cell as a
       // privileged start. See pickVersusSpawnSet's own doc comment for the measured
-      // case (15 of 15 shipped arena x player-count pairs improve on both separation
-      // measures, zero regressions).
+      // case.
       //
       // P1's tank and spawn already exist, stamped at the authored `P` in PASS 1a, and
-      // are RELOCATED here rather than created here. That ordering is load-bearing:
+      // are relocated here rather than created here. That ordering is load-bearing:
       // ids are handed out in PASS 1a before this branch can run, so a versus load
       // numbers its tanks exactly as a one-player load does, and every per-tank RNG
       // stream keyed on `tank.id` (ai/targeting.ts) is unmoved. Moving P1's creation
@@ -441,7 +407,7 @@ export function loadArena(
     walls.push({ id: id++, aabb, kind: 'solid', destroyed: false });
   }
 
-  // The PP1 role-first ordnance arm (issue #358), stamped in ONE pass over every tank
+  // The PP1 role-first ordnance arm (issue #358), stamped in one pass over every tank
   // rather than at each `makeTank`. There are three spawn sites in this file -- PASS 1a's
   // grid loop, the campaign co-op placer, and PASS 1b's versus branch -- and stamping at
   // each is how one gets missed: a co-player spawned by a site that forgot would carry the
@@ -451,7 +417,7 @@ export function loadArena(
   // A kind with no entry keeps its authored value even with the arm on, and the two tables
   // are consulted independently because their memberships differ. Yellow is in neither: it
   // is outside PP1, so a kind joining the campaign later is not silently opted into an
-  // experiment nobody ran for it. Grey is in the SHELL table only -- its approved mine
+  // experiment nobody ran for it. Grey is in the shell table only -- its approved mine
   // direction is a placement policy rather than a capacity, so it takes the shell arm and
   // keeps its authored mine capacity.
   if (pp1Roles) {
@@ -465,7 +431,7 @@ export function loadArena(
 
   // Not `arena` itself: `Arena`'s shape happens to match `ArenaGeometry` field-for-field
   // today, but building the World-facing copy explicitly here means a future field added
-  // to `Arena` for some OTHER reason does not silently leak onto every World.
+  // to `Arena` for some other reason does not silently leak onto every World.
   return { walls, tanks, spawns, arenaGeometry: { cols, rows, cellSize, grid, legend } };
 }
 
@@ -481,19 +447,17 @@ export const CURRENT_ARENA: Arena = ARENAS[0];
  * (issue #493). Every key optional; an absent key means the shipped default, chosen in
  * `loadArena` or `resolveWorldRules` and nowhere else.
  *
- * WHY AN OBJECT AND NOT A RUN OF POSITIONALS. `createWorldFor` reached thirteen of them,
- * seven rule-shaped, each added as "trailing and optional, same precedent" until the
- * precedent was the problem: `levels.ts` passed `undefined, undefined,` to reach the last
- * one, and half the call sites in the tree carried three or four `undefined`s to name a
- * mode. A rule added to `WorldRules` now grows `WorldRulesInit` and nothing else.
+ * An object rather than a run of positionals, so a caller names only what it sets instead
+ * of passing `undefined`s to reach a later argument, and a rule added to `WorldRules` grows
+ * `WorldRulesInit` and nothing else.
  *
- * WHY THE RULES NEST rather than flattening into this object. `WorldRules` is a closed,
- * frozen set with one resolver, and `rules.ts` owns which keys are in it -- `RULE_KEYS`'s
- * `satisfies` is what makes a new rule a compile error at the one place it is being added.
- * Flattening would put `lives` and `mode` in one bag and lose that boundary; nesting keeps
- * `init.rules` assignable to `WorldRulesInit` and nothing else.
+ * The rules nest rather than flattening into this object. `WorldRules` is a closed,
+ * frozen set with one resolver, and `rules.ts` owns which keys are in it --
+ * `WORLD_RULE_KEYS`'s `satisfies` is what makes a new rule a compile error at the one place
+ * it is being added. Flattening would put `lives` and `mode` in one bag and lose that
+ * boundary; nesting keeps `init.rules` assignable to `WorldRulesInit` and nothing else.
  *
- * `seed` stays positional. It is the one value nearly every caller passes, it reaches BOTH
+ * `seed` stays positional. It is the one value nearly every caller passes, it reaches both
  * `loadArena` (it picks a versus variant) and `createWorld`, and `createWorldFor(arena, 7)`
  * is the shape most of the suite is written in.
  */
@@ -524,26 +488,24 @@ export interface WorldForInit {
  */
 export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit = {}): World {
   const { lives = LIVES, playerCount = 1, stock, teams, pp1Roles, bots, rules = {} } = init;
-  // `arenaGeometry` is a `WorldRulesInit` key and also the one rule `loadArena` DERIVES, so
+  // `arenaGeometry` is a `WorldRulesInit` key and also the one rule `loadArena` derives, so
   // it is taken off `rules` here rather than left to the spread below. A caller passing
   // `rules: { ...world.rules }` -- which is the documented way to derive a variant, and
   // exactly what a versus rematch would reach for -- otherwise overwrites the geometry of the
-  // board just loaded with the geometry of the board it came from. No caller does that today,
-  // which is why nothing would have caught it: the spread is well-typed and every test passes.
+  // board just loaded with the geometry of the board it came from.
   const worldRules: WorldRulesInit = { ...rules };
   delete worldRules.arenaGeometry;
   // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
   // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
   // campaign-coop call, which is every call that does not set a mode, is unaffected).
-  // Reusing the SAME seed a versus session already carries (rather than a second
+  // Reusing the same seed a versus session already carries (rather than a second
   // variant-only seed) is what makes a recorded replay's own stamped seed
   // (replayMetaFor, game/replay.ts) enough to reproduce the exact board it was played
   // on, with no extra field.
   //
-  // `rules.mode` is threaded to BOTH loadArena (so versus modes strip enemies and stamp
-  // team) and createWorld (so `World.rules.mode` matches what was actually built). It is
-  // the one key that is not purely a rule, which is why it is read out here rather than
-  // left to the spread.
+  // `rules.mode` is read out for loadArena (so versus modes strip enemies and stamp
+  // team) and also reaches createWorld through the spread (so `World.rules.mode` matches
+  // what was actually built).
   return createWorld({
     ...loadArena(arena, playerCount, rules.mode, seed, stock, teams, pp1Roles, bots),
     ...worldRules,
@@ -554,11 +516,10 @@ export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit =
 
 /**
  * `seed` drives every random draw in the sim (AI wander headings, aim jitter).
- * It is a parameter rather than a constant because the default made every
- * playthrough byte-identical: 78 consecutive rounds measured at exactly 1,276
- * ticks each, with the enemies walking the same paths and missing by the same
- * angles forever. The game layer passes a fresh one per session; tests and
- * replays omit it and get the reproducible default.
+ * It is a parameter rather than a constant because a fixed seed made every
+ * playthrough byte-identical, with the enemies walking the same paths and missing
+ * by the same angles forever. The game layer passes a fresh one per session; tests
+ * omit it and get the reproducible default.
  *
  * Kept at its old one-arena signature: dozens of tests (and the pacifist suite's
  * headline metric) mean "level 1" when they say createArenaWorld.

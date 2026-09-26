@@ -8,33 +8,32 @@ import { nextRng } from './types';
  *
  * "Randomized subsets before full procedural generation": versus maps are meant to move
  * from authored boards, played identically every time, to authored boards with a
- * randomized SUBSET of their own destructible cells, and later to boards generated from
+ * randomized subset of their own destructible cells, and later to boards generated from
  * nothing. This module builds the middle step. Solid walls, board dimensions and the
- * authored `P` cell are NEVER touched -- only which destructible cells are PRESENT
- * varies, and only ever as a SUBSET of what the author placed (never a superset: a
+ * authored `P` cell are never touched -- only which destructible cells are present
+ * varies, and only ever as a subset of what the author placed (never a superset: a
  * variant cannot invent a destructible the author did not draw).
  *
- * WHY DESTRUCTIBLE ONLY, NEVER SOLID: solid geometry defines the arena's shape -- its
+ * Why destructible only, never solid: solid geometry defines the arena's shape -- its
  * merged runs (`wall-merge.ts`) feed collision and bank shots, and varying it would
- * change the board's IDENTITY rather than vary it, the same distinction CLAUDE.md's
- * "Destructible walls are never merged" section draws for a different reason (a
- * destructible cell is a destruction UNIT; arena-02's centre barrier is authored as
- * adjacent blocks whose separate destruction is the level's design). Turning a
- * destructible cell into open floor here is the same kind of edit a mine blast already
- * makes mid-round -- this module just makes the choice of WHICH cells at load time
- * instead of at detonation time.
+ * change the board's identity rather than vary it, the same distinction
+ * docs/agent/architecture.md's "Destructible walls are never merged" section draws for a
+ * different reason (a destructible cell is a destruction unit; arena-02's centre barrier
+ * is authored as adjacent blocks whose separate destruction is the level's design).
+ * Turning a destructible cell into open floor here is the same kind of edit a mine blast
+ * already makes mid-round -- this module just makes the choice of which cells at load
+ * time instead of at detonation time.
  *
- * IMPORT GRAPH, checked before writing any code: `arena.ts` is the one real caller
- * (`loadArena` needs this module to build a versus variant's grid before running its own
- * PASS 1a/1b/2a/2b), so this module must never import `arena.ts` -- that would close a
- * two-node cycle. It takes grid/cols/rows/cellSize/legend as PRIMITIVES rather than an
- * `Arena` object for exactly that reason -- the same shape `versus-spawns.ts` already
+ * Import graph: `arena.ts` imports this module (`loadArena` builds a versus variant's grid
+ * before its own PASS 1a/1b/2a/2b), so this module must never import `arena.ts` -- that
+ * would close a two-node cycle. It takes grid/cols/rows/cellSize/legend as primitives
+ * rather than an `Arena` object for that reason -- the same shape `versus-spawns.ts`
  * takes, for the identical cycle-avoidance reason (see that module's own doc comment).
- * The two imports below (`versus-spawns.ts` for `pickVersusSpawnCell`/`wallsForQuery`,
- * `ai/targeting.ts` for `lineOfSight`) are both leaves `versus-spawns.ts` itself already
- * uses, so reaching them from here adds no new direction to the graph.
+ * The imports below (`versus-spawns.ts`, `ai/targeting.ts`, `config/arena-types.ts`) are
+ * all modules `arena.ts` already reaches, so importing them here adds no new direction to
+ * the graph.
  *
- * SEEDED, NOT RANDOM: every draw here goes through `nextRng` (types.ts's mulberry32),
+ * Seeded, not random: every draw here goes through `nextRng` (types.ts's mulberry32),
  * chained -- never `Math.random`. `purity.test.ts` scans this file like every other one
  * under `src/sim/`.
  */
@@ -137,14 +136,14 @@ export function countRemoved(before: string[], after: string[]): number {
 }
 
 /**
- * The real versus placement sequence for a CANDIDATE grid -- P1 at the grid's own `P`
- * cell, then `playerCount - 1` co-players via `pickVersusSpawnCell`, exactly the shape
- * `loadArena`'s PASS 1b ffa/teams branch runs (arena.ts) -- duplicated here rather than
- * imported for the same cycle reason `wallsForQuery`'s own doc comment gives: getting
- * REAL geometry for a query without building a whole `World`. Returns an empty array if
- * the grid carries no `P` cell (should not happen on any grid this module is ever
- * handed -- every caller derives `grid` from an already-`validateArenas`-checked shipped
- * arena -- but a defensive empty result is cheaper than a throw for a suitability probe).
+ * Versus spawn positions for a candidate grid: P1 at the grid's own `P` cell, then
+ * `playerCount - 1` co-players via `pickVersusSpawnCell`. This is not the placement
+ * `loadArena`'s ffa/teams branch runs: that picks the whole set at once with
+ * `pickVersusSpawnSet` (versus-spawns.ts), P1 included, so the suitability probe below
+ * judges a variant by a different placement from the one the match will use. Written here
+ * rather than borrowed from `arena.ts`, which this module must never import. Returns an
+ * empty array if the grid carries no `P` cell -- a defensive empty result is cheaper than a
+ * throw for a suitability probe.
  */
 function versusPositions(
   grid: string[],
@@ -173,19 +172,20 @@ function versusPositions(
 }
 
 /**
- * Whether a candidate grid is fit for versus play at `playerCount`, using the SAME two
+ * Whether a candidate grid is fit for versus play at `playerCount`, using the same two
  * criteria from `versus-board.ts`'s `evaluateVersusBoard` that can actually regress when
- * a destructible cell disappears: `distinctSpawns` and `allPairsConcealed`. `roomOk` is
- * DELIBERATELY not re-checked here -- see `versus-variants.test.ts`'s monotonicity
+ * a destructible cell disappears: `distinctSpawns` and `allPairsConcealed` (over
+ * `versusPositions` above, not `evaluateVersusBoard`'s own placement). `roomOk` is
+ * deliberately not re-checked here -- see `versus-variants.test.ts`'s monotonicity
  * block for the proof and the measurement backing it: turning a destructible cell into
  * `.` strictly increases `openFloorCells` by exactly the removed count (every removed
  * character was not `.` and becomes `.`), so `openFloorPerPlayer` can only rise, and if
- * `roomOk` held for the authored board (measured true on all 15 shipped (arena, N)
- * combinations, `versus-board.test.ts`) it holds for every variant of it. Concealment is
- * NOT similarly guaranteed: removing a destructible wall can open a sightline between
- * two spawn cells that was blocked before, and `pickVersusSpawnCell`'s own ranking can
- * pick DIFFERENT cells once more candidates exist -- both are genuinely empirical, which
- * is why this function exists rather than relying on argument alone.
+ * `roomOk` held for the authored board (`versus-board.test.ts` asserts it for every
+ * offered one) it holds for every variant of it. Concealment is not similarly guaranteed:
+ * removing a destructible wall can open a sightline between two spawn cells that was
+ * blocked before, and `pickVersusSpawnCell`'s own ranking can pick different cells once
+ * more candidates exist -- both are genuinely empirical, which is why this function
+ * exists rather than relying on argument alone.
  */
 function isVariantSuitable(
   grid: string[],
@@ -209,14 +209,12 @@ function isVariantSuitable(
 }
 
 /**
- * The fraction of an arena's destructible cells a versus variant omits. See
- * docs/superpowers/plans/2026-08-17-versus-map-variants.md for the measured sweep this
- * was chosen from: at this fraction, 0 of 150 (arena, N, seed) draws -- 5 shipped
- * arenas x 3 player counts x 10 seeds -- come out unsuitable. A wider sweep (1500 draws
- * per fraction) shows real, if rare, failures starting around fraction 0.5, which is
- * why the retry/fallback machinery below still exists as a defensive bound rather than
- * being dropped as decorative -- it is exercised by `versus-variants.test.ts` at a
- * higher fraction, just not by shipped data at this one.
+ * The fraction of an arena's destructible cells a versus variant omits, chosen from the
+ * measured sweep in docs/superpowers/plans/2026-08-17-versus-map-variants.md.
+ * `versus-variants.test.ts` pins that at this fraction no offered (arena, N) combination
+ * draws a variant `evaluateVersusBoard` calls unsuitable, over ten seeds. The
+ * retry/fallback machinery below is a defensive bound; the same test file exercises it on
+ * a synthetic fixture at a higher fraction.
  */
 export const DESTRUCTIBLE_REMOVAL_FRACTION = 0.4;
 
@@ -227,15 +225,15 @@ export const VARIANT_RETRY_BOUND = 5;
 /**
  * Picks a suitable versus variant grid, retrying with a freshly chained seed up to
  * `VARIANT_RETRY_BOUND` times if a draw fails `isVariantSuitable`, and falling back to
- * the AUTHORED grid unchanged if every attempt is exhausted -- never an unsuitable
+ * the authored grid unchanged if every attempt is exhausted -- never an unsuitable
  * variant, and never an unbounded loop. This is the one function `arena.ts`'s
  * `loadArena` calls; every other export above is measured directly in
  * `versus-variants.test.ts` and by the plan doc's sweep.
  *
  * `fraction` defaults to `DESTRUCTIBLE_REMOVAL_FRACTION` (the shipped operating point)
  * but is a parameter, not a hardcoded read, so `versus-variants.test.ts` can drive this
- * exact function at a fraction the measured sweep shows CAN produce an unsuitable first
- * draw -- proving the retry path really executes, not merely arguing that it would.
+ * exact function at a fraction that produces an unsuitable first draw on its synthetic
+ * fixture -- proving the retry path really executes, not merely arguing that it would.
  */
 export function pickVersusVariantGrid(
   grid: string[],
