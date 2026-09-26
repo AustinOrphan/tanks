@@ -169,14 +169,11 @@
   --hud-radius-lg: 12px;
   --hud-radius-pill: 999px;
 
-  /* Spacing scale, from the gaps this file already uses. */
-  --hud-space-1: 6px;
-  --hud-space-2: 8px;
-  --hud-space-3: 10px;
-  --hud-space-4: 12px;
-  --hud-space-5: 14px;
-  --hud-space-6: 16px;
-  --hud-space-7: 18px;
+
+  /* The spacing and type scales are NOT here. They multiply by `--hud-ui-scale`, and a
+   * `var()` inside a declaration is substituted where that declaration LIVES -- so a scale
+   * declared on `:root` would resolve the multiplier against `:root`'s value and ignore the
+   * player's setting entirely. They live on `.hud` instead; see the block there. */
 
   /* Control sizing. `--hud-control-min` is the 44 CSS px touch floor new primitives are
    * held to; `--hud-control-touch` is the larger on-screen driving control. The rotate
@@ -206,13 +203,13 @@
    * There is deliberately NO `:root { font-size }`. Pinning it is the classic way to break
    * exactly the preference this scale exists to honour: rem would then resolve against our
    * number instead of the reader's. The 25 `em` declarations elsewhere in this file need no
-   * change -- they inherit from these anchors and scale with them. */
-  --hud-type-1: 0.6875rem;
-  --hud-type-2: 0.75rem;
-  --hud-type-3: 0.8125rem;
-  --hud-type-4: 0.9375rem;
-  --hud-type-5: 1.125rem;
-  --hud-type-6: 1.25rem;
+   * change -- they inherit from these anchors and scale with them.
+   *
+   * `* var(--hud-ui-scale)` is the player's own UI-scale setting, which is 1 by default and
+   * so moves nothing until they ask for it (issue #290). It multiplies WITH the reader's
+   * font size rather than replacing it -- the rem keeps honouring the browser, the
+   * multiplier adds the in-game preference on top, and a player who has raised both gets
+   * both. Scaling here rather than at `:root` is what keeps those two independent. */
 
   /* Safe areas. The floor the touch controls keep off a display edge when the device
    * reports no inset; `max(--hud-safe-inset, env(safe-area-inset-*))` is the pattern.
@@ -857,6 +854,54 @@
 .hud {
   position: fixed;
   inset: 0;
+
+  /* The player's UI scale (issue #290's criterion 5, out of #321 and #843), as a multiplier.
+   * `1` here is the whole design: at the default setting every product below is its original
+   * value, so this token can exist without moving a single pixel or a single screen baseline.
+   * `hud.ts` overwrites it on the ROOT ELEMENT from `EffectiveSettings.uiScaleFactor`, and
+   * removes it again at 1 so the default page carries no inline style at all.
+   *
+   * SCALED BY IT: the type scale and the spacing scale, which is what makes a control grow --
+   * its text and its padding both move, and it passes its floor by a wider margin.
+   *
+   * NOT SCALED BY IT, deliberately: `--hud-control-min` and `--hud-control-touch`. Those are
+   * accessibility FLOORS, not sizes. Multiplying a floor makes it a different idea, and the
+   * two of them are pinned as literal values by issue #957's guard precisely so they cannot
+   * drift; a control at 125% clears 44px on its scaled padding and type without the floor
+   * having to move. `UI_SCALES` is 100/125/150 (`settings.ts:105`), never below 100, so
+   * nothing here can shrink a target below its floor.
+   *
+   * It does NOT pin `:root { font-size }` -- see the type scale's own note below for why
+   * that would break the reader preference this all exists to honour. The reader's font size
+   * and the player's UI scale multiply together, which is the correct composition: both are
+   * the player asking for something bigger. */
+  --hud-ui-scale: 1;
+
+  /* Spacing scale, from the gaps this file already uses. */
+  --hud-space-1: calc(6px * var(--hud-ui-scale));
+  --hud-space-2: calc(8px * var(--hud-ui-scale));
+  --hud-space-3: calc(10px * var(--hud-ui-scale));
+  --hud-space-4: calc(12px * var(--hud-ui-scale));
+  --hud-space-5: calc(14px * var(--hud-ui-scale));
+  --hud-space-6: calc(16px * var(--hud-ui-scale));
+  --hud-space-7: calc(18px * var(--hud-ui-scale));
+
+  /* Type scale. Moved here from `:root` with the spacing scale, for the reason stated
+   * there: a `var()` is substituted where its declaration lives, so these must be declared
+   * on the element that can carry an overridden `--hud-ui-scale`. Scoping them to the HUD
+   * subtree is also the correct home on this repository's own terms -- `hud.ts`'s menu
+   * transition comment makes the same call, that a property on `document.documentElement`
+   * "would leak out of the HUD's own subtree and outlive `dispose()`".
+   *
+   * The rem values are unchanged and the full rationale for them stays with the `:root`
+   * comment above the type block. */
+  --hud-type-1: calc(0.6875rem * var(--hud-ui-scale));
+  --hud-type-2: calc(0.75rem * var(--hud-ui-scale));
+  --hud-type-3: calc(0.8125rem * var(--hud-ui-scale));
+  --hud-type-4: calc(0.9375rem * var(--hud-ui-scale));
+  --hud-type-5: calc(1.125rem * var(--hud-ui-scale));
+  --hud-type-6: calc(1.25rem * var(--hud-ui-scale));
+
   /* Two rows (issue #687): the topbar, exactly as tall as it renders, and the rest of the
    * screen. The row is the ONE statement of where the topbar ends. The toast rail and the
    * capacity flash are placed in row 2, so their `top` is a distance below the bar's real

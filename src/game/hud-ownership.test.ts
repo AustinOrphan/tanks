@@ -207,7 +207,13 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Issue #785 adds TWO, both route-owned: the `onVersusSetupOpen`/`Close` pair. 88 -> 90. The
     // Controllers panel's reason: `route-ui.ts` holds the pad hotplug listeners the versus setup
     // pane reads, for exactly as long as it is open, and a session must not reach either.
-    expect(frame.size + route.size + gameplay.size).toBe(90);
+    //
+    // Issue #290 adds ONE, frame-owned: `setUiScale`. 90 -> 91. FRAME rather than route, for the
+    // reason `setReducedMotion` is: it writes one custom property on the ROOT that every surface
+    // inherits, so it belongs to no single route -- and it is pushed from the same one
+    // `effectiveSettings` subscription in `route-host.ts`. A session must not write it, because
+    // the player's UI scale outlives any match.
+    expect(frame.size + route.size + gameplay.size).toBe(91);
     expect(gameplay.size, 'what a live match may write').toBe(10);
   });
 

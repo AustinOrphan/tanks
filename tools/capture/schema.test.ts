@@ -93,6 +93,7 @@ describe('capture recipe schema', () => {
       'screen.settings.pressed',
       'screen.settings.rumble-refused',
       'screen.settings.touch',
+      'screen.settings.ui-scale',
       // The `flow` producer's matched pair (issue #815): the two halves differ in one field,
       // variant.flags.pp1Roles, which is the point of shipping them as a pair.
       'flow.campaign-round.pp1roles-off',

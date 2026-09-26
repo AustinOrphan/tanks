@@ -1,8 +1,8 @@
 {
   "id": "hud-type-step-stops-being-a-whole-px",
   "file": "src/game/hud.css",
-  "find": "  --hud-type-1: 0.6875rem;",
-  "replace": "  --hud-type-1: 0.7rem;",
+  "find": "  --hud-type-1: calc(0.6875rem * var(--hud-ui-scale));",
+  "replace": "  --hud-type-1: calc(0.7rem * var(--hud-ui-scale));",
   "tests": [
     "src/game/hud.css.test.ts"
   ],

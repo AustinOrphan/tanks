@@ -97,7 +97,13 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // new state declares no menu, so it joins the exclusion above rather than this list. Its
     // controls are driving controls, which this collector skips on purpose and whose floor is
     // 56 px rather than the 44 this sweep enforces.
-    expect(hitSweepStates()).toHaveLength(34);
+    // 35 since issue #290's `screen.settings.ui-scale`. This one JOINS the sweep rather than
+    // the exclusion, and it is the most useful member of the list: it is the Settings pane at
+    // 150% UI scale, so it is the one state where the type and spacing scales are multiplied
+    // and a control could plausibly outgrow its row. Measuring it against the same 44 px floor
+    // is how "scaling the interface up does not break its hit targets" stops being an
+    // assumption -- the scaled capture measures its controls at 128x44 and 161x44.
+    expect(hitSweepStates()).toHaveLength(35);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 

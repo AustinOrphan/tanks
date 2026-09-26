@@ -1962,3 +1962,49 @@ describe('hud: the Bot candidate is gated (bots may not drive a player tank in t
     expect(candidateLabels(rows(root)[0])).toContain('Bot');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #290 criterion 5: the player's UI scale reaches the stylesheet.
+//
+// `uiScaleFactor` has existed since issue #321 and NOTHING multiplied by it, which is what
+// made issue #843's seeded `uiScale` capture photograph a byte-identical page. These cases
+// pin the one property that closes that gap. The multiplication itself is a stylesheet
+// concern and is pinned in `hud.css.test.ts`; jsdom applies no stylesheet, so what is
+// assertable here is the value the stylesheet reads.
+// ---------------------------------------------------------------------------
+describe('UI scale reaches the stylesheet (issue #290)', () => {
+  const hudRoot = () => document.querySelector('.hud') as HTMLElement;
+
+  it('writes the factor as a custom property on the root', () => {
+    const { hud: h } = mount();
+    h.setUiScale(1.5);
+    expect(hudRoot().style.getPropertyValue('--hud-ui-scale')).toBe('1.5');
+  });
+
+  it('REMOVES the property at 1 rather than writing it, which is what keeps the baselines still', () => {
+    // The whole reason the 46 screen baselines do not move: a default page carries no inline
+    // style at all, so its markup is byte-identical to one built before this existed.
+    // `--hud-ui-scale: 1` would be numerically identical and would change every captured DOM.
+    const { hud: h } = mount();
+    expect(hudRoot().getAttribute('style'), 'a default page starts with an inline style').toBeNull();
+    h.setUiScale(1.25);
+    expect(hudRoot().style.getPropertyValue('--hud-ui-scale')).toBe('1.25');
+    h.setUiScale(1);
+    expect(hudRoot().style.getPropertyValue('--hud-ui-scale'), 'the property survives a return to 1').toBe('');
+    expect(hudRoot().getAttribute('style'), 'returning to 1 leaves an inline style behind').toBe('');
+  });
+
+  it('ignores a value that would collapse the interface, one case each', () => {
+    // This property is multiplied into every size in the HUD, so a bad value does not degrade
+    // gracefully -- it makes the whole interface zero-sized or NaN-sized. `UI_SCALES` is
+    // 100/125/150 so production cannot produce one; the guard is here because the blast radius
+    // is too large to leave to the caller. Each case would be written through without it.
+    const { hud: h } = mount();
+    h.setUiScale(1.5);
+    for (const bad of [Number.NaN, 0, -1, Number.POSITIVE_INFINITY]) {
+      h.setUiScale(bad);
+      expect(hudRoot().style.getPropertyValue('--hud-ui-scale'), `${bad} was written through`)
+        .toBe('1.5');
+    }
+  });
+});

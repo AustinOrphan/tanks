@@ -104,6 +104,7 @@ on:
           - screen.settings.pressed
           - screen.settings.rumble-refused
           - screen.settings.touch
+          - screen.settings.ui-scale
           - screen.startup.entry-refused
           - screen.startup.entry-unparseable
           - screen.startup.match-failed

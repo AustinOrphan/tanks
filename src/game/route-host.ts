@@ -783,6 +783,13 @@ export function createRouteHost(
     // renderer gets the same value from the session's own subscription (issue #289); this
     // is the frame's half, and the frame is the page's.
     hud.setReducedMotion(effective.reducedMotion);
+    // The player's UI scale (issue #290's criterion 5). Pushed here for the same reason as
+    // every line above it: this is the page's single `effectiveSettings` subscription, so a
+    // change made in Settings with the menu open takes effect without a reload. It was
+    // derived but unconsumed since issue #321 -- `uiScaleFactor` existed and nothing
+    // multiplied by it, which is what made issue #843's seeded `uiScale` capture photograph
+    // a byte-identical page.
+    hud.setUiScale(effective.uiScaleFactor);
   };
   /**
    * The page's ONE audio engine (issue #485).
