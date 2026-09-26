@@ -130,8 +130,10 @@ function minApproach(a: Vec2, b: Vec2, legTime: number, legStart: number, p: Vec
  * True if dropping a mine at `tank.pos` right now would leave a live teammate inside the
  * resulting blast.
  *
- * A mine's blast spares nobody (mines.ts), so a mine laid at a teammate's feet is a
- * teammate kill on a 3-second fuse -- and Brown, which never moves, has no way to leave.
+ * A mine's blast spares no enemy tank: mines.ts's only team exemption is the teams-mode
+ * friendly-fire gate, and only player tanks in teams mode carry a `team` (arena.ts). So a
+ * mine laid at a teammate's feet is a teammate kill on a 3-second fuse -- and Brown, which
+ * never moves, has no way to leave.
  * Measured against AI_MINE_FLEE_RADIUS rather than the bare kill radius so the teammate is
  * not merely outside the blast but outside the zone it would have to run from at all.
  *
