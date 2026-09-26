@@ -33,6 +33,34 @@ export function rng(seed) {
   };
 }
 
+/**
+ * The seeds one sweep runs: `offset + 1` through `offset + count`.
+ *
+ * THE OFFSET IS THE POINT, and it exists so a second, DISJOINT sample is reachable at all.
+ * A ranking taken from one seed set is not a finding: on the AI sweep a per-profile ordering
+ * held across all four commitment values with n = 50-154 per cell, and flipped outright on
+ * seeds 1001-2000. `sweep.mjs` could only ever run `1..N`, so the set that catches that could
+ * not be asked for -- `--seeds 30` then `--seeds 30 --seed-offset 30` is two disjoint samples
+ * of the same size, and disagreement between them is the signal.
+ *
+ * Seeds are ONE-BASED because every ruleset's generator is `generate(seed)` over a mulberry32
+ * chain and seed 0 is not distinguished; the existing sweeps and their published tables all
+ * start at 1, so an offset of 0 has to reproduce them exactly.
+ *
+ * THROWS rather than coercing. `Number('--seeds')` of a missing or misspelled value is `NaN`,
+ * and a `for` loop over `NaN` runs zero times: the sweep would print a table of empty rows and
+ * look like a generator that accepts nothing rather than like a typo.
+ */
+export function seedRange(offset, count) {
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error(`seed offset must be a non-negative integer, got ${offset}`);
+  }
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error(`seed count must be a positive integer, got ${count}`);
+  }
+  return Array.from({ length: count }, (_, i) => offset + i + 1);
+}
+
 /** The one board size every ruleset is compared at. */
 export const BOARD = { cols: 33, rows: 27, cellSize: 2 / 3 };
 
