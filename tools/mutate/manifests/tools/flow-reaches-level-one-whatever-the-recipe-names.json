@@ -1,8 +1,8 @@
 {
   "id": "flow-reaches-level-one-whatever-the-recipe-names",
   "file": "tools/screens/flow.mjs",
-  "find": "      { click: `.hud-level-btn[aria-label=\"Level ${level}\"]` },",
-  "replace": "      { click: '.hud-new-game' },",
+  "find": "  { click: `.hud-level-btn[aria-label=\"Level ${level}\"]` },",
+  "replace": "  { click: '.hud-new-game' },",
   "expect": "killed",
   "tests": [
     "tools/screens/flow.test.ts"
