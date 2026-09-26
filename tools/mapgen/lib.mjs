@@ -103,15 +103,6 @@ export function rotate180(cells) {
   return cells;
 }
 
-/** Impose left-right mirror symmetry about the vertical axis. */
-export function mirrorH(cells) {
-  const cols = cells[0].length;
-  for (const row of cells) {
-    for (let c = 0; c < Math.floor(cols / 2); c++) row[cols - 1 - c] = row[c];
-  }
-  return cells;
-}
-
 /**
  * Finish a board: stamp the single authored `P` and hand back an `Arena`.
  *
