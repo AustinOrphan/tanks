@@ -21,7 +21,7 @@ import {
  * padIndex 0 -- slot 0's baseline never moves). `createGamepadInputSource`, further
  * down this file, wraps it into a standalone `PlayerInputSource` for every co-player
  * slot 1..N-1 (`?dev=1&players=N`), one instance per slot, each bound to ITS OWN
- * `padIndex` equal to its slot number -- see CLAUDE.md's input-routing entry and
+ * `padIndex` equal to its slot number -- see the controllers-4 plan cited below and
  * `loop.ts`'s `realSources` construction. Slot 0's optional merge (padIndex 0) and a
  * co-player slot's dedicated reader (padIndex >= 1) can never collide: they read
  * different indices of the same `getGamepads()` array by construction, not merely by
