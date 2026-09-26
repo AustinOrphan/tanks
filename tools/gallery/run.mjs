@@ -7,9 +7,9 @@
  * caught two things every unit test passed -- a shell nose that was an open hemisphere,
  * visible only from overhead, and blast growth that was linear when it should ease out.
  *
- *   npm run gallery -- --subject mine --view low
- *   npm run gallery -- --subject blast --anim --out blast.gif
- *   npm run gallery -- --subject mine --view low --sweep MINE_DOME_H --values 0.04,0.08,0.12
+ *   npm run gallery -- --elements mine --view low
+ *   npm run gallery -- --elements blast --anim --out blast.gif
+ *   npm run gallery -- --elements mine --view low --sweep MINE_DOME_H --values 0.04,0.08,0.12
  *   npm run gallery -- --elements tank --view close --skin flow --hull '#3d7bd6'
  *   npm run gallery -- --elements tank --skin flow --anim --frames 90 --out flow.gif
  *   npm run gallery -- --scene ai-tracking --anim --sweep TURRET_R --values 0.2,0.55 --out cmp.gif
@@ -180,16 +180,6 @@ async function run(browser) {
   // captureGame's own `args.scene === 'game'` branch (above, in capture()) has already
   // returned, so 'game' never lands in it.
   const q = () => `http://localhost:${PORT}/tools/gallery/index.html?${galleryQuery(args)}`;
-  /**
-   * The GAME's canvas, not the Customize panel's.
-   *
-   * A bare `locator('canvas')` matched two elements the moment the HUD gained its
-   * persistent `.hud-preview` canvas, and Playwright's strict mode then failed EVERY
-   * `--scene game` run with "resolved to 2 elements" while waiting for the page --
-   * which reads as a page that never loaded. The preview canvas is hidden and empty
-   * until Customize is opened, so it was never a candidate; it just made the selector
-   * ambiguous.
-   */
   /**
    * Reaching gameplay lives in `enter-gameplay.mjs` so its ORDER is testable without a
    * browser (issue #581). It used to be inline here, and it waited for the game canvas

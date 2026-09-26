@@ -40,8 +40,9 @@ describe('loadArena', () => {
   // real logic: at playerCount 1 (the default, and passed explicitly), output must
   // stay byte-identical to today's single-arg call -- across all 8 shipped arenas,
   // not just ARENA_01, since the co-op spawn-offset rule reads every arena's own
-  // grid. This is the claim CLAUDE.md's arena.ts section calls "stronger than the
-  // prototype made": conditional controlledBy stamping means PASS 1a is the ENTIRE
+  // grid. This is the claim the co-op foundation plan
+  // (docs/superpowers/plans/2026-08-15-coop-foundation.md) calls a "stronger claim than
+  // the prototype made": conditional controlledBy stamping means PASS 1a is the ENTIRE
   // function body relevant to spawns at playerCount 1, so nothing here should ever
   // need editing when PASS 1b (playerCount > 1) lands.
   it('at playerCount 1 (default and explicit) is byte-identical to the single-arg call, on all 8 shipped arenas', () => {
@@ -550,8 +551,9 @@ describe('loadArena', () => {
 });
 
 describe('loadArena: mode-aware (n-player arc PR 4 -- FFA + teams)', () => {
-  // Denominator for every "all N arenas" claim below: ARENAS.length is 5 at this tree
-  // (arena-01..05) -- asserted once so a sixth arena silently narrows nothing.
+  // Denominator for every "all N arenas" claim below: ARENAS.length is 8 at this tree
+  // (arena-01..05 plus the versus boards vs-duel-01, vs-tri-01 and vs-quad-01) -- asserted
+  // once so a ninth arena silently narrows nothing.
   it('ARENAS holds exactly 8 shipped arenas -- the population every sweep below claims', () => {
     expect(ARENAS.length).toBe(8);
   });

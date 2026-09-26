@@ -711,8 +711,8 @@ describe('dangerAvoidMove: fleeRadius/dangerCorridor are optional, defaulted par
   }
 
   it('defaults to the exact constants: unchanged from every existing 2-arg caller', () => {
-    // The whole idiom this parameterization rests on (CLAUDE.md's Tank.team? precedent):
-    // omitting the new arguments must reproduce today's exact behaviour.
+    // The whole idiom this parameterization rests on: omitting the new arguments must
+    // reproduce today's exact behaviour.
     const t = hazardTank(1, { x: 0, y: 0 });
     const m = { id: 70, ownerId: 1, pos: { x: AI_MINE_FLEE_RADIUS - 1e-6, y: 0 }, timer: 3, armed: true, detonated: false };
     expect(dangerAvoidMove(hazardWorld({ tanks: [t], mines: [m] }), t)).not.toBeNull();

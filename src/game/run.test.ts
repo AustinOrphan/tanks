@@ -207,12 +207,11 @@ describe('createRunStore: corrupt or foreign data reads as no run', () => {
 
   it('an absurdly large livesRemaining is ACCEPTED, by design -- no magnitude cap', () => {
     // isActiveRun checks type, finiteness, integrality and non-negativity, but no
-    // upper bound -- the same convention stats.ts's read() uses for its counters
-    // (CLAUDE.md: "no upper bound check, only type/shape"). That is deliberate here
-    // too, not an oversight: the spec's run model explicitly allows a life pool
-    // larger than the campaign's starting count ("unless another life has been
-    // deliberately awarded by game design"), so a large-but-well-formed integer must
-    // round-trip rather than being rejected as corrupt.
+    // upper bound -- the same convention stats.ts's read() uses for its counters.
+    // That is deliberate here too, not an oversight: the spec's run model explicitly
+    // allows a life pool larger than the campaign's starting count ("unless another
+    // life has been deliberately awarded by game design"), so a large-but-well-formed
+    // integer must round-trip rather than being rejected as corrupt.
     localStorage.setItem(RUN_KEY, JSON.stringify({ ...validBase, livesRemaining: 999 }));
     expect(createRunStore(localStorage).active()).toEqual({ ...validBase, livesRemaining: 999 });
   });
@@ -222,7 +221,8 @@ describe('createRunStore: the v1 -> v2 bump (issue #154)', () => {
   // currentLevelId used to be a stringified ARENAS index; #154 gives it real
   // campaign-level ids instead, so a stale v1 record's `currentLevelId` means
   // something this build no longer reads the same way. The bump makes it simply
-  // invisible rather than misresolved -- see CLAUDE.md's Migration notes.
+  // invisible rather than misresolved -- see the Migration section of
+  // docs/superpowers/plans/2026-08-12-campaign-level-identity.md.
   const legacyV1: ActiveRun = {
     campaignId: DEFAULT_CAMPAIGN_ID,
     currentLevelId: '3', // the OLD format: what levelIdFromIndex(3) used to produce

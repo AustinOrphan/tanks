@@ -13,9 +13,10 @@ import { RESPAWN_DELAY_TICKS, RESPAWN_SHIELD_TICKS } from './constants';
  * guard, and the 1P regression the guard-first split depends on.
  *
  * Deliberately calls resolveStatus/stepRespawns DIRECTLY, not through step()/stepInputs
- * -- this is a unit file in CLAUDE.md's sense (movement.test.ts, bullets.test.ts) and
- * cannot see whether stepInputs actually wires stepRespawns in; that composition is
- * pinned separately in step-pipeline.test.ts.
+ * -- this is a unit file in docs/agent/testing-and-review.md's sense (movement.test.ts,
+ * bullets.test.ts) and cannot see whether stepInputs actually wires stepRespawns in; that
+ * composition is pinned separately, through stepInputs, in this file's "stepInputs
+ * composition" describe block below.
  */
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number, alive = true): Tank {
@@ -354,8 +355,9 @@ describe('stepRespawns', () => {
   it('does nothing at all when countPlayerTanks(world) < 2 -- 1P never reaches this stage in the real pipeline (the gate lives in stepInputs, pinned in the describe block directly below)', () => {
     // stepRespawns itself has no internal player-count gate -- calling it directly on a
     // 1-player world with a stamped respawnAtTick WOULD revive it. That is fine: the
-    // gate is stepInputs' job (`if (countPlayerTanks(draft) >= 2) stepRespawns(...)`),
-    // not stepRespawns' own, matching resolveStatus's guard-first pattern one level up.
+    // gate is stepInputs' job (its `stepRespawns(draft, events);` call runs in campaign-coop
+    // only when `countPlayerTanks(draft) >= 2`; ffa/teams call it unconditionally), not
+    // stepRespawns' own, matching resolveStatus's guard-first pattern one level up.
     const w = createWorld({
       walls: [],
       tanks: [makeTank('player', A_ID, 12, 9, false)],
@@ -372,12 +374,13 @@ describe('stepRespawns', () => {
 
 /**
  * COMPOSITION, not a unit test of stepRespawns' own body (that is the describe block
- * above, which calls it directly). This is the CLAUDE.md distinction step-pipeline.test.ts
- * draws for the rest of the pipeline: a unit file that calls a stage directly cannot see
- * whether stepInputs actually wires that stage in. Every test above this point calls
- * stepRespawns or resolveStatus directly and would keep passing if stepInputs' own
- * `if (countPlayerTanks(draft) >= 2) stepRespawns(draft, events);` line were deleted --
- * this is the one that would not.
+ * above, which calls it directly). This is the distinction docs/agent/testing-and-review.md
+ * names and step-pipeline.test.ts draws for the rest of the pipeline: a unit file that
+ * calls a stage directly cannot see whether stepInputs actually wires that stage in.
+ * Every test above this point calls stepRespawns or resolveStatus directly and would
+ * keep passing if stepInputs' own `stepRespawns(draft, events);` call (gated on
+ * `countPlayerTanks(draft) >= 2` in campaign-coop) were deleted -- this is the one that
+ * would not.
  */
 describe('stepInputs composition: stepRespawns is actually wired in, not merely correct in isolation', () => {
   it('a corpse whose respawnAtTick lands on the very next tick revives THROUGH stepInputs -- not just when stepRespawns is called directly', () => {

@@ -1647,11 +1647,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       };
     })(),
     // The REAL run store over `storage` (also real -- see its own comment below), not
-    // a hand-fake: this is exactly the composition CLAUDE.md warns loop.test.ts must
-    // pin ("the REAL wiring feeds the run store"), so the store itself has to be real
-    // too, or a wiring bug that never calls it could still read back a value that
-    // happens to be right. Decorated only to also RECORD each call, the same
-    // convention `stats`/`progress` above already follow.
+    // a hand-fake: this is exactly the composition docs/agent/known-holes.md warns
+    // loop.test.ts must pin (whether loop.ts wires the real collaborators, here the run
+    // store), so the store itself has to be real too, or a wiring bug that never calls it
+    // could still read back a value that happens to be right. Decorated only to also
+    // RECORD each call, the same convention `stats`/`progress` above already follow.
     run: (() => {
       const real = createRunStore(storage);
       return {
@@ -2046,6 +2046,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 }
 
+/** The intent the eager boot used to be: resume the run on whatever board it reached. */
+const CONTINUE: StartIntent = { kind: 'campaign-continue' };
+
 /**
  * Boots the game AND leaves the title screen, which is where nearly every test in this
  * file wants to start: `hud.onStartRestart` branches on `sm.state === 'title'`, so a
@@ -2056,9 +2059,6 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
  *
  * Use `bootAtSplash()` when the title screen itself is the subject.
  */
-/** The intent the eager boot used to be: resume the run on whatever board it reached. */
-const CONTINUE: StartIntent = { kind: 'campaign-continue' };
-
 function boot(h = makeDeps()): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
   const booted = bootAtSplash(h);
   booted.pointerdown(); // splash -> title, the way a player leaves it
@@ -4165,8 +4165,8 @@ function worldWithPlayerAboutToDie(): World {
  * docs/superpowers/specs/2026-08-11-campaign-run-model.md). `deps.run` here is the
  * REAL run.ts store over the REAL (in-memory) `storage` -- not a hand-fake -- so
  * these tests pin the COMPOSITION: that loop.ts's wiring actually calls the real
- * store with the right arguments at the right moments, the blindness CLAUDE.md
- * warns a unit-level test (run.test.ts) cannot see on its own.
+ * store with the right arguments at the right moments, the composition blindness
+ * docs/agent/known-holes.md warns a unit-level test (run.test.ts) cannot see on its own.
  */
 describe('startGameWith: the active campaign run (issues #153/#152)', () => {
   describe('death persistence -- the #152 fix', () => {
@@ -4694,10 +4694,11 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
 
   describe('coop kill attribution, end to end (coop semantics plan)', () => {
     // tallyCoopKills and the HUD's coop line are each unit-tested directly (their own
-    // describe blocks), which is exactly the CLAUDE.md-named blindness: a unit test
-    // calling either directly cannot see whether onFrameEvents still pushes an outcome
-    // at all. This drives a REAL kill through a driven frame and checks the tally
-    // reaches the HUD -- the composition, not the arithmetic.
+    // describe blocks), which is exactly the composition blindness
+    // docs/agent/known-holes.md names: a unit test calling either directly cannot see
+    // whether onFrameEvents still pushes an outcome at all. This drives a REAL kill
+    // through a driven frame and checks the tally reaches the HUD -- the composition, not
+    // the arithmetic.
     it('pushes an outcome projection AT BOOT, before any frame has run', () => {
       // The opening state, and it has to be asserted before a frame because every other
       // outcome test here reads `outcomePushes.at(-1)` only after driving one -- which a
@@ -5277,8 +5278,9 @@ describe('startGameWith: autoplay wiring', () => {
   // simulated tick against a FAKE `input`; it cannot see whether loop.ts wires the REAL
   // input controller into that seam, let alone whether ?dev=1&autoplay=1 swaps it for
   // the scripted player -- the same composition-blindness gap loop.test.ts's other
-  // "real frame, pumped" tests exist to close (CLAUDE.md: driver.test.ts injects fake
-  // hooks and cannot see whether loop.ts wires the real collaborators into them).
+  // "real frame, pumped" tests exist to close (docs/agent/known-holes.md: driver.test.ts
+  // injects fake hooks and cannot see whether loop.ts wires the real collaborators into
+  // them).
   it('samples the real input controller with the flag off (unchanged from today)', () => {
     const h = boot(makeDeps({ devFlags: { autoplay: false } }));
     h.setState('playing');
@@ -6982,17 +6984,16 @@ describe('startGameWith: reassignSlot (controller assignment UI, docs/superpower
     // slot to bot in one, drive both for many ticks, compare) was tried FIRST and
     // rejected on evidence, not preference: it diverges by tick ~30 even with a
     // correct single-entry `reassignSlot`. The cause is real, not a test bug --
-    // CLAUDE.md's "the bot brain reads the whole board" -- `assessThreats` only
+    // the bot brain reads the whole board (PR #180) -- `assessThreats` only
     // treats non-player-kind tanks as opponents in campaign-coop (isOpponent,
     // player-profile.ts), so the newly-bot-claimed slot is never a TARGET, but its
     // shells and mines still land in `world.bullets`/`world.mines`, which every
     // bot's hazard-avoidance reads regardless of owner. So "an unrelated bot's
     // trajectory is identical" is FALSE by design the instant the reassigned slot
-    // fires -- asserting it would be exactly the overclaim CLAUDE.md's "claims must
-    // match evidence" warns against. What IS true, and what `reassignSlot` actually
-    // promises, is narrower: the OTHER bot's `botSources` Map entry -- its `rnd`
-    // stream and its `PlayerAiState` object -- is never rebuilt. That is provable at
-    // two levels without the board-interaction confound: `createBotSources` itself
+    // fires -- asserting it would be an overclaim. What IS true, and what
+    // `reassignSlot` actually promises, is narrower: the OTHER bot's `botSources` Map
+    // entry -- its `rnd` stream and its `PlayerAiState` object -- is never rebuilt. That is
+    // provable at two levels without the board-interaction confound: `createBotSources` itself
     // is a pure, per-slot-independent function (pinned already, see "createBotSources
     // / BOT_SEED_SPACING: independence from every enemy-AI stream" above -- the same
     // seed+slot always draws the same first value, regardless of what else is in the
@@ -8309,7 +8310,7 @@ describe('startGameWith: the dev console surface', () => {
   // driver.test.ts and the sibling unit files (save.test.ts, replay.test.ts) prove
   // each piece against fakes. Only a test HERE can see whether loop.ts publishes
   // them, behind the right flags, from the right storage -- the composition
-  // blindness CLAUDE.md names.
+  // blindness docs/agent/known-holes.md names.
   function api(h: ReturnType<typeof boot>): DevConsole {
     return h.devConsole[DEV_CONSOLE_KEY] as DevConsole;
   }
@@ -10210,12 +10211,10 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
   const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
 
   /**
-   * Campaign -> Main Menu -> Versus -> Main Menu, then two rematches: the exact path the
-   * acceptance criterion names, plus the repetition that turns a one-off leak into a
-   * growing one. Five sessions in total, four of them retired.
-   */
-  /**
-   * Five sessions over a realistic route.
+   * Five sessions over a realistic route, four of them retired: Campaign -> Main Menu ->
+   * Versus -> Main Menu -> Campaign again, then two rematches. That covers the path issue
+   * #317's acceptance criterion names (Campaign -> Main Menu -> Versus -> Main Menu and
+   * repeated rematches), plus the repetition that turns a one-off leak into a growing one.
    *
    * Re-anchored by issue #428: the page boots EMPTY, so the route now opens with an
    * explicit Continue rather than with a session the page load produced, and the

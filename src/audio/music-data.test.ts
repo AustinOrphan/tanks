@@ -109,10 +109,10 @@ describe('the shipped track data', () => {
 describe('the arrangement census the glide is justified by', () => {
   it('recomputes the 72-of-120 figure quoted in music.ts and the commit', () => {
     // music.ts's glide comment and PR #76 both quote "72 of 120 layers across
-    // the 24 arena-context suite members". CLAUDE.md: quote a measurement and
-    // you owe it a recomputing test -- otherwise an edit to music-tracks.json
-    // or music-suites.json silently falsifies the prose that justifies a
-    // feature. This is that test; it fails rather than lets the numbers rot.
+    // the 24 arena-context suite members". The arena-`notes` rule in docs/agent/architecture.md
+    // applies here too: quote a measurement and you owe it a recomputing test -- otherwise an
+    // edit to music-tracks.json or music-suites.json silently falsifies the prose that
+    // justifies a feature. This is that test; it fails rather than lets the numbers rot.
     const members = new Set<string>();
     for (const s of SUITES) if (s.context === 'arena') for (const m of s.members) members.add(m);
     const tracks = MUSIC_TRACKS.filter((t) => members.has(t.id));

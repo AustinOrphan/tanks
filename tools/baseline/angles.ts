@@ -12,39 +12,50 @@
  * its own file with its OWN pinned hash, and leaves BASELINE_HASH untouched.
  *
  * WHY the large-magnitude regime is reachable at all, even though the golden trace never
- * finds it (grep-verified on this checkout, file:line):
+ * finds it (grep-verified; cited by file and function, since line numbers drift):
  *
- *   - src/sim/types.ts:210-223 `slewAngle(current, target, maxDelta)` nudges `current`
- *     toward `target` by at most `maxDelta` per call (types.ts:222,
+ *   - src/sim/types.ts's `slewAngle(current, target, maxDelta)` nudges `current` toward
+ *     `target` by at most `maxDelta` per call (its final line,
  *     `return current + Math.sign(delta) * maxDelta;`). The nudge direction and the
- *     "shortest arc" `delta` (types.ts:218-220) are both computed mod 2*PI, but the
- *     RETURNED value is not -- `current` itself is never wrapped back into any bounded
- *     range. Contrast `angleDelta` (types.ts:202-208), which canonicalises its own return
- *     value into (-PI, PI] and is used only for the target-relative comparison, never for
- *     the angle that persists tick to tick.
- *   - `slewAngle` is the only PER-TICK writer of both accumulators: bodyAngle at
- *     src/sim/collision.ts:420 (`tank.bodyAngle = slewAngle(tank.bodyAngle, aim, ...)`),
- *     and turretAngle at src/sim/world.ts:158 (player) and src/sim/ai/index.ts:87 (AI).
- *     The one other writer in src/sim is `resetArena` (world.ts:235-236), which assigns
- *     both fields directly from the spawn table -- but it runs only when the player dies
- *     with lives remaining, so it bounds the accumulation per LIFE, not per tick, and a
- *     life in which the player never dies accumulates without limit. Nothing anywhere
- *     reduces either field mod 2*PI. A player who circles the aim reticle repeatedly in
- *     one rotational sense keeps adding to `turretAngle` every such lap; the same holds
- *     for a hull driven in tight circles.
- *   - Both accumulators feed transcendental calls directly, on the very next line in one
- *     case: src/sim/collision.ts:422, `Math.cos(tank.bodyAngle)` / `Math.sin(tank.bodyAngle)`,
- *     immediately after the unwrapped assignment at line 420. turretAngle reaches the same
- *     pair one call deeper: `fromAngle(tank.turretAngle)` (called at src/sim/bullets.ts:59,
- *     with turretAngle passed in at src/sim/world.ts:167 and src/sim/ai/index.ts:124) does
- *     `Math.cos(r)` / `Math.sin(r)` at src/sim/types.ts:177.
+ *     "shortest arc" `delta` are both computed mod 2*PI, but the RETURNED value is not --
+ *     `current` itself is never wrapped back into any bounded range. Contrast `angleDelta`
+ *     (types.ts), which canonicalises its own return value into (-PI, PI] and is used only
+ *     for the target-relative comparison, never for the angle that persists tick to tick.
+ *   - Two slew functions are the only PER-TICK writers of the two accumulators. `slewAngle`
+ *     writes bodyAngle in src/sim/collision.ts's `moveTank`
+ *     (`tank.bodyAngle = slewAngle(tank.bodyAngle, aim, ...)`) and the player's turretAngle
+ *     in src/sim/world.ts's `driveTank`. The AI's turretAngle is written in
+ *     src/sim/ai/index.ts's `stepAi` by `accelSlew` (src/sim/ai/turret-accel.ts), which
+ *     likewise never wraps its return value: it returns `target` on arrival, otherwise the
+ *     raw `current + nv`. Besides construction (arena.ts's `makeTank`), the only other
+ *     writers in src/sim are `resetArena` and `stepRespawns` (both world.ts), which assign
+ *     both fields directly from the spawn table -- but only after a player tank dies
+ *     (resetArena when a life is lost with lives remaining, stepRespawns when a dead co-op
+ *     or versus player tank revives), so they bound the accumulation per LIFE, not per
+ *     tick, and a life in which the player never dies accumulates without limit. Nothing
+ *     anywhere reduces either field mod 2*PI. A player who circles the aim reticle
+ *     repeatedly in one rotational sense keeps adding to `turretAngle` every such lap; the
+ *     same holds for a hull driven in tight circles.
+ *   - Both accumulators feed transcendental calls directly, on the very next statement in
+ *     one case: `moveTank`'s `detCos(tank.bodyAngle)` / `detSin(tank.bodyAngle)`,
+ *     immediately after the unwrapped bodyAngle assignment. turretAngle reaches the same
+ *     pair one call deeper: `spawnBullet` (src/sim/bullets.ts, handed turretAngle by
+ *     `driveTank` and `stepAi`) calls `fromAngle(angle)`, which does `detCos(r)` /
+ *     `detSin(r)` in src/sim/types.ts. Both call sites were native `Math.cos` / `Math.sin`
+ *     when this file was written; issue #133's vendored-math port moved them to the
+ *     deterministic detCos/detSin in src/sim/math.
  *
- * So "the sim never normalises angles" is not a vague description -- it is one function
- * (`slewAngle`) that every writer of these two fields goes through, verified to never wrap
- * its own return value, feeding two call sites that hand the raw accumulator straight to
- * Math.cos/Math.sin. A long play session (or an autoplay demo, or a lockstep replay run for
- * hours) can drive either field arbitrarily far from zero; this file asks what chromium,
- * firefox and webkit do with the results once it has.
+ * So "the sim never normalises angles" is not a vague description -- it is two slew
+ * functions (`slewAngle`, and the AI turret's `accelSlew`) that every per-tick writer of
+ * these two fields goes through, verified to never wrap their own return values, feeding two
+ * call sites that hand the raw accumulator straight to cos/sin. A long play session (or an
+ * autoplay demo, or a lockstep replay run for hours) can drive either field arbitrarily far
+ * from zero; this file asks what chromium, firefox and webkit do with the results once it
+ * has. It asks twice. The native sweep behind ANGLE_HASH measures each engine's own Math.*,
+ * which these call sites no longer use, so it now documents native math in general rather
+ * than what gameplay executes; the vendored sweep behind VENDORED_ANGLE_HASH runs the
+ * detSin/detCos/detAtan2/detHypot the sim actually calls, and is the one of the two that
+ * tools/baseline/run.mjs fails on (see VENDORED_ANGLE_HASH below).
  *
  * WHAT #133 says is actually at risk. ECMA-262 leaves `sin`, `cos`, `atan2` and `hypot`
  * "implementation-approximated" (fdlibm recommended, not required) -- issue #133's own

@@ -20,10 +20,10 @@ import { MINE_BLAST_RADIUS, TANK_RADIUS } from '../sim/constants';
 export type VibrateFn = (pattern: number | number[]) => boolean;
 
 // ---- Pulse durations (ms). Feel, not measurement -- chosen by eye, with no
-// device in hand to tune against (see CLAUDE.md's "Numbers that are feel, not
-// measurement"). Retuning is explicit follow-up once a real phone can be held;
-// the tests below pin the CONSTANTS, not a guessed-right value, so retuning
-// does not mean rewriting tests.
+// device in hand to tune against (see docs/agent/development.md's "Numbers that
+// are feel, not measurement"). Retuning is explicit follow-up once a real phone
+// can be held; the tests below pin the CONSTANTS, not a guessed-right value, so
+// retuning does not mean rewriting tests.
 
 /** The player's own shot leaving the barrel. Short: it happens often and must not fatigue. */
 export const FIRE_PULSE_MS = 15;
@@ -189,7 +189,7 @@ export function createHapticsDirector(
       case 'fire':
         // Discriminated by ownerId, not presence: the stream is shared, so a bare
         // `some(e => e.type === 'fire')` would pulse on every enemy shot too --
-        // exactly the anti-pattern CLAUDE.md names.
+        // exactly the anti-pattern docs/agent/testing-and-review.md names.
         if (e.ownerId === playerId) vibrate(FIRE_PULSE_MS);
         break;
       case 'tank-destroyed':
@@ -222,9 +222,9 @@ export function createHapticsDirector(
       case 'mine-triggered':
         // Distance-gated exactly like 'mine-detonate' above, and for the same reason: a
         // mine tripped by someone else across the arena is not this player's problem, and
-        // buzzing for it is the anti-pattern CLAUDE.md names. The gate also bounds the
-        // spam the issue asks about -- several mines going off at once can only produce
-        // pulses for the ones actually near this player.
+        // buzzing for it is the anti-pattern docs/agent/testing-and-review.md names. The
+        // gate also bounds the spam the issue asks about -- several mines going off at once
+        // can only produce pulses for the ones actually near this player.
         if (playerPos !== null && distance(e.pos, playerPos) <= MINE_DANGER_RADIUS) {
           vibrate(MINE_TRIP_PATTERN_MS);
         }

@@ -80,8 +80,10 @@ function identityColor(slot: number): number {
  *
  * Re-picked on that basis: the largest unoccupied hue gap among the saturated colours is 78
  * degrees, between olive (75) and the green tank (154). `#4eff3b` sits at its midpoint, 39
- * degrees from the nearest saturated neighbour, and carries the SAME saturation and value
- * as the two existing team hues (0.77 / 1.00) so the trio reads as one set.
+ * degrees from the nearest saturated neighbour, and carried the SAME saturation and value
+ * as the two team hues of the time, red and the old blue `#3b82ff` (0.77 / 1.00), so the
+ * trio read as one set. That stopped holding when team B became `#fcc0fc` (0.24 / 0.99,
+ * issue #579 below).
  *
  * RED AND GREEN IS THE WORST PAIR FOR A DEUTERANOPE, and that is accepted rather than
  * overlooked: the constraint set leaves no hue that is both well separated here and

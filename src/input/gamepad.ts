@@ -21,7 +21,7 @@ import {
  * padIndex 0 -- slot 0's baseline never moves). `createGamepadInputSource`, further
  * down this file, wraps it into a standalone `PlayerInputSource` for every co-player
  * slot 1..N-1 (`?dev=1&players=N`), one instance per slot, each bound to ITS OWN
- * `padIndex` equal to its slot number -- see CLAUDE.md's input-routing entry and
+ * `padIndex` equal to its slot number -- see the controllers-4 plan cited below and
  * `loop.ts`'s `realSources` construction. Slot 0's optional merge (padIndex 0) and a
  * co-player slot's dedicated reader (padIndex >= 1) can never collide: they read
  * different indices of the same `getGamepads()` array by construction, not merely by
@@ -94,13 +94,11 @@ export const GAMEPAD_FIRE_BUTTON = STANDARD_PROFILE.buttons.fire;
 export const GAMEPAD_MINE_BUTTON = STANDARD_PROFILE.buttons.mine;
 
 /*
- * The axis indices that used to sit here -- left stick 0/1, right stick 2/3 -- are in
- * `gamepad-profile.ts`'s `STANDARD_PROFILE` now, along with the two buttons above, and
- * `poll()` reads NEITHER set directly (issue #596). It reads whatever profile
+ * `poll()` does not read the two exports above (issue #596). It reads whatever profile
  * `classifyPad` resolves for the pad in hand; the standard layout is only the answer it
- * gets back for a pad the browser has already remapped. The two exports above remain
- * because tests and `input.ts` name them, and they are derived rather than restated so
- * "what the standard profile says" and "what the reader reads" cannot drift apart.
+ * gets back for a pad the browser has already remapped. The two exports remain because
+ * tests name them, and they are derived rather than restated so "what the standard
+ * profile says" and "what the reader reads" cannot drift apart.
  */
 
 /**

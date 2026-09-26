@@ -155,8 +155,8 @@ describe('legacy migration: eager write-back (issue #154)', () => {
   });
 
   it('writes the translated value back in the v2 shape -- read back, not inferred from a zero exit', () => {
-    // CLAUDE.md: read back what a write actually wrote, don't trust that a call
-    // returning normally means it wrote what was intended.
+    // docs/agent/testing-and-review.md: read back what a write actually wrote, don't
+    // trust that a call returning normally means it wrote what was intended.
     localStorage.setItem(PROGRESS_KEY, '3');
     createProgressStore(localStorage);
     const raw = localStorage.getItem(PROGRESS_KEY);

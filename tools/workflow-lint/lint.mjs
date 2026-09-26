@@ -80,7 +80,6 @@ export const PINS = {
   },
 };
 
-/** The pins for this machine, or an error naming the platform and the supported ones. */
 /**
  * How many times a pinned archive is fetched before the lint gives up, and how long it waits
  * between tries.
@@ -110,6 +109,7 @@ export function backoffMs(attempt) {
   return attempt * 500;
 }
 
+/** The pins for this machine, or an error naming the platform and the supported ones. */
 export function pinsFor(platform, arch) {
   const key = `${platform}-${arch}`;
   const pins = PINS[key];

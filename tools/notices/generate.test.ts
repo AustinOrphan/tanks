@@ -1,12 +1,12 @@
 // THIRD-PARTY-NOTICES.md is generated from package.json's runtime "dependencies" and each
 // dependency's license file in node_modules -- see tools/notices/render.mjs and
 // generate.mjs. Same regenerate-and-diff idiom as tools/devflags/doc.test.ts and
-// tools/tanks/doc.test.ts (CLAUDE.md: "quote a measurement and you owe it a recomputing
-// test"), applied to a top-level generated file instead of a docs/ page: regenerate in
-// memory, compare against what's committed, fail if they differ. The fix for a red run
-// here is `npm run notices`, never hand-editing this test or the file -- editing either to
-// make this pass is exactly the "repair the red build by changing what it expects" habit
-// CLAUDE.md warns against.
+// tools/tanks/doc.test.ts (docs/agent/architecture.md: "Quote a measurement in `notes` and
+// you owe it a recomputing test"), applied to a top-level generated file instead of a docs/
+// page: regenerate in memory, compare against what's committed, fail if they differ. The fix
+// for a red run here is `npm run notices`, never hand-editing this test or the file --
+// editing either to make this pass is exactly the "repair the red build by changing what the
+// test expects" habit docs/agent/known-holes.md warns against.
 //
 // Two production mutations this guards against, named so a reader can check the negative
 // control without re-deriving it:

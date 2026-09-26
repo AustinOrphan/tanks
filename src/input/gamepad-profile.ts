@@ -45,7 +45,7 @@ export interface ProfileAxes {
  * MENU AND GAMEPLAY IN ONE RECORD, on purpose. They were two hard-coded sets in two files,
  * and issue #494 was caused by those sets overlapping: Confirm and Fire were both button 0,
  * so confirming Resume leaked a shell into the first simulated tick. Naming all nine
- * together is what lets `profileCollides` below be written at all -- a check that is
+ * together is what lets `profileCollisions` below be written at all -- a check that is
  * impossible when the two halves live in separate modules and neither can see the other.
  */
 export interface ProfileButtons {

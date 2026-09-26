@@ -65,13 +65,6 @@ export function serialiseBaseline(stateId, measurements) {
 }
 
 /**
- * Every field-level difference between an expectation and a capture, in reading order.
- *
- * SELECTOR-KEYED, not index-keyed. A state that gains or loses a measured selector should
- * report that selector by name rather than reporting every later entry as changed, which is
- * what a positional walk does and what makes a diff unreadable exactly when it matters.
- */
-/**
  * Whether a capture's page errors are the ones its state exists to demonstrate.
  *
  * Both consumers refused ANY page error, on the reasonable ground that a page which threw has
@@ -152,6 +145,13 @@ export function boxWithinTolerance(expected, actual, tolerance = BOX_TOLERANCE_P
   return Math.abs(expected - actual) <= tolerance;
 }
 
+/**
+ * Every field-level difference between an expectation and a capture, in reading order.
+ *
+ * SELECTOR-KEYED, not index-keyed. A state that gains or loses a measured selector should
+ * report that selector by name rather than reporting every later entry as changed, which is
+ * what a positional walk does and what makes a diff unreadable exactly when it matters.
+ */
 export function diffMeasurements(expected, actual) {
   const changes = [];
   const byName = (list) => new Map(list.map((m) => [m.selector, m]));
@@ -192,14 +192,6 @@ export function diffMeasurements(expected, actual) {
 }
 
 /**
- * One failure, in the shape #326 asks for: "Failure output names the recipe, route/state,
- * viewport/profile."
- *
- * All four, every time, because a diff without them is a set of numbers a reader cannot place
- * -- and the subset runs one viewport today, which is exactly the condition under which a
- * report quietly stops naming it and nobody notices until a second one exists.
- */
-/**
  * One value, short enough to read in a terminal.
  *
  * A panel's `text` runs to hundreds of characters of markup whitespace, and printing two of
@@ -214,6 +206,14 @@ export function brief(value, limit = 72) {
     : `${JSON.stringify(`${text.slice(0, limit)}…`)} (${text.length} chars)`;
 }
 
+/**
+ * One failure, in the shape #326 asks for: "Failure output names the recipe, route/state,
+ * viewport/profile."
+ *
+ * All four, every time, because a diff without them is a set of numbers a reader cannot place
+ * -- and the subset runs one viewport today, which is exactly the condition under which a
+ * report quietly stops naming it and nobody notices until a second one exists.
+ */
 export function formatFailure({ recipeId, stateId, viewport, profile, changes }) {
   const where = `${viewport.width}x${viewport.height}@${viewport.devicePixelRatio}`;
   const how = `${profile.visual}/${profile.capability}/motion=${profile.motion}`;

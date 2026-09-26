@@ -8,8 +8,8 @@ import { RUN_KEY } from './run';
 import type { StorageNamespace } from './storage';
 
 /**
- * Serialise and restore the whole save: the six `tanks.*` keys an export carries, as one
- * blob -- plus one seventh key the IMPORTER still accepts for backward compatibility.
+ * Serialise and restore the whole save: the seven `tanks.*` keys an export carries, as one
+ * blob -- plus one eighth key the IMPORTER still accepts for backward compatibility.
  *
  * localStorage is ORIGIN-scoped. The web game lives at `austinorphan.com`; a
  * wrapped mobile build lives at `capacitor://localhost` or `https://localhost`.
@@ -18,8 +18,8 @@ import type { StorageNamespace } from './storage';
  * now nothing in the tree could serialise that state or take it back.
  *
  * It is also the only backup a player has: the origin is SHARED with every other
- * project page on austinorphan.com (CLAUDE.md), so anything that clears storage
- * for that origin takes the save with it.
+ * project page on austinorphan.com (docs/agent/commands-and-operations.md), so
+ * anything that clears storage for that origin takes the save with it.
  *
  * Deliberately at the RAW key/value layer, not through the typed stores.
  * The stores validate on read and drop what they do not recognise, so a

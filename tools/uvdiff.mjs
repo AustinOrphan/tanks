@@ -8,8 +8,9 @@
  *
  * PNG decoding shells out to `ffmpeg`, which is why the CLI half is separated from the
  * comparison half: `compare()` below is pure, takes raw RGBA buffers, and is what
- * `uvdiff.test.ts` exercises. Nothing in `tools/` is typechecked (see CLAUDE.md), so the
- * test is the only thing standing behind this file.
+ * `uvdiff.test.ts` exercises. Most of `tools/`, this file included, is typechecked by nothing
+ * (see docs/agent/testing-and-review.md), so the test is the only thing standing behind this
+ * file.
  */
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

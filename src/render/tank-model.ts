@@ -41,10 +41,6 @@ export const TURRET_H = 0.28;
 export const TURRET_SEAT = 0.03;
 
 /**
- * Turret radius. 0.36 is 90% of the hull's 0.80 depth -- close to flush without
- * overhanging the sides. Chosen from two rendered sweeps, 0.26-0.44 then 0.32-0.38.
- */
-/**
  * Hull dimensions, in world units, along the tank's own axes: +x is forward.
  *
  * The sim collides tanks as a CIRCLE of radius TANK_RADIUS, so nothing here can make the
@@ -114,6 +110,11 @@ export const TRACK_PROUD = 0.25;
 /** How far the tracks overhang the body front and back. */
 export const TRACK_OVERHANG = 0.05;
 
+/**
+ * Turret radius. When chosen, 0.36 made the turret 90% of the hull's 0.80 depth across --
+ * close to flush without overhanging the sides; the body has since widened to BODY_WIDTH.
+ * Chosen from two rendered sweeps, 0.26-0.44 then 0.32-0.38.
+ */
 export const TURRET_R = 0.36;
 
 /**
@@ -169,10 +170,10 @@ export const BULLET_Y = HULL_RIDE + TANK_BODY_H + TURRET_H / 2 - TURRET_SEAT;
  * SHELL_MUZZLE_FORWARD, which moves the opening, the spawn and the flash together.
  *
  * DELIBERATELY NOT SHELL_SPAWN_FORWARD (issue #237). That constant is now the shell's
- * CENTRE, one bullet-radius behind the opening, so deriving the barrel from it would
- * silently shorten the drawn gun by exactly that radius -- the regression this comment
- * used to warn about, arriving through the fix rather than through a retune. The reach
- * was chosen at PLAY distance, not in
+ * CENTRE, SHELL_NOSE_REACH_RADII bullet-radii behind the opening, so deriving the barrel
+ * from it would silently shorten the drawn gun by exactly that inset -- the regression
+ * this comment used to warn about, arriving through the fix rather than through a retune.
+ * The reach was chosen at PLAY distance, not in
  * close-up: the barrel is the shipped aim indicator (aimRay is a dev flag precisely
  * because of that), and a shorter one read as a nub from the real camera even though
  * it looked generous up close.
@@ -416,7 +417,10 @@ export type TankPartParent = 'visual' | 'turret';
  * and a caller that wants only the third should not have to name the first two.
  */
 export interface TankShape {
-  /** Barrel tube thickness. */
+  /**
+   * Barrel tube thickness: issue #357's weapon-class cue, as a multiple of the shipped tube
+   * (1 for the shipped gun).
+   */
   readonly barrelGirth?: number;
   /** Muzzle flare, on top of the shipped MUZZLE_FLARE. */
   readonly muzzleFlare?: number;
@@ -459,11 +463,6 @@ export interface TankPart {
  * groups carrying the spawn animation's scale and the aim rotation -- gameplay concerns
  * the canonical model has no business reproducing. `parent` records the nesting so an
  * exporter can rebuild the same hierarchy without the reasons for it.
- */
-/**
- * @param barrelGirth issue #357's weapon-class cue as a multiple of the shipped tube, 1 for
- * the shipped gun. Defaulted so every existing caller -- the exporter included -- keeps
- * emitting the model unchanged.
  */
 /**
  * @param shape issue #357's prototype levers, all 1 for the shipped tank. Defaulted so every

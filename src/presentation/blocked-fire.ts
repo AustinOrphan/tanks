@@ -50,28 +50,6 @@
  * defers until the single-channel arms exist to choose between.
  */
 /**
- * Exported so each channel's suite can assert one row PER CUE rather than per remembered
- * case. A cue reaches a channel when its name carries that channel, but nothing enforces
- * that -- every consumer enumerates the members it acts on -- and `ring-audio` was added to
- * the union twice over before a table caught either half: the audio enumeration in
- * director.ts was left at two arms so the pair shipped silent, and blocked-fire-ring.ts's
- * own gate then went un-asserted for the paired cue (measured: narrowing it to
- * `cue !== 'ring'` left all 8 of that file's tests green).
- *
- * Six of the seven consumers key a table off this set -- director.test.ts (`audio`),
- * haptics.test.ts (`haptic`), and one per visual arm in blocked-fire-ring.test.ts,
- * blocked-fire-muzzle.test.ts, blocked-fire-pips.test.ts and blocked-fire-hud.test.ts --
- * so a new cue fails all six until its channels are stated. The seventh, renderer.ts's
- * construction gate, is not among them: it has no sibling Vitest file by policy
- * (.claude/rules/rendering.md) and is reached only through the GL harness, which measures
- * the three selectable arena arms against each other but not the whole cue set.
- *
- * There were eight consumers and seven tables until issue #536 retired `smoke`. Its table
- * went with it, because the file that kept it (render/muzzle-smoke.ts) no longer reads a
- * cue at all -- which is what retiring an arm means here, and why the count above is worth
- * restating rather than leaving as a number a reader has to re-derive.
- */
-/**
  * The multimodal arms are spelled with a hyphen, not a plus, because these values are
  * typed into `?dev=1&blockedFire=...` by hand (issue #497). `URLSearchParams` decodes a
  * literal `+` as a space, so `ring+audio` reached the parser as `ring audio` and fell
@@ -101,6 +79,28 @@ export type BlockedFireCue =
   // Multimodal.
   | 'haptic-audio'
   | 'ring-audio';
+/**
+ * Exported so each channel's suite can assert one row PER CUE rather than per remembered
+ * case. A cue reaches a channel when its name carries that channel, but nothing enforces
+ * that -- every consumer enumerates the members it acts on -- and `ring-audio` was added to
+ * the union twice over before a table caught either half: the audio enumeration in
+ * director.ts was left at two arms so the pair shipped silent, and blocked-fire-ring.ts's
+ * own gate then went un-asserted for the paired cue (measured: narrowing it to
+ * `cue !== 'ring'` left all 8 of that file's tests green).
+ *
+ * Six of the seven consumers key a table off this set -- director.test.ts (`audio`),
+ * haptics.test.ts (`haptic`), and one per visual arm in blocked-fire-ring.test.ts,
+ * blocked-fire-muzzle.test.ts, blocked-fire-pips.test.ts and blocked-fire-hud.test.ts --
+ * so a new cue fails all six until its channels are stated. The seventh, renderer.ts's
+ * construction gate, is not among them: it has no sibling Vitest file by policy
+ * (.claude/rules/rendering.md) and is reached only through the GL harness, which measures
+ * the three selectable arena arms against each other but not the whole cue set.
+ *
+ * There were eight consumers and seven tables until issue #536 retired `smoke`. Its table
+ * went with it, because the file that kept it (render/muzzle-smoke.ts) no longer reads a
+ * cue at all -- which is what retiring an arm means here, and why the count above is worth
+ * restating rather than leaving as a number a reader has to re-derive.
+ */
 // Typed against the union rather than inferred as `Set<string>`, so iterating the set
 // yields `BlockedFireCue` and a member the union does not name is a compile error here.
 export const BLOCKED_FIRE_CUES: ReadonlySet<BlockedFireCue> = new Set<BlockedFireCue>([

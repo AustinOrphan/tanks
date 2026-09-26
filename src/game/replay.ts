@@ -45,7 +45,8 @@ export const REPLAY_SCHEMA = 5;
  * leaves replay.test.ts green, because the limit tests pass an explicit `limit`
  * rather than exercising this number. What IS pinned is that the default gets
  * APPLIED at all -- setting it to 0 fails several of those tests. Retune it
- * freely; that is the same treatment CLAUDE.md gives its other feel constants.
+ * freely; that is the same treatment docs/agent/development.md gives its other feel
+ * constants.
  */
 export const DEFAULT_TICK_LIMIT = TICK_HZ * 60 * 10;
 
@@ -337,14 +338,16 @@ export function createRecordingInput(
   };
 }
 
-/** What a world says about itself, for the trace's meta. */
 /**
+ * What a world says about itself, for the trace's meta -- plus `arenaId` and `pp1Roles`,
+ * which the world does not carry and the caller supplies.
+ *
  * `pp1Roles` is a REQUIRED third parameter rather than a trailing defaulted one, and that is
  * deliberate (issue #797). It cannot be read off the world -- see `ReplayMeta.pp1Roles` -- so
  * the recorder has to supply it, and a defaulted parameter is a parameter callers drop. This
  * repository has already measured that failure once: `decidePlayerInput`'s trailing
  * `difficulty` was dropped at its call site and **1,801 tests stayed green**, because nothing
- * in the tree drove a bot far enough to notice (see `buildBotSources` in game/loop.ts). A
+ * in the tree drove a bot far enough to notice (see `createBotSources` in game/loop.ts). A
  * required parameter makes the omission a compile error instead of a silent wrong replay.
  */
 export function replayMetaFor(world: World, arenaId: string, pp1Roles: boolean): ReplayMeta {
