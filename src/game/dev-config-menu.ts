@@ -130,26 +130,6 @@ export function toggleField(selection: DevSelection, field: string): DevSelectio
 }
 
 /**
- * Step a select-like control through its own `values`, wrapping, with UNSET as one of the
- * stops.
- *
- * Unset has to be reachable or a control could never be put back: every one of these flags
- * defaults to absent, and a cycle over `values` alone would trap the menu on whichever value
- * it first landed on. It is the FIRST stop rather than the last so a fresh control's forward
- * press selects `values[0]` -- the reading a player expects from an unset control.
- */
-export function cycleSelect(selection: DevSelection, control: DevControl, step = 1): DevSelection {
-  const stops: (string | null)[] = [null, ...(control.values ?? [])];
-  const current = (selection[control.field as keyof DevSelection] ?? null) as string | null;
-  const at = stops.indexOf(current);
-  const next = stops[(((at < 0 ? 0 : at) + step) % stops.length + stops.length) % stops.length];
-  const out = { ...selection } as Record<string, unknown>;
-  if (next === null) delete out[control.field];
-  else out[control.field] = next;
-  return out as DevSelection;
-}
-
-/**
  * Step a valued control's number, with the PARSER deciding what is in range.
  *
  * The registry states each input's accepted shape as prose for a human -- "an integer 1-4",

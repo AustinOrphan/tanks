@@ -97,50 +97,18 @@ export function mineLever(cue: EnemyRoleCue | null): 'deck' | 'riser' | 'crown' 
 }
 
 /**
- * How thick the barrel is, as a multiple of the shipped tube.
- *
- * THE COLLAR COUNT DID NOT SURVIVE MEASUREMENT and this replaces it. At the shipped camera a
- * hull is 89px wide near the viewer and about 40px far, so the visible barrel is 20-44px and
- * a collar is 2-4px: not countable at any boldness that keeps the toy-tank silhouette. Girth
- * changes the whole length of the barrel at once, so the difference is the full 20-44px run
- * rather than a feature inside it.
- *
- * Still keyed to the bounce budget, and still ordered by it -- a fatter gun throws a shell
- * that comes back more often. The mapping is coarser than a count and that is the point: three
- * thicknesses is what this many pixels can carry.
- */
-export function barrelGirthFor(bulletType: BulletType): number {
-  switch (bulletType) {
-    case 'fast': return 0.78;
-    case 'ricochet': return 1.4;
-    default: return 1;
-  }
-}
-
-/**
- * How much of the hull top a mine-load block covers, as a fraction of its length.
- *
- * AREA, NOT A COUNT, for the same measurement that killed the collars: one stripe against two
- * is a few pixels at play distance, but a filled block covering a third of the hull against
- * two thirds is tens of pixels of value. The hull top is the one large surface nothing has
- * claimed -- 1.0 by 1.0, foreshortening to about 89 by 69 px near the camera -- and unlike the
- * hull SIDE (0.25 units effective, 10px far) it does not vanish when the tank turns.
- *
- * Zero for a kind that lays no mines, so olive carries a clean deck and reads as the outlier
- * it is.
- */
-export function mineBlockFor(mineCapacity: number): number {
-  if (mineCapacity <= 0) return 0;
-  return mineCapacity <= 2 ? 0.3 : 0.62;
-}
-
-/**
  * The shipped tank, scaled by whichever weapon lever a cue pulls -- all three carry the same
  * three states, ordered by the bounce budget, so they can be compared against each other
  * rather than against a different claim.
  *
  * Returned as multipliers of the shipped values, so an unpulled lever is exactly 1 and the
  * shipped tank does not move a vertex.
+ *
+ * GIRTH REPLACED A COLLAR COUNT, which did not survive measurement. At the shipped camera a
+ * hull is 89px wide near the viewer and about 40px far, so the visible barrel is 20-44px and
+ * a collar is 2-4px: not countable at any boldness that keeps the toy-tank silhouette. Girth
+ * changes the whole length of the barrel at once, so the difference is the full 20-44px run
+ * rather than a feature inside it; three thicknesses is what that many pixels can carry.
  */
 export function weaponShapeFor(
   lever: 'girth' | 'flare' | 'dome' | 'hull' | null, bulletType: BulletType,
@@ -202,6 +170,14 @@ const HULL_PLAN_CORNER = 0.3;
  * The same, for mine load. `crown` is the odd one: it spends the turret's DIAMETER, which is
  * the biggest uninterrupted shape on the tank -- and also the surface #630 wants for owner
  * identity, so it is here to be measured rather than because it is available.
+ *
+ * The deck block is an AREA, NOT A COUNT, for the same measurement that retired the barrel
+ * collars: one stripe against two is a few pixels at play distance, but a filled block
+ * covering a third of the hull top against two thirds is tens of pixels. The hull top is the
+ * one large surface nothing else has claimed -- 1.0 by 1.0, foreshortening to about 89 by 69
+ * px near the camera -- and unlike the hull SIDE (0.25 units effective, 10px far) it does not
+ * vanish when the tank turns. Zero for a kind that lays no mines, so olive carries a clean
+ * deck and reads as the outlier it is.
  */
 export function mineShapeFor(
   lever: 'deck' | 'riser' | 'crown' | null, mineCapacity: number,

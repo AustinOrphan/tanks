@@ -57,8 +57,7 @@ const VARIANTS = process.argv.includes('--variants');
 function accepts(arena, n) {
   const verdict = evaluateVersusBoard(arena, n);
   if (!verdict.suitable) return { ok: false, why: reasonFor(verdict) };
-  const { walls, tanks } = loadArena(arena, n, 'ffa');
-  void walls;
+  const { tanks } = loadArena(arena, n, 'ffa');
   const positions = tanks.filter((t) => t.kind === 'player').map((t) => t.pos);
   const failures = versusSpawnClearanceFailures(
     arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, positions,

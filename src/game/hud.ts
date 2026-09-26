@@ -1404,7 +1404,6 @@ export type GameplayHudKey =
   // happen mid-match and have nowhere else to report.
   | 'showToast';
 
-export type HudFrame = Pick<Hud, HudFrameKey>;
 export type RouteHud = Pick<Hud, RouteHudKey>;
 export type GameplayHud = Pick<Hud, GameplayHudKey>;
 
