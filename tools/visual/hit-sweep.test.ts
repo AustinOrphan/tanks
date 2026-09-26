@@ -97,13 +97,26 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // new state declares no menu, so it joins the exclusion above rather than this list. Its
     // controls are driving controls, which this collector skips on purpose and whose floor is
     // 56 px rather than the 44 this sweep enforces.
-    // 35 since issue #917's `screen.main-menu.pad-only`. It is the Main Menu, so it carries a
+    // 35 since issue #290's `screen.settings.ui-scale`. This one JOINS the sweep rather than
+    // the exclusion, and it is the most useful member of the list: it is the Settings pane at
+    // 150% UI scale, so it is the one state where the type and spacing scales are multiplied
+    // and a control could plausibly outgrow its row. Measuring it against the same 44 px floor
+    // is how "scaling the interface up does not break its hit targets" stops being an
+    // assumption -- the scaled capture measures its controls at 128x44 and 161x44.
+    //
+    // 36 since issue #917's `screen.main-menu.pad-only`. It is the Main Menu, so it carries a
     // menu and joins this list rather than the exclusion above -- and it is the one member
     // reached with no keyboard and no pointer, which is the session a controller player
     // actually has. Its five measured selectors are identical to `screen.main-menu`'s, so it
     // adds a second sweep of the same controls from a different input history rather than new
     // surface area.
-    expect(hitSweepStates()).toHaveLength(35);
+    //
+    // TWO STATES ARRIVED AT ONCE, from branches that could not see each other, and each raised
+    // this count to 35 on its own. 36 is what the two together actually sweep. Worth naming
+    // because a ratchet is the one kind of conflict git can resolve CLEANLY into a wrong
+    // number -- both sides wrote `35` and either resolution would have compiled -- so this
+    // number was re-derived by running the collector rather than taken from either side.
+    expect(hitSweepStates()).toHaveLength(36);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 

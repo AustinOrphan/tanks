@@ -1,0 +1,16 @@
+{
+  "id": "pad-focus-ring-class-never-written",
+  "file": "src/game/hud.ts",
+  "find": "el.classList.toggle('hud--padnav', modality === 'gamepad');",
+  "replace": "el.classList.toggle('hud--padnav', false);",
+  "expect": "killed",
+  "why": "The inert-change failure mode, aimed at the half that is easiest to lose. Issue #917's fix is two pieces in two files, and the stylesheet half is dead on its own: a rule keyed on a class nobody writes matches nothing, paints nothing, and is invisible to every assertion that reads the stylesheet's text. This mutation leaves the CSS rule, the class name and the `classList.toggle` call all present and only stops the condition ever being true -- so the ring silently never appears while `hud.css` still looks correct. It is written as a literal `false` rather than a deleted line deliberately: an empty replacement aborts the whole run, and keeping the call site makes the mutation read as a plausible edit rather than an obvious deletion.",
+  "tests": [
+    "src/game/hud.a11y.test.ts",
+    "src/game/hud.css.test.ts"
+  ],
+  "killedBy": [
+    "pad-navigation focus ring hook (issue #917) marks the root while the gamepad is the settled modality, and not before",
+    "hud.css is syntactically whole rings a PAD-driven focus move too, which `:focus-visible` cannot see (issue #917)"
+  ]
+}

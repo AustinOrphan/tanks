@@ -1238,6 +1238,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setTouchIndicator: (t: TouchIndicator) => rec.touchPushes.push(t),
         setMuted: (m) => rec.muted.push(m),
         setModality: () => {},
+        setUiScale: () => {},
         setVolume: (v: number) => rec.volumeEchoes.push(v),
         setShellCount: (i) => rec.shellCounts.push(i),
         signalShellCapacity: (i) => rec.capacityFlashes.push(i),

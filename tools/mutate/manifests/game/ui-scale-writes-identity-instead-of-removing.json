@@ -1,0 +1,14 @@
+{
+  "id": "ui-scale-writes-identity-instead-of-removing",
+  "file": "src/game/hud.ts",
+  "find": "    if (factor === 1) el.style.removeProperty('--hud-ui-scale');\n    else el.style.setProperty('--hud-ui-scale', String(factor));",
+  "replace": "    el.style.setProperty('--hud-ui-scale', String(factor));",
+  "expect": "killed",
+  "why": "The mutation that is numerically perfect and still wrong. Writing `--hud-ui-scale: 1` multiplies every size by exactly 1, so the rendered page is pixel-identical and no visual check, screen measurement or layout assertion can see it -- but every default page now carries an inline style it did not carry before, which is the one thing the 46 existing screen baselines were kept still by. It also reads as a simplification, since the branch it removes looks redundant. The guard is the DOM state rather than any size: the property must be absent, and the root's `style` attribute must stay empty, after a return to 1.",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "killedBy": [
+    "UI scale reaches the stylesheet (issue #290) REMOVES the property at 1 rather than writing it, which is what keeps the baselines still"
+  ]
+}

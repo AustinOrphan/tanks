@@ -43,7 +43,7 @@ if (json) {
     'board'.padEnd(12), 'N', 'ok', 'wall', 'dstr', 'cov', 'spc', 'legal', 'corr', 'open',
     'dead', 'lane2', 'lane3', 'lane4', 'slit',
     'prs', 'unr', 'mine', 'pMin', 'pMax', 'sprd', 'neck', 'rout', '1way', 'pts', 'sight',
-    'bank', 'bOnly', 'rot',
+    'bank', 'bOnly', 'rot', 'c3',
   ];
   console.log(head.join('  '));
   for (const r of rows) {
@@ -61,7 +61,7 @@ if (json) {
       f(r.pathMin, 1).padStart(4), f(r.pathMax, 1).padStart(4), f(r.pathSpread),
       f(r.bottleneckWidth).padStart(4), f(r.routeCount), String(r.singleRoutePairs).padStart(4),
       String(r.samplePoints).padStart(3), f(r.openSightFraction),
-      f(r.bankGain), f(r.bankOnlyFraction), f(r.asymmetryRotational),
+      f(r.bankGain), f(r.bankOnlyFraction), f(r.asymmetryRotational), f(r.asymmetryC3),
     ].join('  '));
   }
   console.log();
@@ -84,5 +84,11 @@ if (json) {
   console.log('fractions that follow; sight = mean fraction of them in direct view; bank = of');
   console.log('pairs with no direct shot and within 9 units, the fraction one bounce reaches;');
   console.log('bOnly = that as a fraction of ALL pairs in reach;');
-  console.log('rot = fraction of cells disagreeing under 180-degree rotation.');
+  console.log('rot = fraction of cells disagreeing under 180-degree rotation;');
+  console.log('c3 = the same under a 120-degree rotation, over the INSCRIBED DISC rather');
+  console.log('than the rectangle, because a rectangle has no 120-degree rotation onto');
+  console.log('itself and the corners would dominate (issue #820). REPORTED, NOT A BUDGET:');
+  console.log('no shipped board is close to 3-fold symmetric and the measure does not track');
+  console.log('3-player fairness -- two boards reach pathSpread 0.000 at N=3 while scoring');
+  console.log('0.32 and 0.22 here.');
 }

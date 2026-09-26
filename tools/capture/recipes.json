@@ -2618,6 +2618,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.settings.ui-scale",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.settings.ui-scale"
+    },
+    "fixture": {
+      "id": "screen.settings.ui-scale",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Settings at 150% UI scale",
+    "description": "The Settings pane for a player who raised the in-game UI scale to 150%, which multiplies the type and spacing scales. Against the default capture of the same pane its controls are measurably larger -- 13px type at 94x44 becomes 19.5px at 128x44.",
+    "altText": "Screenshot of the Tanks! settings screen at 150% UI scale, with noticeably larger text and controls than the default capture of the same screen.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "flow.campaign-round.pp1roles-off",
     "producer": {
       "kind": "flow",

@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-c3-measures-the-rectangle-not-the-disc",
+  "file": "tools/mapgen/measure.ts",
+  "find": "    asymmetryC3: rotationalAsymmetry(arena, 3, 'disc'),",
+  "replace": "    asymmetryC3: rotationalAsymmetry(arena, 3, 'whole'),",
+  "expect": "killed",
+  "why": "The wrong-variant mutation, which is the one that cannot be seen by reading the number. Both regions return a plausible fraction between 0 and 1, both move when a wall moves, and both rank the shipped boards in a broadly similar order -- so a reviewer comparing figures would notice nothing. What changes is what the figure is ABOUT: over the whole rectangle the count is dominated by cells whose image rotates off the board, which is a fact about rectangles rather than about the arrangement of walls. Measured: a completely uniform 11x11 board, symmetric under every rotation, scores 0.132 over the rectangle and 0 over the disc. A generator tuned against the rectangle variant would be optimising partly for its own aspect ratio.",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: 3-fold symmetry (issue #820) reports the DISC on the board measures, which is a different number from the rectangle"
+  ]
+}

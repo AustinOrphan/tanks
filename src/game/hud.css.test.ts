@@ -91,6 +91,17 @@ const THEMED_PROPS = ['background', 'color', 'borderRadius', 'cursor'] as const;
 const VAR_REFERENCE = /^var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,\s*([\s\S]*?))?\s*\)$/;
 
 /**
+ * The one token chain this stylesheet has (issue #290): a type or spacing step written as
+ * `calc(<literal> * var(--hud-ui-scale))`, so the player's UI scale multiplies it.
+ *
+ * The `\s*` around the `*` are load-bearing rather than defensive. jsdom serialises the
+ * computed value with the whitespace stripped -- `calc(12px*var(--hud-ui-scale))` -- while
+ * the stylesheet source has spaces around it, and this pattern is applied to the computed
+ * form. Written to accept both so it does not depend on which one it is handed.
+ */
+const UI_SCALED_TOKEN = /^calc\(\s*([^*]+?)\s*\*\s*var\(\s*--hud-ui-scale\s*\)\s*\)$/;
+
+/**
  * A computed value with one level of `var()` resolved. Use this, not `getComputedStyle`,
  * for any property this stylesheet tokenises.
  *
@@ -115,9 +126,16 @@ const VAR_REFERENCE = /^var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,\s*([\s\S]*?))?\s*\)$/;
  *
  * THROWS rather than returning the unresolved string, and rather than returning `''`,
  * when a reference has no value and no fallback. A typo in a token name is then a red
- * suite instead of the same vacuous pass this helper exists to remove. One level only:
- * this stylesheet chains no tokens, and a recursive resolver would be a branch no test
- * here could kill.
+ * suite instead of the same vacuous pass this helper exists to remove.
+ *
+ * ONE CHAIN, and only one (issue #290). Every type and spacing token is
+ * `calc(<literal> * var(--hud-ui-scale))`, because the player's UI scale multiplies the
+ * whole interface. Every guard below measures the DEFAULT interface, where that multiplier
+ * is 1, so the helper unwraps that one shape and returns the literal rather than refusing
+ * it. It READS the scale rather than assuming it: if the default ever stops being 1, every
+ * measurement in this file would be silently wrong by that factor, so this throws instead
+ * of quietly returning the unmultiplied literal. Any other chain is still refused, and a
+ * general recursive resolver would still be a branch no test here could kill.
  */
 function resolved(el: Element, prop: keyof CSSStyleDeclaration & string): string {
   const style = getComputedStyle(el);
@@ -134,6 +152,17 @@ function resolved(el: Element, prop: keyof CSSStyleDeclaration & string): string
   const out = value !== '' ? value : (fallback ?? '').trim();
   if (out === '') {
     throw new Error(`resolved(${prop}): ${token} has no value and no fallback`);
+  }
+  const scaled = UI_SCALED_TOKEN.exec(out);
+  if (scaled) {
+    const scale = style.getPropertyValue('--hud-ui-scale').trim();
+    if (scale !== '1') {
+      throw new Error(
+        `resolved(${prop}): --hud-ui-scale is ${scale || 'unset'}, not 1, so ${token} is not `
+        + `${scaled[1]} here and every measurement in this file is off by that factor`,
+      );
+    }
+    return scaled[1];
   }
   if (out.includes('var(')) {
     throw new Error(`resolved(${prop}): ${token} resolves to another reference, ${out}`);
@@ -1610,12 +1639,20 @@ describe('hud.css is syntactically whole', () => {
     // selector list above) cannot see this: `.hud-accents` matching zero rules and
     // `.hud-accents` matching a rule with no layout declarations look identical to
     // `toContain`.
+    // Inside a `.hud` host, because the spacing and type scales are declared there rather
+    // than on `:root` since issue #290 -- they multiply by `--hud-ui-scale`, and a `var()`
+    // is substituted where its declaration lives, so a scale on `:root` could never see the
+    // player's setting. A bare probe on `document.body` inherits neither scale and reads
+    // `gap` as unset. This is also where both of these elements really sit.
+    const host = document.createElement('div');
+    host.className = 'hud';
     const swatches = document.createElement('div');
     swatches.className = 'hud-swatches';
     const accents = document.createElement('div');
     accents.className = 'hud-accents';
-    document.body.appendChild(swatches);
-    document.body.appendChild(accents);
+    host.appendChild(swatches);
+    host.appendChild(accents);
+    document.body.appendChild(host);
 
     const swatchesStyle = getComputedStyle(swatches);
     const accentsStyle = getComputedStyle(accents);
@@ -1932,6 +1969,11 @@ describe('hud.css is syntactically whole', () => {
     // a gap, so without `display: flex` they touch; and the extra margin that groups the
     // pairs has to land on the THIRD child, which is what makes the cluster read as
     // hull-pair / turret-pair rather than four identical buttons.
+    // Inside a `.hud` host, for the reason the accent-row case above states: the spacing and
+    // type scales are declared on `.hud` since issue #290, so a probe on `document.body`
+    // inherits neither and reads `gap` as unset.
+    const host = document.createElement('div');
+    host.className = 'hud';
     const cluster = document.createElement('div');
     cluster.className = 'hud-preview-rotate';
     const made: HTMLButtonElement[] = [];
@@ -1941,7 +1983,8 @@ describe('hud.css is syntactically whole', () => {
       cluster.appendChild(b);
       made.push(b);
     }
-    document.body.appendChild(cluster);
+    host.appendChild(cluster);
+    document.body.appendChild(host);
     const row = getComputedStyle(cluster);
     expect(row.display).toBe('flex');
     // `gap` is tokenised, so `parseFloat(getComputedStyle(...).gap)` is NaN here and every
@@ -2042,6 +2085,53 @@ describe('hud.css is syntactically whole', () => {
     expect(block, 'the generic rule rings a panel container too').toContain(
       ':not([tabindex="-1"])',
     );
+  });
+
+  it('rings a PAD-driven focus move too, which `:focus-visible` cannot see (issue #917)', () => {
+    // The generic rule above is `:focus-visible`, and that is correct for keyboard and wrong
+    // for a gamepad: a pad press is not a DOM input event -- the Gamepad API is polled -- so
+    // the browser never counts it as an interaction and `moveFocus`'s programmatic `.focus()`
+    // inherits whatever the player last touched. MEASURED on the built bundle, holding the
+    // surface and the control constant and varying only the route to them: the same
+    // `.hud-settings-mute`, focused by the same D-pad press, computes
+    // `outline: solid 2px rgb(127, 208, 255)` when the pane was reached by keyboard and
+    // `outline-style: none` when it was reached by mouse.
+    //
+    // TEXT only, for the reason the generic case above states at length.
+    const src = stripComments(css);
+    expect(src, 'no pad-navigation focus rule').toContain('.hud--padnav button:focus');
+    const start = src.indexOf('.hud--padnav button:focus');
+    const block = src.slice(start, src.indexOf('}', start));
+
+    // `:focus`, NOT `:focus-visible`. Rewriting it to `:focus-visible` would make the whole
+    // rule a duplicate of the generic one and silently restore the defect, while leaving the
+    // selector, the tokens and the container exclusion all looking right.
+    expect(block, 'the pad rule is keyed on :focus-visible, so it changes nothing')
+      .not.toContain(':focus-visible');
+
+    // Same three tokens as the generic ring, so the two cannot drift apart into a pad ring
+    // that is thinner, differently coloured, or an inner ring instead of an outer one.
+    for (const token of ['--hud-focus-width', '--hud-focus-color', '--hud-focus-offset']) {
+      expect(block, `the pad ring does not use ${token}`).toContain(token);
+    }
+
+    // Same container exclusion, for the same reason: `[tabindex]` is as specific as a class,
+    // so a bare `[tabindex]:focus` would outrank the five `:focus { outline: none }`
+    // container rules and ring the whole pane on every panel-open transition.
+    expect(block, 'the pad rule rings a panel container too').toContain(':not([tabindex="-1"])');
+
+    // SCOPED, so a pointer player never matches it. Without `.hud--padnav` this would be a
+    // bare `:focus` ring for everyone, which is exactly what the generic rule's own comment
+    // declines to do -- a mouse click would leave a ring hanging until the blur after it.
+    expect(src, 'the pad ring is not scoped to the pad modality')
+      .not.toMatch(/(^|[^-\w])\.hud button:focus\s*[,{]/m);
+
+    // AND THE RULE IS WIRED. A stylesheet rule keyed on a class nobody writes is inert and
+    // would pass every assertion above. hud.ts must toggle it, and only for the gamepad.
+    expect(hudSource, 'hud.ts never writes hud--padnav, so the rule above is dead')
+      .toContain("'hud--padnav'");
+    expect(hudSource, 'the pad-navigation class is not keyed on the gamepad modality')
+      .toMatch(/hud--padnav'\s*,\s*modality === 'gamepad'/);
   });
 
   /**
@@ -3680,9 +3770,19 @@ describe('hud.css type scales with the reader (issue #971)', () => {
   });
 
   it('spends every step of the scale, and each step is a whole number of px at the default', () => {
-    const declared = [...stripComments(css).matchAll(/--hud-type-(\d+)\s*:\s*([0-9.]+)rem\s*;/g)]
+    // Each step is `calc(<rem> * var(--hud-ui-scale))` since issue #290 -- the literal is still
+    // the scale, and the multiplier is the player's UI setting, 1 by default.
+    const declared = [...stripComments(css)
+      .matchAll(/--hud-type-(\d+)\s*:\s*calc\(\s*([0-9.]+)rem\s*\*\s*var\(--hud-ui-scale\)\s*\)\s*;/g)]
       .map((m) => ({ step: m[1], rem: Number(m[2]) }));
     expect(declared.length, 'no --hud-type-* steps found').toBeGreaterThan(0);
+    // ...and EVERY declared step carries the multiplier. Without this, a step that lost its
+    // `* var(--hud-ui-scale)` would simply drop out of `declared` and the loop below would
+    // still pass on the rest -- a step silently exempt from the player's UI scale, which is
+    // exactly the interesting failure.
+    const allSteps = [...stripComments(css).matchAll(/--hud-type-(\d+)\s*:/g)];
+    expect(declared.length, `${allSteps.length - declared.length} of ${allSteps.length} type `
+      + 'steps are not multiplied by --hud-ui-scale').toBe(allSteps.length);
     for (const { step, rem } of declared) {
       // A step used nowhere names a size that is not a step. Counted in the stylesheet text,
       // because that is where a token is spent.
