@@ -1,0 +1,16 @@
+{
+  "id": "mapgen-seed-range-ignores-its-offset",
+  "file": "tools/mapgen/lib.mjs",
+  "find": "  return Array.from({ length: count }, (_, i) => offset + i + 1);",
+  "replace": "  return Array.from({ length: count }, (_, i) => i + 1);",
+  "expect": "killed",
+  "why": "Drops the offset, so every sweep runs seeds 1..N whatever `--seed-offset` says. This is the one mutation that restores the exact hole the flag was added to close, and it is INVISIBLE in the sweep's output: the table still prints, the row counts are right, and the numbers are plausible -- they are simply the first sample again under a label claiming a second one. A ranking 'confirmed on a disjoint set' would then be confirmed against itself, which is worse than not checking, because it carries the authority of a check that did not happen. Measured on this generator: at fill=0.35 seeds 1-6 accept 0 of 6 and seeds 7-12 accept 3 of 6, so the two samples genuinely differ and a test asserting disjointness has real content.",
+  "tests": [
+    "tools/mapgen/seed-range.test.ts"
+  ],
+  "killedBy": [
+    "mapgen seed ranges (issue #821) gives two disjoint samples when the offset is the first sample size",
+    "mapgen seed ranges (issue #821) runs offset+1 through offset+count, so offset 0 reproduces the published sweeps",
+    "mapgen seed ranges (issue #821) overlaps when the offset is smaller than the first sample, which is the misuse to catch"
+  ]
+}

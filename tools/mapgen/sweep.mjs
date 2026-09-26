@@ -5,6 +5,7 @@ import { measureBoard } from './measure';
 import { RULESETS } from './rulesets.mjs';
 import { writeBoardPng } from './render.mjs';
 import { expressiveRange, renderExpressiveRange } from './expressive-range.mjs';
+import { seedRange } from './lib.mjs';
 
 /**
  * Generate boards from every ruleset over a seed sample, filter them through the SHIPPED
@@ -26,6 +27,7 @@ import { expressiveRange, renderExpressiveRange } from './expressive-range.mjs';
  *
  *   npx vite-node tools/mapgen/sweep.mjs                 # table over the default seeds
  *   npx vite-node tools/mapgen/sweep.mjs --seeds 40      # a wider sample
+ *   npx vite-node tools/mapgen/sweep.mjs --seeds 30 --seed-offset 30   # a DISJOINT second sample
  *   npx vite-node tools/mapgen/sweep.mjs --png DIR       # also write one board per ruleset
  *   npx vite-node tools/mapgen/sweep.mjs --axes a,b      # pick the expressive-range axes
  *
@@ -40,6 +42,7 @@ const arg = (flag, fallback) => {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 };
 const SEEDS = Number(arg('--seeds', '20'));
+const SEED_OFFSET = Number(arg('--seed-offset', '0'));
 const COUNTS = process.argv.includes('--variants') ? [4] : [2, 3, 4];
 const PNG_DIR = arg('--png', null);
 /**
@@ -91,7 +94,7 @@ for (const key of Object.keys(RULESETS)) {
 for (const job of jobs) {
   const key = job.label;
   const boards = [];
-  for (let s = 1; s <= SEEDS; s++) boards.push({ seed: s, arena: job.generate(s) });
+  for (const s of seedRange(SEED_OFFSET, SEEDS)) boards.push({ seed: s, arena: job.generate(s) });
 
   for (const n of COUNTS) {
     const verdicts = boards.map((b) => ({ ...b, verdict: accepts(b.arena, n) }));
