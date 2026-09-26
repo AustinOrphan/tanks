@@ -10,27 +10,22 @@ import { detHypot } from '../math/hypot';
 
 /**
  * The commitment layer (issue #222): an AI tank perceives and decides on its own cadence,
- * then COMMITS, instead of re-deciding its heading every tick.
+ * then commits, instead of re-deciding its heading every tick.
  *
- * Measured before this existed, over 60 seeds x 2 arenas x 2 player policies
- * (commitment.measure.test.ts): against a shooting player, grey's movement intent reversed
- * by more than 90 degrees on 13.93% of adjacent live ticks (8712/62529 pairs, arena 3) and
- * its 95th-percentile turn was 180.0 degrees, while its MEDIAN turn was 0.0 -- a bimodal
- * hold/flip shape rather than a tank steering. The three mechanisms behind it, and what
- * each needs, from that harness's transition rollup (arena1/shooter, n=8797):
+ * Measured before this existed (commitment.measure.test.ts): against a shooting player,
+ * grey's movement intent reversed by more than 90 degrees on 13.93% of adjacent live ticks
+ * while its median turn was 0 -- a bimodal hold/flip shape rather than a tank steering. Its
+ * three sources set the two halves of this layer: `bullet->bullet`, dangerAvoidMove's dodge
+ * perpendicular swapping sides as the tank crosses the shell's axis (two equally good
+ * dodges, so it wants hysteresis); `seek<->bullet`, a dodge starting or ending; and
+ * `seek->seek`, the distance band's near-opposite approach/retreat blends and wander
+ * re-rolls (both want a hold).
  *
- *   bullet->bullet  40.6%  dangerAvoidMove's dodge perpendicular swapping sides as the
- *                          tank crosses the shell's axis -- two equally good dodges, so
- *                          this wants HYSTERESIS
- *   seek<->bullet   36.5%  a dodge starting or ending -- wants a HOLD
- *   seek->seek      12.5%  the distance band's approach/retreat blends are near-opposite,
- *                          and the wander heading re-rolls -- also a HOLD
- *
- * Applied CENTRALLY by `decideAi` over whatever the behaviour function returned, rather
+ * Applied centrally by `decideAi` over whatever the behaviour function returned, rather
  * than inside brown/grey/teal (one implementation, one set of tests, and a new behaviour
- * class gets it for free) and emphatically not inside `dangerAvoidMove`, whose own doc
- * comment requires it to stay stateless shared geometry -- `decidePlayerInput` reuses that
- * function and must never touch `world.seed`.
+ * class gets it for free) and not inside `dangerAvoidMove`, whose own doc comment requires
+ * it to stay stateless shared geometry -- `decidePlayerInput` reuses that function and
+ * must never touch `world.seed`.
  *
  * Deterministic and draw-free: the window is a plain countdown, not a seeded roll, so this
  * adds no RNG stream and cannot desync any existing one.
@@ -83,12 +78,12 @@ export function commitHeading(
   // Hysteresis at the adoption moment: a candidate inside the cone IS the decision already
   // being executed, so keep the held vector rather than nudging it every window.
   //
-  // For a BULLET dodge the comparison is sign-blind, for the same reason the emergency
-  // test below is: the candidate perpendicular and its exact opposite are the SAME
+  // For a bullet dodge the comparison is sign-blind, for the same reason the emergency
+  // test below is: the candidate perpendicular and its exact opposite are the same
   // decision ("dodge sideways out of this corridor"), and which one dangerAvoidMove names
   // flips the instant the tank crosses the shell's axis. Without this, every commitment
-  // expiry during a sustained dodge was free to adopt the flipped perpendicular -- the
-  // second of the two paths by which the measured 180-degree reversals survived the hold.
+  // expiry during a sustained dodge would be free to adopt the flipped perpendicular -- one
+  // of the two paths by which the measured 180-degree reversals survived the hold.
   const alignment = held === null ? 0 : vdot(held, candidate);
   const keep = held !== null
     && (avoidKind === 'bullet' ? Math.abs(alignment) : alignment) >= AI_COMMIT_HYSTERESIS_DOT;
@@ -118,10 +113,10 @@ function emergencyBreaks(
 ): boolean {
   if (wallBlocksStep(world, tank, held)) return true;
   if (avoid === null) return false;
-  // A BULLET dodge is sign-blind: dangerAvoidMove returns one of two exact opposite
+  // A bullet dodge is sign-blind: dangerAvoidMove returns one of two exact opposite
   // perpendiculars and both leave the corridor, so a held heading is still dodging as long
-  // as it keeps enough of a SIDEWAYS component -- |dot|, not dot. Comparing the signed
-  // value here is what let the measured `bullet->bullet` flip survive the hold entirely
+  // as it keeps enough of a sideways component -- |dot|, not dot. Comparing the signed
+  // value here would let the measured `bullet->bullet` flip break the hold every time
   // (see AI_COMMIT_DODGE_ALIGN_DOT). A mine escape keeps the signed test: the opposite
   // direction there is into the blast, not an equally good way out.
   if (avoidKind === 'bullet') return Math.abs(vdot(held, avoid)) < AI_COMMIT_DODGE_ALIGN_DOT;

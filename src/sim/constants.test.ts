@@ -99,7 +99,7 @@ describe('constants', () => {
     expect(MINE_PROXIMITY_RADIUS).toBe(1.5);
     expect(MINE_BLAST_RADIUS).toBe(2.0);
     // The shell-trap radius (see its comment in constants.ts: the mine's BODY,
-    // twenty times smaller than the blast). Unpinned until the JSON inversion
+    // nearly six times smaller than the blast). Unpinned until the JSON inversion
     // review: 20 of 22 balance.json values had pins, this and TANK_TURN_RATE
     // did not -- so retuning them was a silent one-file edit.
     expect(MINE_TRIGGER_RADIUS).toBe(0.35);
@@ -115,8 +115,8 @@ describe('constants', () => {
   });
 
   it('AI aim spread stays at the tuned difficulty value', () => {
-    // src/sim/constants.ts documents this as "THE PRIMARY DIFFICULTY KNOB for
-    // this slice": 0.08 rad ~= 4.6 degrees of jitter on every AI firing
+    // src/sim/constants.ts documents this as the primary difficulty knob:
+    // 0.08 rad ~= 4.6 degrees of jitter on every AI firing
     // solution. There is no behavioural test that can pin it -- the AI is meant
     // to miss sometimes -- so widening it to, say, 0.5 rad (~29 degrees) makes
     // every enemy harmless with the whole suite still green. Pin the literal.

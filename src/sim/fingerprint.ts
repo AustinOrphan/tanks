@@ -7,7 +7,7 @@ import type { World } from './world';
  *
  * One definition for every determinism check (issue #760): `determinism.test.ts`'s
  * repeatability and branch checks, and the generated-scenario harness's repeat run
- * (`scenarios.ts`). Collections are walked in their stored order, so a change of ORDER
+ * (`scenarios.ts`). Collections are walked in their stored order, so a change of order
  * under identical inputs changes the fingerprint as surely as a change of value.
  */
 export function worldFingerprint(w: World): string {

@@ -9,15 +9,15 @@ import { AI_LAST_SEEN_TICKS } from '../constants';
  *
  * An AI should not behave as though an enemy stopped existing on the exact tick direct line
  * of sight broke. When the committed target goes out of sight, the tank keeps looking at the
- * last point it ACTUALLY OBSERVED for a bounded span, then gives up and returns to #371's
+ * last point it actually observed for a bounded span, then gives up and returns to #371's
  * ordinary search.
  *
- * A STORED COPY, never a live reference. `resolveOpponent` hands back the target Tank, whose
+ * A stored copy, never a live reference. `resolveOpponent` hands back the target Tank, whose
  * `pos` keeps moving while the AI cannot see it -- so remembering the tank would remember
  * the present, which is the privileged hidden state this issue forbids by name. What is
  * stored is a Vec2 snapshot taken on a tick when line of sight was valid.
  *
- * ATTENTION ONLY. This never reaches firing: `hasSolution` is computed by each personality
+ * Attention only. This never reaches firing: `hasSolution` is computed by each personality
  * from current line of sight (or a bank path), and the dispatcher's trigger additionally
  * requires the barrel to have arrived (issue #371). A remembered contact moves the turret
  * and nothing else, which is the issue's "attention/perception aid, not permission to attack

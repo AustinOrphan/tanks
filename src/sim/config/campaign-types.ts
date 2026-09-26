@@ -1,16 +1,12 @@
 /**
- * A campaign level: player-facing identity, decoupled from board content.
- *
- * Issue #154: before this, "level N" meant `ARENAS[N-1]` everywhere in the game
- * layer -- permanent progress, the active run, and a replay's stamp all named a
- * level by its position in the arena catalog. That collapsed two different
- * things (which board a level plays, and where a level sits in the campaign)
- * into one array position, so the two could never be edited independently.
+ * A campaign level: player-facing identity, decoupled from board content, so which
+ * board a level plays and where it sits in the campaign can be edited independently
+ * (issue #154).
  */
 export interface CampaignLevel {
   /**
    * Player-facing level identity. Opaque -- compared for equality only, never
-   * parsed. Order comes ONLY from position in `CampaignDefinition.levels`, not
+   * parsed. Order comes only from position in `CampaignDefinition.levels`, not
    * from anything encoded in the id itself.
    */
   readonly id: string;

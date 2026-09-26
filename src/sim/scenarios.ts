@@ -1,14 +1,14 @@
 /**
  * Seeded generated scenarios with structural invariants (issue #760).
  *
- * WHAT THIS IS. Hand-authored tests pin the combinations a maintainer thought of. This
+ * Hand-authored tests pin the combinations a maintainer thought of. This
  * builds legal worlds from an explicit seed -- a shipped arena, a mode and player count the
  * catalogs allow, rule values a world can be created with -- drives them for a bounded
  * number of ticks through `stepInputs`, the entry point the game itself uses, and checks
  * structural invariants after every tick. A failure names the seed, the resolved scenario,
  * the tick and the invariant, and prints the command that reruns exactly that case.
  *
- * WHAT IT IS NOT. It never builds a world by hand, never steps a second simulation path, and
+ * It never builds a world by hand, never steps a second simulation path, and
  * asserts nothing about balance or feel. It is testing infrastructure: nothing in the game
  * imports it. Pure like the rest of `src/sim/`: seeded randomness only, no wall clock.
  *

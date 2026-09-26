@@ -5,9 +5,9 @@ export interface AiDecision {
   turretAngle: number;
   fire: boolean;
   /**
-   * Does the tank HAVE a firing solution this tick (line of sight / a bank
+   * Does the tank have a firing solution this tick (line of sight / a bank
    * path), regardless of whether it wants to or may fire? The dispatcher
-   * accumulates this into tank.aimTicks; its CONTINUITY is what the profile's
+   * accumulates this into tank.aimTicks; its continuity is what the profile's
    * reactionTime is measured against.
    */
   hasSolution: boolean;
@@ -16,18 +16,18 @@ export interface AiDecision {
   nextState: AiState;
   nextTimer: number;
   /**
-   * The dodge direction this decision computed, or null when it needed none. THREADED
+   * The dodge direction this decision computed, or null when it needed none. Threaded
    * rather than recomputed by the dispatcher: grey and teal already hold this value in a
    * local, and re-deriving it in `decideAi` would both re-walk dangerAvoidMove's 16-sample
    * wheel every tick and rest on the assumption that the dispatcher reconstructs the same
-   * PERCEIVED radii the behaviour used -- an assumption that is false for brown, which
+   * perceived radii the behaviour used -- an assumption that is false for brown, which
    * never calls dangerAvoidMove at all. Consumed by the commitment layer to decide whether
    * a held heading is still safe (ai/commitment.ts).
    */
   avoid: Vec2 | null;
   /**
    * Which hazard `avoid` escapes, when there is one. The commitment layer needs it because
-   * the two escape shapes have OPPOSITE symmetry: a bullet dodge is one of two exact
+   * the two escape shapes have opposite symmetry: a bullet dodge is one of two exact
    * opposite perpendiculars and both are equally good, so its sign carries no information,
    * while a mine escape's sign is the whole point (the other way is into the blast). Read
    * `AI_COMMIT_DODGE_ALIGN_DOT`'s comment in constants.ts for what that distinction buys.
@@ -47,9 +47,9 @@ export interface AiDecision {
    * The bank-first/direct-first shot plan to hold, and the ticks left on its window
    * (issue #332). Mirrors Tank.aiShotPlan/aiShotPlanTicks.
    *
-   * OPTIONAL, unlike the intent and aim-hold pairs above, and the distinction is which
+   * Optional, unlike the intent and aim-hold pairs above, and the distinction is which
    * of "no opinion" and "clear it" has to be expressible. Those pairs use `null` to mean
-   * CLEAR because no behaviour needs to preserve a hold it did not itself set. A shot
+   * clear because no behaviour needs to preserve a hold it did not itself set. A shot
    * plan does: only tealDecision evaluates one, and brown's and grey's decisions must
    * leave a teal tank's plan untouched rather than erase it -- so absent has to mean
    * "this decision has no opinion", which `null` inside a required field cannot say
