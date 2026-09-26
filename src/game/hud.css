@@ -1040,6 +1040,33 @@
   outline-offset: var(--hud-focus-offset);
 }
 
+/* THE ONE CASE `:focus-visible` CANNOT SEE (issue #917), and why widening it here is safe.
+ *
+ * A gamepad press is not a DOM input event -- the Gamepad API is polled -- so it never
+ * updates the browser's idea of the last interaction, and `moveFocus`'s programmatic
+ * `.focus()` inherits whatever preceded it. MEASURED on the built bundle, holding the
+ * surface and the control constant and varying only the route taken to them: the same
+ * `.hud-settings-mute`, focused by the same D-pad press, computes
+ * `outline: solid 2px rgb(127, 208, 255)` when the pane was reached by keyboard and
+ * `outline-style: none` when it was reached by mouse. One click is enough, and it lasts
+ * the rest of the session.
+ *
+ * `:focus` rather than `:focus-visible` is exactly what the rule above declines to do,
+ * and the reason it declines does not apply here: it is about a mouse player seeing a
+ * lingering ring between a click and the blur that follows it. `.hud--padnav` is on the
+ * root only while the GAMEPAD is the settled modality (`setModality` in hud.ts, fed by
+ * the tracker's 400ms settle), so a pointer player never matches this rule at all -- the
+ * first pointer input drops the class before any click can leave a ring behind.
+ *
+ * The selector list mirrors the one above deliberately, because `focusableControls`
+ * (`focusable.ts`) queries exactly `button, [tabindex]` and drops negative tabindex --
+ * so this rings precisely the set the D-pad can actually reach, no more. */
+.hud--padnav button:focus,
+.hud--padnav [tabindex]:not([tabindex="-1"]):focus {
+  outline: var(--hud-focus-width) solid var(--hud-focus-color);
+  outline-offset: var(--hud-focus-offset);
+}
+
 /* On a phone the topbar did not fit: measured at 393px wide, the volume slider ran 35px
  * PAST the viewport edge and the row wrapped to 72px tall, eating the top of the board.
  * Shrink the type, tighten the gaps and narrow the slider so it stays one row.

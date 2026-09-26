@@ -2044,6 +2044,53 @@ describe('hud.css is syntactically whole', () => {
     );
   });
 
+  it('rings a PAD-driven focus move too, which `:focus-visible` cannot see (issue #917)', () => {
+    // The generic rule above is `:focus-visible`, and that is correct for keyboard and wrong
+    // for a gamepad: a pad press is not a DOM input event -- the Gamepad API is polled -- so
+    // the browser never counts it as an interaction and `moveFocus`'s programmatic `.focus()`
+    // inherits whatever the player last touched. MEASURED on the built bundle, holding the
+    // surface and the control constant and varying only the route to them: the same
+    // `.hud-settings-mute`, focused by the same D-pad press, computes
+    // `outline: solid 2px rgb(127, 208, 255)` when the pane was reached by keyboard and
+    // `outline-style: none` when it was reached by mouse.
+    //
+    // TEXT only, for the reason the generic case above states at length.
+    const src = stripComments(css);
+    expect(src, 'no pad-navigation focus rule').toContain('.hud--padnav button:focus');
+    const start = src.indexOf('.hud--padnav button:focus');
+    const block = src.slice(start, src.indexOf('}', start));
+
+    // `:focus`, NOT `:focus-visible`. Rewriting it to `:focus-visible` would make the whole
+    // rule a duplicate of the generic one and silently restore the defect, while leaving the
+    // selector, the tokens and the container exclusion all looking right.
+    expect(block, 'the pad rule is keyed on :focus-visible, so it changes nothing')
+      .not.toContain(':focus-visible');
+
+    // Same three tokens as the generic ring, so the two cannot drift apart into a pad ring
+    // that is thinner, differently coloured, or an inner ring instead of an outer one.
+    for (const token of ['--hud-focus-width', '--hud-focus-color', '--hud-focus-offset']) {
+      expect(block, `the pad ring does not use ${token}`).toContain(token);
+    }
+
+    // Same container exclusion, for the same reason: `[tabindex]` is as specific as a class,
+    // so a bare `[tabindex]:focus` would outrank the five `:focus { outline: none }`
+    // container rules and ring the whole pane on every panel-open transition.
+    expect(block, 'the pad rule rings a panel container too').toContain(':not([tabindex="-1"])');
+
+    // SCOPED, so a pointer player never matches it. Without `.hud--padnav` this would be a
+    // bare `:focus` ring for everyone, which is exactly what the generic rule's own comment
+    // declines to do -- a mouse click would leave a ring hanging until the blur after it.
+    expect(src, 'the pad ring is not scoped to the pad modality')
+      .not.toMatch(/(^|[^-\w])\.hud button:focus\s*[,{]/m);
+
+    // AND THE RULE IS WIRED. A stylesheet rule keyed on a class nobody writes is inert and
+    // would pass every assertion above. hud.ts must toggle it, and only for the gamepad.
+    expect(hudSource, 'hud.ts never writes hud--padnav, so the rule above is dead')
+      .toContain("'hud--padnav'");
+    expect(hudSource, 'the pad-navigation class is not keyed on the gamepad modality')
+      .toMatch(/hud--padnav'\s*,\s*modality === 'gamepad'/);
+  });
+
   /**
    * The three focus-visible cases above assert that a ring EXISTS -- each looks for
    * `outline:` inside a block. None of them can see what the ring is made of, because

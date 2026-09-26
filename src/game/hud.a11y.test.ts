@@ -509,3 +509,57 @@ describe('live status announcements (issue #629)', () => {
     expect(node.hasAttribute('aria-live')).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #917: the pad-navigation focus ring.
+//
+// A gamepad press is not a DOM input event -- the Gamepad API is polled -- so the browser
+// never counts it as an interaction, and `moveFocus`'s programmatic `.focus()` inherits
+// whatever the player last touched. MEASURED on the built bundle: after one mouse click on
+// a focusable control, every later pad-driven focus move computes `outline-style: none`.
+// Holding the surface and the control constant isolates it -- the same `.hud-settings-mute`,
+// focused by the same D-pad press, rings after a keyboard route and not after a pointer one.
+//
+// The ring itself is a stylesheet rule and so is pinned in `hud.css.test.ts`; jsdom applies
+// no stylesheet, so what CAN be asserted here is the hook that rule keys off. These cases
+// fail if the `classList.toggle` in `setModality` is removed or its condition inverted.
+// ---------------------------------------------------------------------------
+describe('pad-navigation focus ring hook (issue #917)', () => {
+  const hudRoot = (root: HTMLElement) => root.querySelector('.hud') as HTMLElement;
+
+  it('marks the root while the gamepad is the settled modality, and not before', () => {
+    const { hud: h, root } = mount();
+    // Absent at rest: the class must not ship on by default, or a mouse player gets the
+    // lingering ring the `:focus-visible` convention exists to prevent.
+    expect(hudRoot(root).classList.contains('hud--padnav')).toBe(false);
+    h.setModality('gamepad');
+    expect(hudRoot(root).classList.contains('hud--padnav')).toBe(true);
+  });
+
+  it('drops the mark for every other modality, one case each', () => {
+    // Populated deliberately rather than sampled: `Modality` has exactly four members, and
+    // the three non-gamepad ones must each clear the class. A condition written as
+    // `!== 'keyboard'` would pass a pointer-only check and fail here.
+    const { hud: h, root } = mount();
+    for (const other of ['keyboard', 'pointer', 'touch'] as const) {
+      h.setModality('gamepad');
+      expect(hudRoot(root).classList.contains('hud--padnav')).toBe(true);
+      h.setModality(other);
+      expect(
+        hudRoot(root).classList.contains('hud--padnav'),
+        `${other} should clear the pad-navigation mark`,
+      ).toBe(false);
+    }
+  });
+
+  it('leaves the rest of the root class list alone', () => {
+    // The root also carries the treatment and font classes, and `toggle` on the wrong
+    // element -- or a `className =` assignment instead of a toggle -- would drop them.
+    const { hud: h, root } = mount();
+    const before = [...hudRoot(root).classList].filter((c) => c !== 'hud--padnav');
+    h.setModality('gamepad');
+    h.setModality('pointer');
+    expect([...hudRoot(root).classList].filter((c) => c !== 'hud--padnav')).toEqual(before);
+    expect(hudRoot(root).classList.contains('hud')).toBe(true);
+  });
+});
