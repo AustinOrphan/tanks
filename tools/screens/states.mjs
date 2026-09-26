@@ -272,6 +272,18 @@ const state = (s) => Object.freeze({
   entry: 'ok',
   steps: [],
   measure: [],
+  /**
+   * Extra computed properties this state's measurements record (issue #917).
+   *
+   * The capture's own `WATCHED` list is seven properties about LAYOUT DRIFT, and a focus ring
+   * is not layout -- an `outline` moves no box, so a ring could appear or vanish and every
+   * baseline here would stay byte-identical. One state needed to photograph one, so it names
+   * the properties it is about rather than widening the list for all forty-nine.
+   *
+   * Empty for every state that is about where things are and what colour they are, which is
+   * almost all of them.
+   */
+  watch: [],
   ...s,
 });
 
@@ -609,6 +621,58 @@ export const SCREEN_STATES = Object.freeze([
       { focusKeyboard: '.hud-settings-controllers' },
     ],
     measure: ['.hud-settings', '.hud-settings-controllers'],
+  }),
+  state({
+    id: 'screen.settings.pad-focus',
+    title: 'Settings, a control holding CONTROLLER focus',
+    description:
+      'The same pane and the same ring as the keyboard capture above, reached the way issue '
+      + "#917 is about: a pointer gesture first, then a controller. This is the case "
+      + '`:focus-visible` refuses, and the only capture in this catalogue that photographs '
+      + 'the ring the pad modality paints.',
+    // THE PAIR TO `screen.settings.focused`, and the difference between them is the whole of
+    // issue #917. That one reaches focus by keyboard, where `:focus-visible` matches and the
+    // generic ring rule paints. This one reaches it by pad after a mouse click, where
+    // Chromium stops matching `:focus-visible` on a later programmatic focus -- so only
+    // `.hud--padnav`'s `:focus` rule can draw anything.
+    //
+    // EVERY STEP HERE IS load-BEARING, and each was measured rather than assumed:
+    //
+    //  - The `{ click }` is the pointer gesture, and it has to land on a real BUTTON. Of six
+    //    arrival gestures measured on the built bundle -- pad press, Space, a mouse click on
+    //    empty space, a mouse click on the splash, a touch tap, and a click on a button --
+    //    ONLY the button click makes Chromium stop matching `:focus-visible` afterwards. So a
+    //    state that dismissed the splash with a tap and called itself pointer-first would
+    //    photograph a page where the generic rule still paints, and prove nothing.
+    //  - `times: 2`. `steps.mjs` records that the modality tracker only adopts a new input
+    //    after MODALITY_SWITCH_MS (400ms); measured here, after one D-pad press `.hud--padnav`
+    //    is still OFF and focus has already moved, so a single press photographs a moved focus
+    //    with no ring. The second press past the gap is what turns the class on.
+    //
+    // PROVED NON-INERT by building the mutation in
+    // `tools/mutate/manifests/game/pad-focus-ring-keyed-on-focus-visible.json` and running
+    // this recipe against it: same browser, same steps, the ring goes from
+    // `solid 2px rgb(127, 208, 255)` to `outline-style: none`. The first version of this
+    // capture arrived at the menu by pad ALONE and passed against that same mutated build --
+    // with no pointer in the session Chromium still matched `:focus-visible`, the generic rule
+    // painted, and the capture could not tell the two builds apart.
+    storage: MID_CAMPAIGN,
+    steps: [
+      { fakeGamepads: 'idle' },
+      ...PAST_SPLASH,
+      { click: '.hud-settings-open' },
+      { waitVisible: '.hud-settings' },
+      { padPress: { button: 13, times: 2 } },
+    ],
+    // `:focus` rather than a named control: what this state is about is the ring on whatever
+    // the press landed on, and naming the control would pin the roving ORDER too, so a change
+    // to which control comes second would read as a ring regression. The measurement records
+    // the element's text, so the baseline still says which control it was.
+    measure: ['.hud-settings', ':focus'],
+    // The four properties a focus ring IS. None is in the capture's default list, which is
+    // about layout, and an outline moves no box -- so without this the ring could vanish and
+    // this baseline would not move a byte, which is the hole the state exists to close.
+    watch: ['outline-style', 'outline-width', 'outline-color', 'outline-offset'],
   }),
   state({
     id: 'screen.settings.pressed',

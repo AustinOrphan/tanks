@@ -53,6 +53,7 @@ describe('capture recipe schema', () => {
       'screen.records.stats.empty',
       'screen.records.achievements',
       'screen.settings',
+      'screen.settings.pad-focus',
       'screen.settings.controller-layout',
       'screen.customize',
       'screen.versus-setup',

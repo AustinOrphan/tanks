@@ -100,6 +100,7 @@ on:
           - screen.records.stats
           - screen.records.stats.empty
           - screen.settings
+          - screen.settings.pad-focus
           - screen.settings.controller-layout
           - screen.settings.focused
           - screen.settings.pressed

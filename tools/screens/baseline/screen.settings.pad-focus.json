@@ -1,0 +1,55 @@
+{
+  "state": "screen.settings.pad-focus",
+  "measurements": [
+    {
+      "selector": ".hud-settings",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Settings\n      \n        Audio\n        \n          Mute\n          \n          \n        \n      \n      \n        Controls\n        \n          \n          Aim: Stick\n          \n          Fire: Tap to fire\n    ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px",
+        "outline-style": "none",
+        "outline-width": "3px",
+        "outline-color": "rgb(216, 221, 230)",
+        "outline-offset": "0px"
+      }
+    },
+    {
+      "selector": ":focus",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 415,
+        "y": 221,
+        "w": 97,
+        "h": 44
+      },
+      "text": "Haptics: On",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13px",
+        "margin-top": "0px",
+        "margin-bottom": "0px",
+        "outline-style": "solid",
+        "outline-width": "2px",
+        "outline-color": "rgb(127, 208, 255)",
+        "outline-offset": "2px"
+      }
+    }
+  ]
+}

@@ -59,6 +59,7 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `screen.records.stats.empty` | `screen.records.stats.empty` | `capture.png` | still |
 | `screen.records.achievements` | `screen.records.achievements` | `capture.png` | still |
 | `screen.settings` | `screen.settings` | `capture.png` | still |
+| `screen.settings.pad-focus` | `screen.settings.pad-focus` | `capture.png` | still |
 | `screen.settings.controller-layout` | `screen.settings.controller-layout` | `capture.png` | still |
 | `screen.customize` | `screen.customize` | `capture.png` | still |
 | `screen.versus-setup` | `screen.versus-setup` | `capture.png` | still |

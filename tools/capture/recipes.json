@@ -707,6 +707,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.settings.pad-focus",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.settings.pad-focus"
+    },
+    "fixture": {
+      "id": "screen.settings.pad-focus",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Settings, a control holding controller focus",
+    "description": "The same pane and the same ring as the keyboard capture, reached by a pointer gesture and then a controller -- the case :focus-visible refuses, where only the pad modality rule can draw a ring.",
+    "altText": "Screenshot of the Tanks! settings pane with a light blue focus ring drawn around a control reached using a game controller.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "screen.settings.controller-layout",
     "producer": {
       "kind": "screen",

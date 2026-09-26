@@ -63,7 +63,24 @@ export async function launchBrowser() {
 /** The properties a measurement records beside the box, chosen to catch layout drift. */
 const WATCHED = ['display', 'opacity', 'color', 'background-color', 'font-size', 'margin-top', 'margin-bottom'];
 
-async function measure(/** @type {any} */ page, /** @type {readonly string[]} */ selectors) {
+/**
+ * Extra computed properties for ONE state, from its `watch` field (issue #917).
+ *
+ * `WATCHED` is layout drift, and deliberately narrow. A focus ring is not layout: it is an
+ * `outline`, which changes nothing about the box, so a ring could appear or vanish and every
+ * baseline in this catalogue would stay byte-identical -- which is exactly what issue #917's
+ * criterion 4 asked a capture to photograph, and what no state could do.
+ *
+ * PER STATE rather than appended to `WATCHED`, because a property added there is added to every
+ * measurement in all of the checked-in baselines, and all of them would need re-accepting for a
+ * reading one state wants. The cost of the narrow choice is that a state has to say what it is
+ * about, which is the right thing to have to say.
+ */
+async function measure(
+  /** @type {any} */ page,
+  /** @type {readonly string[]} */ selectors,
+  /** @type {readonly string[]} */ extra = [],
+) {
   return page.evaluate(
     ([sels, props]) => sels.map((sel) => {
       const el = document.querySelector(sel);
@@ -81,7 +98,7 @@ async function measure(/** @type {any} */ page, /** @type {readonly string[]} */
         style,
       };
     }),
-    [selectors, WATCHED],
+    [selectors, [...WATCHED, ...extra]],
   );
 }
 
@@ -198,7 +215,7 @@ async function captureStateOnce(browser, base, state, { width, height, dpr, time
       }).catch(() => {});
     }
 
-    const measurements = await measure(page, state.measure);
+    const measurements = await measure(page, state.measure, state.watch);
     // The screenshot is EVIDENCE, not the verdict, so it is not allowed to decide one.
     // `Page.captureScreenshot` fails on the CI runner for the two states that deliberately
     // refuse WebGL, and because this threw, the measurements already taken above were thrown

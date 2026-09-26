@@ -116,7 +116,13 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // because a ratchet is the one kind of conflict git can resolve CLEANLY into a wrong
     // number -- both sides wrote `35` and either resolution would have compiled -- so this
     // number was re-derived by running the collector rather than taken from either side.
-    expect(hitSweepStates()).toHaveLength(36);
+    //
+    // 37 since issue #917's `screen.main-menu.pad-focus`, the sibling that presses a direction
+    // after the confirm so a control rather than the pane container holds focus. It is the Main
+    // Menu with a menu, so it is swept like the other two. Its controls are the same controls
+    // again -- what differs is that one of them is wearing a focus ring, which this sweep does
+    // not read and its own baseline now does.
+    expect(hitSweepStates()).toHaveLength(37);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 
