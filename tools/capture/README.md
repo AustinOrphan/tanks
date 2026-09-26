@@ -53,13 +53,13 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `gallery.ai-last-seen.normal` | `ai-last-seen` | `capture.mp4`, `preview.gif` | ticks 0–164, one frame per 60 Hz tick |
 | `screen.main-menu` | `screen.main-menu` | `capture.png` | still |
 | `screen.main-menu.pad-only` | `screen.main-menu.pad-only` | `capture.png` | still |
-| `screen.main-menu.pad-focus` | `screen.main-menu.pad-focus` | `capture.png` | still |
 | `screen.main-menu.fresh` | `screen.main-menu.fresh` | `capture.png` | still |
 | `screen.levels` | `screen.levels` | `capture.png` | still |
 | `screen.records.stats` | `screen.records.stats` | `capture.png` | still |
 | `screen.records.stats.empty` | `screen.records.stats.empty` | `capture.png` | still |
 | `screen.records.achievements` | `screen.records.achievements` | `capture.png` | still |
 | `screen.settings` | `screen.settings` | `capture.png` | still |
+| `screen.settings.pad-focus` | `screen.settings.pad-focus` | `capture.png` | still |
 | `screen.settings.controller-layout` | `screen.settings.controller-layout` | `capture.png` | still |
 | `screen.customize` | `screen.customize` | `capture.png` | still |
 | `screen.versus-setup` | `screen.versus-setup` | `capture.png` | still |
