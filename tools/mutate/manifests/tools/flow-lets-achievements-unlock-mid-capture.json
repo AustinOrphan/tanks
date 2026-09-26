@@ -1,8 +1,8 @@
 {
   "id": "flow-lets-achievements-unlock-mid-capture",
   "file": "tools/screens/flow.mjs",
-  "find": "      'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: ACHIEVEMENT_IDS }),",
-  "replace": "      'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: [] }),",
+  "find": "  'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: ACHIEVEMENT_IDS }),",
+  "replace": "  'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: [] }),",
   "expect": "killed",
   "tests": [
     "tools/screens/flow.test.ts"
