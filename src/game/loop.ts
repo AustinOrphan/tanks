@@ -614,20 +614,6 @@ export function deriveSeed(wallMs: number): number {
  */
 export const BOT_SEED_SPACING = 1009;
 
-/**
- * Per-slot RNG stream and hold-state for a bot-claimed slot, mirroring what `autoplay`
- * builds for slot 0 (`autoplayRnd`/`autoplayState` below) -- except reseeded from the
- * CURRENT world's own resolved seed rather than session-scoped from `wallMs()`. Bots
- * exist to simulate a REPRODUCIBLE multiplayer session (owner directive 1's actual use
- * case: `?dev=1&seed=42&bots=K` must replay identically), which is exactly the
- * guarantee `wallMs()` cannot give and `world.seed` can -- see BOT_SEED_SPACING's own
- * doc comment for why `world.seed - BOT_SEED_SPACING + slot` never collides with an
- * enemy AI stream.
- *
- * `slots` is the exact set of slot indices bots claim (the LAST `botCount` of
- * `playerCount`, computed once by the caller) -- keyed by slot number, not built as an
- * array, so a non-claimed slot has no entry at all rather than a hole.
- */
 /** One bot slot's stream, state and -- bound at construction -- its decision function. */
 export interface BotSource {
   readonly rnd: () => number;
@@ -636,6 +622,21 @@ export interface BotSource {
   readonly decide: (world: World, tankId: number) => InputState;
 }
 
+/**
+ * Per-slot RNG stream and hold-state for a bot-claimed slot, mirroring what `autoplay`
+ * builds for slot 0 (`autoplayRnd`/`autoplayState` below) -- except reseeded from the
+ * CURRENT world's own resolved seed rather than session-scoped (from a pinned `?seed=`
+ * when there is one, `wallMs()` otherwise). Bots exist to simulate a REPRODUCIBLE
+ * multiplayer session (owner directive 1's actual use case: `?dev=1&seed=42&bots=K`
+ * must replay identically), which is exactly the guarantee `wallMs()` cannot give and
+ * `world.seed` can -- see BOT_SEED_SPACING's own doc comment for why
+ * `world.seed - BOT_SEED_SPACING + slot` never collides with an enemy AI stream.
+ *
+ * `slots` is the exact set of slot indices bots claim (every slot the caller's
+ * `assignment` marks `'bot'`, or the one slot a reassignment has just made a bot) --
+ * keyed by slot number, not built as an array, so a non-claimed slot has no entry at
+ * all rather than a hole.
+ */
 export function createBotSources(
   seed: number,
   slots: ReadonlySet<number>,
@@ -671,20 +672,6 @@ export function createBotSources(
   return sources;
 }
 
-/**
- * The LAST `botCount` of `playerCount` slots, per the n-player arc's PR2 design: the
- * simplest possible fill rule, chosen because at this PR no per-slot controller routing
- * exists yet to arbitrate a per-slot declaration against (that is a later PR's job).
- * `botCount` may equal `playerCount` -- including at playerCount 1, where it claims the
- * only slot, the fully autonomous match owner directive 1 asks for.
- *
- * PR3 (`pad[i] -> slot[i]`) is that later PR, and the precedence is fixed here rather
- * than arbitrated at the controller layer: `botSlots` is computed once, above, and
- * `realSources`' construction loop only calls `deps.createGamepadSource(i)` for a slot
- * NOT in this set -- bots claim their declared slots first, controllers fill whatever
- * remains, in `pad[i] -> slot[i]` order for the slots that are left. A bot-claimed slot
- * never constructs a gamepad reader at all.
- */
 /**
  * How a session's initial slot assignment is decided, for BOTH entry paths (issue #260).
  *
@@ -723,6 +710,21 @@ export function seedAssignment(
 // including loop.test.ts -- is untouched. `levels.ts` now needs the same rule to stamp
 // `Tank.botDifficulty` on a dev-flag session's tanks, and it cannot import this module:
 // loop.ts imports levels.ts, so the arrow only points one way.
+/**
+ * The LAST `botCount` of `playerCount` slots, per the n-player arc's PR2 design: the
+ * simplest possible fill rule, chosen because at this PR no per-slot controller routing
+ * exists yet to arbitrate a per-slot declaration against (that is a later PR's job).
+ * `botCount` may equal `playerCount` -- including at playerCount 1, where it claims the
+ * only slot, the fully autonomous match owner directive 1 asks for.
+ *
+ * PR3 (`pad[i] -> slot[i]`) is that later PR, and the precedence is fixed by this set
+ * rather than arbitrated at the controller layer: `seedAssignment` hands it to
+ * `deriveInitialAssignment` (`input/assignment.ts`), which makes every slot in it `'bot'`
+ * regardless of index, and `buildRealSource` builds no source for a `'bot'` slot -- bots
+ * claim their declared slots first, controllers fill whatever remains, in
+ * `pad[i] -> slot[i]` order for the slots that are left. A bot-claimed slot never
+ * constructs a gamepad reader at all.
+ */
 export { botSlotsFor };
 
 // createIdleInputSource() was RETIRED at n-player arc PR3 (`pad[i] -> slot[i]`), when
@@ -842,42 +844,6 @@ export function deathVignetteColor(world: World, playerId: number, playerCount: 
 }
 
 /**
- * Per-player kill/death attribution for the results-screen tally (coop semantics plan,
- * docs/superpowers/plans/2026-08-15-coop-semantics.md; generalized to versus modes by
- * the n-player arc's PR 4). Mutates `kills`/`deaths` in place, indexed by slot
- * (`controlledBy`), the same array-as-accumulator shape `checkAchievements`'s callers
- * already use elsewhere in this file.
- *
- * `world.rules.mode` dispatches two entirely separate rules:
- *
- *  - `'campaign-coop'`: TODAY'S rule, byte-for-byte. `e.kind === 'player'` is excluded
- *    -- only ENEMY kills count as a "kill" here, matching the results screen's existing
- *    lifetime/attempt stat semantics (stats.ts's shellKills/mineKills never count a
- *    teammate). AI-on-AI friendly fire (brown.ts's bank shots, teal's alternation --
- *    CLAUDE.md's "A green tank changed what structuralFailures has to check") is
- *    excluded too: `killer?.kind !== 'player'` skips any credit whose `by.ownerId`
- *    resolves to a non-player-kind tank, so an enemy killing another enemy increments
- *    nothing. `deaths` is untouched in this branch -- campaign-coop has no per-slot
- *    death tally, only the shared win/lose machinery in world.ts.
- *  - `'ffa'`/`'teams'`: the OPPOSITE selection -- a `tank-destroyed` event where BOTH
- *    victim and killer are player-kind. The killer's slot gets a kill, the victim's
- *    slot gets a death. Self-elimination (`killer.id === victim.id`, an own shell or
- *    own mine) credits a death to the victim and a kill to NOBODY -- the no-suicide-
- *    credit convention common to arena shooters. There are no enemy-kind tanks to
- *    exclude in these modes (loadArena strips them), so this is not merely the
- *    campaign-coop rule with the polarity flipped -- it is genuinely victim-first
- *    where campaign-coop is killer-only.
- *
- * Teams sums a per-team total from these same per-slot figures as a DERIVED reduction
- * at render/HUD time (Tank.team, no new storage here) -- this function stays unaware of
- * teams beyond dispatching on `world.rules.mode`.
- *
- * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
- * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
- * default 4 keeps lifetime stats P1-scoped. This stays a small loop.ts-local array
- * pair instead.
- */
-/**
  * PER-SLOT SHOTS AND SHELL KILLS, for the versus result's accuracy column (owner ruling
  * on issue #279).
  *
@@ -933,6 +899,45 @@ export function tallyVersusAccuracy(
   }
 }
 
+/**
+ * Per-player kill/death attribution for the results-screen tally (coop semantics plan,
+ * docs/superpowers/plans/2026-08-15-coop-semantics.md; generalized to versus modes by
+ * the n-player arc's PR 4). Mutates `kills`/`deaths` in place, indexed by slot
+ * (`controlledBy`), the same array-as-accumulator shape as its sibling
+ * `tallyVersusAccuracy` just above.
+ *
+ * `world.rules.mode` dispatches two entirely separate rules:
+ *
+ *  - `'campaign-coop'`: TODAY'S rule, byte-for-byte. `e.kind === 'player'` is excluded
+ *    -- only ENEMY kills count as a "kill" here. That is stricter than stats.ts, whose
+ *    shellKills/mineKills credit the tracked player for destroying ANY other tank, a
+ *    co-op teammate included. AI-on-AI friendly fire (brown.ts's bank shots, teal's
+ *    alternation -- docs/agent/architecture.md's "A green tank changed what
+ *    structuralFailures has to check") is excluded too: `killer?.kind !== 'player'`
+ *    skips any credit whose `by.ownerId` resolves to a non-player-kind tank, so an
+ *    enemy killing another enemy increments nothing. `deaths` is untouched in this
+ *    branch -- campaign-coop has no per-slot death tally, only the shared win/lose
+ *    machinery in world.ts.
+ *  - `'ffa'`/`'teams'`: the OPPOSITE selection -- a `tank-destroyed` event where BOTH
+ *    victim and killer are player-kind. The killer's slot gets a kill, the victim's
+ *    slot gets a death. Self-elimination (`killer.id === victim.id`, an own shell or
+ *    own mine) credits a death to the victim and a kill to NOBODY -- the no-suicide-
+ *    credit convention common to arena shooters. There are no enemy-kind tanks to
+ *    exclude in these modes (loadArena strips them), so this is not merely the
+ *    campaign-coop rule with the polarity flipped -- it is genuinely victim-first
+ *    where campaign-coop is killer-only.
+ *
+ * Teams sums a per-team total from these same per-slot figures as a DERIVED reduction
+ * at render/HUD time (no new storage here) -- grouped by `teamOf(slot)`, which is slot
+ * parity, not the configured `Tank.team`; the two disagree whenever versus setup
+ * departs from the default split (issue #993). This function stays unaware of teams
+ * beyond dispatching on `world.rules.mode`.
+ *
+ * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
+ * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
+ * default 4 keeps lifetime stats P1-scoped. This stays a small loop.ts-local array
+ * pair instead.
+ */
 export function tallyCoopKills(events: SimEvent[], world: World, kills: number[], deaths: number[]): void {
   if (world.rules.mode === 'ffa' || world.rules.mode === 'teams') {
     for (const e of events) {
@@ -1164,16 +1169,6 @@ function versusStocksOf(world: World): VersusStock[] | null {
 export type BrowserPageDeps = GameDeps & Pick<RouteHostDeps, 'createHud' | 'previewRender'>;
 
 /**
- * A FUNCTION, not an exported const.
- *
- * A module-scope object literal holding `window` throws ReferenceError on
- * import outside a DOM environment, which would make this module unimportable
- * from any node-environment test -- even one that only wanted a type. Nothing
- * in this module's top-level evaluation touches the global, and the host is
- * read off globalThis so that a mis-call under node yields undefined at the use
- * site rather than a ReferenceError at import.
- */
-/**
  * Issue #591's `outcome=` arm, as the `TypedOutcome` the state machine speaks.
  *
  * The two lists differ, which is why this exists: `practice-result` is ONE outcome kind
@@ -1200,6 +1195,16 @@ export function typedOutcomeForArm(arm: OutcomeArm | null): TypedOutcome | null 
   }
 }
 
+/**
+ * A FUNCTION, not an exported const.
+ *
+ * A module-scope object literal holding `window` throws ReferenceError on
+ * import outside a DOM environment, which would make this module unimportable
+ * from any node-environment test -- even one that only wanted a type. Nothing
+ * in this module's top-level evaluation touches the global, and the host is
+ * read off globalThis so that a mis-call under node yields undefined at the use
+ * site rather than a ReferenceError at import.
+ */
 export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): BrowserPageDeps {
   const search = globalThis.location?.search ?? '';
   const devFlags = parseDevFlags(search);
@@ -2468,11 +2473,6 @@ export function startGameWith(
   pushStatus(world, currentDescriptor.kind, ordinalOf(level));
 
   /**
-   * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
-   * has just landed, which is what stops an attempt feat firing mid-round on a tally
-   * that happens to qualify. Newly earned entries come back and become toasts.
-   */
-  /**
    * Set when a win lands, consumed on the SAME frame once that frame's stats are
    * recorded. The winning tank-destroyed and the win event ride one step() batch,
    * and the driver routes it to the state machine (which flips synchronously)
@@ -2565,6 +2565,11 @@ export function startGameWith(
       hud.setOutcome({ tally: 'solo', attempt, run, action: relaunchTarget, typedOutcome });
     }
   }
+  /**
+   * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
+   * has just landed, which is what stops an attempt feat firing mid-round on a tally
+   * that happens to qualify. Newly earned entries come back and become toasts.
+   */
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
       lifetime: deps.stats.lifetime(),

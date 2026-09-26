@@ -512,24 +512,6 @@ function runChecks(results) {
 
 
 /**
- * Leave the title screen, the way a player does.
- *
- * The game opens on a splash screen that only a real gesture dismisses. Browsers will
- * not resume a suspended AudioContext outside a gesture handler; the screen guarantees
- * that gesture happens before the menu is visible. (It does not perform the resume --
- * audio/engine.ts has always done that from its own handler.)
- *
- * Every threshold in CHECKS was calibrated against the MENU behind it, and the overlay
- * is a 92% scrim, so measuring the splash instead reports a near-blank page:
- * `paintedFraction` fell to 1.0-2.4% against a >10% floor, failing 4 checks across 4
- * viewports on a board that renders perfectly.
- *
- * Tolerant of a build with no splash screen so this file does not become the reason a
- * revert cannot be measured. Returns whether it dismissed one; the call site ignores
- * that, because the checks downstream report the consequence more usefully than a
- * thrown error here would.
- */
-/**
  * Press the button that starts a match, and wait for the board.
  *
  * NEW IN ISSUE #428, and the reason it is new: the page no longer creates a gameplay
@@ -573,6 +555,24 @@ async function startMatch(page) {
   return false;
 }
 
+/**
+ * Leave the title screen, the way a player does.
+ *
+ * The game opens on a splash screen that only a real gesture dismisses. Browsers will
+ * not resume a suspended AudioContext outside a gesture handler; the screen guarantees
+ * that gesture happens before the menu is visible. (It does not perform the resume --
+ * audio/engine.ts has always done that from its own handler.)
+ *
+ * Every threshold in CHECKS was calibrated against the MENU behind it, and the overlay
+ * is a 92% scrim, so measuring the splash instead reports a near-blank page:
+ * `paintedFraction` fell to 1.0-2.4% against a >10% floor, failing 4 checks across 4
+ * viewports on a board that renders perfectly.
+ *
+ * Tolerant of a build with no splash screen so this file does not become the reason a
+ * revert cannot be measured. Returns whether it dismissed one; the call site ignores
+ * that, because the checks downstream report the consequence more usefully than a
+ * thrown error here would.
+ */
 async function dismissSplash(page) {
   const isShowing = () =>
     page.evaluate(() => {

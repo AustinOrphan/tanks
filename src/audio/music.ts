@@ -148,11 +148,6 @@ export function createMusicBed(
    */
   let queued: MusicTrackDef | null = null;
   /**
-   * An in-progress suite change: a short passage of the incoming suite's
-   * DOMINANT, during which the tempo ramps from the outgoing pulse to the
-   * incoming one. See the suites design doc.
-   */
-  /**
    * A tempo ramp in progress, across the incoming piece's pickup bar. This is
    * ALL that remains of the transition machinery: after four iterations of
    * composing interstitial material (a held pad, then arpeggios, then rolled
@@ -161,7 +156,7 @@ export function createMusicBed(
    * invented any more. The through-line construction ends every progression on
    * its own dominant, which means the incoming piece's FINAL BAR is already the
    * entry music: it is played first, as a pickup, and the only thing synthesised
-   * across it is the tempo interpolation.
+   * across it is the tempo interpolation. See the suites design doc.
    */
   let ramp: { played: number; steps: number; fromStep: number; toStep: number } | null = null;
   /**

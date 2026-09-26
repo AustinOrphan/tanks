@@ -44,8 +44,8 @@ describe('runs.mjs: removing the AudioContext constructor before boot', () => {
     const src = readFileSync(new URL('./runs.mjs', import.meta.url), 'utf8');
     // Exactly two spaces: the body's own indentation. `\s*` would accept the call nested
     // inside an `if`, which is the one shape this exists to reject -- an override only some
-    // machines installed would let two machines photograph different pages, which is
-    // precisely the divergence these gates exist to catch.
+    // machines installed would let two machines benchmark different pages, one of them still
+    // building the AudioContexts whose stall the header above describes.
     const call = /^ {2}await context\.addInitScript\(audioContextOverrideSource\(\)\);$/m;
     expect(src, 'the override is gone, conditional, or no longer on its own line').toMatch(call);
     const at = src.search(call);

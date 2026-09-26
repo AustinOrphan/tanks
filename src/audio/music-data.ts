@@ -225,7 +225,6 @@ function parseAll(raw: unknown): MusicTrackDef[] {
   return parsed;
 }
 
-/** Validated at module load: a bad edit fails the boot, not a later note. */
 /**
  * Deep: a shallow freeze left the note ARRAYS mutable, and the module cache
  * means one test mutating them in place leaks into every other test file.
@@ -247,6 +246,7 @@ function deepFreeze(tracks: MusicTrackDef[]): readonly MusicTrackDef[] {
   return Object.freeze(tracks);
 }
 
+/** Validated at module load: a bad edit fails the boot, not a later note. */
 export const MUSIC_TRACKS: readonly MusicTrackDef[] = deepFreeze(parseAll(tracksJson));
 
 export function trackById(id: string): MusicTrackDef | null {

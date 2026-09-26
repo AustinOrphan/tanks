@@ -95,9 +95,9 @@ export function createMemoryStorage(): Storage {
  * Safari private mode's `setItem` -- are handled by each store instead, because
  * only they know what degrading means for their own data.
  *
- * Deliberately does NOT write-probe. A probe would put a key in a namespace this
- * origin SHARES with the rest of austinorphan.com (see CLAUDE.md), and the stores
- * already survive a storage that accepts writes and drops them.
+ * Deliberately does NOT write-probe. A probe would put a key in a namespace this origin
+ * SHARES with the rest of austinorphan.com (see docs/agent/commands-and-operations.md),
+ * and the stores already survive a storage that accepts writes and drops them.
  */
 export function resolveStorage(host: StorageHost = globalThis as StorageHost): Storage {
   return resolveStorageWithStatus(host).storage;
@@ -112,11 +112,12 @@ export function resolveStorage(host: StorageHost = globalThis as StorageHost): S
  * player was never told either. This is the smallest seam that distinguishes them.
  *
  * Still NOT a write probe. A probe would put a key in a namespace this origin SHARES with
- * the rest of austinorphan.com (CLAUDE.md), so `'persistent'` here means "a real Storage
- * object exists", not "writes succeed". Safari private mode -- a real `localStorage`
- * whose `setItem` throws -- reports `'persistent'` here and is caught on the first failed
- * write instead (settings.ts's `SettingsStatus.persistence`). The two facts are kept
- * apart on purpose: folding them together is what would make private mode claim to save.
+ * the rest of austinorphan.com (docs/agent/commands-and-operations.md), so `'persistent'`
+ * here means "a real Storage object exists", not "writes succeed". Safari private mode --
+ * a real `localStorage` whose `setItem` throws -- reports `'persistent'` here and is caught
+ * on the first failed write instead (settings.ts's `SettingsStatus.persistence`). The two
+ * facts are kept apart on purpose: folding them together is what would make private mode
+ * claim to save.
  */
 export interface ResolvedStorage {
   readonly storage: Storage;
@@ -271,21 +272,6 @@ export interface GameStores {
 }
 
 /**
- * All seven stores on ONE storage, by signature.
- *
- * loop.ts used to call the resolver once per store. With a real localStorage that
- * was harmless (the same object comes back every time); with the shim it would
- * hand each store its OWN private Map, so the seven keys would live in seven
- * namespaces and an export of "the save" would see one of them. Taking a single
- * `Storage` makes that structural rather than a rule someone has to remember.
- *
- * @param availability what `resolveStorageWithStatus` found. Only the settings store
- * reads it, and only to report status: it is the difference between "your settings are
- * saved" and "they die with this page", which no store can work out from a `Storage`
- * object alone. Defaults to `'persistent'` so a caller handing over a real localStorage
- * (or a test's memory storage standing in for one) says nothing extra.
- */
-/**
  * Delete every key in the DEVELOPER namespace, and nothing else (issue #249).
  *
  * LIVES HERE, NOT AT THE CALL SITE. The first draft bound this inline in `loop.ts`'s browser
@@ -306,6 +292,21 @@ export function resetDeveloperData(base: Storage): void {
   createNamespacedStorage(base, 'developer').clear();
 }
 
+/**
+ * All seven stores on ONE storage, by signature.
+ *
+ * loop.ts used to call the resolver once per store. With a real localStorage that
+ * was harmless (the same object comes back every time); with the shim it would
+ * hand each store its OWN private Map, so the seven keys would live in seven
+ * namespaces and an export of "the save" would see one of them. Taking a single
+ * `Storage` makes that structural rather than a rule someone has to remember.
+ *
+ * @param availability what `resolveStorageWithStatus` found. Only the settings store
+ * reads it, and only to report status: it is the difference between "your settings are
+ * saved" and "they die with this page", which no store can work out from a `Storage`
+ * object alone. Defaults to `'persistent'` so a caller handing over a real localStorage
+ * (or a test's memory storage standing in for one) says nothing extra.
+ */
 export function createStores(
   storage: Storage,
   availability: StorageAvailability = 'persistent',

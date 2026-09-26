@@ -2046,6 +2046,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 }
 
+/** The intent the eager boot used to be: resume the run on whatever board it reached. */
+const CONTINUE: StartIntent = { kind: 'campaign-continue' };
+
 /**
  * Boots the game AND leaves the title screen, which is where nearly every test in this
  * file wants to start: `hud.onStartRestart` branches on `sm.state === 'title'`, so a
@@ -2056,9 +2059,6 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
  *
  * Use `bootAtSplash()` when the title screen itself is the subject.
  */
-/** The intent the eager boot used to be: resume the run on whatever board it reached. */
-const CONTINUE: StartIntent = { kind: 'campaign-continue' };
-
 function boot(h = makeDeps()): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
   const booted = bootAtSplash(h);
   booted.pointerdown(); // splash -> title, the way a player leaves it

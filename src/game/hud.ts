@@ -781,7 +781,6 @@ export interface Hud {
    * `levels.start`") under a label that says what it does at the title screen.
    */
   onStartRestart(cb: () => void): void;
-  /** Fired by the pause panel's Quit to Title button, and by nothing else. */
   /**
    * Show a classified startup failure as a blocking overlay over the working shell
    * (issue #325). Only ever called for a failure whose `presentation` is `'overlay'`;
@@ -792,6 +791,7 @@ export interface Hud {
    * failure's own (issue #685): the caller holds the descriptor that failed, the HUD does not.
    */
   showMatchFailure(failure: { title: string; detail: string; action: string }, retry?: () => void): void;
+  /** Fired by the pause panel's Quit to Title button, and by nothing else. */
   onQuitToTitle(cb: () => void): void;
   /**
    * The touch-only pause button. Separate from the keyboard hotkey because it is an
@@ -1052,14 +1052,6 @@ export interface Hud {
    */
   setBotAssignmentAllowed(allowed: boolean): void;
   /**
-   * The Controllers panel just became visible/hidden -- the ONE chokepoint for both
-   * transitions (the Back button and `setState`'s unconditional close), same shape as
-   * `onCustomizeOpen`/`onCustomizeClose`. `loop.ts` adds/removes its
-   * `gamepadconnected`/`gamepaddisconnected` window listeners here, scoped to exactly
-   * while the panel that reads them is on screen -- the driver does not tick during
-   * title/paused, so nothing else would refresh the panel's live pad list.
-   */
-  /**
    * The Settings pane just became visible/hidden -- the ONE chokepoint for both
    * transitions, the shape `onControllersOpen`/`onControllersClose` already uses.
    *
@@ -1071,6 +1063,14 @@ export interface Hud {
    */
   onSettingsOpen(cb: () => void): void;
   onSettingsClose(cb: () => void): void;
+  /**
+   * The Controllers panel just became visible/hidden -- the ONE chokepoint for both
+   * transitions (the Back button and `setState`'s unconditional close), same shape as
+   * `onCustomizeOpen`/`onCustomizeClose`. `loop.ts` adds/removes its
+   * `gamepadconnected`/`gamepaddisconnected` window listeners here, scoped to exactly
+   * while the panel that reads them is on screen -- the driver does not tick during
+   * title/paused, so nothing else would refresh the panel's live pad list.
+   */
   onControllersOpen(cb: () => void): void;
   onControllersClose(cb: () => void): void;
   /**
@@ -2042,11 +2042,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          setup (issue #260) -- see renderVersusSlotRows' doc comment for what it
          supersedes. It no longer reuses .hud-controller-row/.hud-controller-source-btn:
          those render a DEVICE assignment for the running session, and conflating the
-         two is the divergence #260 removes. (.hud-controllers above still uses them.)
-         The unused scoping note that stood here referred to the shared classes
-         ancestor in every selector that reads them), the same trick
-         .hud-aimstick .hud-stick-base already uses to share .hud-stick-base between
-         the driving and aiming sticks. -->
+         two is the divergence #260 removes. (.hud-controllers above still uses them.) -->
     <div class="hud-versus-setup hud-versus-setup--hidden" role="region" tabindex="-1" aria-labelledby="hud-versus-setup-title">
       <h1 id="hud-versus-setup-title">Versus Setup</h1>
       <div class="hud-versus-row">
@@ -3011,12 +3007,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /** The Records table's two columns, and nothing else -- see setStats. */
   let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
   /**
-   * The whole win/lose panel, as the session last stated it -- see `GameplayOutcome`.
-   * `null` is "nothing to summarise", which is where every fixture that never calls
-   * `setOutcome` stays, so all three lines below hide and the action button keeps its
-   * campaign wording.
-   */
-  /**
    * LIVE STATUS ANNOUNCEMENTS (issue #629), and the three pieces of state they need.
    *
    * COALESCING IS THE EDGE CONDITIONS, not a separate guard. `setStatus` is pushed EVERY
@@ -3040,6 +3030,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   let deathPending = false;
   let prevStatus: GameplayStatus | null = null;
 
+  /**
+   * The whole win/lose panel, as the session last stated it -- see `GameplayOutcome`.
+   * `null` is "nothing to summarise", which is where every fixture that never calls
+   * `setOutcome` stays, so all three lines below hide and the action button keeps its
+   * campaign wording.
+   */
   let outcomeData: GameplayOutcome | null = null;
   /**
    * Whether a SURFACE that shows the outcome panel is up, maintained by `setState`
@@ -3727,18 +3723,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const LEAVING = 'ui-surface--leaving';
 
   /**
-   * Replace one application surface with another, through the one contract.
-   *
-   * Every panel helper below is this call plus its own render step: they all had the
-   * identical two `classList.toggle` lines and a focus, written out six times, which is
-   * exactly what made "no screen has its own copy" false and left nothing able to
-   * interrupt a transition already in flight.
-   *
-   * `onBegin` runs at the START -- so focus lands on the destination before the animation
-   * ends (criterion 4) rather than racing it, and a panel that renders its contents does
-   * so while it is fading in rather than popping afterwards.
-   */
-  /**
    * Is this surface currently the open one?
    *
    * NOT just "lacks its hidden class". A surface keeps that class off for the whole
@@ -3836,6 +3820,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     );
   }
 
+  /**
+   * Replace one application surface with another, through the one contract.
+   *
+   * Every panel helper below is this call plus its own render step: they all had the
+   * identical two `classList.toggle` lines and a focus, written out six times, which is
+   * exactly what made "no screen has its own copy" false and left nothing able to
+   * interrupt a transition already in flight.
+   *
+   * `onBegin` runs at the START -- so focus lands on the destination before the animation
+   * ends (criterion 4) rather than racing it, and a panel that renders its contents does
+   * so while it is fading in rather than popping afterwards.
+   */
   /** The pair case: replace one surface with another. */
   function swapSurface(
     from: Surface,
@@ -4230,19 +4226,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * The controller self-test (issue #599).
-   *
-   * Open and close are a CHOKEPOINT with subscribers, the shape `onControllersOpen`/
-   * `onControllersClose` already uses and for the same reason: `route-ui.ts` owns a
-   * per-frame poll whose lifetime has to match the pane's exactly. Every exit runs through
-   * here -- the Back button, `back()`, and `setState`'s unconditional close -- so there is
-   * no path that leaves the poll running over a pane that is gone.
-   *
-   * The report field is emptied on close rather than retained: it is a snapshot of pad
-   * state from whenever Copy was last pressed, and a stale one presented on the next visit
-   * would be indistinguishable from a fresh one.
-   */
-  /**
    * The configuration menu (issue #246). No open/close subscribers: unlike the self-test it
    * owns no per-frame resource -- the whole surface is a function of a SELECTION this HUD
    * holds, and nothing outside has to be started or stopped for it.
@@ -4255,6 +4238,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     else closeSurface(DEVCFG_SURFACE);
   }
 
+  /**
+   * The controller self-test (issue #599).
+   *
+   * Open and close are a CHOKEPOINT with subscribers, the shape `onControllersOpen`/
+   * `onControllersClose` already uses and for the same reason: `route-ui.ts` owns a
+   * per-frame poll whose lifetime has to match the pane's exactly. Every exit runs through
+   * here -- the Back button, `back()`, and `setState`'s unconditional close -- so there is
+   * no path that leaves the poll running over a pane that is gone.
+   *
+   * The report field is emptied on close rather than retained: it is a snapshot of pad
+   * state from whenever Copy was last pressed, and a stale one presented on the next visit
+   * would be indistinguishable from a fresh one.
+   */
   function showControllerSelfTest(show: boolean): void {
     if (show === selfTestOpen) return;
     selfTestOpen = show;
@@ -4406,16 +4402,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * real Controllers panel below is now the only caller; nothing about its own
    * behaviour changes from this extraction.
    */
-
-  /**
-   * One pad's reason, in the player's words (issue #597). `gamepad-diagnostics.ts`'s
-   * `describeSupport` is the DEVELOPER line for the same verdict and says so; this is the
-   * sentence the issue assigns to the assignment panel, keyed off the structured code so the
-   * input layer stays free of copy.
-   */
-
-
-
 
   /**
    * Roving-tabindex keyboard (and future D-pad) navigation between the HUD's panels.
@@ -6025,18 +6011,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * WHAT THE PANEL SAID BEFORE ANY OUTCOME KIND REACHED IT -- unchanged, and still the
-   * answer on the two paths `outcomePanelCopyNow` returns `null` for.
-   *
-   * Kept as the shipped code rather than transcribed into `OUTCOME_PANEL`'s vocabulary:
-   * the versus result screen belongs to issue #279, and "leave it exactly as it is" is a
-   * claim that can only be checked if the code that renders it is the same code. It
-   * reads the SURFACE (`shownState`), which is the two-valued projection
-   * `legacyOutcomePresentation` produces, and `hasNextMission`, which is how a
-   * developer-flag versus session on the campaign level system still gets its
-   * `Level N cleared!` / `Next Level` pair.
-   */
-  /**
    * A VERSUS match's own result copy (owner ruling, issue #279).
    *
    * The legacy path below reads "You Win!" / "Arena cleared." for any final win, which is
@@ -6060,6 +6034,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     return `Player ${result.slot + 1} wins`;
   }
 
+  /**
+   * WHAT THE PANEL SAID BEFORE ANY OUTCOME KIND REACHED IT -- unchanged, and still the
+   * answer on the two paths `outcomePanelCopyNow` returns `null` for.
+   *
+   * Kept as the shipped code rather than transcribed into `OUTCOME_PANEL`'s vocabulary:
+   * the versus result screen belongs to issue #279, and "leave it exactly as it is" is a
+   * claim that can only be checked if the code that renders it is the same code. It
+   * reads the SURFACE (`shownState`), which is the two-valued projection
+   * `legacyOutcomePresentation` produces, and `hasNextMission`, which is how a
+   * developer-flag versus session on the campaign level system still gets its
+   * `Level N cleared!` / `Next Level` pair.
+   */
   function renderLegacyOutcomeCopy(): void {
     const win = shownState === 'outcome-win';
     const versusTitle = versusOutcomeTitle();
@@ -6370,27 +6356,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     openLayer('levelselect', levelSelectOpenBtn);
   };
   /**
-   * CHOOSE LEVEL, from a finished practice level (issue #323): leave the session, then
-   * open the Levels pane over the Main Menu. Two existing paths in that order, and
-   * deliberately not a third route into the grid.
-   *
-   * WHY THE QUIT COMES FIRST, rather than opening the pane over the outcome screen: the
-   * pick that follows is `onLevelSelect`, and `loop.ts` acts on it only from the Main
-   * Menu -- "a handler that rebuilds the world deserves its own guard, not a CSS class as
-   * its only defence", which is its own comment there. A pane opened over the end screen
-   * would look right and do nothing on the click that matters. Leaving first is also what
-   * a practice session's Choose Level MEANS: practice is not resumable, so the session
-   * the player is on ends either way, and this button and the Main Menu button beside it
-   * differ only in where they put the player afterwards.
-   *
-   * The opener recorded is the MAIN MENU's Practice button, not this one: `openLayer`
-   * stamps the surface the layer opened over (the Main Menu, by the time the quit above
-   * has been dispatched), and Back must restore a control that surface actually shows.
-   * `restoreFocus` already refuses a hidden opener and falls back to the container, so a
-   * HUD with no quit subscriber -- every unit fixture -- degrades to the container rather
-   * than to a wrong control.
-   */
-  /**
    * WHICH LAYER THIS STATE CHANGE IS HANDING OFF TO, or null when it is not (issue #566).
    *
    * Leaving gameplay to open a pane is two calls -- `handleQuit()` then `openLayer(...)` --
@@ -6430,6 +6395,27 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     return openLayer(id, opener);
   }
 
+  /**
+   * CHOOSE LEVEL, from a finished practice level (issue #323): leave the session, then
+   * open the Levels pane over the Main Menu. Two existing paths in that order, and
+   * deliberately not a third route into the grid.
+   *
+   * WHY THE QUIT COMES FIRST, rather than opening the pane over the outcome screen: the
+   * pick that follows is `onLevelSelect`, and `loop.ts` acts on it only from the Main
+   * Menu -- "a handler that rebuilds the world deserves its own guard, not a CSS class as
+   * its only defence", which is its own comment there. A pane opened over the end screen
+   * would look right and do nothing on the click that matters. Leaving first is also what
+   * a practice session's Choose Level MEANS: practice is not resumable, so the session
+   * the player is on ends either way, and this button and the Main Menu button beside it
+   * differ only in where they put the player afterwards.
+   *
+   * The opener recorded is the MAIN MENU's Practice button, not this one: `openLayer`
+   * stamps the surface the layer opened over (the Main Menu, by the time the quit above
+   * has been dispatched), and Back must restore a control that surface actually shows.
+   * `restoreFocus` already refuses a hidden opener and falls back to the container, so a
+   * HUD with no quit subscriber -- every unit fixture -- degrades to the container rather
+   * than to a wrong control.
+   */
   const handleChooseLevel = (): void => {
     quitInto('levelselect', levelSelectOpenBtn);
   };
@@ -6530,11 +6516,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const VERSUS_TEAM_LABELS: readonly string[] = ['A', 'B', 'C'];
   const VERSUS_STOCK_OPTIONS: readonly number[] = [1, 2, 3, 4, 5];
 
-  /** `'arena-01'` -> `'Arena 1'`, matching the spec's own "Arena 1-5" wording. Falls
-   *  back to the raw id for anything that does not match the pattern -- defensive,
-   *  not reachable against the shipped catalog (`arena-01`..`arena-05`; measured via
-   *  `versusBoardCatalog()`, see versus-config.ts's own doc comment: all 15 of 15
-   *  (arena, playerCount) rows pass `suitable` today). */
   /**
    * The map button's copy, READ FROM THE CATALOG (issue #271, criterion 5).
    *
@@ -6683,17 +6664,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * REPLACE, never append -- rebuilt whenever `players` OR `mode` changes (the map
-   * list is filtered by both declared dimensions -- `versusMapChoices`,
-   * versus-config.ts, issue #270) and whenever the pane is (re)seeded, same
-   * convention `renderControllerRows` already uses for its own per-slot rows.
-   * A retained selection dropping out of the rebuilt list has no reset branch for
-   * the same reason the 'random' default comment above gives: every shipped entry
-   * declares all of {2,3,4} x both modes, so nothing can reach it --
-   * `resolveVersusConfig`'s launch gate is the loud backstop, and the reset ships
-   * with the first narrower entry (#271-#273).
-   */
-  /**
    * The card's schematic box, in device-independent pixels.
    *
    * Fixed attributes rather than a measured size: `drawArenaSchematic` scales the board into
@@ -6743,6 +6713,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     return `${counts} players \u00b7 ${modes}`;
   }
 
+  /**
+   * REPLACE, never append -- rebuilt whenever `players` OR `mode` changes (the map
+   * list is filtered by both declared dimensions -- `versusMapChoices`,
+   * versus-config.ts, issue #270) and whenever the pane is (re)seeded, same
+   * convention `renderControllerRows` already uses for its own per-slot rows.
+   * A retained selection dropping out of the rebuilt list has no reset branch for
+   * the same reason the 'random' default comment above gives: every shipped entry
+   * declares all of {2,3,4} x both modes, so nothing can reach it --
+   * `resolveVersusConfig`'s launch gate is the loud backstop, and the reset ships
+   * with the first narrower entry (#271-#273).
+   */
   /**
    * One card per eligible board, and Random last (issue #274).
    *

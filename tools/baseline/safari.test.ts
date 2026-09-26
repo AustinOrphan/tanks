@@ -145,8 +145,7 @@ describe('safari.mjs against a mock WebDriver server', () => {
 
   it('a trace MISMATCH from the mock still completes the session and fails the exit code', async () => {
     mock = await startMockWebDriver();
-    // Monkeypatch: reuse the same mock but have the client hit a variant. Simplest: start
-    // a second server whose trace hash is deliberately wrong.
+    // Close the shared mock and start a second server whose trace hash is deliberately wrong.
     mock.close();
     const server = createServer((req, res) => {
       let body = '';

@@ -154,15 +154,6 @@ export function membersOf(suite: SuiteDef): MusicTrackDef[] {
 }
 
 /**
- * The chord that leads INTO a suite: the fifth degree of its key, as a major
- * triad regardless of whether the key is major or minor.
- *
- * That is the whole trick. A dominant sounds unfinished and pulls toward its
- * home chord, so a bar of it before the switch makes the new key sound arrived
- * at rather than cut to. Major even in a minor key -- the raised third is the
- * leading tone, and it is what does the pulling; a minor v has no such pull.
- */
-/**
  * How related two KEYS are, for choosing the next suite.
  *
  * The design feedback: "probably weight same keys higher and then related keys." The tiers:
@@ -231,6 +222,15 @@ export function pickNextSuite(from: SuiteDef, all: readonly SuiteDef[], rnd: () 
   return ranked[ranked.length - 1].suite;
 }
 
+/**
+ * The chord that leads INTO a suite: the fifth degree of its key, as a major
+ * triad regardless of whether the key is major or minor.
+ *
+ * That is the whole trick. A dominant sounds unfinished and pulls toward its
+ * home chord, so a bar of it before the switch makes the new key sound arrived
+ * at rather than cut to. Major even in a minor key -- the raised third is the
+ * leading tone, and it is what does the pulling; a minor v has no such pull.
+ */
 export function dominantOf(suite: SuiteDef): Chord {
   const home = parseChord(suite.key);
   if (!home) fail(`[${suite.id}].key`, `is not a chord name: ${JSON.stringify(suite.key)}`);

@@ -4,9 +4,9 @@
  * `serve-path.mjs`'s `resolveRequestPath` was extracted after two measured defects in this
  * handler's original block: a malformed percent-encoding threw out of an async handler
  * nothing awaits, and a `startsWith(root)` check let a sibling directory named like the root
- * (`dist-evil`) be served. `roundtrip.mjs` and `screens/run.mjs` adopted the resolver;
- * `verify.mjs` and both `tools/uikit` scripts kept the original block. The handler lives
- * here so every one of them serves through the same guard.
+ * (`dist-evil`) be served. `roundtrip.mjs` and `screens/run.mjs` had adopted the resolver;
+ * `verify.mjs` and both `tools/uikit` scripts still carried the original block. The handler
+ * lives here so every one of them serves through the same guard, and all of them now do.
  *
  * SEPARATE MODULE for the reason `serve-path.mjs` gives: each of those scripts calls `main()`
  * at the top level, so a test that imported one would run it. Nothing here listens until

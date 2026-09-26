@@ -94,13 +94,11 @@ export const GAMEPAD_FIRE_BUTTON = STANDARD_PROFILE.buttons.fire;
 export const GAMEPAD_MINE_BUTTON = STANDARD_PROFILE.buttons.mine;
 
 /*
- * The axis indices that used to sit here -- left stick 0/1, right stick 2/3 -- are in
- * `gamepad-profile.ts`'s `STANDARD_PROFILE` now, along with the two buttons above, and
- * `poll()` reads NEITHER set directly (issue #596). It reads whatever profile
+ * `poll()` does not read the two exports above (issue #596). It reads whatever profile
  * `classifyPad` resolves for the pad in hand; the standard layout is only the answer it
- * gets back for a pad the browser has already remapped. The two exports above remain
- * because tests and `input.ts` name them, and they are derived rather than restated so
- * "what the standard profile says" and "what the reader reads" cannot drift apart.
+ * gets back for a pad the browser has already remapped. The two exports remain because
+ * tests name them, and they are derived rather than restated so "what the standard
+ * profile says" and "what the reader reads" cannot drift apart.
  */
 
 /**

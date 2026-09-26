@@ -169,15 +169,6 @@ export interface DevFlags {
    */
   autoplay: boolean;
   /**
-   * Publish the save export/import on the dev console object (`__tanks`).
-   *
-   * localStorage is origin-scoped, so a player who moves from the web build to a
-   * wrapped mobile build starts at zero -- and this is the only mechanism that
-   * carries a save across, or backs one up at all. Console-level, not a HUD
-   * button: whether it earns a permanent affordance is a product call, and
-   * shipping a button now would decide it by accident.
-   */
-  /**
    * Use the PRODUCTION save keys on a developer session (issue #249).
    *
    * The one flag that moves where every store reads and writes, which is why it is a
@@ -188,6 +179,15 @@ export interface DevFlags {
    * same object to every store, so there is no way for half a session to land in each.
    */
   prodSave: boolean;
+  /**
+   * Publish the save export/import on the dev console object (`__tanks`).
+   *
+   * localStorage is origin-scoped, so a player who moves from the web build to a
+   * wrapped mobile build starts at zero -- and this is the only mechanism that
+   * carries a save across, or backs one up at all. Console-level, not a HUD
+   * button: whether it earns a permanent affordance is a product call, and
+   * shipping a button now would decide it by accident.
+   */
   saveIo: boolean;
   /**
    * Record the per-tick input stream, and publish it on the dev console object.

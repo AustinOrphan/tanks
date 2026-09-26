@@ -550,8 +550,9 @@ describe('loadArena', () => {
 });
 
 describe('loadArena: mode-aware (n-player arc PR 4 -- FFA + teams)', () => {
-  // Denominator for every "all N arenas" claim below: ARENAS.length is 5 at this tree
-  // (arena-01..05) -- asserted once so a sixth arena silently narrows nothing.
+  // Denominator for every "all N arenas" claim below: ARENAS.length is 8 at this tree
+  // (arena-01..05 plus the versus boards vs-duel-01, vs-tri-01 and vs-quad-01) -- asserted
+  // once so a ninth arena silently narrows nothing.
   it('ARENAS holds exactly 8 shipped arenas -- the population every sweep below claims', () => {
     expect(ARENAS.length).toBe(8);
   });
