@@ -90,6 +90,7 @@ on:
           - screen.levels
           - screen.main-menu
           - screen.main-menu.pad-only
+          - screen.main-menu.pad-focus
           - screen.main-menu.fresh
           - screen.no-script
           - screen.pause.campaign

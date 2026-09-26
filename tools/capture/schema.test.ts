@@ -47,6 +47,7 @@ describe('capture recipe schema', () => {
       // list is what makes ADDING a recipe a deliberate act rather than a side effect.
       'screen.main-menu',
       'screen.main-menu.pad-only',
+      'screen.main-menu.pad-focus',
       'screen.main-menu.fresh',
       'screen.levels',
       'screen.records.stats',

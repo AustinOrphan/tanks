@@ -272,6 +272,18 @@ const state = (s) => Object.freeze({
   entry: 'ok',
   steps: [],
   measure: [],
+  /**
+   * Extra computed properties this state's measurements record (issue #917).
+   *
+   * The capture's own `WATCHED` list is seven properties about LAYOUT DRIFT, and a focus ring
+   * is not layout -- an `outline` moves no box, so a ring could appear or vanish and every
+   * baseline here would stay byte-identical. One state needed to photograph one, so it names
+   * the properties it is about rather than widening the list for all forty-nine.
+   *
+   * Empty for every state that is about where things are and what colour they are, which is
+   * almost all of them.
+   */
+  watch: [],
   ...s,
 });
 
@@ -413,6 +425,48 @@ export const SCREEN_STATES = Object.freeze([
     // two are a direct comparison: identical measurements say the menu a controller player
     // reaches is the menu everyone else reaches, which is the claim worth pinning.
     measure: ['.hud-panel', '.hud-title', '.hud-run-summary', '.hud-continue', '.hud-new-game'],
+  }),
+  state({
+    id: 'screen.main-menu.pad-focus',
+    title: 'Main Menu with the controller focus ring',
+    description:
+      'The same controller-only session one D-pad press later, with the focus ring the pad '
+      + 'modality paints. This is the state that photographs the ring.',
+    // ISSUE #917's LAST ACCEPTANCE CRITERION. The ring itself has been pinned since #984 by
+    // source-text assertions and two mutation entries; what none of them is, is a picture.
+    //
+    // ARRIVAL IS NOT ENOUGH, and that is the whole reason this is a second state rather than
+    // two more steps on `pad-only`. MEASURED on the built bundle: after the confirm press the
+    // splash is gone and `.hud--padnav` is already on, but `document.activeElement` is
+    // `div.hud-panel` -- the pane CONTAINER, which the ring rule excludes by design with
+    // `:not([tabindex="-1"])`, because a bare `[tabindex]:focus` would ring the whole pane on
+    // every panel-open transition. So a controller player's first screen carries no ring, and
+    // it takes one direction press to put focus on a control that can wear one.
+    //
+    // (Which control that is, is issue #919's open question -- arrival focus on the container
+    // or on the primary action. This state does not depend on the answer: it presses a
+    // direction either way, and it is the press, not the arrival, that is being photographed.)
+    storage: MID_CAMPAIGN,
+    steps: [
+      { fakeGamepads: 'idle' },
+      { padPress: { button: 0 } },
+      { waitHidden: '.hud-splash' },
+      // D-pad down. 12-15 are the standard mapping's up/down/left/right (`gamepad-menu.ts`),
+      // and `route-host.ts`'s `onMenuAction` turns one into `hud.act('down')`, which ends in
+      // the programmatic `.focus()` that `:focus-visible` refuses to ring. That refusal IS
+      // issue #917.
+      { padPress: { button: 13 } },
+    ],
+    // `:focus` rather than a class: what this state is about is whatever control the press
+    // landed on, and naming one would pin the ROVING ORDER as well as the ring, so a future
+    // change to which control comes first would read as a ring regression. The measurement
+    // records the element's text, so the baseline still says which control it was.
+    measure: ['.hud-panel', ':focus'],
+    // The four properties a focus ring IS. None of them is in the capture's default list,
+    // which is about layout, and an outline moves no box -- so without this the ring could
+    // vanish and this state's baseline would not move a byte, which is the failure mode the
+    // state exists to close rather than reproduce.
+    watch: ['outline-style', 'outline-width', 'outline-color', 'outline-offset'],
   }),
   state({
     id: 'screen.main-menu.fresh',

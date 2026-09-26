@@ -1,0 +1,55 @@
+{
+  "state": "screen.main-menu.pad-focus",
+  "measurements": [
+    {
+      "selector": ".hud-panel",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "TANKS!\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Mission 3 -- 2 lives left\n      \n      Continue Campaign\n      Start New Campaign\n      \n      \n      Choose Level\n      \n  ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(255, 255, 255)",
+        "background-color": "rgba(20, 24, 30, 0.55)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px",
+        "outline-style": "none",
+        "outline-width": "3px",
+        "outline-color": "rgb(255, 255, 255)",
+        "outline-offset": "0px"
+      }
+    },
+    {
+      "selector": ":focus",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 520,
+        "y": 296,
+        "w": 240,
+        "h": 51
+      },
+      "text": "Continue Campaign",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(6, 52, 15)",
+        "background-color": "rgb(79, 208, 106)",
+        "font-size": "20px",
+        "margin-top": "0px",
+        "margin-bottom": "0px",
+        "outline-style": "solid",
+        "outline-width": "2px",
+        "outline-color": "rgb(127, 208, 255)",
+        "outline-offset": "2px"
+      }
+    }
+  ]
+}
