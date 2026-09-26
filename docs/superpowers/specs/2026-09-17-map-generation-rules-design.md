@@ -598,21 +598,46 @@ weighed as its replacement was declined too. **#820: a generated 3-player board 
 approximate symmetry with a measured tolerance** -- not an inscribed C3 region, and not
 skipping N=3.
 
-That ruling commits work this document does not contain, and one prerequisite is larger than it
-looks. **There is no C3 measure in the tree at all.** `asymmetryRotational` is the fraction of
-cells disagreeing with their image under a **180-degree** rotation (`tools/mapgen/measure.ts`,
-the `symmetry (CELL space)` block), it takes no player count, and it therefore returns the same
-value at N=2, 3 and 4 -- verified by reading `calibrate.mjs --json` across all three counts. So
-a 3-player tolerance cannot be derived from it without first building a measure for the right
-symmetry group, and the exposure measure the ruling also names does not exist either.
+That ruling commits work this document did not contain. **The C3 measure now exists**
+(`rotationalAsymmetry` and the `asymmetryC3` board measure, `tools/mapgen/measure.ts`), because
+`asymmetryRotational` could not answer it: that is a **180-degree** measure taking no player
+count, and it returns the same value at N=2, 3 and 4. The new one is generalised over the order
+of the rotation so it can be controlled -- at two turns over the whole rectangle it reproduces
+`asymmetryRotational` exactly on all 8 shipped boards, which is what makes its 3-turn figures
+worth reading. It samples the **inscribed disc**, because a rectangle has no 120-degree rotation
+onto itself: over the whole shape the count is dominated by cells rotating off the board, and a
+uniform 11x11 board -- symmetric under every rotation -- scores 0.132 there against 0 on the disc.
 
-What the 180-degree numbers do show is why the ruling's alternatives looked the way they did:
-**vs-tri-01, the only shipped 3-player board, is the worst in the set at 0.3268** while being
-*exactly* mirror-symmetric (`asymmetryMirrorH` 0.000), and the two boards that measure 0.0000
-rotationally are vs-duel-01 and vs-quad-01, where a 180-degree rotation is the natural group. A
-180-degree measure simply does not ask the 3-player question. Whatever tolerance is chosen, the
-shipped range it is derived from spans **0.0000 to 0.3268 over 8 boards** -- not a sample -- and
-that caveat should travel with the number.
+### What it measured, and why nothing is gated on it
+
+**No shipped board is approximately 3-fold symmetric.** Best is arena-03 at **0.2218**; vs-tri-01,
+the only board offered at three players, is the second **worst** at 0.4489. A tolerance derived
+from this set would have to be >= 0.22 simply to admit the best board, which is an absence of a
+tolerance rather than one. The set cannot supply the number because it contains no examples of
+the thing being tolerated.
+
+| board | C3 (disc) | `pathSpread` at N=3 |
+| --- | ---: | ---: |
+| arena-03 | 0.2218 | **0.000** |
+| arena-05 | 0.2242 | 0.38 |
+| arena-04 | 0.2532 | **0.75** |
+| arena-01 | 0.3224 | **0.000** |
+| arena-02 | 0.3449 | 0.14 |
+| vs-quad-01 | 0.4159 | 0.15 |
+| vs-tri-01 | 0.4489 | 0.24 |
+| vs-duel-01 | 0.4986 | 0.66 |
+
+**And it does not track three-player fairness**, which is the finding that matters. arena-01 and
+arena-03 reach `pathSpread` **0.000** -- every spawn pair equally far apart, the fairest outcome
+available -- while scoring 0.322 and 0.222 on symmetry; arena-04 pairs the second-best symmetry
+score with the worst spread in the set. A threshold on cell symmetry would order boards unlike
+the property it is meant to protect, which is precisely the objection that rejected the
+70%-of-diagonal sightline cap above.
+
+So `asymmetryC3` is **reported and not budgeted**. Which quantity the tolerance belongs on --
+fairness/exposure, where `pathSpread` already discriminates across a shipped range of 0.00 to
+0.75, or cell symmetry, where the number would have to come from first principles or from play --
+is the open question on issue #820, and it changes what a generator is built to hit.
 
 **6. Then playtest.** Every claim here is static. A bot-vs-bot capture at normal speed on the
 best board from each ruleset is the cheapest thing that would turn any of this into evidence
