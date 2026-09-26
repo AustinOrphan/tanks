@@ -556,6 +556,21 @@ export interface BoardMeasures {
   readonly asymmetryRotational: number;
   readonly asymmetryMirrorH: number;
   readonly asymmetryMirrorV: number;
+  /**
+   * Fraction of cells inside the board's INSCRIBED DISC whose wall kind disagrees with their
+   * image under a 120-degree rotation about the board centre. 0 is exact 3-fold symmetry
+   * (issue #820).
+   *
+   * REPORTED, NOT GATED, and deliberately so: see the note on `rotationalAsymmetry` for the
+   * measured reason no threshold is proposed here.
+   *
+   * The disc rather than the whole rectangle, because a rectangle has no 120-degree rotation
+   * that maps it onto itself. Measured over the whole rectangle the number is dominated by
+   * cells whose image simply falls off the board -- it would be reporting the shape of the
+   * arena rather than the arrangement of its walls. A disc is rotation-invariant, so every
+   * sampled cell has an image in the same region and the number is about the board.
+   */
+  readonly asymmetryC3: number;
 }
 
 /**
@@ -1149,7 +1164,70 @@ export function measureBoard(arena: Arena, playerCount: number, arenaId: string)
     asymmetryRotational: rot / totalCells,
     asymmetryMirrorH: mirH / totalCells,
     asymmetryMirrorV: mirV / totalCells,
+    asymmetryC3: rotationalAsymmetry(arena, 3, 'disc'),
   };
+}
+
+/**
+ * Cell-kind disagreement under a rotation of `1/turns` of a full turn about the board centre.
+ * 0 is exact symmetry of that order. `region` is what gets sampled: the whole rectangle, or
+ * the inscribed disc (radius `min(cols, rows) / 2`).
+ *
+ * GENERALISED RATHER THAN HARD-CODED TO THREE, because that is what makes it testable. At
+ * `turns = 2` over the whole rectangle this must reproduce `asymmetryRotational` exactly --
+ * a 180-degree rotation maps cell centres onto cell centres on any rectangle -- and
+ * `measure.test.ts` asserts it does, on all 8 shipped boards. Without that control this is an
+ * unvalidated number of the kind that file's own header exists to catch.
+ *
+ * WHAT IT MEASURED, recorded here because it is the reason nothing gates on it (issue #820).
+ * No shipped board is approximately 3-fold symmetric: the best is arena-03, which still
+ * disagrees with its own 120-degree rotation on 22% of the cells in its disc, and vs-tri-01 --
+ * the only board offered at three players -- is the second WORST at 0.449. More usefully, the
+ * measure does not track three-player fairness: arena-01 and arena-03 reach `pathSpread` 0.000
+ * at N=3, every spawn pair equally far apart, while scoring 0.322 and 0.222 here; and arena-04
+ * has the second-best score with the worst spread in the set. A threshold on this would order
+ * boards unlike the property it would be protecting, which is the same objection that got the
+ * 70%-of-diagonal sightline cap rejected (issue #819). So it is published and computable, and
+ * a generator is not judged by it until someone decides it should be.
+ */
+export function rotationalAsymmetry(
+  arena: Arena,
+  turns: number,
+  region: 'whole' | 'disc',
+): number {
+  const kindAt = (r: number, c: number): number => {
+    const kind = arena.legend[arena.grid[r][c]];
+    return kind === 'solid' ? 2 : kind === 'destructible' ? 1 : 0;
+  };
+  const theta = (2 * Math.PI) / turns;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  const radius = Math.min(arena.cols, arena.rows) / 2;
+  let considered = 0;
+  let mismatch = 0;
+  for (let r = 0; r < arena.rows; r++) {
+    for (let c = 0; c < arena.cols; c++) {
+      // Cell CENTRES, in board coordinates with the origin at the middle. Centres rather than
+      // corners so that at `turns = 2` the image lands exactly on another centre instead of on
+      // a boundary, which is what lets the control above be an equality rather than a
+      // tolerance.
+      const x = c + 0.5 - arena.cols / 2;
+      const y = r + 0.5 - arena.rows / 2;
+      if (region === 'disc' && Math.hypot(x, y) > radius) continue;
+      const rx = x * cos - y * sin;
+      const ry = x * sin + y * cos;
+      if (region === 'disc' && Math.hypot(rx, ry) > radius) continue;
+      considered++;
+      const ic = Math.floor(rx + arena.cols / 2);
+      const ir = Math.floor(ry + arena.rows / 2);
+      // Off the board entirely: only reachable for `region: 'whole'`, where a rectangle's
+      // corners rotate into empty space. Counted as a disagreement rather than skipped,
+      // because skipping would let a board score well for having nothing to compare.
+      if (ir < 0 || ic < 0 || ir >= arena.rows || ic >= arena.cols) { mismatch++; continue; }
+      if (kindAt(r, c) !== kindAt(ir, ic)) mismatch++;
+    }
+  }
+  return considered ? mismatch / considered : 0;
 }
 
 /**

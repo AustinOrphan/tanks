@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-rotation-samples-cell-corners-not-centres",
+  "file": "tools/mapgen/measure.ts",
+  "find": "      const x = c + 0.5 - arena.cols / 2;",
+  "replace": "      const x = c - arena.cols / 2;",
+  "expect": "killed",
+  "why": "Sampling a cell's CORNER instead of its centre, which is the kind of off-by-half that survives review because it still produces a symmetric-looking number. It destroys the one property the whole measure is validated by: at two turns a 180-degree rotation maps cell centres exactly onto other cell centres, which is why the generalised function can be checked against the shipped `asymmetryRotational` as an EQUALITY rather than a tolerance. Sampling corners lands the image on a boundary, the floor picks a neighbour, and the agreement becomes approximate -- so the control that makes every C3 figure in this file trustworthy would quietly stop holding while the C3 numbers themselves still looked reasonable.",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "killedBy": [
+    "mapgen quality measures: 3-fold symmetry (issue #820) reproduces the shipped 180-degree measure at two turns, on every shipped board"
+  ]
+}
