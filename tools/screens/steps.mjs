@@ -120,6 +120,29 @@ export function webglOverrideSource(mode) {
  */
 const GAMEPAD_FIXTURE_PADS = {
   none: null,
+  /**
+   * One connected pad with NOTHING held (issue #917).
+   *
+   * `mixed` cannot be used with `{ padPress }`, and that is a measured fact rather than a
+   * style preference: its pad 0 ships with button 7 already down, and the menu poller
+   * dispatches that on its first read, so the fixture actuates the interface on its own. It
+   * is what made the first draft of `screen.main-menu.pad-only` pass with the press REMOVED
+   * -- the splash was being dismissed by the fixture, not by the press, and the state proved
+   * nothing about either.
+   *
+   * So a state that wants the press to be the only actuation starts from a silent pad. Still
+   * a real, standard-mapping pad, because the point is a pad that is connected and idle,
+   * which is what a controller sitting on a desk actually reports.
+   */
+  idle: [
+    {
+      index: 0,
+      id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)',
+      mapping: 'standard',
+      axes: [0, 0, 0, 0],
+      buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })),
+    },
+  ],
   mixed: [
     {
       index: 0,
@@ -145,9 +168,52 @@ function gamepadOverrideSource(fixture) {
   const pads = GAMEPAD_FIXTURE_PADS[fixture];
   if (pads === undefined) throw new Error(`unknown gamepad fixture '${fixture}'`);
   if (pads === null) return '(() => {})()';
+  // The array is parked on a window global and `getGamepads` reads it on every call, rather
+  // than closing over a frozen snapshot. That is what lets `{ padPress }` below actuate a
+  // button: the pads have to be MUTABLE between polls, because `createGamepadMenuPoller`
+  // dispatches on the press->release EDGE and a static array never has one. Measured while
+  // reproducing issue #917 -- a fixture that only ever reads "button 7 is down" can model a
+  // pad being CONNECTED, and cannot press anything.
   return `(() => {
-    const pads = ${JSON.stringify(pads)};
-    navigator.getGamepads = () => pads;
+    window.__screenPads = ${JSON.stringify(pads)};
+    navigator.getGamepads = () => window.__screenPads;
+  })()`;
+}
+
+/**
+ * Actuate one button on the pads `{ fakeGamepads }` installed: down, hold, up.
+ *
+ * `times` repeats the whole press. More than one matters because the modality tracker only
+ * adopts a new input after `MODALITY_SWITCH_MS` (400ms) of it holding the field, and the
+ * poller notes 'gamepad' only on a pad ACTION -- so a single press cannot switch a page that
+ * was last touched by a pointer, and `gapMs` is what carries the second press past that
+ * threshold.
+ *
+ * THROWS if no fake pad is installed. That is the realistic failure -- a state that forgets
+ * `{ fakeGamepads }` first would otherwise press into `navigator.getGamepads()`'s real empty
+ * list, photograph the rest state, and look exactly like a capture of a page where the pad
+ * did nothing.
+ */
+function padPressSource(spec) {
+  const button = spec.button;
+  const holdMs = spec.holdMs ?? 120;
+  return `(async () => {
+    const pads = window.__screenPads;
+    if (!Array.isArray(pads) || pads.length === 0) {
+      throw new Error('padPress: no synthetic pad installed -- this state needs { fakeGamepads } first');
+    }
+    const pad = pads[0];
+    if (!pad || !Array.isArray(pad.buttons) || pad.buttons.length <= ${button}) {
+      throw new Error('padPress: pad 0 has no button ${button}');
+    }
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const set = (down) => {
+      pad.buttons[${button}] = { pressed: down, value: down ? 1 : 0 };
+      pad.timestamp = performance.now();
+    };
+    set(true);
+    await wait(${holdMs});
+    set(false);
   })()`;
 }
 
@@ -349,6 +415,21 @@ export async function runStep(page, step, timeout) {
     // reads `navigator.getGamepads` on every frame while its pane is open, so the override
     // only has to be in place before the pane is, and boot must be left alone.
     return void (await page.evaluate(gamepadOverrideSource(step.fakeGamepads)));
+  }
+  if (kind === 'padPress') {
+    // Applied to the LIVE page like the two steps above. `times` presses are spaced by
+    // `gapMs` so a page whose last input was a pointer can actually reach the gamepad
+    // modality, which takes two notes 400ms apart.
+    const spec = step.padPress;
+    const times = spec.times ?? 1;
+    const gapMs = spec.gapMs ?? 450;
+    for (let n = 0; n < times; n++) {
+      if (n > 0) await page.waitForTimeout(gapMs);
+      await page.evaluate(padPressSource(spec));
+    }
+    // Settle, so the poller's next frame has run before whatever asserts on the result.
+    await page.waitForTimeout(120);
+    return;
   }
   await page.waitForFunction(
     `(() => {

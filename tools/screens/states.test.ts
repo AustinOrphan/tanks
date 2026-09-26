@@ -128,7 +128,11 @@ describe('the screen-state catalogue', () => {
       'screen.boot-loading',
     ]);
     for (const state of SCREEN_STATES) {
-      const dismisses = state.steps.some((s) => s.press === 'Space');
+      // A pad press leaves the splash as surely as Space does, and issue #917's
+      // `screen.main-menu.pad-only` is the first state to do it that way -- deliberately,
+      // because every other state here starts from a keystroke and a browser decides what
+      // `:focus-visible` matches from the last input it saw.
+      const dismisses = state.steps.some((s) => s.press === 'Space' || 'padPress' in s);
       expect(dismisses, `${state.id} never leaves the Launch splash`).toBe(!noSplashNeeded.has(state.id));
     }
   });

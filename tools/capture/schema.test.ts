@@ -46,6 +46,7 @@ describe('capture recipe schema', () => {
       // The `screen` producer's states (issue #561). Pinned like the gallery ones: this
       // list is what makes ADDING a recipe a deliberate act rather than a side effect.
       'screen.main-menu',
+      'screen.main-menu.pad-only',
       'screen.main-menu.fresh',
       'screen.levels',
       'screen.records.stats',
