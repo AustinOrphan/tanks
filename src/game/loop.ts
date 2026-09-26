@@ -424,8 +424,11 @@ export interface GameDeps {
   readonly wallMs: () => number;
   readonly raf: RafScheduler;
   readonly host: HostWindow;
-  /** Opt-in switches for unshipped work. Off unless the URL says otherwise. */
-  /** Opt-in diagnostics. Off unless the URL says otherwise. */
+  /**
+   * Opt-in developer diagnostics and switches, off unless the URL says otherwise -- except
+   * in a session booted with a versus config, where `applyVersusToDeps` overwrites `mode`,
+   * `players`, `friendlyFire` and `bots` from that config.
+   */
   readonly devFlags: DevFlags;
   /**
    * Whether the `dev` GATE itself was on -- `parseDeveloperMode`, not a
@@ -519,8 +522,8 @@ export interface GameHandle {
  * The property the dev surface is published under.
  *
  * Underscored because this origin is SHARED with every other project page on
- * austinorphan.com (CLAUDE.md): a bare `tanks` on the global object is a name a
- * neighbour could plausibly want.
+ * austinorphan.com (docs/agent/commands-and-operations.md): a bare `tanks` on the global
+ * object is a name a neighbour could plausibly want.
  */
 export const DEV_CONSOLE_KEY = '__tanks';
 
@@ -706,35 +709,17 @@ export function seedAssignment(
   return deriveInitialAssignment(playerCount, botSlotsFor(playerCount, botCount), unreadable);
 }
 
-// MOVED to versus-setup.ts (issue #891) and re-exported here, so every existing importer --
-// including loop.test.ts -- is untouched. `levels.ts` now needs the same rule to stamp
-// `Tank.botDifficulty` on a dev-flag session's tanks, and it cannot import this module:
-// loop.ts imports levels.ts, so the arrow only points one way.
-/**
- * The LAST `botCount` of `playerCount` slots, per the n-player arc's PR2 design: the
- * simplest possible fill rule, chosen because at this PR no per-slot controller routing
- * exists yet to arbitrate a per-slot declaration against (that is a later PR's job).
- * `botCount` may equal `playerCount` -- including at playerCount 1, where it claims the
- * only slot, the fully autonomous match owner directive 1 asks for.
- *
- * PR3 (`pad[i] -> slot[i]`) is that later PR, and the precedence is fixed by this set
- * rather than arbitrated at the controller layer: `seedAssignment` hands it to
- * `deriveInitialAssignment` (`input/assignment.ts`), which makes every slot in it `'bot'`
- * regardless of index, and `buildRealSource` builds no source for a `'bot'` slot -- bots
- * claim their declared slots first, controllers fill whatever remains, in
- * `pad[i] -> slot[i]` order for the slots that are left. A bot-claimed slot never
- * constructs a gamepad reader at all.
- */
+// Moved to versus-setup.ts (issue #891; its doc has the rule), re-exported for existing importers.
 export { botSlotsFor };
 
 // createIdleInputSource() was RETIRED at n-player arc PR3 (`pad[i] -> slot[i]`), when
 // every co-player slot got its own dedicated `createGamepadInputSource(padIndex)` whose
 // own "no pad ever connected" branch (`input/gamepad.ts`) already produced the identical
-// echo -- so it was deleted rather than kept unused, per CLAUDE.md's "a generator nothing
-// calls rots." The controller assignment UI UN-retires that exact shape as
+// echo -- so it was deleted rather than kept unused, per docs/agent/architecture.md's "a
+// generator nothing calls rots." The controller assignment UI UN-retires that exact shape as
 // `createHeldInputSource` (`input/assignment.ts`): a `'none'` slot is a real,
-// UI-selectable call site again, and CLAUDE.md's retirement note only applies while
-// nothing calls a generator.
+// UI-selectable call site again, and that retirement note only applies while nothing calls
+// a generator.
 
 /**
  * Holding M fires ~30 keydowns a second, so an unguarded toggle lands on
@@ -800,9 +785,9 @@ export function playerShellsInFlight(world: World, playerId: number | undefined)
  * Did THIS tracked player die this frame?
  *
  * The event stream is shared, so `some(e => e.type === 'tank-destroyed')` is
- * true for every enemy kill as well -- the presence-only mistake CLAUDE.md
- * warns about. Exported so the discrimination is testable without engineering
- * a real death inside a driven frame.
+ * true for every enemy kill as well -- the presence-only mistake
+ * docs/agent/testing-and-review.md warns about. Exported so the discrimination is
+ * testable without engineering a real death inside a driven frame.
  *
  * Discriminated by `tankId`, not `kind === 'player'`: at playerCount > 1 a
  * second player-kind tank exists, and kind alone can no longer tell "the
@@ -1724,8 +1709,8 @@ export function startGameWith(
   let level = deps.levels.start;
 
   /**
-   * The shared `level + 1` arithmetic, split into its two unrelated roles (CLAUDE.md):
-   * a 1-based display/record ordinal, and "what comes after this in THIS SESSION's own
+   * The shared `level + 1` arithmetic, split into its two unrelated roles: a 1-based
+   * display/record ordinal, and "what comes after this in THIS SESSION's own
    * sequence." Computed against `deps.levels.levels` -- this session's own list -- never
    * against the global `CAMPAIGN_LEVELS` catalog directly: the sandbox's synthetic
    * `'sandbox'` id is not a member of that catalog, and a lookup against it would throw.
@@ -2779,8 +2764,8 @@ export function startGameWith(
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
-    // CLAUDE.md warns about. Discriminate on tankId: kind alone stops being unique
-    // the moment a second player-kind tank exists (the co-op foundation).
+    // docs/agent/testing-and-review.md warns about. Discriminate on tankId: kind alone stops
+    // being unique the moment a second player-kind tank exists (the co-op foundation).
     onFrameEvents(events): void {
       if (isPlayerDeath(events, playerId ?? -1)) {
         hud.signalPlayerDeath(deathVignetteColor(driver.world, playerId ?? -1, playerCount));
@@ -2793,7 +2778,7 @@ export function startGameWith(
       }
       // Discriminated by ownerId, not presence: the stream is shared, so a bare
       // `some(e => e.type === 'fire')` pulses on every enemy shot -- exactly the
-      // presence-only mistake CLAUDE.md warns about.
+      // presence-only mistake docs/agent/testing-and-review.md warns about.
       // `!== undefined`, not `!== null`: playerId is `number | undefined`, so the null
       // form was always true and the guard did nothing. tsc does not flag it.
       if (playerId !== undefined && events.some((e) => e.type === 'fire' && e.ownerId === playerId)) {

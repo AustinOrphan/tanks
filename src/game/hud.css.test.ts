@@ -2299,9 +2299,10 @@ describe('hud.css is syntactically whole', () => {
       );
     }
     // ...and each inset on the side it is FOR. The presence checks above are exactly
-    // the "close to worthless" shape CLAUDE.md names, and it was not hypothetical here:
-    // swapping `env(safe-area-inset-right)` and `env(safe-area-inset-left)` in the
-    // shorthand -- so each pads the opposite edge -- passed all 17 tests in this file.
+    // the "close to worthless" shape docs/agent/testing-and-review.md names, and it was
+    // not hypothetical here: swapping `env(safe-area-inset-right)` and
+    // `env(safe-area-inset-left)` in the shorthand -- so each pads the opposite edge --
+    // passed all 17 tests in this file.
     // Measured in Chromium at 844x390 with the notch on the left (inset-left 59px),
     // shipped computes `12px 18px 12px 59px` and swapped computes `12px 59px 12px 18px`:
     // the score row stays under the camera housing and gains dead space on the far side.

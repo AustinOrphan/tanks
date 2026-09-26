@@ -163,7 +163,7 @@ describe('tankDifficultyBreakdown: every named weight is wired into the total', 
 });
 
 describe('the movement band is gated on behavior !== STATIONARY', () => {
-  // CLAUDE.md: "STATIONARY still ignores preferredDistance/minimumDistance/
+  // docs/agent/architecture.md: "STATIONARY still ignores preferredDistance/minimumDistance/
   // retreatChance, and always will". A stationary tank never runs seekMove, so
   // crediting it for a tight preferred distance or a high retreat chance would
   // score data the sim never reads. The two fixtures are IDENTICAL except for
@@ -346,7 +346,7 @@ describe('tankDifficulty over the shipped roster (population: all 7 shipped Tank
 
   it('player is included for completeness but its number is not a real difficulty: its AI-derived terms exactly match brown, the other STATIC_BASIC kind', () => {
     // The player's own (inert) aiProfile is STATIC_BASIC only because the schema
-    // requires one -- CLAUDE.md: "stepAi never runs it" (decideAi returns an
+    // requires one -- roster.ts: "stepAi never runs it" (decideAi returns an
     // idle decision for tank.kind === 'player' BEFORE profile routing even
     // runs -- src/sim/ai/index.ts). brown is the other shipped STATIC_BASIC
     // kind, so every AI-derived term below (everything except the weapon

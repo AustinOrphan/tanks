@@ -89,7 +89,7 @@ const FOV = 50;
 // HULL_LEN in entities.ts) but the turret overhangs the nose and the muzzle overhangs
 // the turret, so the framed area is generously larger than the hull alone. Chosen by
 // eye against the real geometry (see "Numbers that are feel, not measurement" in
-// CLAUDE.md); cheap to retune with `npm run gallery`.
+// docs/agent/development.md); cheap to retune with `npm run gallery`.
 // Exported so preview.test.ts can assert the fitted camera frames EXACTLY this, as
 // tightly as the fit allows -- which is what makes a change to the framing fail
 // something instead of silently moving the aim.

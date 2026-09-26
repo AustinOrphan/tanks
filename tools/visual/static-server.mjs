@@ -8,9 +8,11 @@
  * `verify.mjs` and both `tools/uikit` scripts still carried the original block. The handler
  * lives here so every one of them serves through the same guard, and all of them now do.
  *
- * SEPARATE MODULE for the reason `serve-path.mjs` gives: each of those scripts calls `main()`
- * at the top level, so a test that imported one would run it. Nothing here listens until
- * `serveStatic` is called.
+ * SEPARATE MODULE for the reason `serve-path.mjs` gives: each of those scripts called `main()`
+ * at the top level, so a test that imported one would have run it. `roundtrip.mjs`,
+ * `verify.mjs` and both `tools/uikit` scripts have since gated `main()` behind an entry-point
+ * check (issue #881); `screens/run.mjs` still calls it unconditionally. Nothing here listens
+ * until `serveStatic` is called.
  */
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

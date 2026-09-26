@@ -64,8 +64,8 @@ interface DeathRing {
 // only to bound worst-case simultaneous deaths (e.g. a full coop wipe), not to shape
 // the common case.
 const MAX_RINGS = 16;
-// Feel constants (CLAUDE.md's "numbers that are feel, not measurement"): how long a
-// ring lives and how far it expands over that life. Both cheap to retune by eye.
+// Feel constants (docs/agent/development.md's "Numbers that are feel, not measurement"):
+// how long a ring lives and how far it expands over that life. Both cheap to retune by eye.
 const LIFETIME_SECONDS = 0.6;
 const GROWTH = 2.4;
 

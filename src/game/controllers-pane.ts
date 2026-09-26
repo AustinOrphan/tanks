@@ -111,6 +111,17 @@ export function createControllersPane(
   let currentAssignment: Assignment = [];
   let botAllowed = false;
 
+  /**
+   * One row per slot, one button per candidate source, replacing whatever was there.
+   *
+   * Parameterized over the TARGET CONTAINER and the ASSIGNMENT for the second caller it was
+   * extracted for: the versus pane's who's-playing preview, which rendered these same rows
+   * disabled through an `interactive` flag and pointed them at an explanatory note. That caller
+   * is gone as of issue #260 -- the versus pane renders retained ROLES now, not a device
+   * assignment (`renderVersusSlotRows`, hud.ts) -- so the flag was dropped as dead code, and the
+   * manifest entry that pinned it (`ui-versus-preview-reason-left-on-the-real-rows`) was retired
+   * with it. `renderRows` is now the only caller.
+   */
   function renderRowsInto(container: HTMLElement, assignment: Assignment): void {
     const pads = deps.detectedPads();
     const restoreFocus = captureFocus(container);
@@ -193,8 +204,8 @@ export function createControllersPane(
     renderRowsInto(rowsEl, currentAssignment);
   }
 
-  // Guarded on the ACTUAL transition, same as Customize's `show`, so loop.ts's window listener
-  // add/remove never sees a redundant open or close.
+  // Guarded on the ACTUAL transition, same as Customize's `show`, so route-ui.ts's window
+  // listener add/remove never sees a redundant open or close.
   function show(open: boolean, instant = false): void {
     // Read before the transition begins -- same reason as Customize's `show`.
     const wasOpen = host.isSurfaceOpen(surface);

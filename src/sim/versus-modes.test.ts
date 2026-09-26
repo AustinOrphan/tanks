@@ -151,8 +151,9 @@ describe('resolveStatus dispatch: teams', () => {
  * player still has stock -- "eliminated" (isVersusEliminated, world.ts) is
  * `!alive && stockRemaining === 0`, not bare `!alive`. Each test below is isolated on
  * fresh state with its own single call and its own assertion immediately after it (the
- * combined-call/one-trailing-assertion trap CLAUDE.md's testing conventions warn about),
- * so a defect in one call cannot be masked by a later call's own no-op path.
+ * combined-call/one-trailing-assertion trap docs/agent/testing-and-review.md's testing
+ * conventions warn about), so a defect in one call cannot be masked by a later call's own
+ * no-op path.
  */
 describe('versus stock: a mid-stock death does not end the match', () => {
   it('FFA N=3, one death with 2 stock remaining after it: still playing, not won', () => {

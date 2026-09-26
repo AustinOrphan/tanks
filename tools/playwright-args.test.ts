@@ -8,12 +8,13 @@ import { describe, expect, it } from 'vitest';
  * function ignores it, options stays undefined, and the call runs at Playwright's 30s
  * default instead of the timeout that was written down.
  *
- * All three call sites in `tools/` had this, and it went unnoticed for the reason
- * CLAUDE.md names: `tools/` is read by no test and largely typechecked by nothing, so a
- * silent argument-position error has nothing to fail against. `tools/gl/run.mjs` was the
- * one that bit — its 90s liveness ceiling was raised deliberately, with a comment citing
- * measured timings, and the raise never took effect. It surfaced as a bare `TimeoutError`
- * at a flat 30s, which reads as a broken harness rather than a mis-set option.
+ * All eight call sites in `tools/` had this, and it went unnoticed for the reason
+ * docs/agent/testing-and-review.md names: the files holding them were read by no test, and
+ * `tools/` is largely typechecked by nothing, so a silent argument-position error has
+ * nothing to fail against. `tools/gl/run.mjs` was the one that bit — its 90s liveness
+ * ceiling was raised deliberately, with a comment citing measured timings, and the raise
+ * never took effect. It surfaced as a bare `TimeoutError` at a flat 30s, which reads as a
+ * broken harness rather than a mis-set option.
  *
  * This guard is a source scan, not a behavioural test, because the failure is invisible at
  * runtime: the wrong call still resolves whenever the page is fast enough. It fails on the

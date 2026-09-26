@@ -246,8 +246,8 @@ describe('evaluateVersusBoard: separation can fail (and takes room down with it)
   // MIN_OPEN_FLOOR_PER_PLAYER at any player count. This is why the manifest mutates
   // `distinctSpawns`'s own computation directly rather than claiming a "drop it from
   // suitable" mutation is killed: that one is equivalent, and asserting it as caught
-  // would be exactly the tautology-that-cannot-fail CLAUDE.md's testing conventions
-  // warn about.
+  // would be exactly the tautology-that-cannot-fail docs/agent/testing-and-review.md's
+  // testing conventions warn about.
   it('room also measures failing on this fixture -- open floor is 0', () => {
     const verdict = evaluateVersusBoard(arena, 2);
     expect(verdict.openFloorCells).toBe(0);

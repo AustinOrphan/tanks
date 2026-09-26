@@ -1939,7 +1939,7 @@ describe('co-op per-slot player styling', () => {
 
   it('the unstyled-slot placeholder is distinct from every roster kind\'s own colour', () => {
     // Verified against the REAL rendered colour, not a hardcoded expected hex -- the
-    // placeholder's exact value is a feel pick (CLAUDE.md's TANK_TURN_RATE
+    // placeholder's exact value is a feel pick (docs/agent/development.md's TANK_TURN_RATE
     // treatment); what this pins is only that it never collides with a roster kind.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);

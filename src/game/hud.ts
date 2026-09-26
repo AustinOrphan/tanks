@@ -791,7 +791,12 @@ export interface Hud {
    * failure's own (issue #685): the caller holds the descriptor that failed, the HUD does not.
    */
   showMatchFailure(failure: { title: string; detail: string; action: string }, retry?: () => void): void;
-  /** Fired by the pause panel's Quit to Title button, and by nothing else. */
+  /**
+   * Fired by the `.hud-quit` button -- Quit to Title on the pause panel, which `setState`
+   * relabels End Practice or Main Menu for a practice or versus pause and Main Menu at an
+   * outcome -- and by the buttons that leave gameplay on the way somewhere else:
+   * Choose Level and Change Setup (both through `quitInto`) and Practice This Level.
+   */
   onQuitToTitle(cb: () => void): void;
   /**
    * The touch-only pause button. Separate from the keyboard hotkey because it is an
@@ -1066,7 +1071,7 @@ export interface Hud {
   /**
    * The Controllers panel just became visible/hidden -- the ONE chokepoint for both
    * transitions (the Back button and `setState`'s unconditional close), same shape as
-   * `onCustomizeOpen`/`onCustomizeClose`. `loop.ts` adds/removes its
+   * `onCustomizeOpen`/`onCustomizeClose`. `route-ui.ts` adds/removes its
    * `gamepadconnected`/`gamepaddisconnected` window listeners here, scoped to exactly
    * while the panel that reads them is on screen -- the driver does not tick during
    * title/paused, so nothing else would refresh the panel's live pad list.
@@ -1150,7 +1155,7 @@ export interface Hud {
   onVersusStart(cb: (config: VersusConfig) => void): void;
   /**
    * Show/hide the versus setup pane, following the exact panel-open template
-   * `showControllers` and the Customize pane's `show` use: focus-the-pane on open, closed
+   * the Controllers and Customize panes' `show` use: focus-the-pane on open, closed
    * unconditionally by `setState` (every OTHER state change hides it, same as every
    * sibling subpanel). `initial`, when supplied and TRUTHY, reseeds the pane's own
    * selections; omitting the argument AND passing `null` (`route-ui.ts`'s own
@@ -1336,12 +1341,14 @@ export type HudFrameKey =
  * Application-route surfaces: Main Menu, Level Select, Records, Customize, Controllers,
  * Versus Setup and Settings. Owned by `route-host.ts` and `route-ui.ts`.
  *
- * The seven gameplay-FACING callbacks (`onStartRestart`, `onQuitToTitle`, `onPauseTap`,
- * `onMineTap`, `onFireTap`, `onMuteToggle`, `onVolumeChange`) are here rather than in
+ * The seven gameplay-FACING callbacks (`onStartRestart`, `onLevelSelect`, `onNewGame`,
+ * `onQuitToTitle`, `onMineTap`, `onFireTap`, `onReassignSlot`) are here rather than in
  * `GameplayHudKey` because ownership is about who REGISTERS them, not about what they
  * eventually do: `route-host.ts` registers each exactly once, as a trampoline into
  * whatever session is live. A session never touches them, and must not, or a handler
- * would outlive the session that installed it.
+ * would outlive the session that installed it. `onPauseTap`, `onMuteToggle` and
+ * `onVolumeChange` are route members too, registered by `route-ui.ts`: pause drives the
+ * state machine and the audio pair writes the settings store, so no session is involved.
  */
 export type RouteHudKey =
   // `showMatchFailure` is the SHELL's (issue #325): it is drawn over the Main Menu when a
@@ -2024,12 +2031,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          lives, and Settings -> Controls is the durable way in). Unlike its four siblings
          above/below, this one is NOT title-only, so its Back button cannot hardcode
          setState('main-menu') --
-         its Back is handleControllersBack, which calls back() and nothing else. The
-         heading text DOES still branch on shownState, in showControllers, and that is
-         this panel's only route-state read. (The earlier wording here said
-         handleControllersBack routed on shownState too. It has not since the layer stack
-         took over, and the claim made this panel's coupling look twice the size it is --
-         issue #556.) -->
+         its Back is controllers-pane.ts's handleBack, which calls back() and nothing
+         else. The heading text DOES still branch on shownState (the headingText dep
+         createHud hands the pane), and that is this panel's only route-state read. -->
     <div class="hud-controllers hud-controllers--hidden" role="region" tabindex="-1" aria-labelledby="hud-controllers-title">${CONTROLLERS_BODY}</div>
     <!-- The versus setup pane (docs/superpowers/plans/2026-08-21-versus-setup-menu.md,
          docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md §3): reached from
@@ -3863,7 +3867,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function closeSurface(from: Surface, onBegin?: () => void, instant = false): void {
     if (!isSurfaceOpen(from)) {
-      // Still owed: the callback half. Customize's `show` and `showControllers` guard their own
+      // Still owed: the callback half. The Customize and Controllers panes' `show` guard their own
       // on `wasOpen`, so passing it through here would double-guard rather than skip.
       onBegin?.();
       return;
@@ -4034,8 +4038,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * Hand the Records tables their numbers, immediately before the pane renders them.
    *
-   * Placed before the render rather than after it (the order Customize's `show` and
-   * `showControllers` use) so the pane is drawn once from the values it is about to show.
+   * Placed before the render rather than after it (the order the Customize and Controllers
+   * panes' `show` use) so the pane is drawn once from the values it is about to show.
    * That is a saving, not a correctness point -- `setStats` and `setAchievements` both
    * re-render while their pane is visible, so either order settles on the same table.
    *
@@ -4374,36 +4378,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * A candidate/current source's label. `'gamepad'` looks its `id` up in
-   * `currentDetectedPads` -- the panel's own live list, not a cached name -- falling
-   * back to `Controller ${padIndex}` when the browser reports an empty id (or, for a
-   * currently-assigned-but-disconnected pad, when the index is not in the list at all:
-   * a pad's id is unknowable once unplugged, so this is the honest fallback for both
-   * cases, not two different ones).
-   */
-
-
-  /**
-   * REPLACE, never append -- the same "REPLACE, never append" convention `setLevelSelect`
-   * already uses, rebuilt on open and on every detection refresh (`setControllers`/
-   * `setDetectedPads`, each gated on the panel being open). One row per slot; one button
-   * per candidate source (Keyboard / Bot / None / one per currently detected pad index).
-   *
-   * Parameterized over the TARGET CONTAINER and the ASSIGNMENT to render.
-   *
-   * It USED to take an `interactive` flag too, for the second caller it was extracted
-   * for: the versus pane's who's-playing preview, which rendered these same rows
-   * disabled and pointed them at an explanatory note. That caller is gone as of issue
-   * #260 -- the pane renders retained ROLES now, not a device assignment
-   * (renderVersusSlotRows) -- which left `interactive: false` with no reachable caller.
-   * Dropped rather than kept as contract, because an unreachable branch is dead code;
-   * the manifest entry that pinned it (`ui-versus-preview-reason-left-on-the-real-rows`)
-   * is retired in the same change rather than left killing through its other half. The
-   * real Controllers panel below is now the only caller; nothing about its own
-   * behaviour changes from this extraction.
-   */
-
-  /**
    * Roving-tabindex keyboard (and future D-pad) navigation between the HUD's panels.
    *
    * Exactly one of `panel`/`customizeView`/`statsView`/`achView`/`levelSelectView`/
@@ -4431,7 +4405,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * reachable by Tab, exactly as it was before this file existed.
    *
    * EVERY panel-open transition focuses the CONTAINER, never a control inside it --
-   * `showStats`/Customize's `show`/`showAchievements`/`showLevelSelect`/`showControllers`/
+   * `showStats`/Customize's `show`/`showAchievements`/`showLevelSelect`/the Controllers pane's `show`/
    * `showVersusSetup` above and setState's paused/win/lose/title branches below all
    * call `.focus()` on the pane itself, which is exactly what `.hud-panel`'s own
    * pre-existing `tabindex="-1"` did for the one transition this file used to handle
@@ -6035,8 +6009,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * WHAT THE PANEL SAID BEFORE ANY OUTCOME KIND REACHED IT -- unchanged, and still the
-   * answer on the two paths `outcomePanelCopyNow` returns `null` for.
+   * WHAT THE PANEL SAID BEFORE ANY OUTCOME KIND REACHED IT, and still the answer on the
+   * two paths `outcomePanelCopyNow` returns `null` for -- unchanged except for the versus
+   * branch it opens with (#574), where `versusOutcomeTitle` supplies the result copy.
    *
    * Kept as the shipped code rather than transcribed into `OUTCOME_PANEL`'s vocabulary:
    * the versus result screen belongs to issue #279, and "leave it exactly as it is" is a
@@ -6546,11 +6521,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // showVersusSetup(true, initial) with a TRUTHY `initial` ever overwrites it -- so a
   // trip through Back and back to Versus keeps whatever was last chosen.
   //
-  // Default map is 'random': every (arena, playerCount) combination in the shipped
-  // catalog passes `suitable` today (measured, see arenaLabel's own comment above), so
-  // there is no "the default arena is not offered at this player count" case for a
-  // fallback to handle -- not coded, since a fallback branch nothing can reach is
-  // exactly what this repo's review flags as dead.
+  // Default map is 'random', which the Map row offers at every (players, mode) -- it is
+  // appended after the filtered list, not drawn from it -- and which `retainArenaChoice`
+  // always keeps, so there is no "the default arena is not offered at this player count"
+  // case for a fallback to handle -- not coded, since a fallback branch nothing can reach
+  // is exactly what this repo's review flags as dead.
   let versusConfigState: VersusConfig = opts.versusSetup
     ? { ...opts.versusSetup.get() }
     : {
@@ -6716,13 +6691,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * REPLACE, never append -- rebuilt whenever `players` OR `mode` changes (the map
    * list is filtered by both declared dimensions -- `versusMapChoices`,
-   * versus-config.ts, issue #270) and whenever the pane is (re)seeded, same
-   * convention `renderControllerRows` already uses for its own per-slot rows.
-   * A retained selection dropping out of the rebuilt list has no reset branch for
-   * the same reason the 'random' default comment above gives: every shipped entry
-   * declares all of {2,3,4} x both modes, so nothing can reach it --
-   * `resolveVersusConfig`'s launch gate is the loud backstop, and the reset ships
-   * with the first narrower entry (#271-#273).
+   * versus-config.ts, issue #270), on a map click, and whenever the pane is (re)seeded,
+   * the same convention the Controllers pane's `renderRowsInto` (controllers-pane.ts)
+   * uses for its per-slot rows. On a Players or Mode change, a retained selection that
+   * drops out of the rebuilt list is reset BEFORE this runs, not here: both handlers go
+   * through `setVersusAxis`, where `retainArenaChoice` swaps the id for Random and
+   * `renderVersusMapNote` says why. The catalog's narrower entries (#271-#273;
+   * `vs-duel-01` is two-player only) are what make that reachable, and
+   * `resolveVersusConfig`'s launch gate remains the loud backstop.
    */
   /**
    * One card per eligible board, and Random last (issue #274).
@@ -7369,8 +7345,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     customize.show(false, true);
     cleanupHide(achView, 'hud-achievements--hidden');
     cleanupHide(levelSelectView, 'hud-levelselect--hidden');
-    // Routed through showControllers for the same reason as Customize above -- it
-    // must fire onControllersClose (loop.ts's window listener teardown) on EVERY exit,
+    // Routed through the Controllers pane's `show` for the same reason as Customize above --
+    // it must fire onControllersClose (route-ui.ts's window listener teardown) on EVERY exit,
     // not only the panel's own Back button. Omitted, the panel -- and its live
     // gamepadconnected/disconnected listeners -- would leak onto the live game on
     // Resume, since 'paused' -> 'playing' is one of this function's own early returns.

@@ -4,8 +4,8 @@ import tankDefsJson from './data/tank-defs.json';
 import aiProfilesJson from './data/ai-profiles.json';
 import { AIProfile } from './enums';
 
-// A guard is worth what its own tests prove (CLAUDE.md; the purity guard passed
-// four of five known-bad probes before it got a meta-test). Every check the
+// A guard is worth what its own tests prove (docs/agent/testing-and-review.md; the purity
+// guard passed four of five known-bad probes before it got a meta-test). Every check the
 // validator claims to make gets a NEGATIVE CONTROL here: a corrupted copy of the
 // real data that must throw, with the message naming the corrupted path. The
 // happy path is asserted against the shipped files, so the controls cannot pass
@@ -363,8 +363,8 @@ describe('validateArenas', () => {
   it('rejects a lane claim whose "from" and "to" are the same cell -- it could never fail', () => {
     // Before this guard, {from:[0,0],to:[0,0]} validated and shipped: a cell is
     // always in line of sight of itself, so the claim reads "open" in both wall
-    // phases forever regardless of the arena's geometry. CLAUDE.md: every
-    // assertion must be able to fail.
+    // phases forever regardless of the arena's geometry. docs/agent/testing-and-review.md:
+    // every assertion must be able to fail.
     const vacuous = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
       ((c.arenas as Mutable[])[0] as Mutable).claims = [
         { type: 'lane', from: [0, 0], to: [0, 0], intact: 'blocked', breached: 'open', why: 'x' },
@@ -458,11 +458,12 @@ describe('validateArenas', () => {
   it('rejects a claim cell coordinate that is negative or fractional (cell()\'s own nonNegInt check)', () => {
     // A negative control cell() lacked entirely: swapping its nonNegInt calls for
     // the plain num() check left the full suite green (verified by hand -- a
-    // check nothing exercises is a check that cannot fail, which CLAUDE.md
-    // forbids). GOOD_ARENA's B spawn is at [1, 0]; picking THAT cell's row/col
-    // off by a negative or fractional amount proves nonNegInt's two branches
-    // (non-integer, and negative) without also tripping the in-bounds check
-    // cell() runs afterward, which a wildly out-of-range value would confound.
+    // check nothing exercises is a check that cannot fail, which
+    // docs/agent/testing-and-review.md forbids). GOOD_ARENA's B spawn is at [1, 0];
+    // picking THAT cell's row/col off by a negative or fractional amount proves
+    // nonNegInt's two branches (non-integer, and negative) without also tripping the
+    // in-bounds check cell() runs afterward, which a wildly out-of-range value would
+    // confound.
     const negative = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
       ((c.arenas as Mutable[])[0] as Mutable).claims = [
         { type: 'sightlineAfterBreach', from: [-1, 0], sees: true, why: 'x' },

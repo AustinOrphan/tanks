@@ -33,8 +33,8 @@ export interface RafScheduler {
  *
  * Two booleans rather than the whole AppLocation: the driver has no
  * legitimate business with routes or descriptors, and taking a bare enum
- * kept its `state === 'title'` foot-gun that CLAUDE.md's "keep both reads"
- * rule already exists to warn about. See `src/game/state.ts` for the
+ * kept its `state === 'title'` foot-gun that `.claude/rules/game.md`'s rule to
+ * keep both reads already exists to warn about. See `src/game/state.ts` for the
  * canonical model.
  */
 export interface DriverStateMachine {
@@ -61,7 +61,8 @@ export interface DriverDeps {
    * stepInputs" describe block proves `stepInputs(world, [input])` is value-identical
    * to `step(world, input)`, byte for byte; `driver.test.ts`'s own N=1 structural
    * regression proves this DRIVER wires that adapter correctly, one layer up (the
-   * composition-blindness gap CLAUDE.md names for `step-pipeline.test.ts`).
+   * composition-blindness gap docs/agent/testing-and-review.md names for
+   * `step-pipeline.test.ts`).
    */
   input: { sample(): InputState[] };
   renderer: {

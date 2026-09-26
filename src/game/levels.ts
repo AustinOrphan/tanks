@@ -195,9 +195,9 @@ export function createLevelSystem(
  * `CAMPAIGN_LEVELS`, same posture as `createLevelSystem`'s own sandbox branch above),
  * built from a `VersusConfig` rather than dev flags. `tracksProgress`/`isDevJump` are
  * both `false` -- a versus session is exactly as far outside campaign-run bookkeeping
- * as the sandbox, and by the same CLAUDE.md rule ("Practice/level-select state must
- * not create or mutate a campaign run"): this function never calls a single method on
- * `run`. It is accepted anyway (unread, hence the `_` prefix -- same treatment
+ * as the sandbox, and by the same `.claude/rules/game.md` rule ("Practice/level-select
+ * state must not create or mutate a campaign run"): this function never calls a single
+ * method on `run`. It is accepted anyway (unread, hence the `_` prefix -- same treatment
  * `createLevelSystem`'s own sandbox `world` gives its unused `_level`) purely so
  * `createVersusLevelSystem(config, run)` has the identical two-argument shape
  * `createLevelSystem(flags, run)` already has; the versus-setup-menu plan's boot

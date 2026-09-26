@@ -66,8 +66,8 @@ afterEach(() => {
 
 describe('particles: where a burst is drawn', () => {
   it('draws every particle at exactly the event position, sim y mapping to three z', () => {
-    // CLAUDE.md singles this out: particles draw bursts at exactly ev.pos, so a
-    // wrong position is a visible defect no presence check catches. The
+    // docs/agent/testing-and-review.md singles this out: particles draw bursts at exactly
+    // ev.pos, so a wrong position is a visible defect no presence check catches. The
     // coordinates are deliberately asymmetric -- (3, 7), not (3, 3) -- so that
     // swapping x and z is detectable at all.
     const { scene, ps } = setup();
@@ -94,9 +94,9 @@ describe('particles: where a burst is drawn', () => {
   it('draws no burst for a respawn, discriminated against another event in the same batch', () => {
     // The identity spawn ring (entities.ts, #199) is the single source of truth for a
     // respawn's look now -- the old cyan burst here was ad-hoc and is removed (#201).
-    // Not presence-only (CLAUDE.md): a `fire` in the same spawn() call proves the
-    // absence isn't an accident of the fixture -- the fire burst still draws while the
-    // respawn at a distinct position draws nothing.
+    // Not presence-only (docs/agent/testing-and-review.md): a `fire` in the same spawn()
+    // call proves the absence isn't an accident of the fixture -- the fire burst still
+    // draws while the respawn at a distinct position draws nothing.
     const { scene, ps } = setup();
     ps.spawn([
       { type: 'fire', ownerId: 9, bulletType: 'normal', pos: { x: -8, y: 4 }, angle: 0 },

@@ -176,9 +176,9 @@ describe("arena-02's spawnBlockRobust figures, which no claim can protect", () =
   // arena-02 declares no `spawnBlockRobust` claim -- correctly: breaching its centre
   // barrier IS the level, so the property is false there by design. But the runner
   // only evaluates claims that are DECLARED, so the numbers documented in
-  // arena-claims.ts and CLAUDE.md ("12 of 16 breached, 0 of 16 intact") were measured
-  // by hand and nothing recomputed them. They would have rotted silently the first
-  // time anyone edited that grid.
+  // arena-claims.ts and docs/agent/architecture.md (12 of 16 breached, 0 of 16 intact)
+  // were measured by hand and nothing recomputed them. They would have rotted silently
+  // the first time anyone edited that grid.
   //
   // This recomputes them. It is deliberately NOT a claim: making it one would assert
   // a property arena-02 does not have. A grid edit that changes these counts fails
