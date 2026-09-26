@@ -3,7 +3,10 @@ import type { Arena } from '../../src/sim/arena';
 import { ARENA_DEFS, loadArena } from '../../src/sim/arena';
 import { evaluateVersusBoard } from '../../src/sim/versus-board';
 import { lineOfSight as losImpl } from '../../src/sim/ai/targeting';
-import { measureBoard, tankLattice, geodesic, nearestLegal, openingShots, wallAABBs } from './measure';
+import {
+  measureBoard, tankLattice, geodesic, nearestLegal, openingShots, wallAABBs,
+  rotationalAsymmetry,
+} from './measure';
 
 /**
  * NEGATIVE CONTROLS for the quality measures.
@@ -658,5 +661,97 @@ describe('mapgen quality measures: bot jam corridors (issue #822)', () => {
     rows.filter((r) => r.m.jamCorridors === 0).forEach((r) => {
       expect(r.m.routeCount, `${r.id} has an alternative route`).toBeGreaterThan(1);
     });
+  });
+});
+
+describe('mapgen quality measures: 3-fold symmetry (issue #820)', () => {
+  /**
+   * THE CONTROL THAT MAKES THE C3 NUMBER MEAN ANYTHING.
+   *
+   * `rotationalAsymmetry` is generalised over the order of the rotation precisely so that it
+   * can be checked against something already trusted. At two turns over the whole rectangle it
+   * is computing the same thing as the shipped `asymmetryRotational` by a completely different
+   * route -- centre coordinates, a rotation matrix and a floor, rather than an index flip --
+   * and on a rectangle a 180-degree rotation maps cell centres exactly onto cell centres, so
+   * the two must agree EXACTLY rather than approximately.
+   *
+   * Over all 8 shipped boards, which is the whole population `ARENA_DEFS` offers. If this ever
+   * fails, the C3 figures reported beside it are wrong and nothing should be derived from them.
+   */
+  it('reproduces the shipped 180-degree measure at two turns, on every shipped board', () => {
+    expect(ARENA_DEFS.length).toBeGreaterThan(0);
+    for (const def of ARENA_DEFS) {
+      const mine = rotationalAsymmetry(def, 2, 'whole');
+      const shipped = measureBoard(def, 2, def.id).asymmetryRotational;
+      expect(mine, `${def.id}: the generalised measure disagrees with asymmetryRotational`)
+        .toBeCloseTo(shipped, 12);
+    }
+  });
+
+  it('is zero on the disc for a board that cannot disagree with itself, at every order', () => {
+    // A uniform board is symmetric under any rotation by construction, so on the disc every
+    // order must score 0. This is the floor: a measure reporting anything here would be
+    // counting something other than disagreement -- a rounding error in the centre
+    // arithmetic, or an image being pushed out of the region it was sampled from.
+    const uniform = board(Array.from({ length: 11 }, () => '#'.repeat(11)));
+    for (const turns of [2, 3, 4, 6]) {
+      expect(rotationalAsymmetry(uniform, turns, 'disc'), `order ${turns}`).toBe(0);
+    }
+  });
+
+  it('shows why the rectangle is the wrong region: a UNIFORM board scores 0.13 at three turns', () => {
+    // The whole-rectangle variant counts a cell whose image leaves the board as a
+    // disagreement, deliberately -- skipping would let a board score well for having nothing
+    // to compare against. The consequence is this: a completely uniform 11x11 board, which is
+    // symmetric under every rotation, still scores 0.132 at three turns, purely because a
+    // rectangle has no 120-degree rotation onto itself and its corners rotate into nothing.
+    //
+    // That is the confound `asymmetryC3` avoids by sampling the inscribed disc, and it is the
+    // whole reason the board measure does not use the rectangle. Asserted rather than
+    // explained, so the claim in `rotationalAsymmetry`'s own comment is checked.
+    const uniform = board(Array.from({ length: 11 }, () => '#'.repeat(11)));
+    expect(rotationalAsymmetry(uniform, 2, 'whole'), 'a rectangle IS 180-degree symmetric').toBe(0);
+    expect(rotationalAsymmetry(uniform, 3, 'whole'), 'the rectangle confound is gone')
+      .toBeCloseTo(0.1322, 3);
+    expect(rotationalAsymmetry(uniform, 3, 'disc'), 'the disc should not inherit it').toBe(0);
+  });
+
+  it('moves the moment one cell breaks the symmetry', () => {
+    // The open board has nothing to disagree about; one solid cell inside the disc gives it
+    // something. Placed at (2,2) on an 11x11 board, whose inscribed radius is 5.5 and whose
+    // centre is (5.5, 5.5): the cell centre sits 4.24 from the middle, comfortably inside.
+    const open = openBoard(11, 11);
+    expect(rotationalAsymmetry(open, 3, 'disc'), 'the open board already disagrees').toBe(0);
+
+    const broken = { ...open, grid: open.grid.map((row, r) =>
+      r === 2 ? `${row.slice(0, 2)}#${row.slice(3)}` : row) };
+    expect(broken.grid[2][2], 'the fixture did not place the wall').toBe('#');
+    expect(rotationalAsymmetry(broken, 3, 'disc'), 'one wall did not move the measure')
+      .toBeGreaterThan(0);
+  });
+
+  it('reports the DISC on the board measures, which is a different number from the rectangle', () => {
+    // `asymmetryC3` is the disc variant deliberately: over the whole rectangle the number is
+    // dominated by corners rotating into empty space, which is a fact about rectangles rather
+    // than about the board. Asserted on a shipped board so the two are known to differ -- a
+    // field wired to the wrong variant would otherwise be invisible.
+    const def = ARENA_DEFS.find((d) => d.id === 'vs-tri-01');
+    expect(def, 'vs-tri-01 is gone from the catalogue').toBeDefined();
+    const measured = measureBoard(def!, 3, def!.id).asymmetryC3;
+    expect(measured).toBeCloseTo(rotationalAsymmetry(def!, 3, 'disc'), 12);
+    expect(measured).not.toBeCloseTo(rotationalAsymmetry(def!, 3, 'whole'), 3);
+  });
+
+  it('finds no shipped board that is approximately 3-fold symmetric, over the whole catalogue', () => {
+    // The finding that keeps this measure REPORTED rather than gating (issue #820). Stated as
+    // a floor rather than as the exact figures, so it survives a board being retuned: if some
+    // future board ever scores below 0.2 the premise "the shipped set cannot supply a
+    // tolerance" has changed and this issue's reasoning deserves revisiting -- which is
+    // exactly when a reader wants to be told.
+    const scores = ARENA_DEFS.map((d) => ({ id: d.id, c3: rotationalAsymmetry(d, 3, 'disc') }));
+    expect(scores.length, 'no boards to measure').toBe(8);
+    const best = scores.reduce((a, b) => (a.c3 <= b.c3 ? a : b));
+    expect(best.c3, `${best.id} is now nearly 3-fold symmetric; see issue #820`)
+      .toBeGreaterThan(0.2);
   });
 });
