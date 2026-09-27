@@ -31,13 +31,10 @@ import { TICK_HZ } from '../constants';
  * hold across the gap, not only at the write.
  */
 
-/** The retarget reasons, deliberately a closed set: every change of target records one. */
+/** Every change of target records one. */
 export type RetargetReason = 'acquired' | 'target-lost' | 'switched-on-expiry';
 
 /**
- * What a commitment path supplies: how long a fresh commitment lasts, what still counts as a
- * legal target, which target is best right now, and how to rank two of them.
- *
  * The policy below is written once and run by both AIs (issue #891). Campaign enemies fill
  * this in from their AI profile and the perception-bounded selector; a bot in a versus player
  * slot fills it in from its difficulty and the versus opponent predicate. Sharing the seam
@@ -47,15 +44,12 @@ export type RetargetReason = 'acquired' | 'target-lost' | 'switched-on-expiry';
 export interface CommitmentPolicy {
   /** Ticks a fresh commitment is held for. */
   readonly span: number;
-  /** Is this tank still a legal target for the subject right now? */
   valid(candidate: Tank): boolean;
-  /** The best target available this tick, or undefined when there is none. */
   select(): Tank | undefined;
-  /** Lower is better. Compared between the held target and a challenger at expiry. */
+  /** Lower is better. */
   cost(target: Tank): number;
 }
 
-/** The tank this AI is committed to, if that commitment is still valid under `policy`. */
 function heldTarget(world: World, tank: Tank, policy: CommitmentPolicy): Tank | undefined {
   if (tank.aiTargetId === undefined) return undefined;
   const held = world.tanks.find((t) => t.id === tank.aiTargetId);
@@ -63,11 +57,8 @@ function heldTarget(world: World, tank: Tank, policy: CommitmentPolicy): Tank | 
 }
 
 /**
- * Advance and, where the policy says so, replace this tank's committed opponent.
- *
  * The one writer of `aiTargetId`/`aiTargetTicks`/`aiRetargetReason`/`aiRetargetAgeTicks`,
- * for every AI. Returns the reason when the target changed, and null when it did not -- so a
- * caller can record every retarget without having to diff the ids itself.
+ * for every AI. Returns the reason when the target changed, and null when it did not.
  */
 export function applyCommitment(
   world: World,
@@ -75,16 +66,10 @@ export function applyCommitment(
   policy: CommitmentPolicy,
 ): RetargetReason | null {
   const reason = decideCommitment(world, tank, policy);
-  // Recorded at the one writer (issue #359), so a thrashing AI can be asked why it switched.
-  // Writing it here rather than at the call site keeps the guarantee the rest of this module
-  // rests on: there is exactly one place `aiTargetId` changes and exactly one place the cause
-  // of that change is recorded, so the two cannot disagree.
   if (reason !== null) {
     tank.aiRetargetReason = reason;
     tank.aiRetargetAgeTicks = 0;
   } else if (tank.aiRetargetReason !== undefined) {
-    // Ages only once a reason exists, so a tank that has never chosen a target carries no
-    // age at all rather than a growing count against nothing.
     tank.aiRetargetAgeTicks = (tank.aiRetargetAgeTicks ?? 0) + 1;
   }
   return reason;
@@ -104,7 +89,6 @@ export function commitTarget(world: World, tank: Tank): RetargetReason | null {
   });
 }
 
-/** The policy itself: rules 5 and 6 of issue #359's binding target policy. */
 function decideCommitment(
   world: World,
   tank: Tank,
@@ -128,8 +112,7 @@ function decideCommitment(
     return null;
   }
 
-  // Rule 6: the span has run out, but expiry is not a reason to move. Switch only for a
-  // materially better candidate; anything less re-commits to the current one.
+  // Rule 6: expiry is not a reason to move. Switch only for a materially better candidate.
   const challenger = policy.select();
   if (
     challenger &&

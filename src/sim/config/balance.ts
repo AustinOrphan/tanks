@@ -27,19 +27,16 @@ import aiProfilesJson from './data/ai-profiles.json';
 // config/reference/balance-constants.json (those are a different, un-tuned scale).
 //
 // The numbers come from constants.ts, which derives them from config/data/balance.json
-// (every value pinned in constants.test.ts), so this table reads from it rather than
-// restating it, and retuning the constant retunes the resolved config with it. This
-// module supplies the structure (which class means which number).
+// (every value pinned in constants.test.ts).
 //
 // Which classes are live is data (data/tank-defs.json), pinned per kind in
-// config/roster.test.ts. The SLOW and FAST points of the ordered scale below (0.6x /
-// 1.4x / 1.8x anchored on the MEDIUM value) are real tuning (2026-07-31 balance pass,
-// #52), so retuning a multiplier here is a gameplay change gated by the roster pins.
-// No kind selects STATIONARY, FAST or VERY_FAST movement, or FAST or VERY_FAST rotation.
+// config/roster.test.ts. The live multipliers below are real tuning (2026-07-31 balance
+// pass, #52), so retuning one is a gameplay change gated by the roster pins. No kind
+// selects STATIONARY, FAST or VERY_FAST movement, or FAST or VERY_FAST rotation.
 // ---------------------------------------------------------------------------
 
 export const GAME_BALANCE: BalanceConstants = {
-  // World units/second. MEDIUM = TANK_SPEED. FAST/VERY_FAST remain unselected vocabulary.
+  // World units/second.
   movementSpeeds: {
     [MovementSpeed.STATIONARY]: 0,
     [MovementSpeed.SLOW]: TANK_SPEED * 0.6,
@@ -47,22 +44,21 @@ export const GAME_BALANCE: BalanceConstants = {
     [MovementSpeed.FAST]: TANK_SPEED * 1.4,
     [MovementSpeed.VERY_FAST]: TANK_SPEED * 1.8,
   },
-  // Radians/second (hull slew). MEDIUM = TANK_TURN_RATE.
+  // Radians/second (hull slew).
   rotationSpeeds: {
     [RotationSpeed.SLOW]: TANK_TURN_RATE * 0.6,
     [RotationSpeed.MEDIUM]: TANK_TURN_RATE,
     [RotationSpeed.FAST]: TANK_TURN_RATE * 1.4,
     [RotationSpeed.VERY_FAST]: TANK_TURN_RATE * 1.8,
   },
-  // Whole ticks between shots. MEDIUM = FIRE_COOLDOWN_TICKS.
+  // Whole ticks between shots.
   fireCooldowns: {
     [FireRate.SLOW]: Math.round(FIRE_COOLDOWN_TICKS * 1.6),
     [FireRate.MEDIUM]: FIRE_COOLDOWN_TICKS,
     [FireRate.FAST]: Math.round(FIRE_COOLDOWN_TICKS * 0.6),
   },
-  // These are live and genuinely varied: the sim's three bullet kinds. Bounce
-  // counts are carried on each tank's weapon.ricochetCount (see roster.ts) to
-  // match the sim's per-BulletType bounce table; speeds live here.
+  // Bounce counts are carried on each tank's weapon.ricochetCount (see roster.ts)
+  // to match the sim's per-BulletType bounce table; speeds live here.
   // `lifetime`/`explosionRadius`/`damage` are carried for the schema but the
   // shipped sim shells never expire on time and never explode -- they die on
   // bounce-count or wall-bury, and kill on contact.
@@ -89,12 +85,11 @@ export const GAME_BALANCE: BalanceConstants = {
       explosionRadius: 0,
     },
   },
-  // AI profiles. The per-profile numbers live in data/ai-profiles.json, validated at
-  // load (validate.ts). Every profile field is consumed by the implementations it
-  // applies to (docs/agent/architecture.md, "Entity configs are data"). The two shot
-  // weights are read only as signs (brown.ts and teal.ts each gate a shot type on its
-  // weight being positive), so RICOCHET_SNIPER's bank weight (0.55) switches banking on
-  // but its magnitude is never read.
+  // Every profile field is consumed by the implementations it applies to
+  // (docs/agent/architecture.md, "Entity configs are data"). The two shot weights are
+  // read only as signs (brown.ts and teal.ts each gate a shot type on its weight being
+  // positive), so RICOCHET_SNIPER's bank weight (0.55) switches banking on but its
+  // magnitude is never read.
   //
   // Fields the Wii reference carries hold the Wii reference figures; fields it lacks
   // are authored for this project. "Wii reference figure" here means the
@@ -110,7 +105,7 @@ export const GAME_BALANCE: BalanceConstants = {
   aiProfiles: validateAiProfiles(aiProfilesJson),
   // Mines are a global system in the sim (not per-tank), so this section is carried
   // for schema completeness/reference and is not what the mine code reads -- that
-  // stays in constants.ts. Values mirror the live mine constants where they map.
+  // stays in constants.ts.
   mines: {
     deploymentCooldown: MINE_COOLDOWN_TICKS,
     armingDelay: 0,

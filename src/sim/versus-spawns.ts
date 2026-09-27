@@ -15,45 +15,39 @@ import { TANK_RADIUS } from './constants';
  * cannot carry authored spawn points -- and the same ranking serves both initial placement
  * and versus respawn (`respawnPos`, world.ts, passes live tank positions as `avoid`).
  *
- * Cycle note: this module imports `lineOfSight` from `ai/targeting.ts`. `arena.ts` already
- * depends on that module transitively, via `world.ts` -> `ai/index.ts` -> `ai/targeting.ts`,
- * so importing it directly here does not add a new dependency direction, and
+ * Importing `lineOfSight` from `ai/targeting.ts` adds no new dependency direction:
+ * `arena.ts` already reaches that module via `world.ts` -> `ai/index.ts`, and
  * `ai/targeting.ts`'s import closure (type-only imports included) never reaches `arena.ts`.
  * This module must never import from `arena.ts` -- that would close a cycle, since
  * `arena.ts` imports this module.
  */
 
-/** A grid cell, row-major -- `arena.ts`'s own coordinate convention. */
 export interface Cell {
   readonly row: number;
   readonly col: number;
 }
 
 /**
- * The world-space centre of a grid cell. A copy of the `(c + 0.5) * cellSize` formula in
- * `arena.ts` (`loadArena`'s own spawn placement) and `arena-claims.ts`'s `cellCentre`.
- * `cell-mapping.test.ts` pins those two to each other; nothing pins this copy to either.
- * Importing either is not an option: `arena-claims.ts` imports `arena.ts`, and `arena.ts`
- * imports this module, so either import would close a cycle back through here.
+ * A copy of the `(c + 0.5) * cellSize` formula in `arena.ts` (`loadArena`'s own spawn
+ * placement) and `arena-claims.ts`'s `cellCentre`. `cell-mapping.test.ts` pins those two
+ * to each other; nothing pins this copy to either. Importing either is not an option:
+ * `arena-claims.ts` imports `arena.ts`, and `arena.ts` imports this module, so either
+ * import would close a cycle back through here.
  */
 function cellCentre(cell: Cell, cellSize: number): Vec2 {
   return { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
 }
 
-/** Which cell a world position sits in nearest to -- the inverse of `cellCentre`. */
 function cellOfPos(pos: Vec2, cellSize: number): Cell {
   return { row: Math.round(pos.y / cellSize - 0.5), col: Math.round(pos.x / cellSize - 0.5) };
 }
 
 /**
- * Wall geometry for a visibility query -- solid cells merged (`mergeSolidRuns`,
- * `wall-merge.ts`, the same merge `loadArena` uses), destructible cells one box per cell,
- * never merged, matching PASS 2a/2b of `loadArena` exactly (a destructible cell is a
- * destruction unit, and at spawn time none is destroyed yet, so both kinds block a fresh
- * line of sight the same way they block one mid-round). Deliberately not the boundary
- * ring `loadArena` also builds: a query between two interior cell centres can never reach
- * it. These ids are throwaway -- `lineOfSight` never inspects `id` -- and this array is
- * never written into a `World`.
+ * Matches PASS 2a/2b of `loadArena` exactly: solid cells merged by the same
+ * `mergeSolidRuns`, destructible cells one box per cell (each is a destruction unit),
+ * never merged. Deliberately not the boundary ring `loadArena` also builds: a query
+ * between two interior cell centres can never reach it. These ids are throwaway --
+ * `lineOfSight` never inspects `id` -- and this array is never written into a `World`.
  *
  * `versus-spawns.test.ts` checks its solid-wall rectangles against `loadArena`'s real ones
  * on every shipped arena.
@@ -95,12 +89,10 @@ export function wallsForQuery(
 }
 
 /**
- * Whether a tank can occupy `ch` as open floor -- the same test `arena.ts`'s
- * `findCoPlayerSpawnCell` uses (`grid[row][col] === '.'`), so the versus and co-op
- * placements agree on what "fits" means: exactly the plain-floor cells, excluding solid,
- * destructible and every spawn letter (a spawn letter marks an enemy's authored start,
- * still present in the grid string even though versus mode never instantiates the tank
- * there -- see `loadArena`'s PASS 1a).
+ * The same test `arena.ts`'s `findCoPlayerSpawnCell` uses, so the versus and co-op
+ * placements agree on what "fits" means. It excludes every spawn letter too: an enemy's
+ * authored start stays in the grid string even though versus mode never instantiates the
+ * tank there (`loadArena`'s PASS 1a).
  */
 function isOpenFloor(ch: string): boolean {
   return ch === '.';
@@ -136,18 +128,16 @@ function isWalkable(ch: string, legend: Readonly<Record<string, WallKind>>): boo
 }
 
 /**
- * BFS distances (in cell steps, not world units) from `start` to every walkable cell,
- * 4-connected. Deliberately not 8-connected: a tank's hull has nonzero radius, so a
- * diagonal step between two cells whose shared corner is walled off on both orthogonal
- * sides is not reliably free in continuous space, and this ranking is already a greedy
- * approximation (see `pickVersusSpawnCell`'s own doc comment) -- treating the reachability
- * graph as orthogonal is the conservative reading, not a shortcut taken for speed.
- * Unreached cells stay `Infinity`.
+ * Distances in cell steps, not world units. Deliberately 4-connected, not 8: a tank's
+ * hull has nonzero radius, so a diagonal step between two cells whose shared corner is
+ * walled off on both orthogonal sides is not reliably free in continuous space, and this
+ * ranking is already a greedy approximation -- treating the reachability graph as
+ * orthogonal is the conservative reading, not a shortcut taken for speed.
  */
 function geodesicDistances(start: Cell, walkable: boolean[][], cols: number, rows: number): number[][] {
   const dist: number[][] = [];
   for (let r = 0; r < rows; r++) dist.push(new Array(cols).fill(Infinity));
-  if (!walkable[start.row]?.[start.col]) return dist; // degenerate: start itself is walled
+  if (!walkable[start.row]?.[start.col]) return dist;
   dist[start.row][start.col] = 0;
   const queue: Cell[] = [start];
   let head = 0;
@@ -168,25 +158,22 @@ function geodesicDistances(start: Cell, walkable: boolean[][], cols: number, row
   return dist;
 }
 
-/** Deterministic tie-break: `a` sorts before `b` iff `a` is (row, col) earlier. */
 function isEarlier(a: Cell, b: Cell): boolean {
   return a.row !== b.row ? a.row < b.row : a.col < b.col;
 }
 
 /**
- * Options shared by both pickers. `clearanceMargin` defaults to
- * `VERSUS_SPAWN_CLEARANCE_MARGIN`; `null` disables the hull-clearance filter
- * entirely -- a seam for tests that isolate the ranking or LOS layer and for negative
- * controls; nothing shipped uses it.
+ * `clearanceMargin` defaults to `VERSUS_SPAWN_CLEARANCE_MARGIN`; `null` disables the
+ * hull-clearance filter entirely -- a seam for tests that isolate the ranking or LOS layer
+ * and for negative controls; nothing shipped uses it.
  */
 export interface SpawnPickOptions {
   readonly clearanceMargin?: number | null;
 }
 
 /**
- * Picks one well-separated versus spawn cell. Every open-floor candidate (`isOpenFloor`,
- * same predicate `findCoPlayerSpawnCell` uses) goes through the hull-clearance filter
- * (below), then is scored in priority order:
+ * Every open-floor candidate goes through the hull-clearance filter, then is scored in
+ * priority order:
  *
  *  1. Hard filter, where achievable: no line of sight to any position in `avoid`. If at
  *     least one candidate qualifies, every candidate that does not is discarded outright
@@ -196,25 +183,22 @@ export interface SpawnPickOptions {
  *     filter is skipped and every candidate stays in play: a hard filter that can reject
  *     every candidate is not a filter a caller can use, so falling through to plain
  *     maximin on the full pool is the deliberate degradation.
- *  2. Among the survivors, greedy maximin on geodesic distance (BFS cell-steps through
- *     walkable cells, `geodesicDistances` above, respecting walls -- not Euclidean: two
- *     cells either side of a wall are far apart in play, and two Euclidean-distant cells
- *     down one open lane are not safe from each other). The candidate whose distance to
- *     its nearest `avoid` entry is largest wins. This is an approximation of the true
+ *  2. Among the survivors, greedy maximin on geodesic distance, not Euclidean: two cells
+ *     either side of a wall are far apart in play, and two Euclidean-distant cells down
+ *     one open lane are not safe from each other. This is an approximation of the true
  *     "farthest cell from everything already placed" problem (classic p-dispersion), not
  *     its optimum -- see `versus-spawns.test.ts` for a measured gap on one small fixture
  *     via brute force, and `pickVersusSpawnSet` for the relaxation pass that closes some
  *     of that gap in practice.
- *  3. Geodesic ties broken on Euclidean distance to the nearest `avoid` entry, largest
- *     wins. This is not cosmetic. Geodesic distance saturates at `Infinity` for any cell
- *     in a component `avoid` cannot reach, so on a board whose walls partition it, every
- *     unreachable cell ties at `Infinity` and the positional tie-break below would decide
- *     (measured on arena-02 at 2 players: a cell 2.67 world units from the anchor,
- *     straight through the wall, against 27.49 with this key). Ties still arise constantly
- *     on connected boards too (cell steps are integers), so this key does work on every
- *     board, not only partitioned ones.
- *  4. Remaining ties broken deterministically on (row, col) ascending (`isEarlier`), which
- *     is what keeps the whole ranking a pure function of the grid.
+ *  3. Geodesic ties broken on Euclidean distance. This is not cosmetic. Geodesic distance
+ *     saturates at `Infinity` for any cell in a component `avoid` cannot reach, so on a
+ *     board whose walls partition it, every unreachable cell ties at `Infinity` and the
+ *     positional tie-break below would decide (measured on arena-02 at 2 players: a cell
+ *     2.67 world units from the anchor, straight through the wall, against 27.49 with this
+ *     key). Ties still arise constantly on connected boards too (cell steps are integers),
+ *     so this key does work on every board, not only partitioned ones.
+ *  4. Remaining ties broken on (row, col) ascending, which is what keeps the whole
+ *     ranking a pure function of the grid.
  *
  * `avoid` is world-space `Vec2[]`, not cells, so the same signature serves placement (the
  * spawns already chosen: `pickVersusSpawnSet`, versus-variants.ts) and versus respawn
@@ -249,21 +233,15 @@ export function pickVersusSpawnCell(
       candidates.push({ row: r, col: c });
     }
   }
-  // No candidate: co-locate at the first `avoid` position's cell, or at (0, 0) when
-  // `avoid` is empty, so a truly pathological board still returns a cell rather than
-  // throwing.
   if (candidates.length === 0) return avoidCells[0] ?? { row: 0, col: 0 };
 
   const walls = wallsForQuery(grid, cols, rows, cellSize, legend);
   const avoidDist = avoidCells.map((a) => geodesicDistances(a, walkable, cols, rows));
 
-  // Hull clearance filter (issue #225), ahead of the LOS filter and the maximin
-  // ranking exactly as the issue's own ordering asks ("preserve the existing
-  // line-of-sight and geodesic/maximin quality rules after invalid candidates are
-  // removed"). An emptied pool falls back to the full candidate list -- the same
-  // total-degradation posture as the zero-candidate and no-concealment fallbacks
-  // (never throw mid-match-start); versusSpawnClearanceFailures is the loud half,
-  // and CI-time validation is what keeps advertised combinations off this path.
+  // Hull clearance (issue #225) runs ahead of the LOS filter and the ranking, the order the
+  // issue asks for. An emptied pool falls back rather than throwing mid-match-start, like the
+  // zero-candidate and no-concealment fallbacks; versusSpawnClearanceFailures is the loud
+  // half, and CI-time validation is what keeps advertised combinations off this path.
   const margin = opts.clearanceMargin === undefined ? VERSUS_SPAWN_CLEARANCE_MARGIN : opts.clearanceMargin;
   let eligible = candidates;
   if (margin !== null) {
@@ -308,15 +286,13 @@ export function pickVersusSpawnCell(
 }
 
 /**
- * How many coordinate-ascent rounds `pickVersusSpawnSet` may run. Each round is bounded
- * work and the pass only ever accepts a strict improvement, so the loop terminates on its
- * own; this is a backstop, not the termination argument. When chosen, the pass converged
- * in at most 4 rounds on every shipped (arena, player count) pair, so 8 is roughly double
- * the observed worst case.
+ * A backstop, not the termination argument: the relaxation pass only ever accepts a strict
+ * improvement, so it terminates on its own. When chosen, the pass converged in at most 4
+ * rounds on every shipped (arena, player count) pair, so 8 is roughly double the observed
+ * worst case.
  */
 export const VERSUS_RELAX_ROUNDS = 8;
 
-/** Lexicographic separation score for a whole spawn set: (min geodesic, min Euclidean). */
 function setSeparation(cells: Cell[], walkable: boolean[][], cols: number, rows: number, cellSize: number): [number, number] {
   let minGeo = Infinity;
   let minEuclid = Infinity;
@@ -332,7 +308,6 @@ function setSeparation(cells: Cell[], walkable: boolean[][], cols: number, rows:
   return [minGeo, minEuclid];
 }
 
-/** Strictly better on the lexicographic (geodesic, Euclidean) separation score. */
 function isBetterSeparation(a: [number, number], b: [number, number]): boolean {
   return a[0] !== b[0] ? a[0] > b[0] : a[1] > b[1];
 }
@@ -381,19 +356,12 @@ function anchorCell(cands: Cell[], walkable: boolean[][], cols: number, rows: nu
  * P1's tank there in PASS 1a before relocating it here, which is what keeps tank ids (and
  * therefore every seeded RNG stream keyed on them) identical to a one-player load.
  *
- * Three stages, each earning its place against the measured alternative:
- *
- *  1. Anchor (`anchorCell`) -- an approximate geodesic-diameter endpoint.
- *  2. Greedy chain -- `pickVersusSpawnCell` once per remaining player, each against the
- *     spawns already chosen. Classic farthest-point sampling.
- *  3. Relaxation -- bounded coordinate ascent. Each round re-picks every spawn in turn
- *     against the other `count - 1`, keeping the new cell only if the whole set's
- *     separation strictly improves. Stops as soon as a full round changes nothing.
- *
- * Stage 3 is not polish: greedy farthest-point sampling is anchor-sensitive. Measured
- * over the 15 (shipped arena, player count) pairs when this landed, the chain alone was
- * worse than P1-on-`P` placement on 2 of them; with relaxation it beat that placement on
- * all 15, on both the geodesic and the Euclidean measure, with zero regressions.
+ * After the anchor, a greedy farthest-point chain places the rest, then a bounded
+ * coordinate-ascent relaxation re-picks each spawn against the others. The relaxation is
+ * not polish: greedy farthest-point sampling is anchor-sensitive. Measured over the 15
+ * (shipped arena, player count) pairs when this landed, the chain alone was worse than
+ * P1-on-`P` placement on 2 of them; with relaxation it beat that placement on all 15, on
+ * both the geodesic and the Euclidean measure, with zero regressions.
  *
  * Returns exactly `count` cells, `[0]` being P1's. Degenerate boards degrade rather than
  * throw, inheriting `pickVersusSpawnCell`'s own zero-candidate fallback.
@@ -418,15 +386,12 @@ export function pickVersusSpawnSet(
     }
   }
   if (count <= 0) return [];
-  // No open floor anywhere: the same total, no-throw degradation pickVersusSpawnCell
-  // takes. separateTanks (world.ts) already runs every tick and handles worse overlaps.
   // Distinct objects, not `new Array(count).fill(cell)` -- that fills every slot with one
   // shared reference, and callers treat these as their own to keep.
   if (cands.length === 0) return Array.from({ length: count }, () => ({ row: 0, col: 0 }));
 
-  // The anchor honours the same wall/boundary clearance as every later pick (no
-  // pairwise term -- nothing is placed yet), with the same fall-back-to-unfiltered
-  // degradation when a cramped board leaves nothing eligible.
+  // The same clearance filter as every later pick, minus the pairwise term: nothing is
+  // placed yet.
   const margin = opts.clearanceMargin === undefined ? VERSUS_SPAWN_CLEARANCE_MARGIN : opts.clearanceMargin;
   let anchorCands = cands;
   if (margin !== null) {
@@ -451,7 +416,7 @@ export function pickVersusSpawnSet(
     let changed = false;
     for (let i = 0; i < cells.length; i++) {
       const others = cells.filter((_, j) => j !== i);
-      if (others.length === 0) break; // a 1-player set has nothing to be separated from
+      if (others.length === 0) break;
       const cand = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, others.map((c) => cellCentre(c, cellSize)), opts);
       const next = cells.slice();
       next[i] = cand;
@@ -483,7 +448,6 @@ export function pickVersusSpawnSet(
  */
 export const VERSUS_SPAWN_CLEARANCE_MARGIN = 0.15;
 
-/** Point-to-AABB surface distance: 0 inside, the usual per-axis clamp outside. */
 function wallDistance(p: Vec2, w: Wall): number {
   const dx = Math.max(w.aabb.minX - p.x, p.x - w.aabb.maxX, 0);
   const dy = Math.max(w.aabb.minY - p.y, p.y - w.aabb.maxY, 0);
@@ -491,16 +455,10 @@ function wallDistance(p: Vec2, w: Wall): number {
 }
 
 /**
- * Every hull-clearance violation for already-picked spawn positions, one line per
- * violation (empty = clean) -- the loud half of issue #225, and the default rule
- * behind versus-catalog-rules.ts's `spawn-clearance` seam (issue #312). Callers pass
- * the match-start grid (the variant-applied one -- every real caller already holds
- * exactly that), so "validate clearance against destructible-wall variants as they
- * exist at match start" costs nothing extra: `wallsForQuery` builds intact solids
- * and intact destructibles, and a destructible really does block a hull at the
- * instant of spawning.
- *
- * Deterministic and total: a pure function of its arguments; no throw on any input.
+ * The loud half of issue #225, and the default rule behind versus-catalog-rules.ts's
+ * `spawn-clearance` seam (issue #312). Pass the match-start grid (variant-applied, when a
+ * variant is in play): `wallsForQuery` builds every destructible in it intact, and a
+ * destructible really does block a hull at the instant of spawning.
  */
 export function versusSpawnClearanceFailures(
   grid: readonly string[],

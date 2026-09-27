@@ -8,12 +8,7 @@ import { TANK_KINDS, validateTankDefinitions } from './validate';
 import tankDefsJson from './data/tank-defs.json';
 
 // ---------------------------------------------------------------------------
-// The shipped roster lives in data/tank-defs.json -- one TankDefinition per
-// sim TankKind, validated at load (validate.ts): a bad edit is a boot failure
-// naming the exact path, never a silent stat. The 9-type Wii taxonomy lives
-// untouched in config/reference/ as forward-looking data.
-//
-// Fidelity notes (the JSON cannot carry comments, so they live here):
+// Fidelity notes on data/tank-defs.json (the JSON cannot carry comments, so they live here):
 //  - The classes are not uniform since the 2026-07-31 balance pass (#52): brown
 //    turns and reloads SLOW; teal drives and turns SLOW but reloads FAST; player
 //    and grey are MEDIUM across the board. Brown's stillness is still an
@@ -40,20 +35,16 @@ import tankDefsJson from './data/tank-defs.json';
 
 export const GAME_TANK_DEFS: Record<TankKind, TankDefinition> = validateTankDefinitions(tankDefsJson);
 
-// The tank family on the generic catalog machinery (catalog.ts): resolved once
-// at module load -- pure, deterministic, no per-tick cost. Every gameplay read
-// goes through configFor(kind); no code branches on a kind literal for stats.
 const TANK_CATALOG = createCatalog<TankKind, TankDefinition, ResolvedTankConfig>(
   GAME_TANK_DEFS,
   (kind, defs) => resolveTankConfig(kind, defs, GAME_BALANCE),
 );
 
-/** The resolved runtime config for a tank kind. The one entry point gameplay uses. */
+/** The one entry point gameplay uses for tank stats: no code branches on a kind literal for them. */
 export function configFor(kind: TankKind): ResolvedTankConfig {
   return TANK_CATALOG.get(kind);
 }
 
-/** True when a kind has a given ability. Sugar over configFor(kind).abilities. */
 export function hasAbility(kind: TankKind, ability: TankAbility): boolean {
   return TANK_CATALOG.get(kind).abilities.includes(ability);
 }

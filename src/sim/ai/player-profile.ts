@@ -19,24 +19,14 @@ import { withBotDifficulty, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '.
  * tests (a second headline metric alongside the pacifist harness), for demos (the `autoplay`
  * dev flag in game/loop.ts) and for versus bot slots.
  *
- * Deliberately reuses the geometry/threat-assessment helpers `src/sim/ai/*.ts` already
- * proved out for the enemy AI -- lineOfSight, aimLead, dangerAvoidMove, profileAimSpread,
- * profileHazardSpread -- rather than reimplementing them (see brown.ts/grey.ts/teal.ts,
- * which this mirrors in spirit). What it does not reuse is any of targeting.ts's
- * probabilistic helpers (wanderMove, aimJitter, mineInclination, seekMove's own draws,
- * estimationError): those are pure hashes of `world.seed`, and driving the player through
- * them would make its behaviour a function of the same seed the enemy AI draws from, the
- * coupling pacifist.test.ts's local PRNG exists to avoid. `decidePlayerInput` instead takes
- * its own injected `rnd` stream; `mulberry32` below is exported so the callers that drive
- * this bot share one implementation. Directive B's hazard estimation error rides that same
- * stream, drawn once per hazard-refresh window and held in `PlayerAiState`.
+ * It does not reuse targeting.ts's probabilistic helpers (wanderMove, aimJitter,
+ * mineInclination, seekMove's own draws, estimationError): those are pure hashes of
+ * `world.seed`, and driving the player through them would make its behaviour a function of
+ * the same seed the enemy AI draws from, the coupling pacifist.test.ts's local PRNG exists to
+ * avoid. `decidePlayerInput` instead takes its own injected `rnd` stream.
  */
 
-/**
- * A tiny, fast, deterministic PRNG (mulberry32). NOT `Math.random` and NOT `Date.now` --
- * both are banned in src/sim/ by purity.test.ts, and this module lives there. Seeded
- * explicitly by the caller; same seed, same sequence, forever.
- */
+/** `Math.random` is banned in src/sim/ (purity.test.ts), hence a seeded PRNG. */
 export function mulberry32(seed: number): () => number {
   let a = seed | 0;
   return () => {
@@ -48,50 +38,34 @@ export function mulberry32(seed: number): () => number {
 }
 
 /**
- * The scratch state a real input device would keep between samples: how long a firing
- * solution has been held (mirrors Tank.aimTicks, which the enemy dispatcher owns for
- * enemies but never touches for the player -- see ai/index.ts's decideAi, which routes
- * the player straight to an inert decision) and the current wander heading/countdown.
- *
- * Threaded explicitly by the caller rather than mutated onto `world`: `step()` clones
- * its input and never mutates what it is given (see CLAUDE.md), and decidePlayerInput
- * holds itself to the same rule -- this state is the caller's object, not the sim's.
+ * Caller-owned scratch, because decidePlayerInput never writes to the world (pinned by
+ * player-profile.test.ts's "never writes to the world on ANY branch it can reach"). The enemy
+ * AI keeps the equivalents on the tank -- `Tank.aimTicks`, `Tank.aiIntent`/`aiIntentTicks` --
+ * but ai/index.ts never updates those for the player.
  */
 export interface PlayerAiState {
-  /** Consecutive ticks a firing solution (a visible enemy) has been held. */
+  /** Consecutive live-phase ticks a firing solution (a visible enemy) has been held. */
   aimTicks: number;
-  /** The current wander heading, radians. */
+  /** Radians. */
   wanderHeading: number;
   /** Ticks left before the wander heading (and the mine inclination) are redrawn. */
   wanderTicksLeft: number;
-  /** This window's mine inclination -- drawn once per WANDER_TICKS window, like the AI. */
   mineInclined: boolean;
-  /**
-   * The committed movement heading and its remaining ticks (issue #222), the bot-player
-   * mirror of `Tank.aiIntent`/`aiIntentTicks`. It lives HERE rather than on the tank
-   * because this module is forbidden from writing to the world at all -- see this file's
-   * "never writes to the world on ANY branch it can reach" test -- while `stepAi` writes
-   * the enemy AI's copy straight onto the tank. Same `commitHeading` implementation,
-   * different owner of the state.
-   */
+  /** Issue #222's committed movement heading, fed through the enemy AI's `commitHeading`. */
   intent: Vec2 | null;
   intentTicks: number;
   /**
    * The held hazard snapshot (issue #223), this file's answer to the enemy AI's
    * `perceiveHazards`. The three fields are drawn together and expire together.
    *
-   * It lives in state rather than being re-derived because of the split this module's own
-   * comment describes: the enemy side re-derives its snapshot from a pure hash of
-   * `(world.seed, tank.id, bucket)`, while this bot deliberately does not key on `world.seed`
-   * -- it draws from an injected `rnd` stream, which is linear and cannot be asked what it
-   * said 20 ticks ago. Holding the answer is the only way to give this side the same "one
-   * read per window" property, and #223 requires it: a per-tick draw is the frame-to-frame
-   * noise the issue opens against, not a mistaken judgment.
+   * Held rather than re-derived: the enemy side re-derives its snapshot from a pure hash of
+   * `(world.seed, tank.id, bucket)`, but an injected `rnd` stream is linear and cannot be
+   * asked what it said earlier in the window. #223 requires one read per window: a per-tick
+   * draw is the frame-to-frame noise the issue opens against, not a mistaken judgment.
    */
   hazardTicksLeft: number;
-  /** This window's signed radius-estimation offset, world units. */
+  /** Signed radius-estimation offset, world units. */
   hazardOffset: number;
-  /** This window's awareness delay, whole ticks. */
   hazardDelayTicks: number;
 }
 
@@ -100,19 +74,15 @@ export function createPlayerAiState(rnd: () => number): PlayerAiState {
     aimTicks: 0, wanderHeading: rnd() * Math.PI * 2, wanderTicksLeft: 0, mineInclined: false,
     intent: null, intentTicks: 0,
     // Zero ticks left, so the FIRST call draws rather than acting on a fabricated read.
-    // The two values below are never consumed in that state; they are initialised anyway
-    // because a partially-populated state object is a footgun for the next reader.
     hazardTicksLeft: 0, hazardOffset: 0, hazardDelayTicks: 0,
   };
 }
 
-// Movement-band tuning. The player's own resolved profile (STATIC_BASIC, shared with
-// Brown) is a STATIONARY gunner's tuning -- preferredDistance 10 with minimumDistance 0
-// and retreatChance 0, which a mobile consumer would read as "always close to point-blank,
-// never give ground": exactly the ramming behaviour the issue asks us to avoid. Rather
-// than consume those specific numbers in a context they were never meant for, these
-// mirror teal's MOBILE_MINE_LAYER band (config/data/ai-profiles.json) -- the shipped
-// archetype closest to what a mobile combatant driving itself should look like.
+// Movement band. The player's own resolved profile (STATIC_BASIC, shared with Brown) is a
+// STATIONARY gunner's tuning -- preferredDistance 10 with minimumDistance 0 and retreatChance
+// 0, which a mobile consumer would read as "always close to point-blank, never give ground",
+// i.e. ramming. These copy teal's MOBILE_MINE_LAYER band (config/data/ai-profiles.json)
+// instead: the shipped archetype closest to a mobile combatant driving itself.
 const PLAYER_PREFERRED_DISTANCE = 7.5;
 const PLAYER_MINIMUM_DISTANCE = 4;
 const PLAYER_RETREAT_CHANCE = 0.4;
@@ -141,43 +111,18 @@ const PLAYER_MINE_CHANCE = 0.05;
 
 
 /**
- * Directive A, part 2: whole-map awareness. `assessThreats` is the single bounded per-tick
- * pass over the opponents: one loop, no pairwise term.
- *
- * Carries only what has a real consumer: `engaged` with its `engagedInSight` flag (the one
- * opponent movement, mines, aim and fire all reason about -- issue #893) and `centroid` (the
- * retreat branch's whole-map answer to "which way is actually away"). Add a field only
- * alongside the consumer that needs it: a computed value with no consumer is untestable dead
- * weight, not scaffolding for later.
+ * Directive A, part 2: whole-map awareness from one bounded per-tick pass over the opponents,
+ * with no pairwise term.
  */
 interface ThreatSummary {
-  /**
-   * The one opponent this tick: nearest visible, or nearest outright when none is visible; a
-   * versus bot's committed opponent instead. Every consumer reads this. See `assessThreats`
-   * for why it is not two fields.
-   */
   engaged: Tank | null;
-  /**
-   * Whether `engaged` is the one that can be seen, which is the only thing entitled to a
-   * firing solution. False also when there are no opponents at all.
-   */
   engagedInSight: boolean;
-  /**
-   * Centroid of every opponent's position, or null when there are none. Equal to the engaged
-   * tank's position when there is exactly one opponent, so the retreat that reads it in place
-   * of that position only diverges once a second opponent presses at the same time -- the
-   * case directive A asks the movement band to handle differently.
-   */
   centroid: Vec2 | null;
 }
 
 /**
- * The one opponent this tick, and everything the decision needs to know about it.
- *
  * Movement, the mine gate, aim, the reaction clock and fire all read `engaged`, so the bot
- * cannot drive at one tank while shooting at another (issue #893). Off the bot path it is
- * `nearestVisible ?? nearest`: where an opponent is visible, aim and fire see the nearest
- * visible one; where none is, `engagedInSight` is false and the bot holds fire.
+ * cannot drive at one tank while shooting at another (issue #893).
  *
  * `nearest` is deliberately not exposed. A second opinion available to a caller is how the
  * two derivations #893 fixed grew apart in the first place.
@@ -213,18 +158,15 @@ function assessThreats(world: World, subject: Tank): ThreatSummary {
   // Issue #891: a bot in a versus slot engages the opponent it is committed to, written by
   // `stepAi` one tick ago, rather than re-picking the nearest every tick. `committedOpponent`
   // returns null for anything that is not a bot-driven slot -- a human, and any player tank in
-  // a world built without `WorldForInit.bots` -- so off the bot path the branch below adds no
-  // line-of-sight call and changes no behaviour.
+  // a world built without `WorldForInit.bots`.
   const committed = committedOpponent(world, subject);
   if (committed === null) {
     return { engaged: nearestVisible ?? nearest, engagedInSight: nearestVisible !== null, centroid };
   }
   return {
     engaged: committed,
-    // The committed tank is entitled to a firing solution only if it can actually be seen.
-    // `=== nearestVisible` is the free case; anything else costs one line-of-sight test,
-    // because a commitment is deliberately HELD through a sight break (rule 7) and the tank
-    // it is held to is therefore often not the visible one.
+    // A commitment is deliberately HELD through a sight break (rule 7), so the committed
+    // tank is often not the visible one.
     engagedInSight:
       committed === nearestVisible || lineOfSight(subject.pos, committed.pos, world.walls),
     centroid,
@@ -239,22 +181,8 @@ function blend(toward: Vec2, wander: Vec2): Vec2 {
 }
 
 /**
- * The baseline move when nothing more urgent (a dodge) overrides it: approach the
- * engaged opponent beyond PLAYER_PREFERRED_DISTANCE, retreat-by-draw inside
- * PLAYER_MINIMUM_DISTANCE, wander in the band -- the same three-way shape as
- * targeting.ts's seekMove, reimplemented against the injected `rnd` stream instead of
- * seekMove's world.seed-keyed hash (see the module comment for why).
- *
- * Also redraws the wander heading and the window's mine inclination together, once every
- * WANDER_TICKS ticks -- one cadence for both, rather than a separate clock for each.
- *
- * Directive A, part 2: the retreat branch pulls away from `threats.centroid`, not
- * `threats.engaged.pos` -- retreating from only the opponent you are engaging can walk the
- * player straight at a second one, and the centroid is the whole-map-aware answer to
- * "which way is actually away from the pressure" (see ThreatSummary's doc comment). The
- * approach band and the mine gate read `threats.engaged` directly instead, since driving at,
- * shooting at or mining one specific opponent is the thing issue #893 made them agree about;
- * the mass is a retreat question only.
+ * targeting.ts's seekMove, reimplemented against the injected `rnd` stream (see the module
+ * comment). Also redraws the window's mine inclination, on the wander cadence.
  */
 function seekLikeMove(world: World, player: Tank, rnd: () => number, state: PlayerAiState, threats: ThreatSummary): Vec2 {
   if (state.wanderTicksLeft <= 0) {
@@ -281,29 +209,12 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
   }
 
   if (dir === null || vlen(dir) < VEC_EPS) return wander;
-  // The shared horizon probe (issue #224), so the bot player and the enemy AI vet a seek
-  // heading against identical geometry over an identical horizon.
   return wallBlocksPath(world, player, dir, AI_PATH_HORIZON_TICKS, speed) ? wander : dir;
 }
 
 /**
- * Deterministic in `world`, `playerId`, `rnd` and the caller's own `state`: same inputs,
- * same InputState, every time. `world` is read, never mutated -- the scratch this function
- * updates lives in the caller-owned `state`, not on `world.tanks` -- so it holds to the same
- * "never mutate what you are given" rule `step()` itself follows for `world`.
- *
- * Behaviour, in priority order: dodge incoming shells / flee live mines (dangerAvoidMove,
- * the same shared geometry the enemy AI uses, fed a perceived radius/corridor and a
- * back-dated hazard picture drawn from `rnd` and held for the profile's hazard-refresh
- * window, never `world.seed`, so the player can misjudge a hazard exactly as an enemy can,
- * through its own stream rather than the shared one); otherwise keep a sensible distance
- * from the engaged opponent rather than ramming, retreating from the whole-map opponent
- * centroid once a second opponent is in play (see ThreatSummary); aim at the engaged
- * opponent while it is in sight, jittered by the player's own resolved profile's aimAccuracy
- * (STATIC_BASIC: 0.55, the same as Brown and below Grey's 0.6); fire only once that solution
- * has been held for the profile's own reactionTime (0.8s), so the player does not snap to a
- * frame-perfect shot the instant an enemy peeks a corner; occasionally lay a mine when an
- * enemy is close enough for one to matter.
+ * Deterministic in `world`, `playerId`, `rnd` and the caller's own `state`. `world` is read,
+ * never mutated; the scratch this function updates lives in `state`.
  *
  * With no tank in sight, this does not aim at or fire on a destructible wall in the way: a
  * shell never destroys one (only a mine blast does, mines.ts's `applyBlast`), so spending a
@@ -317,11 +228,9 @@ export function decidePlayerInput(
   playerId: number,
   rnd: () => number,
   state: PlayerAiState,
-  // Trailing and defaulted (issue #267): `normal` is the exact no-op, and
-  // `withBotDifficulty` returns its input unchanged for it, so every call site that omits it
-  // -- the autoplay dev flag, scenarios.ts, the measurement harnesses except
-  // bot-difficulty.measure.test.ts (which passes presets to compare them) -- resolves the
-  // authored config unchanged. In the game, only a versus bot slot passes anything else.
+  // Issue #267: `withBotDifficulty` returns its input unchanged for the default, so a call
+  // site that omits this resolves the authored config. In the game, only a versus bot slot
+  // passes anything else.
   difficulty: BotDifficulty = DEFAULT_BOT_DIFFICULTY,
 ): InputState {
   const player = world.tanks.find((t) => t.id === playerId);
@@ -329,21 +238,15 @@ export function decidePlayerInput(
     return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
   }
 
-  // The authored profile, scaled on its COMPETENCE axes only. Applied here rather than at
-  // each read site because `profileAimSpread`, `profileHazardSpread` and the reaction gate
-  // all derive from `cfg.ai`, so one substitution at the source reaches every one of them
-  // and no future read can miss it.
+  // Scaled here rather than at each read site because `profileAimSpread`,
+  // `profileHazardSpread` and the reaction gate all derive from `cfg.ai`, so one substitution
+  // at the source reaches every one of them and no future read can miss it.
   const cfg = withBotDifficulty(configFor(player.kind), difficulty);
 
-  // The one bounded per-tick pass (directive A, part 2) -- computed once and read by
-  // movement, targeting and the mine gate below.
   const threats = assessThreats(world, player);
 
-  // Directive B, widened to issue #223's whole hazard picture: the bot's own perceived
-  // hazard state, drawn from the injected `rnd` stream (never `world.seed` -- see the
-  // module comment) and held for `hazardRefreshTime`, the same competence axis the enemy
-  // side buckets on. Every mine/dodge gate below reads the same window's belief, exactly as
-  // grey.ts/teal.ts reuse one `perceiveHazards` snapshot across their sites.
+  // Directive B / issue #223: one perceived hazard read per `hazardRefreshTime` window, so
+  // every mine/dodge gate below reads the same window's belief.
   //
   // This is the difficulty-bearing site. `withBotDifficulty` is applied in this file and
   // nowhere else, because a versus bot fills a player slot -- campaign enemies resolve
@@ -363,20 +266,17 @@ export function decidePlayerInput(
   const fleeRadius = AI_MINE_FLEE_RADIUS + hazardOffset;
   const dangerCorridor = DANGER_CORRIDOR + hazardOffset;
   const tacticalRadius = AI_MINE_TACTICAL_RADIUS + hazardOffset;
-  // The world this bot BELIEVES it is looking at: shells back-dated by its awareness delay,
-  // mines it has not noticed yet absent. Identical to `world` at a zero delay, and used for
-  // the hazard reads only -- targeting, line of sight and the movement band below still
-  // read the real world, because difficulty may not reach those.
+  // The world this bot BELIEVES it is looking at, for the hazard reads only -- targeting,
+  // line of sight and the movement band below still read the real world, because difficulty
+  // may not reach those.
   const seen = backdateHazards(world, state.hazardDelayTicks);
 
-  // ---- Movement: dodge overrides the band/wander baseline, never the reverse. ----
+  // ---- Movement ----
   const avoid = dangerAvoidMove(seen, player, fleeRadius, dangerCorridor);
   const candidate = avoid ?? seekLikeMove(world, player, rnd, state, threats);
-  // The commitment layer (issue #222), shared with the enemy AI via `commitHeading`. A bot
-  // driving a player slot reaches the same `dangerAvoidMove` geometry and so would show the
-  // same tick-to-tick reversal; holding the heading here keeps a versus bot from jittering.
-  // The held state is this caller's `PlayerAiState`, never the world (see that field's own
-  // comment).
+  // Issue #222: a bot driving a player slot reaches the same `dangerAvoidMove` geometry as
+  // the enemy AI and so would show the same tick-to-tick reversal; holding the heading keeps a
+  // versus bot from jittering.
   const avoidKind = avoid === null
     ? null
     : incomingThreats(seen, player, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
@@ -388,20 +288,15 @@ export function decidePlayerInput(
   state.intentTicks = committed.nextIntentTicks;
   const move = committed.move;
 
-  // ---- Targeting: the opponent already resolved for this tick. ----
-  // Aim and fire read the same `engaged` tank movement does (issue #893), and only while it
-  // is in sight.
+  // ---- Targeting ----
   const target: Tank | null = threats.engagedInSight ? threats.engaged : null;
 
-  // No tank in sight: hold the current turret heading rather than snapping to some
-  // default or firing on a wall (see this function's own doc comment for why not a wall).
   let aimPoint: Vec2;
   const hasSolution = target !== null;
   if (target) {
     const targetVel = driveVelocity(target);
     const lead = aimLead(player.pos, target.pos, targetVel, cfg.weapon.speed);
-    // Jitter only the live solution, exactly as brown.ts/grey.ts/teal.ts document: a
-    // held/passthrough angle must not drift with nothing to aim at.
+    // Jitter only the live solution: a held angle must not drift with nothing to aim at.
     const jitter = (rnd() * 2 - 1) * profileAimSpread(cfg);
     const dir = fromAngle(lead + jitter);
     aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
@@ -410,11 +305,7 @@ export function decidePlayerInput(
     aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
   }
 
-  // The reaction clock: same shape as the enemy dispatcher's (ai/index.ts) aimTicks/
-  // reactionTime gate, applied here instead since the player never passes through
-  // decideAi/stepAi (idleDecision short-circuits kind === 'player').
-  //
-  // Gated on the live phase for the same reason and by the same rule as the enemy clock
+  // The reaction clock, mirroring the enemy one in ai/index.ts, including its live-phase gate
   // (issue #367): a countdown is a phase in which nobody may fire, so time spent in it
   // must not satisfy a reaction requirement. world.ts already refuses the shot itself
   // during the countdown, which is why the clock needs its own gate: without it the
@@ -424,13 +315,11 @@ export function decidePlayerInput(
   const reactionTicks = Math.round(cfg.ai.reactionTime * TICK_HZ);
   const fire = hasSolution && state.aimTicks >= reactionTicks;
 
-  // ---- Mines: only while not dodging, off cooldown, and actually near an enemy --
-  // mirrors grey.ts/teal.ts's mineThreatensPlayer gate with the roles swapped (there is
-  // no "mineThreatensNearestEnemy" in targeting.ts to reuse: that helper is hardcoded to
-  // the player as the threatened party). This is oracle-knowledge site #5 (directive B):
-  // an independently written parallel to targeting.ts's mine gates, not shared code, so
-  // it draws its own perceived radii above (`fleeRadius`, `tacticalRadius`) rather than
-  // calling estimationError (world.seed-keyed, enemy-only).
+  // ---- Mines ----
+  // Mirrors grey.ts/teal.ts's mineThreatensPlayer gate with the roles swapped; that helper is
+  // hardcoded to the player as the threatened party, so there is nothing to reuse. This is
+  // oracle-knowledge site #5 (directive B), so it uses the perceived radii above rather than
+  // estimationError (world.seed-keyed, enemy-only).
   //
   // Capped at one of the player's own active mines, not cfg.mineCapacity (2): at the
   // original 0.3 chance the cap cut arena-02's self-mine losses to 9 of 31 (see
@@ -439,16 +328,13 @@ export function decidePlayerInput(
   // not) -- the same margin dangerAvoidMove flees to, so a mine is never dropped somewhere
   // the player's own (possibly mistaken) read says it would have to dodge again.
   const nearest = threats.engaged;
-  // `seen`, not `world`: this is a hazard read, so it goes through the same believed picture
-  // the dodge above did. A mine the bot has not noticed cannot be a reason not to lay one.
+  // `seen`, not `world`: a mine the bot has not noticed cannot be a reason not to lay one.
   const nearLiveMine = seen.mines.some(
     (m) => !m.detonated && vdist(player.pos, m.pos) <= fleeRadius,
   );
-  // Also requires the enemy to be at a comfortable range, not point-blank -- a plausible
-  // objection (don't mine while being pressed at close quarters) rather than a measured
-  // fix: at 0.3 chance it left arena-02's share roughly where the cap alone did (11 vs 9
-  // of 31). Kept on the same principle dangerAvoidMove already applies, not because it
-  // was shown to reduce the residual named in PLAYER_MINE_CHANCE's comment.
+  // The PLAYER_MINIMUM_DISTANCE floor (no mining while pressed at close quarters) is a
+  // plausible objection rather than a measured fix: at 0.3 chance it left arena-02's share
+  // roughly where the cap alone did (11 vs 9 of 31).
   const mine =
     hasAbility(player.kind, TankAbility.MINE_LAYER) &&
     state.mineInclined &&

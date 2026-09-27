@@ -1,24 +1,12 @@
 // ---------------------------------------------------------------------------
-// The generic entity-catalog machinery: a definition table keyed by id, resolved
-// once at module load through a supplied resolver, then read through `get`.
-//
-// This is the shape every entity family shares -- tanks today (definitions +
-// balance classes -> ResolvedTankConfig), walls (definitions resolved by
-// identity, no balance classes yet), arenas, campaign levels and versus-catalog
-// entries (validated JSON, also resolved by identity), and whatever comes next
-// (power-ups, bosses, turrets, destructibles). A new family supplies its
-// Definition type, its Resolved type, and a pure resolver; the catalog supplies
-// resolve-once semantics and the keyed accessor.
-//
-// Pure by construction: definitions in, resolved plain objects out, nothing
-// imported. Resolution happens at module load, never per tick, so the sim's
-// hot path only ever does a record lookup.
+// The shared catalog every entity family rides (tanks, walls, arenas, campaign levels,
+// versus-catalog entries): a new family supplies its Definition type, its Resolved type
+// and a pure resolver rather than its own plumbing. Resolution happens once at module
+// load, never per tick, so the sim's hot path only ever does a record lookup.
 // ---------------------------------------------------------------------------
 
 export interface EntityCatalog<K extends string, D, R> {
-  /** The raw definitions, exposed for tests and tooling. */
   readonly defs: Record<K, D>;
-  /** The resolved runtime config for one entity id. */
   get(key: K): R;
 }
 

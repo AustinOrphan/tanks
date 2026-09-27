@@ -11,17 +11,11 @@ export function accelSlew(
   // back, which reads as a wobble rather than a stop.
   //
   // The velocity it discards is bounded by vMax, not by aMax (turret-accel.test.ts pins
-  // this). vStop caps the speed at sqrt(2*aMax*err) only once the velocity has settled to
-  // vDes: if the target jumps behind a turret already travelling fast, nv is still most of
-  // the old speed while err is small and the opposite sign, so this fires with a large
-  // velocity and zeroes it. Observed in the ai-tracking gallery moment: the turret arrives
-  // on a target 1.11 degrees behind it while carrying 1.82 degrees/tick.
-  //
-  // Kept anyway, and the residual is measured rather than argued away: over 60 seeds x 2
-  // arenas this path is most of what remains in the abrupt-change column, which still reads
-  // 0.06% (brown) / 0.24% (grey) / 0.44% (teal) of ticks against 0.84% / 1.84% / 2.85% for
-  // the bang-bang slew. Arriving is worth one bounded discontinuity; overshooting and
-  // returning would be a visible wobble on every sweep instead of a rare one.
+  // this): if the target jumps behind a turret already travelling fast, nv is still most of
+  // the old speed while err is small and the opposite sign, so this fires and zeroes a large
+  // velocity. Kept anyway: over 60 seeds x 2 arenas abrupt changes stay at 0.06% (brown) /
+  // 0.24% (grey) / 0.44% (teal) of ticks against 0.84% / 1.84% / 2.85% for the bang-bang
+  // slew. One bounded discontinuity is better than a wobble on every sweep.
   if (Math.abs(nv) >= Math.abs(err)) return { angle: target, vel: 0 };
   return { angle: current + nv, vel: nv };
 }

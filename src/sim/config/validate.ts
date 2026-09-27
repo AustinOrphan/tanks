@@ -16,23 +16,17 @@ import type { VersusCatalogEntry } from './versus-catalog-types';
 import { VERSUS_MODES, VERSUS_PLAYER_COUNTS, VERSUS_SPAWN_POLICIES, VERSUS_VARIANT_KINDS } from './versus-catalog-types';
 
 // ---------------------------------------------------------------------------
-// Runtime validation for the JSON entity data (data/tank-defs.json,
-// data/ai-profiles.json, data/arenas.json, data/campaign.json,
-// data/versus-catalog.json).
-//
 // JSON enters through `as`-free `unknown` and leaves fully typed, or the module
 // throws at load -- a bad edit is a boot failure naming the exact path, never a
 // silently-undefined stat downstream. This is the trade for moving the tables
 // out of TypeScript: the compiler checked enum membership and key completeness
-// for free; this module re-checks them at runtime, and its own tests carry the
-// negative controls that prove each check can actually fail
-// (validate.test.ts -- a guard is worth what its own tests prove).
+// for free; this module re-checks them at runtime, and validate.test.ts carries
+// the negative controls that prove each check can actually fail.
 // ---------------------------------------------------------------------------
 
 /**
- * The canonical runtime list of tank kinds. `satisfies` keeps every entry a
- * real TankKind; the MissingKind check below makes adding a TankKind member
- * without listing it here a compile error that names the missing kind.
+ * The MissingKind check below makes adding a TankKind member without listing it here a
+ * compile error that names the missing kind.
  */
 export const TANK_KINDS = ['player', 'brown', 'grey', 'teal', 'olive', 'green', 'yellow'] as const satisfies readonly TankKind[];
 type MissingKind = Exclude<TankKind, (typeof TANK_KINDS)[number]>;
@@ -52,40 +46,30 @@ function num(file: string, path: string, v: unknown): number {
   return v;
 }
 
-/** Counts and grid coordinates (caps, bounce budgets, cells): whole and non-negative. */
 function nonNegInt(file: string, path: string, v: unknown): number {
   const n = num(file, path, v);
   if (!Number.isInteger(n) || n < 0) fail(file, path, `must be a non-negative integer, got ${n}`);
   return n;
 }
 
-/** Durations in seconds: finite and never negative, but genuinely unbounded above. */
 function nonNegative(file: string, path: string, v: unknown): number {
   const n = num(file, path, v);
   if (n < 0) fail(file, path, `must be non-negative, got ${n}`);
   return n;
 }
 
-/**
- * Durations in seconds that must not be zero: unbounded above like `nonNegative`, but the
- * sim either divides by them or scales them by a multiplier that cannot improve on zero.
- * `positiveUnitInterval` makes the same exclusion for values that are also capped at 1;
- * these are spans, so they are not.
- */
 function strictlyPositive(file: string, path: string, v: unknown): number {
   const n = num(file, path, v);
   if (!(n > 0)) fail(file, path, `must be strictly positive, got ${n}`);
   return n;
 }
 
-/** Chances, accuracies and weights: the sim reasons about these as [0, 1]. */
 function unitInterval(file: string, path: string, v: unknown): number {
   const n = num(file, path, v);
   if (n < 0 || n > 1) fail(file, path, `must be within [0, 1], got ${n}`);
   return n;
 }
 
-/** As unitInterval but excluding 0 -- for values the sim divides by. */
 function positiveUnitInterval(file: string, path: string, v: unknown): number {
   const n = unitInterval(file, path, v);
   if (n === 0) fail(file, path, `must be strictly positive (the sim divides by it)`);
@@ -116,7 +100,6 @@ function cssHexColor(file: string, path: string, v: unknown): string {
   return s;
 }
 
-/** The exact key set: every expected key present, no unknown keys. */
 function exactKeys(file: string, path: string, obj: Record<string, unknown>, expected: readonly string[]): void {
   for (const k of expected) {
     if (!(k in obj)) fail(file, path, `is missing required entry "${k}"`);
@@ -207,10 +190,8 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       reactionTime: num(file, `${profile}.reactionTime`, p.reactionTime),
       // Strictly positive because `hard` scales it down (bot-difficulty.ts), and a
       // multiplier cannot improve on zero -- an awarenessDelay authored at 0 would make
-      // `hard` identical to `normal` on this axis, which is issue #223's monotonicity
-      // criterion failing silently at load rather than loudly. The resolved value stays
-      // nonzero at every preset via MIN_COMPETENCE_AWARENESS_DELAY; this guard is about
-      // what may be authored.
+      // `hard` identical to `normal` on this axis, issue #223's monotonicity criterion
+      // failing silently.
       awarenessDelay: strictlyPositive(file, `${profile}.awarenessDelay`, p.awarenessDelay),
       // Signed on purpose, unlike every other field here: a margin is extra clearance, and
       // a negative one is a profile that cuts hazard corners. Difficulty composes over it
@@ -229,17 +210,11 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // negative countdown -- which never satisfies `ticks > 0`, silently disabling the
       // commitment for that profile instead of failing loudly at load.
       commitmentTime: nonNegative(file, `${profile}.commitmentTime`, p.commitmentTime),
-      // Same reason commitmentTime is guarded: holdAimFor re-arms to
-      // Math.round(aimHoldTime * TICK_HZ), and a negative span would re-arm to a negative
-      // countdown that never satisfies holdAim's `ticks > 0`, silently disabling the hold.
+      // The same guard for the same reason: holdAimFor, tealDecision and commitTarget each
+      // re-arm to Math.round(span * TICK_HZ), and a negative span re-arms to a countdown
+      // that is already lapsed, silently disabling the hold or commitment.
       aimHoldTime: nonNegative(file, `${profile}.aimHoldTime`, p.aimHoldTime),
-      // Same reason again: tealDecision re-arms to Math.round(shotCommitmentTime * TICK_HZ),
-      // and a negative span would re-arm to a negative countdown that is already lapsed.
       shotCommitmentTime: nonNegative(file, `${profile}.shotCommitmentTime`, p.shotCommitmentTime),
-      // Same reason a fourth time: commitTarget re-arms to
-      // Math.round(targetCommitmentTime * TICK_HZ), and a negative span would re-arm to a
-      // countdown that never satisfies `ticks > 0` -- rule 6's re-evaluation would run every
-      // tick, silently disabling the commitment.
       targetCommitmentTime: nonNegative(file, `${profile}.targetCommitmentTime`, p.targetCommitmentTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),
@@ -267,9 +242,9 @@ function posInt(file: string, path: string, v: unknown): number {
 }
 
 /**
- * The geometry half: dimensions, legend, grid, spawn counts. Split out from
- * validateArenas so the sandbox -- which generates a bare Arena programmatically
- * and has no id/notes/claims -- can be held to the same structural bar.
+ * Split out from validateArenas so the sandbox -- which generates a bare Arena
+ * programmatically and has no id/notes/claims -- can be held to the same structural bar
+ * (sandbox.test.ts).
  */
 export function validateArenaShape(raw: unknown, file: string, path: string): ArenaShape {
   if (!isRecord(raw)) fail(file, path, 'must be an object');
@@ -359,10 +334,6 @@ function validateClaim(file: string, path: string, v: unknown, shape: ArenaShape
     case 'lane': {
       const from = cell(file, `${path}.from`, v.from, shape);
       const to = cell(file, `${path}.to`, v.to, shape);
-      // A vacuous lane (from === to) reads "open" in both phases forever: the same
-      // cell is always in line of sight of itself, whatever the walls do. Reject it
-      // at load rather than ship a claim that can never fail (docs/agent/testing-and-review.md:
-      // "Every assertion must be able to fail.").
       if (from[0] === to[0] && from[1] === to[1]) {
         fail(file, path, `has identical "from" and "to" [${from}] -- a lane like that is always "open" and can never fail`);
       }
@@ -448,11 +419,9 @@ const VERSUS_CATALOG_FIELDS = [
 ] as const;
 
 /**
- * The dedicated VS arena catalog (issue #270) -- see versus-catalog-types.ts for
- * the contract's semantics. Schema-only here, the same posture as every other
- * family: geometry promises (declared support, connectivity, variants) are proven
- * separately by `versus-catalog-rules.ts`, because they need `loadArena` and this
- * module deliberately imports no sim machinery.
+ * Schema-only (issue #270): geometry promises (declared support, connectivity, variants)
+ * are proven separately by `versus-catalog-rules.ts`, because they need `loadArena` and
+ * this module deliberately imports no sim machinery.
  *
  * `id: 'random'` is rejected because the setup pane uses the literal string
  * `'random'` as its draw-for-me sentinel (`VersusConfig.arenaId`,

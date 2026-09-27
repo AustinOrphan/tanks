@@ -1,7 +1,4 @@
 /**
- * Maximal-rectangle decomposition of a solid-cell mask: horizontal runs per row, then
- * runs with identical extent stacked vertically.
- *
  * Canonical — the same region yields the same rectangles whatever cell size expressed
  * it, which is the whole point: resolveWalls and bankShot both read the wall array, so
  * a wall's slicing would otherwise leak into collision and aiming.
@@ -12,11 +9,10 @@
  * merging them would fuse a barrier the level breaches piecemeal.
  *
  * Shared by `arena.ts` (loadArena) and `versus-spawns.ts` (`wallsForQuery`) so the two
- * wall builds cannot diverge: a cross-check test could only make divergence detectable,
- * where one shared module makes it impossible. Zero dependencies by construction (plain
- * arrays and numbers in, plain tuples out), which is what makes it safe for both to
- * import: `versus-spawns.ts` could not import from `arena.ts` without closing a cycle
- * (`arena.ts` already imports `versus-spawns.ts`), and a leaf module cannot introduce one.
+ * wall builds cannot diverge. Zero dependencies by construction, which is what makes it
+ * safe for both to import: `versus-spawns.ts` could not import from `arena.ts` without
+ * closing a cycle (`arena.ts` already imports `versus-spawns.ts`), and a leaf module
+ * cannot introduce one.
  */
 export function mergeSolidRuns(mask: boolean[][], cols: number, rows: number): [number, number, number, number][] {
   const runs: { r: number; c0: number; c1: number }[] = [];

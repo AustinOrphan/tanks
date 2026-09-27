@@ -12,43 +12,27 @@ import { roundPhase } from './round';
 import { pickVersusSpawnCell } from './versus-spawns';
 
 /**
- * One simulated match, as of one tick. Two kinds of field live here, and the split is a
- * contract rather than a tidiness (issue #472):
- *
- *  - `rules` is every policy fixed for the world's life -- mode, friendly fire, mine
- *    trigger, AI perception, the corpse/muzzle switches, the coop model, the arena grid.
- *    Resolved once by `resolveWorldRules` (rules.ts) before the world exists, frozen, and
- *    carried through `cloneWorld` as one reference, so a copy path cannot forget an
- *    individual rule (see cloneWorld).
- *  - `tick`, `nextId`, `tanks`, `bullets`, `mines`, `blasts`, `walls`, `status`, `lives`
- *    and `roundStartTick` are the mutable snapshot, which `cloneWorld` deep-copies field
- *    by field and a tick's stages write to.
- *  - `seed` and `spawns` are fixed for the world's life too, and deliberately not in
- *    `rules`: neither is a policy (`seed` is the entropy key; `spawns` is immutable arena
- *    data that `resetArena` and `stepRespawns` only ever read), and both are required
- *    and typechecked already, so a clone cannot forget them the way it could an optional
- *    rule. `seed` is `readonly` so the claim is enforced the way `rules` is; `spawns`
- *    stays a deep-copied array (moving it was outside #472's scope). See WorldRules's
- *    own doc comment.
+ * The field split is a contract (issue #472). `rules` holds every policy fixed for the
+ * world's life: resolved once, frozen, and passed through `cloneWorld` as one reference,
+ * so no copy path can forget an individual rule. `seed` and `spawns` are fixed too but
+ * are not policy, and as required fields a clone cannot drop them the way it could an
+ * optional rule. `spawns` is only ever read (by resetArena and stepRespawns) yet, unlike
+ * `seed`, is not `readonly` but deep-copied: moving it was outside #472's scope.
+ * Everything else is the mutable snapshot a tick's stages write to.
  */
 export interface World {
   tick: number;
   nextId: number;
   readonly seed: number;
-  /** The immutable match rules. See WorldRules (rules.ts) for every field and its default. */
   readonly rules: WorldRules;
   tanks: Tank[];
   bullets: Bullet[];
   mines: Mine[];
-  /** Detonations in flight. Empty except in the ~10 ticks after a mine goes off. */
   blasts: Blast[];
   walls: Wall[];
   spawns: Spawn[];
   status: 'playing' | 'win' | 'lose';
   lives: number;
-  // Tick at which the current round (countdown + grace + live) began. Reset by
-  // resetArena on every whole-arena restart so the opening-phase protection applies
-  // after each one, not just at game start. See src/sim/round.ts's roundPhase().
   roundStartTick: number;
 }
 
@@ -58,12 +42,9 @@ export interface StepResult {
 }
 
 /**
- * The world-creation boundary. The rule keys of `init` (every `WorldRulesInit` field,
- * all optional) are resolved into `World.rules` here, through `resolveWorldRules`, and
- * nowhere later: a `World` this function returns carries a complete, frozen rule set,
- * so no consumer downstream needs a fallback of its own. The init stays flat rather
- * than nesting a `rules:` object so every existing caller -- createWorldFor, the
- * sandbox, the gallery, every test -- keeps its shape.
+ * Rules are resolved here and nowhere later, so no consumer downstream needs a fallback
+ * of its own. `init` stays flat rather than nesting a `rules:` object so every existing
+ * caller (createWorldFor, the sandbox, the gallery, every test) keeps its shape.
  */
 export function createWorld(init: {
   walls: Wall[];
@@ -102,10 +83,8 @@ function cloneTank(t: Tank): Tank {
     pos: { ...t.pos },
     desiredMove: { ...t.desiredMove },
     activeMineIds: [...t.activeMineIds],
-    // Deep-copied like pos/desiredMove above, not left to the spread. Nothing mutates a
-    // remembered contact in place today -- ai/target-memory.ts always assigns a fresh
-    // object -- but every other object field here is copied, and a shallow one would make
-    // the first in-place edit alias the memory across every clone of the world.
+    // Nothing edits this in place today (ai/target-memory.ts assigns a fresh object), but a
+    // shallow copy would make the first in-place edit alias it across every clone.
     ...(t.aiLastSeenPos ? { aiLastSeenPos: { ...t.aiLastSeenPos } } : {}),
   };
 }
@@ -115,11 +94,10 @@ export function cloneWorld(world: World): World {
     tick: world.tick,
     nextId: world.nextId,
     seed: world.seed,
-    // The rules travel as one reference, never re-resolved and never enumerated: the
-    // object is frozen (rules.ts), so sharing it across every tick's clone is safe, and a
-    // rule added later rides along with no line here to forget. Enumerating them is
-    // exactly how #471 lost `aiTargetPerception` -- an optional field, omitted from this
-    // list, read back through a `?? 'full'` that made the loss look like the default.
+    // One reference, never re-resolved or enumerated: the object is frozen (rules.ts), so
+    // sharing it is safe, and a rule added later needs no line here. Enumerating is how
+    // #471 lost `aiTargetPerception`, read back through a `?? 'full'` that looked like the
+    // default.
     rules: world.rules,
     status: world.status,
     lives: world.lives,
@@ -156,22 +134,12 @@ export function stepMovement(world: World, dt: number): void {
 }
 
 /**
- * Drives one named player tank from one input. applyPlayerInput and applyPlayerInputs
- * share this body rather than each holding a copy: the single-player behaviour it encodes
- * is pinned by the golden trace (tools/baseline/trace.test.ts), and a second copy would
- * not be.
- *
- * The caller decides which tank; nothing here searches for one.
+ * Shared by applyPlayerInput and applyPlayerInputs so the golden trace
+ * (tools/baseline/trace.test.ts) pins the one copy both use.
  */
 function driveTank(world: World, player: Tank, input: InputState, events: SimEvent[]): void {
-  // The player's weapon (bullet type + fire cadence) and abilities come from the
-  // same resolved config as every enemy -- no 'normal'/cooldown literals here.
   const pcfg = configFor(player.kind);
 
-  // Round phases (see round.ts): countdown blocks movement entirely (pure orientation --
-  // aim only); grace allows movement but still blocks fire/mines; live is unrestricted.
-  // Cooldowns keep ticking through both phases regardless (simpler, and harmless since
-  // fire/mine are gated below anyway).
   const phase = roundPhase(world);
 
   // Input crosses the boundary from the impure world (a mouse ray unprojected
@@ -184,10 +152,8 @@ function driveTank(world: World, player: Tank, input: InputState, events: SimEve
       : { x: 0, y: 0 };
   player.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : move;
 
-  // Turret angle always updates, even during countdown: aiming is the whole point of
-  // that phase (spec: "you can see and aim, but can't shoot or move"). It turns at a
-  // finite rate rather than snapping instantly (slewAngle, types.ts) -- see
-  // PLAYER_TURRET_TURN_RATE's comment in constants.ts.
+  // Aim updates in every phase: aiming is the countdown's whole point (spec: "you can see
+  // and aim, but can't shoot or move").
   // `!== 0` is true for NaN, so without the finiteness checks an unlaid-out canvas
   // (screenToGround divides by a zero-width rect) would slew the turret to NaN permanently.
   const aimDir = vsub(input.aim, player.pos);
@@ -198,34 +164,17 @@ function driveTank(world: World, player: Tank, input: InputState, events: SimEve
   if (player.fireCooldown > 0) player.fireCooldown -= 1;
   if (player.mineCooldown > 0) player.mineCooldown -= 1;
 
-  // `!isActionLocked` -- spawn protection's fire/mine lockout (types.ts). This is the
-  // one place every kind==='player' tank's fire/mine input is consumed, human or bot:
-  // a bot-claimed slot's InputState (ai/player-profile.ts's decidePlayerInput, wired in
-  // game/loop.ts) arrives here through the exact same applyPlayerInputs -> driveTank
-  // path a human's does, so gating here covers both without a second gate anywhere
-  // else. Deliberately not the per-world round countdown/grace (`phase`, just above) --
-  // that already blocks every tank uniformly; this is per-tank, reusing the freshly
-  // respawned tank's own shieldUntilTick rather than a second timer. Movement and aim
-  // above are untouched: the directive is fire/mine only.
+  // Spawn protection locks fire and mines only, never movement or aim. A bot-claimed
+  // slot's input (ai/player-profile.ts's decidePlayerInput) reaches here through the same
+  // applyPlayerInputs path a human's does, so this one gate covers both.
   const canAct = phase === 'live' && !isActionLocked(player, world.tick);
 
   if (canAct && input.fire && player.fireCooldown <= 0) {
-    // A shot refused by the shell cap costs the cooldown anyway (issue #356).
-    //
-    // Two things follow from it, and the second is the reason. Mechanically, a refusal that
-    // left the cooldown at zero would re-attempt every tick while the trigger is held at the
-    // cap: the `fire-blocked` cue could fire 60 times a second against a real shot's 2.5
-    // (`cooldownSeconds` 0.4), and any cue attached to it would need a rate limiter of its
-    // own. Charged, a refusal is paced by the same clock a real shot is, so it cannot outrun
-    // one.
-    //
-    // And it gives the rule teeth: spraying while every shell is still in the air costs
-    // the same beat a real shot costs, so paying attention to how many you have out there is
-    // worth something. That is a deliberate, small punishment, not an accident of the fix.
-    //
-    // Only the cap refusal pays. A shot held because a teammate crossed the lane, because the
-    // round has not started, or because the tank is dead is not the shooter's doing, and
-    // `dispatch.test.ts` pins that those leave the cooldown alone.
+    // A shot refused by the shell cap still costs the cooldown (issue #356). Uncharged, a
+    // trigger held at the cap would retry every tick and fire the `fire-blocked` cue 60
+    // times a second; charged, a refusal is paced like a real shot. It is also a deliberate
+    // small punishment for spraying with every shell in the air. No other refusal pays: it
+    // is not the shooter's doing. Pinned in cap-refusal-cooldown.test.ts.
     const fired = spawnBullet(world, player.id, player.turretAngle, pcfg.weapon.bulletType, events);
     if (fired || shellCapReached(world, player.id)) {
       player.fireCooldown = pcfg.weapon.fireCooldown;
@@ -240,24 +189,14 @@ function driveTank(world: World, player: Tank, input: InputState, events: SimEve
 }
 
 /**
- * Applies one input per player-kind tank (human or bot-driven), pairing `inputs[i]` with
- * the i-th `kind === 'player'` tank in tank-array order.
+ * Three decisions, each pinned in step-inputs.test.ts:
  *
- * Three rules, each with a test in step-inputs.test.ts, because each is a decision and
- * not a consequence:
- *
- *  - The pairing indexes over every player tank, alive or not. A dead player still
- *    consumes its slot, so one player dying cannot shift another player's input onto a
- *    different tank mid-round. (Filtering to the living first would do exactly that.)
- *  - Surplus inputs are ignored, and players past the end of the list get no input at
- *    all -- not a synthesised idle one. Those differ: an idle input still decrements
- *    cooldowns and still slews the turret toward `aim`.
- *  - Order comes from `world.tanks`, which loadArena builds from `world.spawns` in grid
- *    order and never reorders (see resetArena's comment) -- so slot i is stable for the
- *    whole game, which is what makes a recorded input list replayable.
- *
- * With one player and one input this drives the same tank applyPlayerInput does, and the
- * golden trace (tools/baseline/trace.test.ts) pins that single-player path.
+ *  - A dead player keeps its slot, so one player dying cannot shift another player's
+ *    input onto a different tank mid-round.
+ *  - Players past the end of `inputs` get no input, not a synthesised idle one: an idle
+ *    input still decrements cooldowns and slews the turret toward `aim`.
+ *  - Slot order is `world.tanks` order, which nothing reorders (see resetArena), so a
+ *    recorded input list replays.
  */
 export function applyPlayerInputs(world: World, inputs: InputState[], events: SimEvent[]): void {
   const players = world.tanks.filter((t) => t.kind === 'player');
@@ -269,44 +208,23 @@ export function applyPlayerInputs(world: World, inputs: InputState[], events: Si
   }
 }
 
-/**
- * The one-player form: drives the first player tank. Tests call it directly; `stepInputs`
- * goes through applyPlayerInputs, which with a one-element list drives this same tank.
- */
+/** Called by tests only; `stepInputs` goes through applyPlayerInputs. */
 export function applyPlayerInput(world: World, input: InputState, events: SimEvent[]): void {
   const player = world.tanks.find((t) => t.kind === 'player');
   if (!player || !player.alive) return;
   driveTank(world, player, input, events);
 }
 
-/**
- * How many `kind === 'player'` tanks the world holds -- the coop discriminator, read by
- * resolveStatus's guard and stepInputs' gate for stepRespawns (and by game/loop.ts's
- * outcome tally). A pure derivation off world.tanks, not a stored field -- it cannot
- * desync from the tank array because there is nothing to desync from.
- */
 export function countPlayerTanks(world: World): number {
   return world.tanks.filter((t) => t.kind === 'player').length;
 }
 
 /**
- * Where a reviving player tank reappears.
- *
- * Campaign-coop uses the tank's own authored world.spawns[i] position, a fresh copy --
- * which is what keeps coop-respawn.test.ts's pins byte-for-byte and is why this returns
- * a plain object rather than the stored Vec2 itself (aliasing world.spawns[i].pos would
- * let a later mutation of the revived tank's own `pos` corrupt the world's spawn table).
- *
- * Versus modes (ffa/teams) instead ask pickVersusSpawnCell (versus-spawns.ts) for the
- * cell farthest, by that function's own greedy-maximin/line-of-sight ranking, from
- * every currently living tank -- "the most isolated/safest spawn point" per the
- * directive this implements. That ranking is a documented approximation of true
- * p-dispersion, not an optimum (see pickVersusSpawnCell's own doc comment). Falls back
- * to the tank's own authored spawn -- campaign-coop's behaviour -- when
- * world.rules.arenaGeometry is null: most of this file's own test fixtures (and
- * sandbox.ts's dev worlds) build a World from raw tanks/walls/spawns with no grid behind
- * it, so there is nothing for pickVersusSpawnCell to search. Total, no-throw degradation,
- * the same posture pickVersusSpawnCell's own zero-candidate fallback already takes.
+ * The authored spawn is returned as a copy: aliasing world.spawns[i].pos would let a
+ * later mutation of the revived tank's `pos` corrupt the spawn table. A null
+ * arenaGeometry is not an error: most of this file's test fixtures and sandbox.ts's dev
+ * worlds build a World with no grid behind it, leaving pickVersusSpawnCell nothing to
+ * search.
  */
 function respawnPos(world: World, tankIndex: number): Vec2 {
   const authored = world.spawns[tankIndex].pos;
@@ -319,33 +237,16 @@ function respawnPos(world: World, tankIndex: number): Vec2 {
 }
 
 /**
- * Revives any player tank whose respawnAtTick has arrived. Per-tank, deliberately a
- * shorter field list than resetArena's -- see the coop semantics plan
- * (docs/superpowers/plans/2026-08-15-coop-semantics.md) for the "hard problem" this
- * exists to solve: resetArena is whole-board (repositions every tank, restores every
- * wall, clears world-level bullets/mines/blasts) and would erase a live partner's
- * fight. This touches only the reviving tank.
+ * Touches only the reviving tank: resetArena is whole-board and would erase a live
+ * partner's fight. It leaves activeMineIds alone: resetArena zeroes it only together with
+ * world.mines, and zeroing it here while the tank's mines are still live would let it
+ * exceed dropMine's cap.
  *
- * Deliberately does not touch activeMineIds, and does not clear world.mines/
- * world.bullets/world.blasts -- resetArena clears mines board-wide and zeroes every
- * tank's activeMineIds together, as one atomic reset; doing that here while the
- * tank's own mines are still live in world.mines would desync the count dropMine's
- * cap check reads, letting the revived tank exceed its mine cap.
+ * Tanks revive in array order with `t.alive` set in place, so a second tank reviving on
+ * the same tick already avoids the first. Facing stays `s.angle`: arena.ts stamps 0 on
+ * every ffa/teams spawn anyway.
  *
- * Where it reappears is respawnPos's decision (above) -- campaign-coop's own
- * world.spawns[i], or, in ffa/teams, a cell pickVersusSpawnCell picks fresh on every
- * call, scored against whichever other tanks are alive at that exact moment. Processing
- * `world.tanks` in array order and mutating `t.alive` in place (below) means that if two
- * tanks revive on the same tick, the second one's pick already sees the first one as
- * alive and avoids it -- no extra bookkeeping needed for that case. Facing angle stays
- * `s.angle` in every mode (arena.ts stamps 0 for every ffa/teams spawn, same as initial
- * placement, so there is no separate "safe facing" decision to make here).
- *
- * Called from stepInputs, gated on countPlayerTanks(draft) >= 2 in campaign-coop, or
- * unconditionally in ffa/teams -- see that gate's own comment for why it runs before
- * applyPlayerInputs. No internal mode/player-count gate of its own: that is stepInputs'
- * job, matching resolveStatus's guard-first split one level up (pinned directly in
- * coop-respawn.test.ts and versus-modes.test.ts).
+ * The mode and player-count gate is the caller's (stepInputs).
  */
 export function stepRespawns(world: World, events: SimEvent[]): void {
   for (let i = 0; i < world.tanks.length; i++) {
@@ -365,21 +266,13 @@ export function stepRespawns(world: World, events: SimEvent[]): void {
     t.aiTimer = 0;
     t.aimTicks = 0;
     t.respawnAtTick = undefined;
-    // Set only at the moment of revival, no explicit clear -- self-expires by
-    // comparison in isDamageImmune/isActionLocked (types.ts), the same idiom
-    // roundPhase's own elapsed-based checks already use. isActionLocked is what makes
-    // this also a fire/mine lockout, not merely a damage shield.
     t.shieldUntilTick = world.tick + RESPAWN_SHIELD_TICKS;
     events.push({ type: 'respawn', tankId: t.id, controlledBy: t.controlledBy ?? 0, pos: { x: t.pos.x, y: t.pos.y } });
   }
 }
 
-// A single-player life loss, or a full wipe in coop's attempts mode, restarts the whole
-// arena (spec §4: "restart arena on death"): every tank returns to its spawn alive,
-// destroyed walls come back, and all bullets/mines clear. Relies on the loadArena
-// invariant that world.tanks[i] was built from world.spawns[i] — tanks are never removed
-// or reordered (dead tanks stay in place with alive=false), so that index alignment holds
-// for the whole game.
+// Relies on the loadArena invariant that world.tanks[i] was built from world.spawns[i]:
+// tanks are never removed or reordered (dead tanks stay in place with alive=false).
 function resetArena(world: World): void {
   // Restart the round's opening phases too: without this, countdown/grace only ever
   // apply once at game start, and a respawned player is exposed to full-strength AI
@@ -415,25 +308,18 @@ function resetArena(world: World): void {
 }
 
 /**
- * Coop's win/lose rule, split on `world.rules.coopAttempts` into two entirely separate
- * bodies behind one win check up front. That check is duplicated from the 1P body in
- * resolveStatus rather than shared, so that body -- the golden trace's path -- stays
- * untouched.
+ * The win check is duplicated from the 1P body in resolveStatus rather than shared, so
+ * that body -- the golden trace's path -- stays untouched.
  *
- * `world.rules.coopAttempts` true (the default): the shared-attempts ruling (owner,
- * 2026-08-16 -- "lives are more like shared attempts. If all players in co op die,
- * then a life/attempt is lost. If one player dies, the remaining can continue on and
- * if they clear the level, all players spawn in on the next level.") See the
- * attempts-mode block below.
- *
- * `world.rules.coopAttempts` false (`?dev=1&coopPool=1`): the shared life pool of
- * docs/superpowers/plans/2026-08-15-coop-semantics.md. See the pool-mode block below.
+ * `coopAttempts` true (the default) is the owner's shared-attempts ruling (2026-08-16):
+ * "If all players in co op die, then a life/attempt is lost. If one player dies, the
+ * remaining can continue on ...". False (`?dev=1&coopPool=1`) is the shared life pool of
+ * docs/superpowers/plans/2026-08-15-coop-semantics.md.
  */
 function resolveStatusCoop(world: World, events: SimEvent[]): void {
   const enemies = world.tanks.filter((t) => t.kind !== 'player');
   const allEnemiesDead = enemies.length > 0 && enemies.every((e) => !e.alive);
-  // A mutual kill is a win, decided ahead of any death handling below, exactly like
-  // the 1P body -- it holds whether or not lives remain.
+  // A mutual kill is a win, so this runs before any death handling.
   if (allEnemiesDead) {
     world.status = 'win';
     events.push({ type: 'win' });
@@ -441,27 +327,19 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
   }
 
   if (!world.rules.coopAttempts) {
-    // Pool mode (docs/superpowers/plans/2026-08-15-coop-semantics.md), behind
-    // `?dev=1&coopPool=1`: a shared life pool, drained per player death (not per-round
-    // like 1P's resetArena call -- resetArena itself is wrong here, since it would erase
-    // a live partner's fight).
+    // Pool mode: drained per player death, with no resetArena, which would erase a live
+    // partner's fight.
     //
-    // Simultaneous deaths (the plan's adopted default 3): two players dying the same tick
-    // are processed in event order, so at pool 2 the first decrement (2 -> 1) schedules a
-    // respawn and the second (1 -> 0) does not -- one partner revives in
-    // RESPAWN_DELAY_TICKS, the other stays down for the rest of the round. At pool 1 both
-    // decrements land on 0 and neither schedules: a shared pool of 1 genuinely cannot
-    // survive two simultaneous deaths.
+    // Simultaneous deaths (the plan's adopted default 3) are processed in event order: at
+    // pool 2 the first decrement schedules a respawn and the second does not, so one
+    // partner stays down for the round; at pool 1 neither schedules.
     //
-    // `pendingRespawn` (not just `world.lives > 0`) is the second half of the lose guard
-    // because a tank can carry a respawn scheduled on an earlier tick while the pool
-    // drops to 0 from a different, later death -- that scheduled respawn was already
-    // paid for and must be honored; checking the pool alone would call `lose` mid-window.
+    // `pendingRespawn` is half the lose guard because a respawn scheduled on an earlier
+    // tick was already paid for; checking the pool alone would call `lose` mid-window.
     for (const e of events) {
       if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;
       const tank = world.tanks.find((t) => t.id === e.tankId);
-      // respawnAtTick !== undefined: this tank's death was already tallied (a corpse
-      // waiting on its scheduled tick cannot be tallied a second time).
+      // A corpse already waiting on a respawn has been tallied.
       if (!tank || tank.respawnAtTick !== undefined) continue;
       world.lives = Math.max(0, world.lives - 1);
       if (world.lives > 0) tank.respawnAtTick = world.tick + RESPAWN_DELAY_TICKS;
@@ -476,30 +354,18 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
     return;
   }
 
-  // Attempts mode (default) -- the shared-attempts ruling. State-based, not
-  // event-based, deliberately mirroring the 1P body's own `if (player && !player.alive)`
-  // shape one level up rather than pool mode's per-event tally immediately above: a
-  // single player's death costs nothing on its own (no lives decrement, no
-  // respawnAtTick -- the corpse simply stays down and the survivor fights on), so
-  // there is nothing here for an individual death event to drive. Only the state "is
-  // anyone still standing" matters, and it is checked fresh on every call.
+  // Attempts mode: state-based rather than a per-event tally, because one player's death
+  // costs nothing on its own; the corpse stays down and the survivor fights on.
   //
-  // No idempotency guard is needed the way pool mode's `respawnAtTick !== undefined`
-  // is: the moment `noneStanding` goes true, this function resolves it synchronously,
-  // in the same call -- either resetArena revives every tank before returning (so
-  // `noneStanding` is false again by the very next call), or `world.status` leaves
-  // 'playing' entirely (so resolveStatus's own top-of-function guard skips this
-  // function on every later call). Neither leaves a window where the same wipe could
-  // be counted twice.
+  // No idempotency guard is needed: a wipe is resolved in this same call, either by
+  // resetArena reviving every tank or by `status` leaving 'playing' (which resolveStatus's
+  // first guard then skips), so the same wipe cannot be counted twice.
   const players = world.tanks.filter((t) => t.kind === 'player');
   const noneStanding = players.length > 0 && players.every((t) => !t.alive);
-  if (!noneStanding) return; // a survivor is still up -- no decrement, no respawn
+  if (!noneStanding) return;
   world.lives = Math.max(0, world.lives - 1);
   if (world.lives > 0) {
-    // Nobody is left standing: there is no partner's board left to protect, so this
-    // is exactly the single-player death experience, generalized -- resetArena
-    // revives every tank (players and enemies), restores every wall, clears
-    // bullets/mines/blasts, and re-arms the round's countdown/grace for everyone.
+    // No partner's fight is left to protect, so the whole-arena reset is right here.
     resetArena(world);
   } else {
     world.status = 'lose';
@@ -508,36 +374,21 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
 }
 
 /**
- * A versus player-kind tank is eliminated -- out for the rest of the round, no more
- * respawns coming -- exactly when it is currently dead and has no stock left. This is
- * not the same question `!t.alive` answers: a player awaiting a scheduled respawn
- * (stock > 0, respawnAtTick set by applyVersusStock below) is dead right now but is
- * very much still in the match. Counting bare `alive` here would end a stock match on
- * the very first death, stock or no stock -- versus-modes.test.ts's
- * "a mid-stock death does not end the match" tests exist to catch exactly that.
+ * Not the same as `!t.alive`: a player awaiting a scheduled respawn is dead but still in
+ * the match, and counting bare `alive` would end a stock match on the first death
+ * (versus-modes.test.ts, "a mid-stock death does not end the match").
  *
- * `?? 0`: a hand-built Tank fixture that never sets stockRemaining reads as already at
- * zero -- single-life behaviour, unchanged for every test that does not opt into the
- * field. Real ffa/teams play always sets it (loadArena stamps a stock, VERSUS_STOCK by
- * default, on every player-kind tank in those modes).
+ * An unset stockRemaining reads as 0, single-life. Real ffa/teams play never leaves it
+ * unset: loadArena stamps a stock on every player tank in those modes.
  */
 export function isVersusEliminated(t: Tank): boolean {
   return !t.alive && (t.stockRemaining ?? 0) === 0;
 }
 
 /**
- * Versus's stock bookkeeping: for every player-kind death this tick, decrement the
- * dying tank's own stock and, if any remains, schedule its respawn. Same event-tally
- * shape resolveStatusCoop's pool-mode block above already uses -- `tank-destroyed`
- * events, idempotency-guarded on `respawnAtTick !== undefined` so a corpse already
- * tallied (waiting on an earlier-scheduled respawn) is never charged twice for the same
- * death. Runs before either resolveStatusFfa or resolveStatusTeams counts who remains,
- * so a stock-exhausted death is reflected in this same tick's elimination count --
- * exactly what lets a mutual last-stock kill still resolve to 'lose' immediately below
- * (the named simultaneous-wipe gap; see resolveStatusFfa).
- *
- * Reuses RESPAWN_DELAY_TICKS rather than a second delay constant: versus's respawn
- * timing is not a new feel value, it is coop's own.
+ * A corpse already waiting on a respawn is not charged twice. Runs before the ffa/teams
+ * counts, so a last-stock death is an elimination on the same tick. The delay is coop's
+ * RESPAWN_DELAY_TICKS on purpose, not a new feel value.
  */
 function applyVersusStock(world: World, events: SimEvent[]): void {
   for (const e of events) {
@@ -550,17 +401,9 @@ function applyVersusStock(world: World, events: SimEvent[]): void {
 }
 
 /**
- * FFA's win rule: exactly one player tank not eliminated, every other player tank
- * eliminated -- see isVersusEliminated's own doc comment for why that is "not
- * eliminated", not "alive". Stock bookkeeping (applyVersusStock) runs first, every
- * call, so a death that still has respawns coming never counts as an elimination.
- *
- * A simultaneous final wipeout (the last two players trade a last-stock kill the same
- * tick) leaves zero non-eliminated, which fails "exactly one remains" -- resolves to
- * 'lose', not a third status. Deliberately no `'draw'`: growing `World.status`'s
- * 3-value union touches game/state.ts, HUD copy and achievements gating, real
- * separately-scoped surface no owner directive asked for -- named residual, not a
- * silent gap.
+ * A simultaneous final wipeout (the last two players trade a last-stock kill) resolves
+ * to 'lose'. Deliberately no 'draw': growing `World.status` touches game/state.ts, HUD
+ * copy and achievements gating, which no owner directive asked for.
  */
 function resolveStatusFfa(world: World, events: SimEvent[]): void {
   applyVersusStock(world, events);
@@ -576,15 +419,8 @@ function resolveStatusFfa(world: World, events: SimEvent[]): void {
 }
 
 /**
- * Teams' win rule: one team's players are all eliminated, the other team has a
- * non-eliminated survivor. `Tank.team` is stamped by arena.ts only when
- * `mode === 'teams'` (`teamOf(slot) = slot % 2` unless the caller overrides a slot's
- * team), so every player tank here carries one. Same stock-then-eliminated shape as
- * resolveStatusFfa -- see its own doc comment, including the unfixed simultaneous-wipe gap.
- *
- * A simultaneous wipeout of both teams' last stock the same tick leaves neither with a
- * survivor, which is neither team's win -- resolves to 'lose', matching FFA's own
- * simultaneous case rather than inventing a second rule for it.
+ * arena.ts stamps `Tank.team` on every player tank in teams mode, so each one here has a
+ * team. A simultaneous wipe of both teams' last stock resolves to 'lose', as in FFA.
  */
 function resolveStatusTeams(world: World, events: SimEvent[]): void {
   applyVersusStock(world, events);
@@ -605,11 +441,9 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
   // pushes a second `win` -- and a second victory stinger.
   if (world.status !== 'playing') return;
 
-  // A mode dispatch, generalizing the coop guard-first split (see resolveStatusCoop's
-  // own doc comment). 'campaign-coop' falls through to the original body below -- this
-  // switch's whole job is to route around it, never to alter it -- which is the trace
-  // argument: `mode` defaults to 'campaign-coop' at every call site that does not pass
-  // one (including tools/baseline/trace.ts's), so BASELINE_HASH pins that body.
+  // The versus modes route around the campaign body below, never alter it: `mode`
+  // defaults to 'campaign-coop' (tools/baseline/trace.ts passes none), so BASELINE_HASH
+  // pins that body.
   if (world.rules.mode === 'ffa') {
     resolveStatusFfa(world, events);
     return;
@@ -619,20 +453,13 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
     return;
   }
 
-  // Two or more player-kind tanks: coop semantics, entirely separate machinery
-  // (resolveStatusCoop above) -- shared attempts by default
-  // (docs/superpowers/plans/2026-08-16-coop-attempts.md), with the shared-pool model
-  // behind ?dev=1&coopPool=1 (docs/superpowers/plans/2026-08-15-coop-semantics.md).
-  // Returns unconditionally, so nothing below this line ever runs at playerCount >= 2
-  // (pinned in coop-respawn.test.ts; tools/baseline/trace.ts's BASELINE_HASH drives
-  // exactly one player and cannot see this branch at all).
+  // The golden trace drives one player and never reaches coop; coop-respawn.test.ts pins
+  // it (plan: docs/superpowers/plans/2026-08-16-coop-attempts.md).
   if (countPlayerTanks(world) >= 2) {
     resolveStatusCoop(world, events);
     return;
   }
 
-  // At most one player-kind tank from here: every world with two or more returned
-  // above, so `.find` takes the only one, if any.
   const player = world.tanks.find((t) => t.kind === 'player');
   const enemies = world.tanks.filter((t) => t.kind !== 'player');
   // Snapshot before resetArena, which revives every tank. Read afterwards, a player
@@ -640,8 +467,7 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
   // deducted, and the whole arena reset instead.
   const allEnemiesDead = enemies.length > 0 && enemies.every((e) => !e.alive);
 
-  // A mutual kill is a win: the player cleared the arena. This is decided ahead
-  // of the death branch so it holds whether or not lives remain.
+  // A mutual kill is a win, so this runs before the death branch.
   if (allEnemiesDead) {
     world.status = 'win';
     events.push({ type: 'win' });
@@ -660,10 +486,6 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
 }
 
 /**
- * Advances the world one tick from a list of inputs -- one per player-kind tank,
- * paired by position (see applyPlayerInputs). This is the primitive; `step` below is the
- * one-argument adapter.
- *
  * Two names rather than one overloaded `step(world, input | inputs)`: a union parameter
  * would put an `Array.isArray` branch in the pure core's hot path and would let a caller
  * silently pass the wrong shape at a call site that still typechecks.
@@ -674,20 +496,11 @@ export function stepInputs(world: World, inputs: InputState[]): StepResult {
   const events: SimEvent[] = [];
 
   if (draft.status === 'playing') {
-    // Before applyPlayerInputs, every mode: a tank that crosses its revival tick gets
-    // that same tick's input rather than sitting inert one extra frame -- a deliberate
-    // improvement on resetArena's incidental one-tick lag. At campaign-coop N < 2 the
-    // whole expression always evaluates but is always false -- a value-identical no-op
-    // (cheap booleans, touches nothing when false), not a "never even called"
-    // structural no-op.
-    //
-    // Two independent conditions, not one shared gate: campaign-coop keeps its
-    // player-count guard (only resolveStatusCoop's pool mode ever sets respawnAtTick
-    // there, and only once a second player exists); ffa/teams have no such guard because
-    // applyVersusStock (resolveStatusFfa/resolveStatusTeams, above) can schedule a
-    // respawn at any player count. `mode === 'campaign-coop' &&` on the campaign-coop arm
-    // exists to make the mode boundary legible at every place it is checked, not only
-    // inside resolveStatus.
+    // Before applyPlayerInputs, so a tank reviving this tick also gets this tick's input.
+    // Campaign-coop schedules respawns only in pool mode with two or more players;
+    // applyVersusStock can schedule one at any player count. The explicit
+    // `mode === 'campaign-coop'` keeps the mode boundary legible here, not only inside
+    // resolveStatus.
     if (
       draft.rules.mode === 'ffa' ||
       draft.rules.mode === 'teams' ||
@@ -709,13 +522,9 @@ export function stepInputs(world: World, inputs: InputState[]): StepResult {
 }
 
 /**
- * One tick from one player's input: the golden trace (tools/baseline/trace.ts), the
- * gallery's single-player moments and tests call it; game/driver.ts calls stepInputs.
- *
- * It is an adapter, not a second implementation -- `[input]` and nothing else. That is
- * deliberate: it means the single-player behaviour cannot drift from the list path, and
- * it is why the golden trace hash in tools/baseline/trace.test.ts, taken through `step`,
- * pins the list path too. If this ever grows a branch of its own, that argument is gone.
+ * Keep this `[input]` and nothing else: the golden trace hash
+ * (tools/baseline/trace.test.ts) is taken through `step` and pins stepInputs only while
+ * this adds no branch of its own.
  */
 export function step(world: World, input: InputState): StepResult {
   return stepInputs(world, [input]);

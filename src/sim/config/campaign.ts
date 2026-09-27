@@ -6,10 +6,8 @@ import { ARENA_DEFS } from './arenas';
 import campaignJson from './data/campaign.json';
 
 /**
- * The one shipped campaign: player-facing level identity and ordering, decoupled
- * from `ARENA_DEFS`'s own catalog order (see campaign-types.ts). Validated at
- * load: a bad edit is a boot failure naming the exact path (levels[2].arenaId),
- * never a silently broken level select.
+ * Player-facing level identity and ordering, decoupled from `ARENA_DEFS`'s own catalog
+ * order (see campaign-types.ts).
  */
 export const CAMPAIGN: CampaignDefinition =
   validateCampaign(campaignJson, new Set(ARENA_DEFS.map((a) => a.id)));
@@ -20,7 +18,6 @@ const BY_ID = createCatalog<string, CampaignLevel, CampaignLevel>(
   (id, defs) => defs[id],
 );
 
-/** Lookup by id, for anything naming a level rather than indexing it. */
 export function campaignLevelById(id: string): CampaignLevel {
   const found = BY_ID.get(id);
   if (!found) throw new Error(`Unknown campaign level id: ${id}`);
@@ -30,8 +27,6 @@ export function campaignLevelById(id: string): CampaignLevel {
 export const FIRST_CAMPAIGN_LEVEL: CampaignLevel = CAMPAIGN_LEVELS[0];
 
 /**
- * The arenas the campaign actually plays, in `ARENA_DEFS` catalog order.
- *
  * Not every shipped arena is a campaign level: boards authored for versus, such as
  * `vs-duel-01`, are never entered from the campaign. Campaign-facing sweeps --
  * difficulty pacing, the claim inventory, the cover ratios each arena quotes in its

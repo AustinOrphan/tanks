@@ -4,10 +4,8 @@ import { COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
 export type RoundPhase = 'countdown' | 'grace' | 'live';
 
 /**
- * The phase formula itself, independent of the shipped tick counts.
- *
- * Split out because GRACE_TICKS is currently 0, which makes the grace phase unreachable
- * through roundPhase -- and a test for a phase that cannot occur is either deleted
+ * Split out of roundPhase because GRACE_TICKS is currently 0, which makes the grace phase
+ * unreachable through roundPhase -- and a test for a phase that cannot occur is either deleted
  * coverage or a vacuous pass. This lets the boundary maths stay pinned at any spans,
  * including the positive-grace configuration the constant can be restored to, while a
  * separate test pins what the shipped constants actually produce.
@@ -19,17 +17,12 @@ export function phaseAt(elapsed: number, countdownTicks: number, graceTicks: num
 }
 
 /**
- * Derives the round phase from `world.tick - world.roundStartTick`.
- *
- * This is the one place phase boundaries are computed. Both the player path
- * (applyPlayerInput in world.ts) and the AI path (stepAi in ai/index.ts) call this
- * same function to decide whether movement/fire/mines are allowed, so the two paths
+ * Both the player path (driveTank in world.ts) and the AI path (stepAi in ai/index.ts) call
+ * this same function to decide whether movement/fire/mines are allowed, so the two paths
  * cannot drift apart.
  *
- * Lives in its own module (not world.ts) purely to avoid a circular import: world.ts
- * imports `stepAi` from ai/index.ts, and ai/index.ts needs this function too. Only a
- * type is imported from world.ts here, which is erased at compile time, so there is no
- * runtime circularity.
+ * Lives in its own module (not world.ts) to avoid a circular import: world.ts
+ * imports `stepAi` from ai/index.ts, and ai/index.ts needs this function too.
  */
 export function roundPhase(world: World): RoundPhase {
   // `roundStartTick` is the tick number the round's first simulated tick will
@@ -42,11 +35,8 @@ export function roundPhase(world: World): RoundPhase {
 }
 
 /**
- * Ticks remaining in the current phase, at arbitrary spans.
- *
- * The counterpart to phaseAt, and split out for the same reason: with GRACE_TICKS at 0
- * the grace leg of this countdown is unreachable through roundPhaseTicksLeft, so a test
- * for it would be vacuous. Restoring the constant must not land on untested code.
+ * Split out for the same reason as phaseAt: with GRACE_TICKS at 0 the grace leg of this
+ * countdown is unreachable through roundPhaseTicksLeft, so a test for it would be vacuous.
  */
 export function ticksLeftAt(elapsed: number, countdownTicks: number, graceTicks: number): number {
   if (elapsed < countdownTicks) return countdownTicks - elapsed;
@@ -55,11 +45,8 @@ export function ticksLeftAt(elapsed: number, countdownTicks: number, graceTicks:
 }
 
 /**
- * Ticks left in the current phase; 0 once live.
- *
- * The HUD counts this down. Phase-relative rather than counting to `live`, so
- * the number restarts at each boundary -- 3,2,1 through the countdown, then again
- * through any grace phase -- which is what makes the two phases legible as two things.
+ * The HUD counts this down. Phase-relative rather than counting to `live`, so the number
+ * restarts at each boundary, which is what makes the two phases legible as two things.
  */
 export function roundPhaseTicksLeft(world: World): number {
   const elapsed = world.tick - world.roundStartTick;

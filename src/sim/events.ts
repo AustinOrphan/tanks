@@ -35,10 +35,6 @@ export type SimEvent =
    * a shot can be refused (`spawnBullet` also returns `false`, emitting nothing, for a dead
    * owner), and #356 is scoped to the cap alone. A treatment keyed on `'shell-cap'` therefore
    * cannot start firing for a different refusal if another reason is added here later.
-   *
-   * Emitting the event is not the feedback. Which cue a player actually gets -- weapon-local,
-   * tank-local, audio, haptic, HUD, or a combination -- is #356's own comparison to make;
-   * this is the one input all of those candidates need.
    */
   | { type: 'fire-blocked'; ownerId: number; reason: 'shell-cap' }
   /**

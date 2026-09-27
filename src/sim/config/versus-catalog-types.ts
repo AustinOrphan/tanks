@@ -14,16 +14,14 @@
  */
 import type { GameMode } from '../types';
 
-/** The two versus modes. A subtype of `GameMode` (never `'campaign-coop'`). */
 export type VersusMode = Extract<GameMode, 'ffa' | 'teams'>;
 export const VERSUS_MODES: readonly VersusMode[] = ['ffa', 'teams'];
 
-/** Versus-supported player counts -- the same 2..4 range the setup pane offers. */
+/** The same range the setup pane offers (`VERSUS_PLAYERS_OPTIONS`, hud.ts). */
 export const VERSUS_PLAYER_COUNTS: readonly number[] = [2, 3, 4];
 
 /**
- * Advertised variant generators. `seeded-destructible` is the one that exists:
- * seeded removal of a subset of destructible cells (`versus-variants.ts`), always
+ * `seeded-destructible` is the one that exists: seeded removal of a subset of destructible cells (`versus-variants.ts`), always
  * on for versus sessions with a seed. An entry declaring it is validated across a
  * pinned seed sweep; an entry with an empty `variants` list skips that sweep. The
  * list is a declaration only: nothing at runtime reads it, and `loadArena` applies
@@ -33,7 +31,7 @@ export const VERSUS_VARIANT_KINDS = ['seeded-destructible'] as const;
 export type VersusVariantKind = (typeof VERSUS_VARIANT_KINDS)[number];
 
 /**
- * Spawn placement policies. `maximin` is the shipped one -- `pickVersusSpawnCell`'s
+ * `maximin` is the shipped one -- `pickVersusSpawnCell`'s
  * farthest-first placement with its hull-clearance filter (issue #225) and hard
  * mutual-LOS filter (versus-spawns.ts). The field exists so a future policy is a
  * declared, validated property of an entry rather than an ambient assumption.
@@ -48,9 +46,9 @@ export interface VersusCatalogEntry {
    * is the menu's reserved draw-for-me sentinel, and the schema rejects it.
    */
   id: string;
-  /** The arena geometry this entry plays on -- must name an `arenas.json` entry. */
+  /** Must name an `arenas.json` entry. */
   arenaId: string;
-  /** Selector display name, read through hud's `arenaLabel`. */
+  /** Read through hud's `arenaLabel`. */
   displayName: string;
   /** One-line gameplay intent note (selector copy, #274). */
   intent: string;
@@ -59,12 +57,11 @@ export interface VersusCatalogEntry {
    * schematic from `arenaId`.
    */
   preview: string;
-  /** Supported player counts -- non-empty, strictly increasing, each in {2,3,4}. */
+  /** Non-empty, strictly increasing, each in {2,3,4}. */
   players: number[];
-  /** Supported modes -- non-empty, unique. */
+  /** Non-empty, unique. */
   modes: VersusMode[];
-  /** The spawn placement policy the entry is validated under. */
   spawnPolicy: VersusSpawnPolicy;
-  /** Advertised variant generators -- unique; may be empty (skips the variant sweep). */
+  /** Unique; may be empty. */
   variants: VersusVariantKind[];
 }

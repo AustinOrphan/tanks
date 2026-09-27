@@ -1,15 +1,11 @@
-// Entity-definition vocabulary. Adopted verbatim from the supplied
-// `tank-enums.ts` (the "wii-play-tanks-config" drop): the enums are unit-agnostic
-// labels, so the same set describes both the 9-type reference taxonomy
-// (config/reference/) and the game's shipped roster (config/roster.ts).
+// Adopted verbatim from the supplied `tank-enums.ts` (the "wii-play-tanks-config" drop): the
+// enums are unit-agnostic labels, so the same set describes both the 9-type reference
+// taxonomy (config/reference/) and the game's shipped roster (config/roster.ts).
 // Numbers live in a BalanceConstants table, never here.
 //
 // Provenance (issue #783): the drop is first-party. It was written for this project with
 // ChatGPT from a description of Wii Play: Tanks!'s enemy types, in a conversation that cites
 // no other codebase. See CONTENT-LICENSE.md, "Where the supplied tank configuration came from".
-//
-// This file is under src/sim/ and therefore pure: it names classes, it imports
-// nothing. See src/sim/purity.test.ts.
 
 export enum TankType {
   BROWN = 'BROWN',

@@ -21,8 +21,7 @@ import { TANK_RADIUS, MINE_BLAST_RADIUS } from './constants';
  *
  * Every criterion is derived from the arena's own geometry, as versus spawn placement
  * (versus-spawns.ts) is, rather than from authored data -- so it works on generated boards
- * too (tools/mapgen gates on it), the same reasoning versus-spawns.ts's module doc gives
- * for not using authored spawn points.
+ * too (tools/mapgen gates on it).
  *
  * Nothing in the shipped path calls this module, and nothing the golden trace runs reaches
  * it. The versus menu offers boards from the declarations in `versus-catalog.json`, and
@@ -30,13 +29,9 @@ import { TANK_RADIUS, MINE_BLAST_RADIUS } from './constants';
  */
 
 /**
- * The real placement sequence, not a re-derivation of it: `loadArena(arena, playerCount,
- * 'ffa')` runs the same `pickVersusSpawnSet` placement `loadArena`'s versus branch runs
- * at real game start, against the exact wall geometry (`walls`, PASS 2a/2b plus the
- * boundary ring) real gameplay collides and sights against. 'ffa' stands in for both
- * versus modes: they share PASS 1b's placement branch and differ only in whether
- * `tank.team` gets stamped, which this module never reads. versus-board.test.ts pins that
- * 'teams' places every player identically.
+ * 'ffa' stands in for both versus modes: they share PASS 1b's placement branch and differ
+ * only in whether `tank.team` gets stamped, which this module never reads.
+ * versus-board.test.ts pins that 'teams' places every player identically.
  */
 function versusPlayerPositions(arena: Arena, playerCount: number): { positions: { x: number; y: number }[]; walls: ReturnType<typeof loadArena>['walls'] } {
   const { tanks, walls } = loadArena(arena, playerCount, 'ffa');
@@ -45,11 +40,8 @@ function versusPlayerPositions(arena: Arena, playerCount: number): { positions: 
 }
 
 /**
- * Open-floor cell count -- the same predicate versus spawn placement uses for its
- * candidate pool (`isOpenFloor` in versus-spawns.ts: exactly the `.` cells, excluding
- * solid, destructible and every spawn letter). Not imported from there because that
- * predicate is a private one-liner (`ch === '.'`), and spelling it out here shows plainly
- * what `MIN_OPEN_FLOOR_PER_PLAYER` counts.
+ * The same predicate as versus-spawns.ts's private `isOpenFloor`, which builds the spawn
+ * candidate pool.
  */
 function countOpenFloor(arena: Arena): number {
   let open = 0;
@@ -79,71 +71,51 @@ function countOpenFloor(arena: Arena): number {
 export const MIN_OPEN_FLOOR_PER_PLAYER = 18;
 
 /**
- * A structured verdict for one (arena, N) pair -- the measured figures behind
- * `suitable`, not just the boolean. `versus-board.test.ts`'s shipped-arena sweep
- * asserts the separation, concealment and room fields alongside `suitable`, so a
- * criterion regressing silently (a correct `suitable` for the wrong reason) is still
- * visible.
+ * The measured figures behind `suitable`, not just the boolean: `versus-board.test.ts`'s
+ * shipped-arena sweep asserts the separation, concealment and room fields alongside
+ * `suitable`, so a correct `suitable` for the wrong reason is still visible.
  */
 export interface VersusBoardVerdict {
   readonly playerCount: number;
 
-  /** True iff every field below that gates `suitable` holds. */
   readonly suitable: boolean;
 
   /** How many of the `playerCount` real placements landed on distinct cells. */
   readonly spawnCount: number;
-  /** `spawnCount === playerCount`. */
   readonly distinctSpawns: boolean;
 
-  /** `C(playerCount, 2)` -- every spawn pair once. */
   readonly totalPairs: number;
-  /** How many of `totalPairs` lack mutual line of sight. */
   readonly concealedPairs: number;
-  /** `concealedPairs === totalPairs` -- the versus-board-rules plan named in the module
-   * doc records why the bar is "every pair", not a fraction. */
+  /** Every pair, not a fraction: the versus-board-rules plan named in the module doc says why. */
   readonly allPairsConcealed: boolean;
 
-  /** The arena's open-floor cell count (constant across N; carried per-verdict for
-   * convenience, since a caller iterating a table wants it alongside the ratio). */
   readonly openFloorCells: number;
-  /** `openFloorCells / playerCount`. */
   readonly openFloorPerPlayer: number;
-  /** `openFloorPerPlayer >= MIN_OPEN_FLOOR_PER_PLAYER`. */
   readonly roomOk: boolean;
 
   /**
-   * How many spawns share the largest connected region of tank-legal space with
-   * destructible walls removed (issue #423). `playerCount` means every player can reach
-   * every other once destructibles are cleared.
+   * The most spawns sharing any one connected region of tank-legal space, with destructible
+   * walls removed (issue #423).
    */
   readonly spawnsInLargestRegion: number;
   /**
-   * Two conditions, not one: `solidlyConnected` -- every spawn standing on tank-legal
-   * space and all of them sharing the largest region of it -- and `fatalEscapes === 0`.
-   * See `evaluateSpawnEgress`.
-   *
-   * The two disagree on shipped data, so `spawnsInLargestRegion === playerCount` is not a
-   * stand-in for this field (issue #818): vs-duel-01 at N=3 and N=4 has every spawn in the
-   * largest region and is still refused, for 1 and 2 fatal escapes.
+   * Not the same as `spawnsInLargestRegion === playerCount` (issue #818): it also requires
+   * every spawn on tank-legal space and `fatalEscapes === 0`. vs-duel-01 at N=3 and N=4 has
+   * every spawn in one region and is still refused, for 1 and 2 fatal escapes.
    */
   readonly egressOk: boolean;
   /**
    * How many spawns share no destructible-free region with any other spawn -- i.e. must
    * blow a way out with a mine to meet anyone. Reported, not gated: arena-02 at N=2 and
-   * N=3 is legitimately like this. See `tankLegalComponents` for the full reasoning.
+   * N=3 is legitimately like this.
    */
   readonly sealedSpawns: number;
   /**
    * How many spawns are sealed by destructibles in a pocket too small to retreat out of a
-   * mine blast -- i.e. the player must spend a life to leave the start line. Gated: only a
-   * mine clears a destructible, and a mine kills within `MINE_KILL_RADIUS`.
+   * mine blast -- i.e. the player must spend a life to leave the start line.
    */
   readonly fatalEscapes: number;
-  /**
-   * Human-readable cause when `egressOk` is false: which spawns are cut off from which,
-   * so a failure names the blocked slot instead of only the board. Empty when it holds.
-   */
+  /** Names the cut-off slots when `egressOk` is false; empty when it holds. */
   readonly egressDiagnosis: string;
 }
 
@@ -174,17 +146,16 @@ export interface VersusBoardVerdict {
  * blowing through to reach an opponent is the design), while vs-duel-01's third and fourth
  * spawns land in pockets 2.24 across and it is refused at N=3 and N=4.
  *
- * Residual, stated rather than hidden: the pocket-diameter test is necessary, not
- * sufficient. It proves the player has somewhere to retreat to; it does not prove the
- * retreat is reachable from the specific spot the mine must be laid. A pocket shaped like
- * a long dead-end corridor could pass this and still be fatal. Closing that needs a
- * per-mine-position reachability search, which is worth doing if a board ever fails
- * playtesting while passing here.
+ * Residual: the pocket-diameter test is necessary, not sufficient. It proves the player has
+ * somewhere to retreat to, not that the retreat is reachable from where the mine must be
+ * laid -- a long dead-end corridor could pass this and still be fatal. Closing that needs a
+ * per-mine-position reachability search, worth doing if a board ever fails playtesting
+ * while passing here.
  *
- * The lattice step is `cellSize / 8`, not a magic constant. The narrowest passage a tank
- * can use is 2 cells (1.333), leaving a legal centre band of `1.333 - 1.0 = 0.333`; four
- * samples across that band means the minimum legal passage cannot alias closed.
- * `versus-board.test.ts` pins both ends: a 1-cell passage fails and a 2-cell passage passes.
+ * Lattice step `cellSize / 8`: the narrowest passage a tank can use is 2 cells (1.333),
+ * leaving a legal centre band of `1.333 - 1.0 = 0.333`; four samples across that band mean
+ * the minimum legal passage cannot alias closed. `versus-board.test.ts` pins both ends: a
+ * 1-cell passage fails and a 2-cell passage passes.
  */
 function tankLegalComponents(
   arena: Arena,
@@ -198,14 +169,11 @@ function tankLegalComponents(
   const ny = Math.max(1, Math.floor(height / step));
   const idx = (i: number, j: number) => i * ny + j;
 
-  // Start from "legal everywhere inside the wall-free border", then rasterise each wall
-  // into the lattice cells it can possibly block. Testing every wall at every lattice
-  // point is O(lattice x walls) (measured at 44s on one variant sweep). A wall can only
-  // block points within TANK_RADIUS of its box, so each wall touches a small
-  // neighbourhood; the exact `circleVsAABB` test still decides every cell, so this is a
-  // speed change and not an approximation. (Expanding the AABB and marking the whole
-  // rectangle would be an approximation -- it would block the rounded corners a tank can
-  // actually occupy.)
+  // Each wall is tested only against the lattice cells within TANK_RADIUS of its box:
+  // testing every wall at every lattice point is O(lattice x walls) (measured at 44s on one
+  // variant sweep). The exact `circleVsAABB` test still decides every cell, so this is a
+  // speed change and not an approximation. (Marking the whole expanded AABB would be an
+  // approximation -- it would block the rounded corners a tank can actually occupy.)
   const legal = new Uint8Array(nx * ny);
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < ny; j++) {
@@ -258,11 +226,9 @@ function tankLegalComponents(
     }
   }
 
-  // Per-component extent, as the bounding-box diagonal of its lattice cells. Used only to
-  // ask whether a sealed pocket is wide enough to retreat out of a mine blast, so an
-  // over-estimate is the safe direction: it can only let a marginal board through, never
-  // refuse a roomy one, and the shipped pockets this separates (2.24 against about 22)
-  // differ by nearly a factor of ten.
+  // The bounding-box diagonal over-estimates a pocket's width, the safe direction here: it
+  // can only let a marginal board through, never refuse a roomy one, and the shipped
+  // pockets this separates (2.24 against about 22) differ by nearly a factor of ten.
   const box = sizes.map(() => ({ minI: Infinity, maxI: -Infinity, minJ: Infinity, maxJ: -Infinity }));
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < ny; j++) {
@@ -310,18 +276,16 @@ function evaluateSpawnEgress(
     && spawnsInLargestRegion === positions.length
     && labels.every((l) => l >= 0);
 
-  // The state the player actually starts in: nothing destroyed yet.
   const intact = tankLegalComponents(arena, positions, walls);
   const softTally = new Map<number, number>();
   for (const l of intact.labels) softTally.set(l, (softTally.get(l) ?? 0) + 1);
   const sealedSpawns = intact.labels.filter((l) => (softTally.get(l) ?? 0) === 1).length;
 
-  // A sealed spawn must have room to lay the mine and get clear of it.
   const fatal: number[] = [];
   for (let s = 0; s < positions.length; s++) {
     const l = intact.labels[s];
     if (l < 0) { fatal.push(s); continue; }
-    if ((softTally.get(l) ?? 0) > 1) continue; // shares its pocket with another player
+    if ((softTally.get(l) ?? 0) > 1) continue;
     if ((intact.diameters[l] ?? 0) < MINE_KILL_RADIUS) fatal.push(s);
   }
   const fatalEscapes = fatal.length;
@@ -347,30 +311,21 @@ function evaluateSpawnEgress(
 }
 
 /**
- * Evaluates one arena at one player count. Pure and deterministic: `loadArena` and
- * `lineOfSight` take no wall clock and no `Math.random` (src/sim/purity.test.ts bans both
- * in the sim), so the same `(arena, playerCount)` always yields the same verdict --
- * `versus-board.test.ts` pins this directly.
- *
  * Report, don't gatekeep: nothing here throws or truncates a player count, and nothing
  * in `loadArena` consults this function's result -- a board with `suitable: false` still
- * loads and plays. What the menu offers comes from `versus-catalog.json` (see the module
- * doc).
+ * loads and plays.
  *
- * `distinctSpawns` is measured and reported, but it cannot fail on its own: given
- * `MIN_OPEN_FLOOR_PER_PLAYER` >= 1, `roomOk` (`openFloorCells / playerCount >=
- * MIN_OPEN_FLOOR_PER_PLAYER`) already implies `openFloorCells >= playerCount`, and since
- * all `playerCount` spawns, P1 included, come out of the open-floor pool (see
- * `pickVersusSpawnSet`) and each pick excludes the cells already taken, that is enough
- * for them to stay distinct. So on every fixture this module's own criteria can
- * construct, `distinctSpawns` false implies `roomOk` false too, never the other way
- * round. `versus-board.test.ts` discloses this: a dedicated mutation targets
- * `distinctSpawns`'s own computation, and dropping it from the `suitable` conjunction is
- * named as an equivalent mutation rather than added to the manifest as `killed`, because
- * no fixture -- shipped or synthetic -- can tell the difference. This is a fact about
- * this module's specific formulas (both keyed off the same open-floor cell count), not a
- * general law; a room metric not based on raw floor-cell count could decouple them, which
- * is part of why the field stays independently reported rather than folded away.
+ * `distinctSpawns` is measured and reported, but it cannot fail on its own: with
+ * `MIN_OPEN_FLOOR_PER_PLAYER` >= 1, `roomOk` already implies `openFloorCells >=
+ * playerCount`, and since all `playerCount` spawns, P1 included, come out of the
+ * open-floor pool (see `pickVersusSpawnSet`) and each pick excludes the cells already
+ * taken, that is enough for them to stay distinct. So `distinctSpawns` false implies
+ * `roomOk` false, never the other way round. `versus-board.test.ts` discloses this: a
+ * dedicated mutation targets `distinctSpawns`'s own computation, and dropping it from the
+ * `suitable` conjunction is named as an equivalent mutation rather than added to the
+ * manifest as `killed`. This follows from both formulas counting the same open-floor
+ * cells, not from a general law; a room metric not based on raw floor-cell count could
+ * decouple them, which is part of why the field stays independently reported.
  */
 export function evaluateVersusBoard(arena: Arena, playerCount: number): VersusBoardVerdict {
   const { positions, walls } = versusPlayerPositions(arena, playerCount);
@@ -415,19 +370,13 @@ export function evaluateVersusBoard(arena: Arena, playerCount: number): VersusBo
   };
 }
 
-/** One `evaluateVersusBoard` row, labelled with the arena it measured -- what a table
- * or a sweep wants to iterate. */
 export interface VersusBoardCatalogRow extends VersusBoardVerdict {
   readonly arenaId: string;
 }
 
 /**
- * Every (arena, N) verdict in the catalog -- the measurement behind which maps may be
- * offered at a given player count (versus-config.test.ts checks the shipped offer against
- * it). `arenas` defaults to `ARENA_DEFS` (8 shipped boards) and `playerCounts` to `[2,
- * 3, 4]` (versus mode's own supported range -- `devflags.ts`'s `players` flag rejects
- * anything outside 1-4), but both are parameters rather than hardcoded so
- * `versus-board.test.ts` can run the same function against synthetic fixtures.
+ * The measurement behind which maps may be offered at a given player count
+ * (versus-config.test.ts checks the shipped offer against it).
  */
 export function versusBoardCatalog(
   arenas: readonly (Arena & { readonly id: string })[] = ARENA_DEFS,

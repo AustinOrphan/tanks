@@ -21,27 +21,22 @@ import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TIC
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
-/** An inert decision: hold position, hold aim, do nothing. */
 function idleDecision(tank: Tank): AiDecision {
   return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
 }
 
 export function decideAi(world: World, tank: Tank): AiDecision {
   // stepAi already skips the player; handled explicitly so tests can call this
-  // directly with a player tank and get the documented inert decision. The player
+  // directly with a player tank and get the inert decision. The player
   // never enters profile routing: its (schema-required) profile is inert data.
   if (tank.kind === 'player') return idleDecision(tank);
 
-  // Profile-driven routing: the decision implementation comes from the tank's
-  // resolved AI profile behaviour, not from its kind -- no code here knows that
-  // "teal banks shots"; the roster says so. A new tank type gets its AI by
-  // naming a profile in data.
+  // No code here knows that "teal banks shots"; the roster says so. A new tank type gets
+  // its AI by naming a profile in data.
   //
   // A new TankKind is a compile error until it is listed in TANK_KINDS
   // (config/validate.ts), and a load failure until tank-defs.json gives it a
-  // roster entry -- either is louder than a silently inert enemy. The
-  // exhaustiveness check below covers AIBehavior: a new behaviour class must be
-  // routed here or fail to compile.
+  // roster entry -- either is louder than a silently inert enemy.
   const cfg = configFor(tank.kind);
   const decision = ((): AiDecision => {
     switch (cfg.behavior) {
@@ -68,14 +63,14 @@ export function decideAi(world: World, tank: Tank): AiDecision {
   // cannot live inside dangerAvoidMove (that helper is shared with decidePlayerInput and
   // must stay stateless).
   //
-  // Only `desiredMove` and the write-back pair are replaced. The turret, the firing
-  // solution and `hasSolution` are deliberately untouched: aiming is not committed, only
-  // movement is, so an enemy that has committed to a heading still tracks and shoots you
-  // the instant it can -- the reaction clock in stepAi below keeps its existing meaning.
+  // The turret, the firing solution and `hasSolution` are deliberately untouched: aiming is
+  // not committed, only movement is, so an enemy that has committed to a heading still
+  // tracks and shoots you the instant it can -- the reaction clock in stepAi below keeps
+  // its existing meaning.
   const committed = commitMove(world, tank, cfg, decision.desiredMove, decision.avoid, decision.avoidKind);
 
   // The aim-hold layer (issue #344), applied centrally beside the commitment layer and
-  // for the same reasons. It replaces only `turretAngle` and its write-back pair.
+  // for the same reasons.
   //
   // `hasSolution` and `fire` are deliberately left reading the fresh solution: this holds
   // where the tank has decided to point, not whether it believes it has a shot, and the
@@ -83,12 +78,11 @@ export function decideAi(world: World, tank: Tank): AiDecision {
   // held aim that has drifted off target simply misses, which is the cost the profile's
   // aimHoldTime is tuned against -- it is not allowed to become a stealth accuracy buff.
   //
-  // The barrel gets its target one of three ways: a live firing solution (the
-  // personality's), then the remembered contact (#372), then idle search (#371). Each is
-  // strictly less informed than the one before it -- a tank that has just lost sight looks
-  // where its target was, and only starts sweeping once that memory expires. All three go
-  // through holdAimFor, so a search heading gets the same hold span, break test and slew as
-  // a real firing solution, and only one place decides where the barrel is going.
+  // Live solution, then remembered contact (#372), then idle search (#371): each is strictly
+  // less informed than the one before it -- a tank that has just lost sight looks where its
+  // target was, and only starts sweeping once that memory expires. All three go through
+  // holdAimFor, so a search heading gets the same hold span, break test and slew as a real
+  // firing solution.
   //
   // `hasSolution` is the switch because it is already the dispatcher's answer to "does
   // this tank have something to point at" -- it is what feeds tank.aimTicks, and it is
@@ -113,10 +107,9 @@ export function decideAi(world: World, tank: Tank): AiDecision {
 }
 
 export function stepAi(world: World, events: SimEvent[]): void {
-  // Same phase gate as applyPlayerInput, via the same helper (round.ts's roundPhase),
-  // so the player path and the AI path cannot drift apart: countdown blocks movement
-  // entirely (turret tracking still happens inside decideAi below); grace allows
-  // movement but blocks fire/mines; live is unrestricted.
+  // Same phase gate as applyPlayerInput, via the same helper, so the player path and the
+  // AI path cannot drift apart: countdown blocks movement entirely; grace allows movement
+  // but blocks fire/mines; live is unrestricted.
   const phase = roundPhase(world);
   const canAct = phase === 'live';
 
@@ -149,10 +142,8 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // note) and the decision below reads a memory that is current for this tick.
     updateTargetMemory(world, tank, resolveOpponent(world, tank, configFor(tank.kind)));
     const decision = decideAi(world, tank);
-    // The reaction clock: consecutive ticks a firing solution has been held
-    // (see AiDecision.hasSolution) in live play. Accumulated here, where the
-    // per-tick truth arrives; losing the solution resets it, so cover breaks
-    // the clock.
+    // The reaction clock (see AiDecision.hasSolution). Losing the solution resets it, so
+    // cover breaks the clock.
     //
     // Countdown ticks do not count (issue #367): the countdown is a phase in
     // which the player cannot act either, so time spent in it satisfying a
@@ -160,8 +151,7 @@ export function stepAi(world: World, events: SimEvent[]): void {
     //
     // Keyed on the phase rather than `canAct` because the rule is "start at live
     // acquisition", not "start when firing is allowed". The two are currently the
-    // same expression (`canAct` is `phase === 'live'`, above), so they agree
-    // whatever GRACE_TICKS is.
+    // same expression, so they agree whatever GRACE_TICKS is.
     //
     // Reset to 0 rather than frozen: nothing else reads `aimTicks` -- the only
     // other consumer is the fire gate below -- so the two are observationally
@@ -173,10 +163,9 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // the shot at the bell stays telegraphed. Only the clock is held.
     tank.aimTicks = phase === 'live' && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;
     tank.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : decision.desiredMove;
-    // Turret turns at a finite rate and a finite acceleration (issue #347): accelSlew
-    // carries the angular velocity on the tank, so the gun ramps up, tracks, and eases back
-    // down instead of only ever being stopped or travelling at the cap. See
-    // AI_TURRET_RAMP_TICKS's comment in constants.ts for the measurement.
+    // Turret turns at a finite rate and a finite acceleration (issue #347), so the gun ramps
+    // up, tracks, and eases back down instead of only ever being stopped or travelling at
+    // the cap.
     const spun = accelSlew(
       tank.turretAngle, tank.turretVel ?? 0, decision.turretAngle,
       AI_TURRET_TURN_RATE * DT, (AI_TURRET_TURN_RATE * DT) / AI_TURRET_RAMP_TICKS,
@@ -185,21 +174,20 @@ export function stepAi(world: World, events: SimEvent[]): void {
     tank.turretVel = spun.vel;
     tank.aiState = decision.nextState;
     tank.aiTimer = decision.nextTimer;
-    // The committed movement heading and its countdown, written back beside the other two
-    // pieces of per-tank AI state so decisions stay pure and the dispatcher owns the write
+    // Written back here so decisions stay pure and the dispatcher owns the write
     // (issue #222). Cleared to undefined rather than left stale when nothing is held, so
     // "no commitment" is genuinely absent rather than a zero vector that reads as a real
     // heading of due-east.
     tank.aiIntent = decision.nextIntent ?? undefined;
     tank.aiIntentTicks = decision.nextIntentTicks;
-    // The held aim angle and its countdown (issue #344), written back and cleared the same
-    // way as the movement pair above: "no held aim" is absent, not an angle of 0.
+    // Cleared the same way as the movement pair above (issue #344): "no held aim" is
+    // absent, not an angle of 0.
     tank.aiAimHeld = decision.nextAimHeld ?? undefined;
     tank.aiAimHeldTicks = decision.nextAimHeldTicks;
-    // The held shot plan (issue #332). Written only when the decision carried one, so a
-    // behaviour that never evaluates a shot plan leaves whatever it held untouched rather
-    // than clearing it -- see AiDecision.nextShotPlan for why absence means "no opinion"
-    // here and `null` means "clear" for the intent and aim-hold pairs above.
+    // Written only when the decision carried one (issue #332), so a behaviour that never
+    // evaluates a shot plan leaves whatever it held untouched rather than clearing it -- see
+    // AiDecision.nextShotPlan for why absence means "no opinion" here and `null` means
+    // "clear" for the intent and aim-hold pairs above.
     //
     // The corollary is a trap: a decision path that forgets the pair silently freezes
     // the countdown instead of erroring, so the window runs longer than the profile
@@ -219,10 +207,8 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // decision functions: the tank still drives, dodges and aims (the sandbox uses it
     // as moving scenery), and the decision layer stays ignorant of a flag that is not
     // its business.
-    // The reaction gate: reactionTime consumed. An enemy may not fire until it
-    // has held its solution for the profile's reactionTime -- the delay between
-    // seeing you and punishing you, per kind. Sits with the other act-site
-    // gates (cooldown, disarmed) so decision-level tests stay decision-level.
+    // The reaction gate sits with the other act-site gates (cooldown, disarmed) so
+    // decision-level tests stay decision-level.
     // Measured for issue #367: 2 of pacifist.test.ts's 60 seeds winnable by a player who
     // never fires, inside that suite's MAX_FREE_WIN_RATE of 0.05.
     const reactionTicks = Math.round(configFor(tank.kind).ai.reactionTime * TICK_HZ);
@@ -239,10 +225,9 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // that same tolerance keeps one definition of "on target" instead of two.
     const onTarget = Math.abs(angleDelta(tank.turretAngle, decision.turretAngle)) <= AI_AIM_BREAK;
     if (canAct && !tank.disarmed && decision.fire && onTarget && tank.fireCooldown <= 0 && (tank.aimTicks ?? 0) >= reactionTicks && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
-      // Fire along the tank's actual (post-slew) turret angle, not the decision's desired
-      // angle -- a shot taken mid-swing must go where the barrel currently points, not
-      // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
-      // fire with a perfect solution while the barrel visibly points elsewhere.
+      // Fire along the tank's actual (post-slew) turret angle: decision.turretAngle here
+      // would let the AI fire with a perfect solution while the barrel visibly points
+      // elsewhere.
       // The same cap-refusal cost the player pays (issue #356), and applied here for the
       // reason the cap itself is: a rule each caller opts into is one the next caller
       // silently escapes. No branch on tank kind -- an enemy that spams at its cap pays the
@@ -256,9 +241,8 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // Same idea for mines: the decision functions gate on cooldown/cap but not on
     // teammates, and a mine laid on top of a teammate kills it on a 3-second fuse
     // (Brown, which never moves, cannot escape one).
-    // MINE_LAYER gates the trigger from config: only kinds whose definition grants the
-    // ability lay mines (config/data/tank-defs.json), so the dispatcher holds no
-    // "which kinds lay mines" knowledge.
+    // Which kinds lay mines is data (MINE_LAYER in config/data/tank-defs.json), not
+    // dispatcher knowledge.
     //
     // Directive B: this is the offense side of estimation error (targeting.ts's
     // friendlyInMineBlast doc comment) -- a perceived flee radius, drawn fresh here via

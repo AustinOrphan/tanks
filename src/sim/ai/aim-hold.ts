@@ -6,7 +6,7 @@ import { AI_AIM_BREAK, TICK_HZ } from '../constants';
 /**
  * The aim-hold layer (issue #344): an AI tank commits to an aim angle for a span and
  * slews toward that, instead of re-solving `aimLead` from scratch every tick and chasing
- * the result. Movement got this treatment in issue #222; this is the same shape for aim.
+ * the result.
  *
  * Measured before this layer existed, over 60 seeds x 2 arenas x 2 player policies: the
  * turret was perfectly still on only 42.53% of live ticks for teal and 72.93% for brown,
@@ -14,16 +14,15 @@ import { AI_AIM_BREAK, TICK_HZ } from '../constants';
  * tracks.
  *
  * It is not aim error: setting AI_AIM_SPREAD to zero moved the micro-nudge rate by at most
- * 1.3 points. The motion is `aimLead` genuinely tracking a moving player, re-solved every
- * tick with no memory of where the tank had already decided to point. So the fix belongs
+ * 1.3 points. The motion is `aimLead` genuinely tracking a moving player, so the fix belongs
  * on the target, not on the slew and not on the error term.
  *
  * Total rotation is deliberately not the metric: the turret must cover the player's
- * bearing change either way, so no tracking fix can reduce it. What changes is the
- * distribution -- dwell, then a deliberate correction, instead of continuous nudging.
+ * bearing change either way. What changes is the distribution -- dwell, then a deliberate
+ * correction, instead of continuous nudging.
  *
- * Deterministic and draw-free: the span is a plain countdown, not a seeded roll, so this
- * adds no RNG stream and cannot desync an existing one.
+ * The span is a plain countdown, not a seeded roll, so this adds no RNG stream and cannot
+ * desync an existing one.
  */
 export function holdAimFor(
   tank: Tank,
@@ -40,15 +39,13 @@ export function holdAimFor(
 }
 
 /**
- * `holdAimFor`'s logic with the held state passed in explicitly rather than read off the
- * `Tank`, mirroring commitHeading beside commitMove: the bot that drives a player slot
- * (decidePlayerInput, player-profile.ts) is forbidden from writing to the world, so it
- * would keep its own state and call this directly.
+ * Split from `holdAimFor`, as commitHeading is from commitMove, because the bot that drives
+ * a player slot (decidePlayerInput, player-profile.ts) is forbidden from writing to the
+ * world, so it would keep its own state and call this directly.
  *
  * The break test uses `angleDelta`, not a raw subtraction, so a hold survives the +/-pi
- * seam: an angle a hair under +pi and one a hair over -pi are two hundredths of a radian
- * apart, and a raw subtraction would read them as most of a full turn and re-solve every
- * time a tank tracked through due west.
+ * seam: a raw subtraction would read two angles either side of it as most of a full turn
+ * and re-solve every time a tank tracked through due west.
  */
 export function holdAim(
   held: number | null,
