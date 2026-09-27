@@ -768,7 +768,8 @@ function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | nu
 /**
  * The deterministic way out when BOTH dodge perpendiculars are blocked (issue #224 AC3).
  * Scored by lateral clearance from the shell's line, so a heading that merely flees down the
- * corridor never beats one that actually leaves it.
+ * corridor never beats one that actually leaves it. Candidates that step toward a mine already
+ * in flee range are refused, the same constraint the two perpendicular passes apply.
  *
  * Returns null when the whole wheel is blocked, which is a real state in a dead end: the
  * caller then falls back to its preferred perpendicular, and that is the explicit, stable
