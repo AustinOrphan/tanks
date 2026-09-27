@@ -21,7 +21,7 @@ const PROJECTILE_BULLET_TYPE: Record<ProjectileType, BulletType> = {
  * Resolve a TankDefinition + a BalanceConstants table into a flat runtime config.
  *
  * Adapted from the supplied resolved-tank-config.ts. Generalised over the key type
- * `K` so the SAME resolver serves both the game roster (keyed by the sim's TankKind)
+ * `K` so the same resolver serves both the game roster (keyed by the sim's TankKind)
  * and the Wii reference taxonomy (keyed by TankType) -- see config/reference/.
  *
  * Provenance (issue #783): the supplied resolver is first-party. It was written for this
@@ -50,7 +50,7 @@ export function resolveTankConfig<K extends string>(
     throw new Error(`Unknown AI profile: ${definition.aiProfile}`);
   }
 
-  // EVERY class lookup is guarded, not just the two above: reference data enters
+  // Every class lookup is guarded, not just the two above: reference data enters
   // through `as` casts (JSON), where the Record<> types check nothing, and an
   // unguarded miss resolves to a silent `undefined` stat -- the partial config
   // this function's contract (and resolve.test.ts) promises can never exist.
@@ -83,7 +83,7 @@ export function resolveTankConfig<K extends string>(
     singlePlayerOnly: definition.singlePlayerOnly,
     movementSpeed,
     rotationSpeed,
-    // A COPY, like weapon and abilities below: without it the resolved config
+    // A copy, like weapon and abilities below: without it the resolved config
     // holds a live reference into the balance table, so two kinds sharing a
     // profile share one object and a stray mutation rewrites global balance.
     // Pinned by the isolation test in resolve.test.ts.

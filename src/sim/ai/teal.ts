@@ -8,7 +8,7 @@ import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
 // The mobile/aggressive-behaviour implementation (decideAi routes TACTICAL --
-// teal today -- plus the not-yet-shipped OFFENSIVE and BERSERKER behaviours here).
+// teal and yellow today -- plus the not-yet-shipped OFFENSIVE and BERSERKER behaviours here).
 // `cfg` is injectable so tests can probe profile consumption.
 export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig = configFor(tank.kind)): AiDecision {
   // Weapon (ricochet bullet, its muzzle speed, and its bounce budget) comes from
@@ -30,57 +30,39 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   const avoidKind = avoid === null
     ? null
     : incomingThreats(seen, tank, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
-  // Mobile (spec §7): wander is the baseline move whenever there's nothing more specific
-  // to do; dodging overrides it when a threat is present. This lets Teal keep roaming
-  // (and reposition itself into new bank opportunities) instead of standing still as a
-  // stationary turret while it has line-of-sight or a bank path.
-  // The baseline move is the distance-band seek (targeting.ts seekMove): approach
-  // beyond ai.preferredDistance, retreat-by-draw inside ai.minimumDistance, wander
-  // in the band. Dodging still overrides it entirely.
+  // Mobile (spec §7): the baseline move is the distance-band seek (targeting.ts seekMove) --
+  // approach beyond ai.preferredDistance, retreat-by-draw inside ai.minimumDistance, wander
+  // in the band -- so Teal keeps roaming (and repositions itself into new bank
+  // opportunities) instead of standing still as a stationary turret while it has
+  // line-of-sight or a bank path. Dodging overrides it entirely when a threat is present.
   const move = avoid ?? seekMove(world, tank, cfg);
 
-  // Aggressive (swapped from Grey): the dodge above overrides only `move`. Unlike Grey,
-  // Teal does NOT hold fire while dodging and has no patience counter — it dodges and
-  // shoots in the same tick, same as Grey used to. Nothing below consumes tank.aiTimer,
-  // so nextTimer is always 0 on every path.
-  // WHICH SHOT TYPE Teal prefers, held per tank instead of alternating on a global cycle
-  // (issue #332). The preference still exists so Teal visibly performs both bank shots and
-  // direct shots rather than banking only when the player happens to stand behind cover
-  // (user decision: "alternate/mix"), and both orderings still fall through to the other
-  // option when the preferred one is unavailable -- a preference, not an exclusion; Teal
-  // never loses a shot it could have taken.
+  // Aggressive: the dodge above overrides only `move`. Unlike Grey, Teal does not hold fire
+  // while dodging and has no patience counter -- it dodges and shoots in the same tick.
+  // Nothing below consumes tank.aiTimer, so nextTimer is always 0 on every path.
+  // Which shot type Teal prefers, held per tank for a window (issue #332). The preference
+  // exists so Teal visibly performs both bank shots and direct shots rather than banking
+  // only when the player happens to stand behind cover (user decision: "alternate/mix"), and
+  // both orderings fall through to the other option when the preferred one is unavailable
+  // -- a preference, not an exclusion; Teal never loses a shot it could have taken.
   //
-  // What changed is WHEN it may turn over. `Math.floor(world.tick / BANK_PREFER_TICKS) % 2`
-  // flipped every tank's preference on the same tick regardless of the engagement, and
-  // because 120 is an exact multiple of the aim-jitter cadence the flip landed on a
-  // boundary tick. Measured on this tree over 60 seeds x 2 arenas x 2 player policies,
-  // isolating plan-boundary ticks from ordinary jitter boundaries: teal's aim-target step
-  // there had a P95 of 52.83-64.91 degrees against 0.01-1.63 for every other kind, while
-  // its MEDIAN was 0.00 -- the flip cost nothing most of the time and swung the gun most
-  // of a half-turn in the tail, which reads as indecision rather than personality.
+  // The window may only turn the plan over on a tick where the held plan has no solution --
+  // so the angle that tick is the fallback's either way, and the turnover adds nothing on
+  // top of a takeover that was already happening. That is a property of the `switching`
+  // line below, not an empirical claim, and it is why this is not merely a longer cycle: a
+  // longer span reduces how often the gun swings, not how far (under a shared tick-based
+  // cycle, teal's aim-target step at plan boundaries had a P95 of 52.83-64.91 degrees,
+  // against 0.01-1.63 for every other kind). Solutions come and go as the player moves
+  // relative to cover, and that is what keeps both plans in circulation.
   //
-  // THE RULE, and the reason it is not merely a longer cycle: a longer span reduces how
-  // OFTEN the swing happens and does nothing to the size of it, which is what the metric
-  // measures. The window may only turn the plan over on a tick where the held plan has NO
-  // solution -- so the angle that tick is the fallback's either way, and the turnover adds
-  // nothing on top of a takeover that was already happening. That is a property of the
-  // `switching` line below, not an empirical claim. Solutions come and go as the player
-  // moves relative to cover, and that is what keeps both plans in circulation.
+  // This does not make a plan change free to look at: losing a solution moves the gun to the
+  // other plan's angle whether or not the stored preference follows (P95 23.97-58.93 degrees
+  // on real turnover ticks). What the gating removes is the flips while both plans were
+  // solvable: measured plan turnovers fell from 348 and 276 to 38 and 25 over 60 seeds x 2
+  // arenas x 2 player policies.
   //
-  // WHAT THIS DOES NOT DO, measured rather than assumed: it does not make a plan change
-  // free to look at. On the ticks where the plan genuinely turned over, the aim-target step
-  // has a median of 0.00 degrees but a P95 of 23.97-58.93 and a maximum of 92.90-137.10 --
-  // because losing a solution moves the gun to the other plan's angle whether or not the
-  // stored preference follows. What the gating removes is the flips that used to happen
-  // while BOTH plans were solvable: measured plan turnovers fall from 348 and 276 to 38 and
-  // 25 over the same population, the before figures taken by restoring only `preferBank` to
-  // the old expression. An earlier draft of this comment claimed the turnover "moves no
-  // target"; the measurement above is what corrected it. A later draft quoted 199 and 163
-  // as the before counts; those are `planStep`'s SAMPLE counts, not turnovers, and the
-  // re-run is what corrected that.
-  //
-  // READ HERE, above the no-target return below, on purpose. `stepAi` writes the pair back
-  // only when the decision carries one, so a return path that omits it FREEZES the
+  // Read here, above the no-target return below, on purpose. `stepAi` writes the pair back
+  // only when the decision carries one, so a return path that omits it freezes the
   // countdown -- and the window would then be longer than the profile says by however long
   // the arena spends without a live player (every countdown, every player death). Every
   // return in this function carries the pair for that reason.
@@ -95,26 +77,23 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   const nextShotPlanTicks = lapsed ? Math.round(cfg.ai.shotCommitmentTime * TICK_HZ) : planTicks - 1;
 
   // Resolved centrally (issue #359): every behaviour asks the same question of the same
-  // function, which is what lets the deferred multi-player policy -- a per-AI commitment
-  // window, a seeded tie-break, a perception bound -- land in ONE place. Still returns the
-  // first alive player-kind tank today, so this extraction moves no behaviour.
+  // function, so the multi-player policy -- a per-AI commitment window, a seeded tie-break,
+  // a perception bound (ai/target-selection.ts) -- lives in one place.
   const player = resolveOpponent(world, tank, cfg);
   if (!player) {
-    // No target, but Teal is the MOBILE personality (spec §7): keep roaming, exactly as
-    // Grey does in the same situation. Freezing at {0,0} here made Teal a stationary
-    // target for the whole of every countdown and every player respawn -- a hardcoded
-    // zero, not a decision. `move` already folds in the dodge when one is present.
+    // No target, but Teal is the mobile personality (spec §7): keep roaming, as Grey does
+    // in the same situation, rather than freezing in place. `move` already folds in the
+    // dodge when one is present.
     return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan: holdPlan, nextShotPlanTicks };
   }
 
   const speed = weapon.speed;
-  // Raw solution existence, for the reaction clock (hasSolution): LINE OF SIGHT
-  // or a bank path -- NOT the vetted, jittered firing angle. A teammate crossing
-  // the lane holds the TRIGGER (shotHitsOwnSide below), but must not reset the
-  // clock: review measured teal's clock zeroing where grey's kept 60 held ticks
-  // on identical geometry, against the field's own doc. bankSeen is only known
-  // when tryBank actually runs; when it doesn't, either the direct line exists
-  // (sees) or the profile never banks -- both give the honest answer.
+  // Raw solution existence, for the reaction clock (hasSolution): line of sight
+  // or a bank path -- not the vetted, jittered firing angle. A teammate crossing
+  // the lane holds the trigger (shotHitsOwnSide below), but must not reset the
+  // clock. bankSeen is only known when tryBank actually runs; when it doesn't,
+  // either the direct line exists (sees) or the profile never banks -- both give
+  // the honest answer.
   const sees = lineOfSight(tank.pos, player.pos, world.walls);
   let bankSeen = false;
 
@@ -159,9 +138,9 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   const switching = lapsed && preferred === null;
   const nextShotPlan: 'bank' | 'direct' = switching ? (preferBank ? 'direct' : 'bank') : holdPlan;
 
-  // Teal now lays mines too (mirrors Grey's rule). Only while NOT dodging: a mine dropped
-  // mid-dodge is wasted and risks self-trapping. MINE_CAP is checked here as
-  // defence-in-depth: dropMine enforces this cap for every owner too, but checking it
+  // Teal lays mines too (mirrors Grey's rule). Only while not dodging: a mine dropped
+  // mid-dodge is wasted and risks self-trapping. The mine cap (cfg.mineCapacity) is checked
+  // here as defence-in-depth: dropMine enforces a cap for every owner too, but checking it
   // here avoids burning tank.mineCooldown on a request dropMine would refuse anyway.
   // Also gated on the player being near enough for the mine to matter -- see
   // mineThreatensPlayer. Availability is not a reason to lay ordnance.
@@ -176,6 +155,6 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   }
 
 
-  // Neither exists: reposition. Teal never falls back to a direct/rocket shot (spec §7).
+  // Neither exists: reposition.
   return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan, nextShotPlanTicks };
 }

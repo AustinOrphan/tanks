@@ -2,21 +2,18 @@ import type { ArenaDefinition } from './arena-types';
 import { validateArenas } from './validate';
 
 /**
- * A deliberately NON-SHIPPED size. It exists to prove the per-level render refit
+ * A deliberately non-shipped size. It exists to prove the per-level render refit
  * (PR #53) sizes and centres the ground plane correctly for a board other than
  * the shipped ones -- checked in `tools/gl/harness.ts`, both at construction and
  * through `refit()` -- and to run the geometry and claim-validation paths (this
- * file, `arena-validation.test.ts`) at that size. NOT every size-generic code
+ * file, `arena-validation.test.ts`) at that size. Not every size-generic code
  * path: walls and tanks are not separately checked at this size.
  *
- * 17x13, NOT 15x11: it was 15x11 until arena-04 shipped at exactly that size,
- * which would have made `arena-validation.test.ts`'s "differs from every shipped
- * arena" assertion false. The fixture moved rather than the level -- a fixture
- * whose whole job is to be an unshipped size must give way to production data,
- * and the suite now covers three distinct board sizes instead of two. The name
- * stays WIDE_ARENA; every consumer reads its dimensions off the object.
+ * `arena-validation.test.ts` pins it at 17x13 and asserts that size differs from
+ * every shipped arena's. If a shipped level ever takes it, the fixture moves
+ * rather than the level: its whole job is to be an unshipped size.
  *
- * TEST-ONLY: never in ARENAS, so it cannot reach the shipped sequence. It runs
+ * Test-only: never in ARENAS, so it cannot reach the shipped sequence. It runs
  * through the same validator as the shipped file, so it cannot rot into
  * something the real pipeline would reject.
  */
@@ -62,8 +59,8 @@ export const WIDE_ARENA: ArenaDefinition = validateArenas(
 )[0];
 
 /**
- * DELIBERATELY BROKEN fixtures: the negative controls for the universal geometry
- * rules (src/sim/arena-claims.ts structuralFailures). Each is structurally VALID --
+ * Deliberately broken fixtures: the negative controls for the universal geometry
+ * rules (src/sim/arena-claims.ts structuralFailures). Each is structurally valid --
  * it passes validateArenas, so it reaches the geometry rules at all -- and violates
  * exactly one rule. A guard is worth what its own tests prove.
  */
@@ -83,12 +80,12 @@ export const SEALED_POCKET_ARENA: ArenaDefinition = validateArenas(
 )[0];
 
 /**
- * Negative control for the STATIONARY-banker spawn rule. Green at (1, 1) has NO direct
+ * Negative control for the STATIONARY-banker spawn rule. Green at (1, 1) has no direct
  * line to the player at (5, 1) -- the solid at (3, 1) sits squarely between them -- but
  * can ricochet off the boundary ring and land on the spawn anyway. That is the whole
  * point of the rule: satisfying "no spawn sightline" is not the same as being safe once
- * an enemy can shoot round corners, and this fixture is a board that passes the old rule
- * and fails the new one.
+ * an enemy can shoot round corners, and this fixture is a board that passes the direct
+ * sightline rule and fails the banker rule.
  */
 export const BANK_SIGHTLINE_ARENA: ArenaDefinition = validateArenas(
   {

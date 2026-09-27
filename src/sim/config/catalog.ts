@@ -4,11 +4,11 @@
 //
 // This is the shape every entity family shares -- tanks today (definitions +
 // balance classes -> ResolvedTankConfig), walls (definitions resolved by
-// identity, no balance classes yet), arenas (config/arenas.ts -- validated JSON,
-// also resolved by identity), and whatever comes next (power-ups, bosses,
-// turrets, destructibles). A new family supplies its Definition type, its
-// Resolved type, and a pure resolver; the catalog supplies resolve-once
-// semantics and the keyed accessor.
+// identity, no balance classes yet), arenas, campaign levels and versus-catalog
+// entries (validated JSON, also resolved by identity), and whatever comes next
+// (power-ups, bosses, turrets, destructibles). A new family supplies its
+// Definition type, its Resolved type, and a pure resolver; the catalog supplies
+// resolve-once semantics and the keyed accessor.
 //
 // Pure by construction: definitions in, resolved plain objects out, nothing
 // imported. Resolution happens at module load, never per tick, so the sim's

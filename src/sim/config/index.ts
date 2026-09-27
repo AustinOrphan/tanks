@@ -8,10 +8,11 @@
 // also drives the 9-type Wii reference taxonomy in config/reference/, proving the
 // pipeline generalises beyond the shipped roster.
 //
-// Tanks are ONE FAMILY on the generic catalog machinery (catalog.ts); walls are
+// Tanks are one family on the generic catalog machinery (catalog.ts); walls are
 // the second (walls.ts, read via wallConfigFor); arenas are the third
 // (config/arenas.ts, read via ARENA_DEFS/arenaById) -- validated JSON in
-// config/data/arenas.json, not TypeScript literals. New families -- power-ups,
+// config/data/arenas.json, not TypeScript literals. Campaign levels (campaign.ts)
+// and the versus catalog (versus-catalog.ts) ride it too. New families -- power-ups,
 // turrets, bosses, destructibles -- should ride createCatalog the same way
 // rather than inventing parallel plumbing.
 // The authoritative balance scalars live in data/balance.json; constants.ts

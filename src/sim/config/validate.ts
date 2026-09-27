@@ -17,10 +17,11 @@ import { VERSUS_MODES, VERSUS_PLAYER_COUNTS, VERSUS_SPAWN_POLICIES, VERSUS_VARIA
 
 // ---------------------------------------------------------------------------
 // Runtime validation for the JSON entity data (data/tank-defs.json,
-// data/ai-profiles.json).
+// data/ai-profiles.json, data/arenas.json, data/campaign.json,
+// data/versus-catalog.json).
 //
 // JSON enters through `as`-free `unknown` and leaves fully typed, or the module
-// throws AT LOAD -- a bad edit is a boot failure naming the exact path, never a
+// throws at load -- a bad edit is a boot failure naming the exact path, never a
 // silently-undefined stat downstream. This is the trade for moving the tables
 // out of TypeScript: the compiler checked enum membership and key completeness
 // for free; this module re-checks them at runtime, and its own tests carry the
@@ -30,10 +31,8 @@ import { VERSUS_MODES, VERSUS_PLAYER_COUNTS, VERSUS_SPAWN_POLICIES, VERSUS_VARIA
 
 /**
  * The canonical runtime list of tank kinds. `satisfies` keeps every entry a
- * real TankKind; the MissingKind check below makes ADDING a TankKind member
- * without listing it here a COMPILE error that names the missing kind -- this
- * is where the old "a 5th TankKind must be a compile error in the roster"
- * guard lives now that the roster is JSON.
+ * real TankKind; the MissingKind check below makes adding a TankKind member
+ * without listing it here a compile error that names the missing kind.
  */
 export const TANK_KINDS = ['player', 'brown', 'grey', 'teal', 'olive', 'green', 'yellow'] as const satisfies readonly TankKind[];
 type MissingKind = Exclude<TankKind, (typeof TANK_KINDS)[number]>;
@@ -53,7 +52,7 @@ function num(file: string, path: string, v: unknown): number {
   return v;
 }
 
-/** Counts (caps, bounce budgets, mission numbers): whole and non-negative. */
+/** Counts and grid coordinates (caps, bounce budgets, cells): whole and non-negative. */
 function nonNegInt(file: string, path: string, v: unknown): number {
   const n = num(file, path, v);
   if (!Number.isInteger(n) || n < 0) fail(file, path, `must be a non-negative integer, got ${n}`);
@@ -69,7 +68,7 @@ function nonNegative(file: string, path: string, v: unknown): number {
 
 /**
  * Durations in seconds that must not be zero: unbounded above like `nonNegative`, but the
- * sim either DIVIDES by them or scales them by a multiplier that cannot improve on zero.
+ * sim either divides by them or scales them by a multiplier that cannot improve on zero.
  * `positiveUnitInterval` makes the same exclusion for values that are also capped at 1;
  * these are spans, so they are not.
  */
@@ -192,7 +191,7 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       }
     }
     // Accuracies, chances and weights are [0, 1] by meaning -- grey's patience
-    // formula (1 - aggression) * TICK_HZ goes NEGATIVE for aggression > 1, so
+    // formula (1 - aggression) * TICK_HZ goes negative for aggression > 1, so
     // the range check is load-bearing, not pedantry. reactionTime (seconds) and
     // the two distances (world units) are genuinely unbounded above.
     const resolved: AIProfileBalance = {
@@ -206,23 +205,24 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // by it (targeting.ts), and 0 would make the spread Infinity.
       estimationAccuracy: positiveUnitInterval(file, `${profile}.estimationAccuracy`, p.estimationAccuracy),
       reactionTime: num(file, `${profile}.reactionTime`, p.reactionTime),
-      // Strictly positive, and the ONLY span in this schema that is: `hard` scales it DOWN
-      // (bot-difficulty.ts), and a multiplier cannot improve on zero -- an awarenessDelay
-      // authored at 0 would make `hard` identical to `normal` on this axis, which is issue
-      // #223's monotonicity criterion failing silently at load rather than loudly. The
-      // resolved value stays nonzero at every preset via MIN_COMPETENCE_AWARENESS_DELAY;
-      // this guard is about what may be AUTHORED.
+      // Strictly positive because `hard` scales it down (bot-difficulty.ts), and a
+      // multiplier cannot improve on zero -- an awarenessDelay authored at 0 would make
+      // `hard` identical to `normal` on this axis, which is issue #223's monotonicity
+      // criterion failing silently at load rather than loudly. The resolved value stays
+      // nonzero at every preset via MIN_COMPETENCE_AWARENESS_DELAY; this guard is about
+      // what may be authored.
       awarenessDelay: strictlyPositive(file, `${profile}.awarenessDelay`, p.awarenessDelay),
       // Signed on purpose, unlike every other field here: a margin is extra clearance, and
-      // a NEGATIVE one is a profile that cuts hazard corners. Difficulty composes over it
+      // a negative one is a profile that cuts hazard corners. Difficulty composes over it
       // additively, so `easy` reaches negative values from an authored 0 -- refusing them
       // here would forbid the resolved value the preset is defined to produce.
       safetyMargin: num(file, `${profile}.safetyMargin`, p.safetyMargin),
-      // Strictly positive for a different reason than awarenessDelay's: hazardRefreshTicks
-      // divides `world.tick` by it. Zero (or a value rounding to zero ticks) is a division
-      // by zero producing an Infinity bucket, i.e. one frozen hazard read for the whole
-      // round. Contained downstream only by accident; a degenerate config should die at
-      // load, the same argument aimAccuracy's guard makes.
+      // Strictly positive for a different reason than awarenessDelay's: the span, in ticks,
+      // is the divisor of `world.tick` in hazardBucket and estimationError, and a zero
+      // divisor buckets every tick to the same Infinity -- one frozen hazard read for the
+      // whole round. hazardRefreshTicks and estimationError also floor the divisor at 1 tick
+      // (which is what catches a value rounding to zero ticks), but a degenerate config
+      // should die at load, the same argument aimAccuracy's guard makes.
       hazardRefreshTime: strictlyPositive(file, `${profile}.hazardRefreshTime`, p.hazardRefreshTime),
       // Non-negative, not merely numeric: commitMove re-arms its window to
       // Math.round(commitmentTime * TICK_HZ), and a negative value would re-arm to a
@@ -231,15 +231,15 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       commitmentTime: nonNegative(file, `${profile}.commitmentTime`, p.commitmentTime),
       // Same reason commitmentTime is guarded: holdAimFor re-arms to
       // Math.round(aimHoldTime * TICK_HZ), and a negative span would re-arm to a negative
-      // countdown that never reaches zero -- an aim frozen for the rest of the round.
+      // countdown that never satisfies holdAim's `ticks > 0`, silently disabling the hold.
       aimHoldTime: nonNegative(file, `${profile}.aimHoldTime`, p.aimHoldTime),
       // Same reason again: tealDecision re-arms to Math.round(shotCommitmentTime * TICK_HZ),
       // and a negative span would re-arm to a negative countdown that is already lapsed.
       shotCommitmentTime: nonNegative(file, `${profile}.shotCommitmentTime`, p.shotCommitmentTime),
       // Same reason a fourth time: commitTarget re-arms to
       // Math.round(targetCommitmentTime * TICK_HZ), and a negative span would re-arm to a
-      // countdown that never reaches zero -- an AI locked onto its first target for the rest
-      // of the round, with rule 6's re-evaluation unreachable.
+      // countdown that never satisfies `ticks > 0` -- rule 6's re-evaluation would run every
+      // tick, silently disabling the commitment.
       targetCommitmentTime: nonNegative(file, `${profile}.targetCommitmentTime`, p.targetCommitmentTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),
@@ -268,7 +268,7 @@ function posInt(file: string, path: string, v: unknown): number {
 
 /**
  * The geometry half: dimensions, legend, grid, spawn counts. Split out from
- * validateArenas so the SANDBOX -- which generates a bare Arena programmatically
+ * validateArenas so the sandbox -- which generates a bare Arena programmatically
  * and has no id/notes/claims -- can be held to the same structural bar.
  */
 export function validateArenaShape(raw: unknown, file: string, path: string): ArenaShape {
@@ -361,8 +361,8 @@ function validateClaim(file: string, path: string, v: unknown, shape: ArenaShape
       const to = cell(file, `${path}.to`, v.to, shape);
       // A vacuous lane (from === to) reads "open" in both phases forever: the same
       // cell is always in line of sight of itself, whatever the walls do. Reject it
-      // at load rather than ship a claim that can never fail (CLAUDE.md: every
-      // assertion must be able to fail).
+      // at load rather than ship a claim that can never fail (docs/agent/testing-and-review.md:
+      // "Every assertion must be able to fail.").
       if (from[0] === to[0] && from[1] === to[1]) {
         fail(file, path, `has identical "from" and "to" [${from}] -- a lane like that is always "open" and can never fail`);
       }

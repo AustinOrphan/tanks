@@ -37,7 +37,7 @@ export function circleVsAABB(center: Vec2, radius: number, box: AABB): Hit {
   const dy = center.y - cy;
   const distSq = dx * dx + dy * dy;
   // Negated rather than `>=`: every comparison against NaN is false, so a `>=`
-  // guard falls THROUGH to the hit branch and reports a NaN circle as touching
+  // guard falls through to the hit branch and reports a NaN circle as touching
   // every box in the world. Failing closed keeps a poisoned entity inert.
   if (!(distSq < radius * radius)) return { hit: false, push: { x: 0, y: 0 } };
   const dist = Math.sqrt(distSq);
@@ -50,7 +50,7 @@ export function circleVsCircle(a: Vec2, ra: number, b: Vec2, rb: number): Hit {
   const dy = a.y - b.y;
   const r = ra + rb;
   const distSq = dx * dx + dy * dy;
-  // See circleVsAABB: `>=` fails OPEN on NaN and would make a NaN bullet kill
+  // See circleVsAABB: `>=` fails open on NaN and would make a NaN bullet kill
   // every tank in the arena, one per tick, at any distance.
   if (!(distSq < r * r)) return { hit: false, push: { x: 0, y: 0 } };
   const dist = Math.sqrt(distSq);
@@ -141,7 +141,7 @@ export interface SweepResult {
 }
 
 /**
- * True if a segment leaving `start` toward `target` is travelling INTO `box`, as opposed to
+ * True if a segment leaving `start` toward `target` is travelling into `box`, as opposed to
  * resting on one of its faces on the way out.
  *
  * Decided by probing a hair along the direction of travel rather than from the surface
@@ -174,15 +174,14 @@ export function reflectSweep(
   let target: Vec2 = { x: to.x, y: to.y };
   let bouncesLeft = bounces;
   const hits: SweepHit[] = [];
-  // Which wall the previous iteration bounced off, so only THAT wall is allowed to be
-  // ignored at t~0. Applying the epsilon to every wall is what let shells escape the map:
-  // at the arena's inside corners two boundary boxes meet, so a bounce point sits exactly
-  // on the abutting wall's face, its entry comes back t=0, and it was discarded as though
-  // it were the wall just left. The sweep then ran on THROUGH a solid 2-unit wall with no
-  // hit recorded and expired=false, and since raySegmentVsAABB reports t=0 for a segment
-  // starting inside a box, every later tick was skipped too -- the shell left the arena and
-  // nothing ever retired it, holding one of its owner's SHELL_CAP slots for the rest of the
-  // life. Five of those and the player cannot fire at all.
+  // Which wall the previous iteration bounced off, so only that wall is allowed to be
+  // ignored at t~0. Applying the epsilon to every wall lets shells escape the map: at the
+  // arena's inside corners two boundary boxes meet, so a bounce point sits exactly on the
+  // abutting wall's face, its entry comes back t=0, and it would be discarded as though it
+  // were the wall just left. The sweep then runs on through the solid wall with no hit
+  // recorded, and since raySegmentVsAABB reports t=0 for a segment starting inside a box,
+  // every later tick skips it too -- the shell leaves the arena and nothing retires it,
+  // holding one of its owner's SHELL_CAP slots for the rest of the life.
   let lastWall = -1;
 
   // Bounded loop: guards against pathological infinite reflection.
@@ -195,9 +194,9 @@ export function reflectSweep(
       if (h.t <= SWEEP_EPS) {
         // Only the wall just bounced off is ignored outright.
         if (i === lastWall) continue;
-        // Otherwise a t~0 contact is only real if the shell is actually going INTO this
-        // box. Every ricochet comes to rest exactly ON a face, so treating all of them as
-        // hits kills a shell the instant it bounces; ignoring all of them is what let one
+        // Otherwise a t~0 contact is only real if the shell is actually going into this
+        // box. Every ricochet comes to rest exactly on a face, so treating all of them as
+        // hits kills a shell the instant it bounces; ignoring all of them lets one
         // cross an abutting wall at an arena corner. The direction decides which it is.
         if (!headingInto(start, target, walls[i])) continue;
       }
@@ -223,7 +222,7 @@ export function reflectSweep(
     // raySegmentVsAABB only fills in a normal when a slab entry strictly beats the running
     // tmin, which starts at 0 -- so a segment beginning exactly on a face plane, or already
     // inside the box, comes back with a zero normal and nothing to reflect about. Fail
-    // CLOSED: stop the shell at the wall exactly as running out of bounces does. Reflecting
+    // closed: stop the shell at the wall exactly as running out of bounces does. Reflecting
     // about a zero normal returns the direction unchanged, which walks the shell deeper into
     // the wall and back out the far side.
     if (Math.abs(best.normal.x) < SWEEP_EPS && Math.abs(best.normal.y) < SWEEP_EPS) {
@@ -257,14 +256,13 @@ export function reflectSweep(
     let reflected: Vec2;
 
     if (corner) {
-      // Exact corner: reflect both axes -> retroreflection. ONE hit record, not
+      // Exact corner: reflect both axes -> retroreflection. One hit record, not
       // two: the two axis flips are one physical deflection point, not two
-      // separate bounces, and bouncesLeft below charges exactly one for it either
-      // way -- so a corner used to emit an extra ricochet event beyond what the
-      // budget accounted for (double audio/particles, and a bounceIndex that could
-      // repeat across ticks in bullets.ts's consumedBefore + i indexing). Collapsing
-      // to one record makes events-emitted and budget-consumed move 1:1, matching
-      // bankShot's own single-reflection corner model (targeting.ts).
+      // separate bounces, and bouncesLeft below charges exactly one for it. A second
+      // record would emit a ricochet event beyond what the budget accounted for (double
+      // audio/particles, and a bounceIndex that could repeat across ticks in bullets.ts's
+      // consumedBefore + i indexing); one keeps events emitted and budget consumed moving
+      // 1:1, matching bankShot's own single-reflection corner model (targeting.ts).
       const nx = Math.abs(pt.x - box.minX) < SWEEP_EPS ? -1 : 1;
       const ny = Math.abs(pt.y - box.minY) < SWEEP_EPS ? -1 : 1;
       hits.push({ point: pt, normal: { x: nx, y: ny }, wallIndex: bestWall });
@@ -301,47 +299,13 @@ export function driveVelocity(tank: Tank): Vec2 {
   return vscale(driveDirection(tank.desiredMove), configFor(tank.kind).movementSpeed);
 }
 
-/**
- * Push a tank out of the walls it overlaps, resolving the DEEPEST overlap at a time
- * until it is clear.
- *
- * It used to apply a push for EVERY overlapping wall in array order, which made the
- * result a function of how the level data was sliced rather than of its geometry: a
- * hull straddling three sub-cells of one flat run took three compounding pushes, and
- * each interior seam offered the circle-vs-box nearest-feature test a CORNER where the
- * real surface is flat. Measured on arena-01: before this change, 8,846 of 48,207
- * reachable wall-touching hull positions resolved to a different place after a 3x
- * re-slice of the same geometry, worst delta 0.481 against a TANK_RADIUS of 0.5; after,
- * 0 of 48,207, worst delta 0.000000. An independent re-measurement across all 4 shipped
- * arenas (3,356 reachable one-tick penetrations, both original and reversed wall array
- * order) also found 0 divergences, worst delta 0.000000000.
- *
- * Taking only the deepest overlap fixes that, because the deepest penetration is a
- * property of the UNION: for a hull over a flat run, the sub-cell beneath the centre
- * offers a face push AT LEAST as deep as its neighbours' corner pushes, which is exactly
- * what the unsliced wall would have offered. At most seam positions it is strictly
- * deeper; at an exact seam boundary the two adjacent sub-cells return an identical
- * corner push (same nearest point, same depth) and the union just needs either one of
- * them, which is where the paragraph below applies.
- *
- * Ties are broken on the push VECTOR, not array position, so the tiebreak is geometric
- * too: this matters even when the tied pushes are NOT identical, e.g. a tank centred on
- * the bisector of two diagonally-touching walls, where the tied depth is reached by two
- * opposite-direction pushes and picking "whichever wall came first" would make the
- * result order-dependent again.
- *
- * Iterating is what keeps concave corners correct -- clearing the deepest wall can
- * leave the hull inside a perpendicular one, so it goes round again. Bounded by
- * SWEEP_MAX_ITERATIONS; a gap narrower than the hull cannot be resolved by any
- * displacement and simply exhausts the budget rather than looping forever.
- */
 const AXES: Vec2[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
 
 function containsPoint(b: AABB, p: Vec2): boolean {
   return p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY;
 }
 
-/** How far from `p` along `dir` until the wall MASS ends. Marches box to box, so a run
+/** How far from `p` along `dir` until the wall mass ends. Marches box to box, so a run
  *  of sub-cells gives the same answer as the single box covering the same span. */
 function unionExitDistance(p: Vec2, dir: Vec2, walls: Wall[]): number {
   let dist = 0;
@@ -357,12 +321,44 @@ function unionExitDistance(p: Vec2, dir: Vec2, walls: Wall[]): number {
   return dist;
 }
 
+/**
+ * Push a tank out of the walls it overlaps, resolving the deepest overlap at a time
+ * until it is clear.
+ *
+ * Applying a push for every overlapping wall in array order would make the result a
+ * function of how the level data is sliced rather than of its geometry: a hull
+ * straddling three sub-cells of one flat run takes three compounding pushes, and each
+ * interior seam offers the circle-vs-box nearest-feature test a corner where the real
+ * surface is flat. Measured in #75: under a 3x re-slice of arena-01, that per-wall rule
+ * moved 8,846 of 48,207 reachable wall-touching hull positions (worst 0.481 against a
+ * TANK_RADIUS of 0.5) and this one moved none; reversing wall order on the four arenas
+ * then shipped moved none either.
+ *
+ * Taking only the deepest overlap fixes that, because the deepest penetration is a
+ * property of the union: for a hull over a flat run, the sub-cell beneath the centre
+ * offers a face push at least as deep as its neighbours' corner pushes, which is exactly
+ * what the unsliced wall would have offered. At most seam positions it is strictly
+ * deeper; at an exact seam boundary the two adjacent sub-cells return an identical
+ * corner push (same nearest point, same depth) and the union just needs either one of
+ * them, which is where the paragraph below applies.
+ *
+ * Ties are broken on the push vector, not array position, so the tiebreak is geometric
+ * too: this matters even when the tied pushes are not identical, e.g. a tank centred on
+ * the bisector of two diagonally-touching walls, where the tied depth is reached by two
+ * opposite-direction pushes and picking "whichever wall came first" would make the
+ * result order-dependent again.
+ *
+ * Iterating is what keeps concave corners correct -- clearing the deepest wall can
+ * leave the hull inside a perpendicular one, so it goes round again. Bounded by
+ * SWEEP_MAX_ITERATIONS; a gap narrower than the hull cannot be resolved by any
+ * displacement and simply exhausts the budget rather than looping forever.
+ */
 export function resolveWalls(tank: Tank, walls: Wall[]): void {
   for (let iter = 0; iter < SWEEP_MAX_ITERATIONS; iter++) {
-    // A centre INSIDE the mass escapes the mass. circleVsAABB's `inside` branch pushes
+    // A centre inside the mass escapes the mass. circleVsAABB's `inside` branch pushes
     // out through the nearest face of the one box it is given, which for a sub-cell is
-    // usually a buried seam -- so the same hull in the same place resolved differently
-    // depending only on how the wall was sliced. Ties break on the push VECTOR, never
+    // usually a buried seam -- so the same hull in the same place would resolve differently
+    // depending only on how the wall was sliced. Ties break on the push vector, never
     // on array or axis position, for the same reason the deepest-overlap pass does.
     if (walls.some((w) => !w.destroyed && containsPoint(w.aabb, tank.pos))) {
       let escape: Vec2 | null = null;
@@ -402,11 +398,7 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
   const mlen = vlen(tank.desiredMove);
 
   if (mlen > 0) {
-    // TURN, THEN DRIVE -- FORWARDS OR BACKWARDS, whichever is the shorter turn.
-    //
-    // Before this the hull was assigned the input direction outright and the position
-    // stepped along that same input, so a tank changed facing AND travel within one
-    // tick: it never turned, it teleported its heading.
+    // Turn, then drive -- forwards or backwards, whichever is the shorter turn.
     //
     // A tank has a reverse gear. Asking for the direction behind it should back it up,
     // not spin it through 180 first -- that is both slower and not how a tracked vehicle
@@ -426,7 +418,7 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
     const travel = { x: heading.x * gear, y: heading.y * gear };
     // Speed still falls off with how far the hull has left to swing, so a turn costs
     // ground rather than being free. Picking the nearer of the two headings caps that
-    // error at 90 degrees, so this never fully stalls the way a forced 180 did.
+    // error at 90 degrees, so this never fully stalls the way a forced 180 would.
     const align = Math.max(0, travel.x * move.x + travel.y * move.y);
     tank.pos = vadd(tank.pos, vscale(travel, cfg.movementSpeed * align * dt));
   }

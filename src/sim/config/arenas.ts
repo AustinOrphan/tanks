@@ -18,7 +18,7 @@ const BY_ID = createCatalog<string, ArenaDefinition, ArenaDefinition>(
   (id, defs) => defs[id],
 );
 
-/** Lookup by id, for tests and tooling that name an arena rather than index it. */
+/** Lookup by id, for anything that names an arena rather than indexing it. */
 export function arenaById(id: string): ArenaDefinition {
   const found = BY_ID.get(id);
   if (!found) throw new Error(`Unknown arena id: ${id}`);

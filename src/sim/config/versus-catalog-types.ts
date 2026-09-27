@@ -25,16 +25,17 @@ export const VERSUS_PLAYER_COUNTS: readonly number[] = [2, 3, 4];
  * Advertised variant generators. `seeded-destructible` is the one that exists:
  * seeded removal of a subset of destructible cells (`versus-variants.ts`), always
  * on for versus sessions with a seed. An entry declaring it is validated across a
- * pinned seed sweep; an entry with an EMPTY `variants` list ships its fixed board
- * only and skips that sweep.
+ * pinned seed sweep; an entry with an empty `variants` list skips that sweep. The
+ * list is a declaration only: nothing at runtime reads it, and `loadArena` applies
+ * the variant to every seeded versus load.
  */
 export const VERSUS_VARIANT_KINDS = ['seeded-destructible'] as const;
 export type VersusVariantKind = (typeof VERSUS_VARIANT_KINDS)[number];
 
 /**
  * Spawn placement policies. `maximin` is the shipped one -- `pickVersusSpawnCell`'s
- * farthest-first placement with the hard mutual-LOS filter (versus-spawns.ts). The
- * field exists so a future policy (e.g. #225's authoritative clearance rule) is a
+ * farthest-first placement with its hull-clearance filter (issue #225) and hard
+ * mutual-LOS filter (versus-spawns.ts). The field exists so a future policy is a
  * declared, validated property of an entry rather than an ambient assumption.
  */
 export const VERSUS_SPAWN_POLICIES = ['maximin'] as const;
@@ -43,17 +44,20 @@ export type VersusSpawnPolicy = (typeof VERSUS_SPAWN_POLICIES)[number];
 export interface VersusCatalogEntry {
   /**
    * Stable VS id -- the selection namespace (`VersusConfig.arenaId` before Start
-   * resolution, pane state, a future selector's key). NEVER `'random'`: that string
+   * resolution, pane state, the map selector's key). Never `'random'`: that string
    * is the menu's reserved draw-for-me sentinel, and the schema rejects it.
    */
   id: string;
   /** The arena geometry this entry plays on -- must name an `arenas.json` entry. */
   arenaId: string;
-  /** Selector display name (#274 consumes; hud's `arenaLabel` parity today). */
+  /** Selector display name, read through hud's `arenaLabel`. */
   displayName: string;
   /** One-line gameplay intent note (selector copy, #274). */
   intent: string;
-  /** Preview reference token consumed by the selector (#274). */
+  /**
+   * Preview reference token. Validated, but nothing reads it: the map selector draws its
+   * schematic from `arenaId`.
+   */
   preview: string;
   /** Supported player counts -- non-empty, strictly increasing, each in {2,3,4}. */
   players: number[];
@@ -61,6 +65,6 @@ export interface VersusCatalogEntry {
   modes: VersusMode[];
   /** The spawn placement policy the entry is validated under. */
   spawnPolicy: VersusSpawnPolicy;
-  /** Advertised variant generators -- unique; may be empty (fixed board only). */
+  /** Advertised variant generators -- unique; may be empty (skips the variant sweep). */
   variants: VersusVariantKind[];
 }

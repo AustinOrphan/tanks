@@ -162,7 +162,7 @@ describe('dangerAvoidMove', () => {
 
   it('flees an UNARMED mine too -- the fuse does not care whether it armed', () => {
     // stepMines detonates on MINE_TIMER expiry regardless of `armed`, and that path
-    // "spares nobody, including an owner still standing on it". A tank that dropped a mine
+    // "the blast spares nobody, owner included". A tank that dropped a mine
     // and then loitered inside 1.5 units (so it never armed) was blown up by its own fuse
     // while dangerAvoidMove reported no danger at all. Armed-ness only gates the PROXIMITY
     // trigger; the flee radius must not be gated on it.

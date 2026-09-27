@@ -13,11 +13,11 @@ import versusCatalogJson from './data/versus-catalog.json';
  * naming the exact path (versus-catalog.json: entries[2].players[0]), never a
  * silently malformed offer list.
  *
- * The five initial entries migrate the shipped arenas (setup-menu spec ruling 2:
- * shipped arenas plus Random stay offered), so each entry's id EQUALS its
- * arenaId. The contract does not require that: a future purpose-built VS map
- * (#271-#273) declares its own id, and `resolveVersusConfig`
- * (game/versus-config.ts) translates entry id -> arenaId at the Start boundary.
+ * The five campaign arenas are offered as entries of their own (setup-menu spec
+ * ruling 2: shipped arenas plus Random stay offered). Every entry's id currently
+ * equals its arenaId, but the contract does not require that: an entry may declare
+ * its own id, and `resolveVersusConfig` (game/versus-config.ts) translates entry
+ * id -> arenaId at the Start boundary.
  *
  * Geometry promises made by these declarations are proven by
  * `versus-catalog-rules.ts` and its sweep test, not here.
