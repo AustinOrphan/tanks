@@ -78,8 +78,8 @@ describe('createAudioDirector', () => {
     // Derived from src/audio/director.ts: `rate = 1 + bounceIndex *
     // RICOCHET_RATE_STEP` with RICOCHET_RATE_STEP = 0.15, so bounces 0/1/2 give
     // 1, 1.15 and 1.30 -- a little over a semitone (~2.4) per bounce, audible
-    // as a rising pitch without leaving the sample's usable range even at the
-    // ricochet shell's third and final bounce (RICOCHET_BOUNCES = 3).
+    // as a rising pitch without leaving the sample's usable range even at
+    // bounceIndex 2 (a ricochet shell, RICOCHET_BOUNCES = 2, emits indices 0 and 1).
     // Both 1 + 0.15 and 1 + 2 * 0.15 are exact in IEEE-754 doubles, so `toEqual`
     // is safe here and says more than a tolerance would.
     expect(rates).toEqual([1, 1.15, 1.3]);

@@ -18,7 +18,6 @@ export function circleVsAABB(center: Vec2, radius: number, box: AABB): Hit {
     center.y <= box.maxY;
 
   if (inside) {
-    // center is inside the box: push out through the nearest face
     const toLeft = center.x - box.minX;
     const toRight = box.maxX - center.x;
     const toBottom = center.y - box.minY;
@@ -30,7 +29,6 @@ export function circleVsAABB(center: Vec2, radius: number, box: AABB): Hit {
     return { hit: true, push: { x: 0, y: toTop + radius } };
   }
 
-  // center outside: separate from the closest point on the box
   const cx = Math.max(box.minX, Math.min(center.x, box.maxX));
   const cy = Math.max(box.minY, Math.min(center.y, box.maxY));
   const dx = center.x - cx;
@@ -55,7 +53,6 @@ export function circleVsCircle(a: Vec2, ra: number, b: Vec2, rb: number): Hit {
   if (!(distSq < r * r)) return { hit: false, push: { x: 0, y: 0 } };
   const dist = Math.sqrt(distSq);
   if (dist === 0) {
-    // concentric: pick a deterministic default axis
     return { hit: true, push: { x: r, y: 0 } };
   }
   const overlap = r - dist;
@@ -75,19 +72,18 @@ export function raySegmentVsAABB(from: Vec2, to: Vec2, box: AABB): RayHit | null
   let tmax = 1;
   let normal: Vec2 = { x: 0, y: 0 };
 
-  // X slab
   if (dx === 0) {
     if (from.x < box.minX || from.x > box.maxX) return null;
   } else {
     const inv = 1 / dx;
     let t1 = (box.minX - from.x) * inv;
     let t2 = (box.maxX - from.x) * inv;
-    let nx = -1; // entering through minX face (moving +x)
+    let nx = -1;
     if (t1 > t2) {
       const tmp = t1;
       t1 = t2;
       t2 = tmp;
-      nx = 1; // entering through maxX face (moving -x)
+      nx = 1;
     }
     if (t1 > tmin) {
       tmin = t1;
@@ -97,7 +93,6 @@ export function raySegmentVsAABB(from: Vec2, to: Vec2, box: AABB): RayHit | null
     if (tmin > tmax) return null;
   }
 
-  // Y slab
   if (dy === 0) {
     if (from.y < box.minY || from.y > box.maxY) return null;
   } else {
@@ -141,12 +136,9 @@ export interface SweepResult {
 }
 
 /**
- * True if a segment leaving `start` toward `target` is travelling into `box`, as opposed to
- * resting on one of its faces on the way out.
- *
- * Decided by probing a hair along the direction of travel rather than from the surface
- * normal, because the normal is exactly what raySegmentVsAABB fails to supply for a
- * boundary-start segment -- which is the whole reason this function exists.
+ * True if a segment from `start` travels into `box`, as opposed to resting on one of its
+ * faces on the way out. Probes along the direction of travel because the surface normal
+ * is exactly what raySegmentVsAABB fails to supply for a boundary-start segment.
  */
 function headingInto(start: Vec2, target: Vec2, box: AABB): boolean {
   const dx = target.x - start.x;
@@ -174,17 +166,14 @@ export function reflectSweep(
   let target: Vec2 = { x: to.x, y: to.y };
   let bouncesLeft = bounces;
   const hits: SweepHit[] = [];
-  // Which wall the previous iteration bounced off, so only that wall is allowed to be
-  // ignored at t~0. Applying the epsilon to every wall lets shells escape the map: at the
-  // arena's inside corners two boundary boxes meet, so a bounce point sits exactly on the
-  // abutting wall's face, its entry comes back t=0, and it would be discarded as though it
-  // were the wall just left. The sweep then runs on through the solid wall with no hit
-  // recorded, and since raySegmentVsAABB reports t=0 for a segment starting inside a box,
-  // every later tick skips it too -- the shell leaves the arena and nothing retires it,
-  // holding one of its owner's SHELL_CAP slots for the rest of the life.
+  // The only wall ignored outright at t~0. Ignoring every t~0 entry lets shells escape at
+  // the arena's inside corners, where a bounce point sits exactly on the abutting wall's
+  // face: its entry comes back t=0, the sweep runs on through the solid wall, and since
+  // raySegmentVsAABB reports t=0 for a segment starting inside a box, every later tick
+  // skips it too. Nothing retires the escaped shell, so it holds one of its owner's
+  // SHELL_CAP slots for the rest of the life.
   let lastWall = -1;
 
-  // Bounded loop: guards against pathological infinite reflection.
   for (let iter = 0; iter < SWEEP_MAX_ITERATIONS; iter++) {
     let best: RayHit | null = null;
     let bestWall = -1;
@@ -192,12 +181,10 @@ export function reflectSweep(
       const h = raySegmentVsAABB(start, target, walls[i]);
       if (h === null) continue;
       if (h.t <= SWEEP_EPS) {
-        // Only the wall just bounced off is ignored outright.
         if (i === lastWall) continue;
-        // Otherwise a t~0 contact is only real if the shell is actually going into this
-        // box. Every ricochet comes to rest exactly on a face, so treating all of them as
-        // hits kills a shell the instant it bounces; ignoring all of them lets one
-        // cross an abutting wall at an arena corner. The direction decides which it is.
+        // Any other t~0 contact counts only if the shell is heading into the box: every
+        // ricochet rests exactly on a face, so counting them all kills a shell the instant
+        // it bounces.
         if (!headingInto(start, target, walls[i])) continue;
       }
       if (best === null || h.t < best.t) {
@@ -236,7 +223,6 @@ export function reflectSweep(
     }
 
     if (bouncesLeft <= 0) {
-      // Out of bounces: stop dead at the wall; caller kills the bullet.
       return {
         end: pt,
         dir: vnorm(vsub(target, start)),
@@ -256,13 +242,10 @@ export function reflectSweep(
     let reflected: Vec2;
 
     if (corner) {
-      // Exact corner: reflect both axes -> retroreflection. One hit record, not
-      // two: the two axis flips are one physical deflection point, not two
-      // separate bounces, and bouncesLeft below charges exactly one for it. A second
-      // record would emit a ricochet event beyond what the budget accounted for (double
+      // One hit record, not two: the two axis flips are one deflection, and bouncesLeft
+      // charges one for it. A second record would emit an unbudgeted ricochet (double
       // audio/particles, and a bounceIndex that could repeat across ticks in bullets.ts's
-      // consumedBefore + i indexing); one keeps events emitted and budget consumed moving
-      // 1:1, matching bankShot's own single-reflection corner model (targeting.ts).
+      // consumedBefore + i indexing). bankShot's corner model (targeting.ts) matches.
       const nx = Math.abs(pt.x - box.minX) < SWEEP_EPS ? -1 : 1;
       const ny = Math.abs(pt.y - box.minY) < SWEEP_EPS ? -1 : 1;
       hits.push({ point: pt, normal: { x: nx, y: ny }, wallIndex: bestWall });
@@ -287,14 +270,13 @@ export function reflectSweep(
   };
 }
 
-/** Clamp a raw drive-input vector to unit length (diagonals aren't faster). */
 export function driveDirection(move: Vec2): Vec2 {
   const mlen = vlen(move);
   return mlen > 1 ? vscale(move, 1 / mlen) : move;
 }
 
-/** A tank's actual world velocity in units/sec — exactly what moveTank will apply.
- *  Shared by movement and AI aiming so the two definitions cannot drift. */
+/** Units/sec: what moveTank applies once the hull faces the drive direction or its
+ *  opposite, not while it is still turning. */
 export function driveVelocity(tank: Tank): Vec2 {
   return vscale(driveDirection(tank.desiredMove), configFor(tank.kind).movementSpeed);
 }
@@ -322,9 +304,6 @@ function unionExitDistance(p: Vec2, dir: Vec2, walls: Wall[]): number {
 }
 
 /**
- * Push a tank out of the walls it overlaps, resolving the deepest overlap at a time
- * until it is clear.
- *
  * Applying a push for every overlapping wall in array order would make the result a
  * function of how the level data is sliced rather than of its geometry: a hull
  * straddling three sub-cells of one flat run takes three compounding pushes, and each
@@ -398,12 +377,9 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
   const mlen = vlen(tank.desiredMove);
 
   if (mlen > 0) {
-    // Turn, then drive -- forwards or backwards, whichever is the shorter turn.
-    //
-    // A tank has a reverse gear. Asking for the direction behind it should back it up,
-    // not spin it through 180 first -- that is both slower and not how a tracked vehicle
-    // behaves. So aim at whichever of the requested heading or its opposite the hull is
-    // already closer to, and drive along the hull with the sign that matches.
+    // A tank has a reverse gear: asking for the direction behind it backs it up rather
+    // than spinning it through 180 first, which is slower and not how a tracked vehicle
+    // behaves.
     const want = angleOf(move);
     const reverse = Math.abs(angleDelta(tank.bodyAngle, want)) > Math.PI / 2;
     // Canonicalised into (-PI, PI]. `want + PI` is otherwise a raw 2PI when reversing
@@ -423,7 +399,7 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
     tank.pos = vadd(tank.pos, vscale(travel, cfg.movementSpeed * align * dt));
   }
 
-  resolveWalls(tank, walls); // slide along whatever it ran into
+  resolveWalls(tank, walls);
 }
 
 export function separateTanks(tanks: Tank[]): void {
@@ -434,7 +410,6 @@ export function separateTanks(tanks: Tank[]): void {
       if (!a.alive || !b.alive) continue;
       const hit = circleVsCircle(a.pos, TANK_RADIUS, b.pos, TANK_RADIUS);
       if (hit.hit) {
-        // push apart symmetrically (push separates a from b)
         a.pos = vadd(a.pos, vscale(hit.push, 0.5));
         b.pos = vsub(b.pos, vscale(hit.push, 0.5));
       }

@@ -64,8 +64,8 @@ describe('incomingThreats', () => {
 
   it('flags the tank\'s OWN shell once it is heading back at it (ricochet self-kill)', () => {
     // resolveBulletHits (bullets.ts) makes a shell lethal to its owner as soon as
-    // vdot(b.vel, ownerPos - b.pos) > 0. NORMAL_BOUNCES is 1 and RICOCHET_BOUNCES is 3,
-    // so EVERY AI shell can come back. Skipping own bullets outright meant the AI stood
+    // vdot(b.vel, ownerPos - b.pos) > 0. NORMAL_BOUNCES is 1 and RICOCHET_BOUNCES is 2,
+    // so any shell that bounces can come back. Skipping own bullets outright meant the AI stood
     // still and let its own ricochet kill it.
     const t = tank(1, { x: 0, y: 0 });
     const b = bullet(50, 1, { x: -2, y: 0 }, { x: 6, y: 0 }); // own shell, now inbound
