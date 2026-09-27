@@ -26,7 +26,9 @@ export const NOT_SUPPORTED = ' — not supported';
  *
  * A gamepad is named from the live list rather than from a cached name, so a pad that was
  * renamed or replaced reads as what is plugged in now. Falling back to `Controller N` keeps a
- * pad the browser declines to name from rendering as an empty string.
+ * pad the browser declines to name from rendering as an empty string. The same fallback names
+ * an assigned pad that has been unplugged, whose index is not in the list at all: a pad's id is
+ * unknowable once unplugged, so this is the honest label for both cases, not two different ones.
  */
 export function slotSourceLabel(source: SlotSource, pads: readonly DetectedPad[]): string {
   switch (source.kind) {

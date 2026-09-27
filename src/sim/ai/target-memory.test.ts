@@ -33,7 +33,6 @@ function world(tanks: Tank[], over: Partial<World> = {}): World {
     rules: resolveWorldRules(), ...over,
   } as World;
 }
-/** A solid slab between (0,0) and anything out at +x. */
 /**
  * A solid slab tall enough to occlude everything at +x, at any y these fixtures use.
  *

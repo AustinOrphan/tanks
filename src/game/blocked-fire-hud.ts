@@ -73,7 +73,7 @@ export function createBlockedFireHudCue(
       for (const e of events) {
         // Discriminated by ownerId, not presence: the stream is shared, so a bare
         // `some(e => e.type === 'fire-blocked')` would flash on every AI tank running out
-        // of shells -- exactly the anti-pattern CLAUDE.md names.
+        // of shells -- exactly the anti-pattern docs/agent/testing-and-review.md names.
         if (e.type !== 'fire-blocked' || e.ownerId !== playerId) continue;
         const owner = world.tanks.find((t) => t.id === playerId);
         if (!owner) continue;

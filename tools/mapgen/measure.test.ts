@@ -308,8 +308,8 @@ describe('mapgen quality measures: the duplicated lattice agrees with the shippe
   // lattice must reach the same CONNECTIVITY verdict the shipped one reaches.
   //
   // The pin is against `spawnsInLargestRegion`, NOT against `egressOk`. They are not the same
-  // question, though `egressOk`'s own doc comment in `versus-board.ts` says it is
-  // "`spawnsInLargestRegion === playerCount`": line 341 computes
+  // question, though `egressOk`'s own doc comment in `versus-board.ts` once said it was
+  // "`spawnsInLargestRegion === playerCount`": `evaluateSpawnEgress` computes
   // `solidlyConnected && fatalEscapes === 0`, so a board whose spawns are all mutually
   // reachable still fails `egressOk` if one of them is sealed in a pocket too small to
   // survive its own mine. vs-duel-01 at 3 and 4 players is exactly that case

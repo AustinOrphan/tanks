@@ -160,10 +160,10 @@ describe('the web app manifest', () => {
 
   it('registers no service worker anywhere the bundle can reach', () => {
     // Not a preference: the portfolio's root-scoped /sw.js already controls /tanks/ and
-    // deletes every CacheStorage entry it does not own (CLAUDE.md), so a service worker
-    // here fights one this repo cannot edit. The manifest is exactly the change that
-    // invites somebody to add one next, which is why the constraint gets an assertion
-    // rather than another paragraph.
+    // deletes every CacheStorage entry it does not own (docs/agent/commands-and-operations.md),
+    // so a service worker here fights one this repo cannot edit. The manifest is exactly the
+    // change that invites somebody to add one next, which is why the constraint gets an
+    // assertion rather than another paragraph.
     //
     // Population: every non-test .ts file under src/ (the code that ships), plus
     // index.html. NOT swept: tools/, docs/, and *.test.ts -- a registration there does

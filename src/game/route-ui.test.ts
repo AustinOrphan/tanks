@@ -310,21 +310,21 @@ function fixture(
 }
 
 /**
- * The 26 registrations this module owns, and the boundary of the claim.
+ * The registrations this module owns, and the boundary of the claim.
  *
  * Pinned as a SET rather than a count so that a handler quietly leaving for the session,
  * or a session handler quietly arriving here, names itself in the diff. The seven absent
  * ones are listed in `route-ui.ts`'s own doc comment with the reason each stays behind;
- * `onQualityChange` is the newest arrival, added by issue #540 with the Settings pane's
- * render-quality control, `onMotionChange` came with #289's motion control, and
- * `onRecordsOpen` before both with issue #324's step S5.
+ * `onQualityChange` was added by issue #540 with the Settings pane's render-quality
+ * control, `onMotionChange` came with #289's motion control, and `onRecordsOpen` before
+ * both with issue #324's step S5.
  */
-// Issue #227's three are the newest: `onControllerRumbleChange` writes the stored key that
-// had no writer, and the `onSettingsOpen`/`Close` pair scopes a capability re-probe to
-// exactly while the pane that shows its result is open.
-// Issue #599's self-test pair are the newest: they scope a per-frame hardware poll to
-// exactly while the pane is open, the same shape `onControllersOpen`/`Close` use for the
-// assignment panel's hotplug listeners.
+// Issue #227's three: `onControllerRumbleChange` writes the stored key that had no writer,
+// and the `onSettingsOpen`/`Close` pair scopes a capability re-probe to exactly while the
+// pane that shows its result is open.
+// Issue #599's self-test pair: they scope a per-frame hardware poll to exactly while the
+// pane is open, the same shape `onControllersOpen`/`Close` use for the assignment panel's
+// hotplug listeners.
 // Issue #754's three: the controller layout pane's open/close pair scopes its settings
 // subscription, hotplug listeners and capture to the pane, and its request handler is the one
 // place a layout is written.

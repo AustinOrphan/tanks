@@ -38,16 +38,18 @@ describe('constants', () => {
   });
 
   it('opens the round with a 3.0-second movement block, the span the HUD announces', () => {
-    // The countdown is now SHIPPED behaviour with a banner and a docstring that
-    // both say "3.0s" (hud.ts, CLAUDE.md/AGENTS.md). Retuning the constant used to
+    // The countdown is now SHIPPED behaviour with a docstring and an agent doc that
+    // both say "3.0s" (hud.ts, docs/agent/development.md). Retuning the constant used to
     // leave all of that silently wrong with a green suite -- expressed as seconds
     // so the pin fails on a tick-rate change too.
     expect(COUNTDOWN_TICKS / TICK_HZ).toBe(3);
   });
 
   it('coop respawn: 2.0s corpse delay, 1.5s post-revival shield', () => {
-    // Feel values (CLAUDE.md), pinned as seconds so a tick-rate change fails this
-    // too -- same convention as the countdown pin above.
+    // Feel values (constants.ts treats them like TANK_TURN_RATE, which
+    // docs/agent/development.md lists under "Numbers that are feel, not measurement"),
+    // pinned as seconds so a tick-rate change fails this too -- same convention as the
+    // countdown pin above.
     expect(RESPAWN_DELAY_TICKS / TICK_HZ).toBe(2);
     expect(RESPAWN_SHIELD_TICKS / TICK_HZ).toBe(1.5);
   });

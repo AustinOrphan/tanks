@@ -4,7 +4,8 @@
  * Pure string building, no filesystem access -- both generate.mjs (which writes the file)
  * and doc.test.ts (which compares against what's committed) call this exact function, so
  * the doc can never be rendered two different ways by the two halves of the guard. See
- * CLAUDE.md's "Dev flags" section and this directory's own doc comment in generate.mjs.
+ * docs/agent/development.md's "Dev flags" section and this directory's own doc comment in
+ * generate.mjs.
  */
 import {
   DEV_FLAGS_OFF,

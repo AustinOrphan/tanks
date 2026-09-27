@@ -138,12 +138,6 @@ function makeLabel(): { sprite: THREE.Sprite; draw: (text: string) => void } {
 }
 
 /**
- * `#<target> c<commitment ticks> m<memory ticks>`, or `-- searching` with no target.
- *
- * Exported and pure so the string can be pinned without a canvas: jsdom draws no glyphs,
- * so a test that went through `draw` would assert nothing about what it says.
- */
-/**
  * The retarget reason, as one character (issue #359): `a`cquired, target `l`ost, `s`witched
  * on expiry. Abbreviated because this label sits over a tank in a live match and the reason
  * is the least of its three facts -- the target and the commitment are what a reader scans
@@ -167,6 +161,14 @@ function reasonSuffix(tank: Tank): string {
   return ` ${REASON_GLYPH[reason]}`;
 }
 
+/**
+ * `#<target> c<commitment ticks>`, plus ` m<memory ticks>` while the target is only
+ * remembered and the retarget reason's glyph while it is recent, or `-- searching` with no
+ * target.
+ *
+ * Exported and pure so the string can be pinned without a canvas: jsdom draws no glyphs,
+ * so a test that went through `draw` would assert nothing about what it says.
+ */
 export function contactLabel(tank: Tank, state: ContactState): string {
   if (tank.aiTargetId === undefined) return '-- searching';
   const commit = tank.aiTargetTicks ?? 0;

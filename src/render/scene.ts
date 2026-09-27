@@ -60,15 +60,6 @@ function gradientPixels(): Uint8ClampedArray<ArrayBuffer> {
 }
 
 /**
- * The same generated sky-to-ground reflection environment createScene builds below,
- * pulled out so render/preview.ts's much smaller preview scene can give its tank the
- * SAME material read the main scene gives it -- one gradient, not two copies that could
- * drift apart. Every MeshStandardMaterial in render/entities.ts carries nonzero
- * metalness, which renders near-black with no environment at all (see createScene's own
- * comment on this), so a preview built without this would look worse than the tank it is
- * supposed to be showing faithfully.
- */
-/**
  * The PMREM cube size this gradient is convolved into (issue #909). three's default is 256.
  *
  * WHY IT IS NOT THE DEFAULT. The source is a 1x64 vertical gradient: it has no horizontal
@@ -106,6 +97,15 @@ function gradientPixels(): Uint8ClampedArray<ArrayBuffer> {
  */
 const ENV_MAP_SIZE = 64;
 
+/**
+ * The same generated sky-to-ground reflection environment createScene builds below,
+ * pulled out so render/preview.ts's much smaller preview scene can give its tank the
+ * SAME material read the main scene gives it -- one gradient, not two copies that could
+ * drift apart. Every MeshStandardMaterial render/entities.ts builds for a tank carries
+ * nonzero metalness, which renders near-black with no environment at all (see createScene's
+ * own comment on this), so a preview built without this would look worse than the tank it
+ * is supposed to be showing faithfully.
+ */
 export function createEnvironmentMap(renderer: THREE.WebGLRenderer): THREE.Texture {
   const envScene = new THREE.Scene();
   const grad = new THREE.DataTexture(gradientPixels(), 1, ENV_STEPS, THREE.RGBAFormat);

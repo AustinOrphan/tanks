@@ -154,11 +154,6 @@ const ACTION_CSS =
   'background:#2a2f38;border:1px solid #4a515e;border-radius:6px;cursor:pointer';
 
 /**
- * Re-exported from `startup-failure.ts`, where issue #325 moved it so the error and the
- * copy that explains it could live together without a cycle. Kept on `boot.ts`'s surface
- * because that is where every existing importer looks for it.
- */
-/**
  * The id of the holding screen `index.html` paints before any script runs (issue #325).
  *
  * Named here rather than spelled into the query below so the markup and the code that
@@ -168,18 +163,14 @@ const ACTION_CSS =
  */
 export const BOOT_LOADING_ID = 'boot-loading';
 
+/**
+ * Re-exported from `startup-failure.ts`, where issue #325 moved it so the error and the
+ * copy that explains it could live together without a cycle. Kept on `boot.ts`'s surface
+ * because that is where every existing importer looks for it.
+ */
 export { UnsupportedRenderError } from './game/startup-failure';
 
 export function boot(deps: BootDeps): void {
-  /**
-   * Replace the page with the readable explanation, and report why.
-   *
-   * A named function since issue #428 rather than the tail of one `catch`, because there
-   * are now TWO ways to reach it and they no longer share a stack. Boot's own failures
-   * still arrive at the `catch` below; a failure while CREATING a match arrives from
-   * inside a HUD click handler, long after `boot()` returned, which is a boundary that
-   * did not have to exist while the only session was the eager one.
-   */
   /**
    * The shell's alert surface, once there is one (issue #325).
    *
@@ -191,6 +182,15 @@ export function boot(deps: BootDeps): void {
    */
   let overlayHost: Pick<Hud, 'showMatchFailure'> | null = null;
 
+  /**
+   * Replace the page with the readable explanation, and report why.
+   *
+   * A named function since issue #428 rather than the tail of one `catch`, because there
+   * are now TWO ways to reach it and they no longer share a stack. Boot's own failures
+   * still arrive at the `catch` below; a failure while CREATING a match arrives from
+   * inside a HUD click handler, long after `boot()` returned, which is a boundary that
+   * did not have to exist while the only session was the eager one.
+   */
   const showFailure = (err: unknown, at: FailurePoint = 'boot', retry?: () => void): void => {
     const state = classifyStartupFailure(err, at);
 

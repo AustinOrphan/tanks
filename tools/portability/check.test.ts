@@ -1,7 +1,8 @@
 /**
  * The portability checker guards a defect class that ships SILENTLY -- a blank game on
  * the deployed subpath, with a green suite and a green build. So the checker itself needs
- * its own negative controls, per CLAUDE.md: "A guard is worth what its own tests prove."
+ * its own negative controls, per docs/agent/testing-and-review.md: "A guard is worth what its
+ * own tests prove."
  *
  * The fixtures below are the shapes vite ACTUALLY emits, copied out of real builds rather
  * than imagined, because that is where the shell version this replaces went wrong: it

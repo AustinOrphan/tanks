@@ -17,9 +17,9 @@ import { BILLOW_COUNT } from './muzzle-smoke';
 
 describe('QUALITY_PRESETS.high matches scene.ts literals exactly', () => {
   // Pinned against LITERALS copied from scene.ts, not against QUALITY_PRESETS.high
-  // itself -- comparing the table to itself is the tautology CLAUDE.md calls out by
-  // name ("angle: 0 in a fixture whose angle is 0"). Each assertion fails if the
-  // preset drifts from the line it claims to mirror, independent of the table.
+  // itself -- comparing the table to itself is the tautology docs/agent/testing-and-review.md
+  // calls out ("asserting `angle: 0` in a fixture whose angle is 0"). Each assertion fails if
+  // the preset drifts from the line it claims to mirror, independent of the table.
   it('muzzleSmoke draws EVERY billow the effect has -- pinned to the table, not to a copy of its length', () => {
     // The one field here that has an independent source to be pinned against, and the
     // reason it is pinned that way: `high` is the preset an absent flag resolves to, so

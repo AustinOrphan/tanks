@@ -527,8 +527,8 @@ export function createEntityViews(
   /**
    * A hue for an unstyled co-op slot >= 1, distinct from P1's roster default and
    * every roster kind's own colour (pinned by entities.test.ts's diff-against-
-   * `configFor` sweep) -- a feel value, implementer's pick, same treatment CLAUDE.md
-   * gives `TANK_TURN_RATE`.
+   * `configFor` sweep) -- a feel value, implementer's pick, same treatment
+   * docs/agent/development.md gives `TANK_TURN_RATE`.
    */
   const UNSTYLED_SLOT_HEX = '#c23b8f';
   /** The bit-identical-to-boot default for slot 0: no hex override, no skin map. */

@@ -196,10 +196,10 @@ describe('a competent scripted player against the shipped arenas', () => {
     // asserted, not as a current measurement. So win rate here is bounded by
     // survival/positioning, not by offense; an upper bound would have been unfalsifiable
     // by any mutation actually tried at the time, which is exactly the decorative-
-    // assertion trap CLAUDE.md warns against. If a real "shoots through everything,
-    // never misses, never dies" bug ever needs catching, it will need a mutation this
-    // file's movement model cannot express (e.g. bypassing dangerAvoidMove's own
-    // geometry), which is out of this issue's scope.
+    // assertion trap docs/agent/testing-and-review.md warns against. If a real "shoots
+    // through everything, never misses, never dies" bug ever needs catching, it will
+    // need a mutation this file's movement model cannot express (e.g. bypassing
+    // dangerAvoidMove's own geometry), which is out of this issue's scope.
     const wins = all.filter((r) => r.outcome === 'win').length;
     const rate = wins / all.length;
     expect(rate, `${wins}/${all.length} games won`).toBeGreaterThan(0.2);

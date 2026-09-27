@@ -1,6 +1,7 @@
 // The haptics seam: a fourth event consumer alongside render, particles and audio
-// (see CLAUDE.md's "Render and audio are one-way projections"). The vibrate function
-// itself is injected -- see resolveVibrate -- so this file never touches `navigator`.
+// (see docs/agent/architecture.md's "Render and audio are one-way projections"). The
+// vibrate function itself is injected -- see resolveVibrate -- so this file never
+// touches `navigator`.
 import { describe, it, expect } from 'vitest';
 import {
   createHapticsDirector,
@@ -71,7 +72,8 @@ describe('createHapticsDirector', () => {
 
   it('does NOT vibrate for an enemy shot -- the stream is shared, discriminate by ownerId', () => {
     // Presence-only (`some(e => e.type === 'fire')`) is exactly the anti-pattern
-    // CLAUDE.md names; this is the test that would pass under it and must not.
+    // docs/agent/testing-and-review.md names; this is the test that would pass under it
+    // and must not.
     const { vibrate, calls } = fakeVibrate();
     const d = createHapticsDirector(vibrate, PLAYER_ID);
     d.handle([fireEvent(ENEMY_ID)]);

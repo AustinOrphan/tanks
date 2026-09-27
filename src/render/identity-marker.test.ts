@@ -38,11 +38,6 @@ function outerAngles(geo: THREE.BufferGeometry): number[] {
 }
 
 /**
- * How many SEPARATE runs the marker draws, measured the way a player reads it: walk the
- * outer rim and count the angular jumps that are far larger than the sampling step.
- * Deliberately not "count the runs I passed in" -- that would assert the input back.
- */
-/**
  * The biggest angular gap anywhere around the marker, in radians. For a closed ring every
  * gap is one sampling step; a real break is many times that. Written to be immune to the
  * `atan2` wrap that made an earlier version of the one-arc assertion vacuous.
@@ -54,6 +49,11 @@ function largestGap(geo: THREE.BufferGeometry): number {
   return max;
 }
 
+/**
+ * How many SEPARATE runs the marker draws, measured the way a player reads it: walk the
+ * outer rim and count the angular jumps that are far larger than the sampling step.
+ * Deliberately not "count the runs I passed in" -- that would assert the input back.
+ */
 function arcRuns(geo: THREE.BufferGeometry): number {
   const angles = outerAngles(geo);
   const step = (Math.PI * 2) / SEGMENTS;

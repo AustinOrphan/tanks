@@ -510,14 +510,6 @@ export const MOMENTS: Record<string, MomentDef> = {
   })(),
 
   /**
-   * The full mine lifecycle, staged through the real drop input rather than a
-   * hand-placed mine (contrast `wall-break` above, which needs an already-armed one):
-   * lay it, walk clear so it arms, then let the fuse run out on its own -- the `fuse`
-   * element (subjects.ts) renders a single POSE at a chosen age using the same
-   * MINE_TIMER math; this is the sim actually living through that countdown tick by
-   * tick and detonating at the end of it.
-   */
-  /**
    * The PROXIMITY half of the mine warnings (issue #276), which no other moment stages:
    * `mine-cycle` runs a fuse down to expiry, and `wall-break` shoots a mine (immediate, no
    * warning at all). Here a tank walks into an already-armed mine, so the clip shows the
@@ -568,6 +560,14 @@ export const MOMENTS: Record<string, MomentDef> = {
     };
   })(),
 
+  /**
+   * The full mine lifecycle, staged through the real drop input rather than a
+   * hand-placed mine (contrast `wall-break` above, which needs an already-armed one):
+   * lay it, walk clear so it arms, then let the fuse run out on its own -- the `fuse`
+   * element (subjects.ts) renders a single POSE at a chosen age using the same
+   * MINE_TIMER math; this is the sim actually living through that countdown tick by
+   * tick and detonating at the end of it.
+   */
   'mine-cycle': (() => {
     // Fixed far downrange so aimDir stays steady while the tank walks (same
     // aim-is-a-world-point landmine every other moment here documents); unrelated to

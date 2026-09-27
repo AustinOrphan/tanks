@@ -35,10 +35,10 @@ import { readConnectedPads, type GetGamepads } from '../input/gamepad';
  * WHAT DECIDED THE SPLIT, measured on `loop.ts` rather than guessed: of its 25
  * `hud.on*` registrations, 15 reached no gameplay state at all and 3 more (the paint
  * shop's `onPick*`) reached it only through `restyle`'s renderer call. Those 18 came
- * here, and three later arrivals -- `onRecordsOpen`, added by issue #324's step S5 so the
- * page can paint the Records tables it now owns, and the Accessibility section's two
- * controls, `onMotionChange` (issue #289) and `onQualityChange` (issue #540) -- make 21
- * today, against `Hud`'s 28 registration methods.
+ * here, and later arrivals have joined them -- among them `onRecordsOpen`, added by issue
+ * #324's step S5 so the page can paint the Records tables it now owns, and the
+ * Accessibility section's two controls, `onMotionChange` (issue #289) and
+ * `onQualityChange` (issue #540).
  * The other 7 belong to a live match and are registered by `route-host.ts` as trampolines
  * into whatever session holds its slot: three that START gameplay, two touch controls
  * that need the live `InputController`, `onReassignSlot` (which owns per-slot input

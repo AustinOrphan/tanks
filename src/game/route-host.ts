@@ -42,13 +42,14 @@ import type { DevExportPort } from './dev-exports';
  * HUD.
  *
  * WHY A SLOT RATHER THAN A SECOND ROUND OF REGISTRATIONS. `hud.ts` APPENDS every
- * `on*` callback onto a per-name list and has no unregister at all -- all 26 of its
- * registration methods are `push(cb)` returning `void`, and there is no `off`, no
- * `delete`, no `splice` anywhere in the file. So a page-scoped HUD that let each session
- * register its own handlers would, after one stop-and-start, hold TWO copies of every
- * gameplay handler: a single New Game click would start two runs, a single Quit would
- * quit twice. Nothing in the existing suite could see it, because nothing before this
- * issue could stop a session and start another on the same HUD.
+ * `on*` callback onto a per-name list and has no unregister at all -- every one of its
+ * registration methods is a `push(cb)` returning `void`, some by forwarding to a pane
+ * module that owns the list, and there is no `off` and no `delete` or `splice` on any such
+ * list. So a page-scoped HUD that let each session register its own handlers would, after
+ * one stop-and-start, hold TWO copies of every gameplay handler: a single New Game click
+ * would start two runs, a single Quit would quit twice. Nothing in the existing suite could
+ * see it, because nothing before this issue could stop a session and start another on the
+ * same HUD.
  *
  * So the seven gameplay-facing handlers are registered ONCE here, as trampolines that
  * dispatch to whatever session currently holds the slot. A session takes the slot with
@@ -384,21 +385,6 @@ export function createRouteHost(
   let versusConfig: VersusConfig | null = deps.initialVersusConfig ?? null;
 
   /**
-   * The route UI's deps, page-scoped.
-   *
-   * Three fields are deliberately NOT the ones a session would supply:
-   *
-   *  - `requestVersusSession`/`requestCampaignSession` are the application-level seams
-   *    above, not a session's own copies.
-   *  - `initialVersusConfig` is a live getter over the retained config.
-   *  - `levels` is whatever `deps` brought, which in production is the CAMPAIGN level
-   *    system. It is only read for `unlockedLevels()` -- how many campaign levels the
-   *    level-select grid may offer. Before this module the route UI got whichever level
-   *    system the LIVE session had, so during a versus match the campaign level-select
-   *    grid was sized from the versus arena list. Sizing it from the campaign sequence
-   *    regardless of what is being played is the behaviour this hoist makes true.
-   */
-  /**
    * The `?dev=1&bench=preview` workload (issue #736), page-scoped for the reason `bench.ts`
    * gives: the Customize panel opens from the Main Menu with no session running, so a
    * recorder a session owned would miss the ordinary case. One recorder for the page, fed by
@@ -416,6 +402,21 @@ export function createRouteHost(
         )
       : null;
 
+  /**
+   * The route UI's deps, page-scoped.
+   *
+   * Three fields are deliberately NOT the ones a session would supply:
+   *
+   *  - `requestVersusSession`/`requestCampaignSession` are the application-level seams
+   *    above, not a session's own copies.
+   *  - `initialVersusConfig` is a live getter over the retained config.
+   *  - `levels` is whatever `deps` brought, which in production is the CAMPAIGN level
+   *    system. It is only read for `unlockedLevels()` -- how many campaign levels the
+   *    level-select grid may offer. Before this module the route UI got whichever level
+   *    system the LIVE session had, so during a versus match the campaign level-select
+   *    grid was sized from the versus arena list. Sizing it from the campaign sequence
+   *    regardless of what is being played is the behaviour this hoist makes true.
+   */
   const routeDeps: RouteUiDeps = {
     ...deps,
     createPreview:
@@ -502,18 +503,6 @@ export function createRouteHost(
   // nothing at all when none is. See this module's doc comment for why the sessions
   // cannot register these themselves.
   /**
-   * Three of the seven branch on whether a session exists (issue #428).
-   *
-   * With a session attached they mean what they always meant -- Resume, Retry, Play
-   * Again, a mid-session New Game -- and go to the slot. With NO session they are the
-   * gestures that create one, and go to the application-level start boundary instead.
-   *
-   * That branch is the whole of #428 at this layer, and it is here rather than inside
-   * each handler because "is a match running?" is a fact about the page, not about the
-   * button. The other four (`onMineTap`, `onFireTap`, `onQuitToTitle`, `onReassignSlot`)
-   * have no meaning without a match and stay pure no-ops when the slot is empty.
-   */
-  /**
    * THE RULE (issue #429): a click that LEAVES gameplay disposes the session.
    *
    * One rule rather than a list of exits, because the list is what goes stale. Quit,
@@ -533,6 +522,18 @@ export function createRouteHost(
     if (wasInGameplay && !sm.inGameplay) requests.requestStop();
   };
 
+  /**
+   * Three of the seven branch on whether a session exists (issue #428).
+   *
+   * With a session attached they mean what they always meant -- Resume, Retry, Play
+   * Again, a mid-session New Game -- and go to the slot. With NO session they are the
+   * gestures that create one, and go to the application-level start boundary instead.
+   *
+   * That branch is the whole of #428 at this layer, and it is here rather than inside
+   * each handler because "is a match running?" is a fact about the page, not about the
+   * button. The other four (`onMineTap`, `onFireTap`, `onQuitToTitle`, `onReassignSlot`)
+   * have no meaning without a match and stay pure no-ops when the slot is empty.
+   */
   hud.onStartRestart(() => {
     if (live) {
       // Wrapped because this button's branch set belongs to the SESSION, not to this
@@ -586,43 +587,6 @@ export function createRouteHost(
    */
   hud.setDevExportPort(() => live?.exports ?? null);
 
-  /**
-   * THE LAUNCH GESTURE, moved to the page by issue #428.
-   *
-   * "Press any key or tap to begin" was dismissed by a listener a SESSION registered, and
-   * that was survivable only while `boot.ts` started one eagerly. With the page booting
-   * into an empty host, a listener that lives on a session means the splash can never be
-   * dismissed at all: the first thing a player ever sees would be the last, and no gesture
-   * could get past it.
-   *
-   * Both halves are page-level facts, which is why they belong together here:
-   *
-   *  - `sm.dismissLaunch()` acts ONLY from the Launch route (state.ts), so the listeners
-   *    are unconditional and the machine does the guarding -- a click during play falls
-   *    through to the session's own handlers unchanged.
-   *  - `launchGate.dismiss()` records it on the SHELL, which is what stops a later session
-   *    -- or, since #428, a page that has never had one -- reopening on the splash.
-   *
-   * The audio half of this is ORDERING, not unlocking (see `dismissLaunch` in state.ts):
-   * `audio/engine.ts` already resumes the context from its own document-level handler.
-   * What this guarantees is that a gesture has happened before the menu is on screen.
-   */
-  /**
-   * WHICH SCREEN IS SHOWING -- painted by the page, not by a session (issue #428).
-   *
-   * This subscription and the initial paint below it lived in `startGameWith`, which was
-   * survivable only while a session existed from the first frame. With the page booting
-   * into an empty host, a HUD that only a session ever painted would show the player
-   * nothing at all: no splash, no Main Menu, and therefore no button with which to start
-   * the session that would have painted them.
-   *
-   * ONLY the surface moved. The session's own `sm.onChange` still owns everything that
-   * needs a world -- the music context, clearing queued input, the run bookkeeping -- and
-   * still runs for every change this one sees.
-   *
-   * `locationToHudSurface` is imported from `loop.ts` as a VALUE while `loop.ts` imports
-   * this module's types only, so the dependency is one-directional at runtime.
-   */
   /**
    * The Main Menu's store-derived affordances, painted by the PAGE.
    *
@@ -889,6 +853,22 @@ export function createRouteHost(
     hud.openGalleryWorkbench();
   };
 
+  /**
+   * WHICH SCREEN IS SHOWING -- painted by the page, not by a session (issue #428).
+   *
+   * This subscription and the initial paint below it lived in `startGameWith`, which was
+   * survivable only while a session existed from the first frame. With the page booting
+   * into an empty host, a HUD that only a session ever painted would show the player
+   * nothing at all: no splash, no Main Menu, and therefore no button with which to start
+   * the session that would have painted them.
+   *
+   * ONLY the surface moved. The session's own `sm.onChange` still owns everything that
+   * needs a world -- clearing queued input, the run bookkeeping -- and still runs for
+   * every change this one sees.
+   *
+   * `locationToHudSurface` is imported from `loop.ts` as a VALUE while `loop.ts` imports
+   * this module's types only, so the dependency is one-directional at runtime.
+   */
   const stopPainting = sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
     // The bed follows the route, and it is the ONLY thing that moves it: a session no
@@ -942,6 +922,27 @@ export function createRouteHost(
     if (modality.note(kind, deps.now())) hud.setModality(kind);
   };
 
+  /**
+   * THE LAUNCH GESTURE, moved to the page by issue #428.
+   *
+   * "Press any key or tap to begin" was dismissed by a listener a SESSION registered, and
+   * that was survivable only while `boot.ts` started one eagerly. With the page booting
+   * into an empty host, a listener that lives on a session means the splash can never be
+   * dismissed at all: the first thing a player ever sees would be the last, and no gesture
+   * could get past it.
+   *
+   * Both halves are page-level facts, which is why they belong together here:
+   *
+   *  - `sm.dismissLaunch()` acts ONLY from the Launch route (state.ts), so the listeners
+   *    are unconditional and the machine does the guarding -- a click during play falls
+   *    through to the session's own handlers unchanged.
+   *  - `launchGate.dismiss()` records it on the SHELL, which is what stops a later session
+   *    -- or, since #428, a page that has never had one -- reopening on the splash.
+   *
+   * The audio half of this is ORDERING, not unlocking (see `dismissLaunch` in state.ts):
+   * `audio/engine.ts` already resumes the context from its own document-level handler.
+   * What this guarantees is that a gesture has happened before the menu is on screen.
+   */
   const onLaunchGesture = (): void => {
     sm.dismissLaunch();
     deps.launchGate.dismiss();

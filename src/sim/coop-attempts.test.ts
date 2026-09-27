@@ -20,8 +20,8 @@ import type { SimEvent } from './events';
  * world, rather than by editing that file.
  *
  * Deliberately calls resolveStatus DIRECTLY for the death/wipe/lose assertions (a unit
- * file in CLAUDE.md's sense, same convention coop-respawn.test.ts uses) and
- * stepInputs for the composition-level claims that a unit call cannot see.
+ * file in docs/agent/testing-and-review.md's sense, same convention coop-respawn.test.ts
+ * uses) and stepInputs for the composition-level claims that a unit call cannot see.
  */
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number, alive = true): Tank {

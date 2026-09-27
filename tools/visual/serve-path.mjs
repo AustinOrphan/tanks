@@ -1,12 +1,14 @@
 /**
  * Request-path resolution for the round-trip probe's static server (issue #429).
  *
- * SEPARATE MODULE ON PURPOSE. `roundtrip.mjs` calls `main()` at the top level, so importing
- * it *runs the whole probe* -- measured: a bare `await import()` launched Chromium and drove
- * three start/quit cycles. A test that imported the resolver from there would launch a
- * browser as a side effect of unit tests, and on a machine without Playwright `loadChromium`
- * rejects into `main().catch`, which calls `process.exit(1)` and would take the vitest worker
- * with it. Nothing here imports Playwright or touches a socket.
+ * SEPARATE MODULE ON PURPOSE. When this was split out, `roundtrip.mjs` called `main()` at the
+ * top level, so importing it *ran the whole probe* -- measured: a bare `await import()`
+ * launched Chromium and drove three start/quit cycles. A test that imported the resolver from
+ * there would have launched a browser as a side effect of unit tests, and on a machine
+ * without Playwright `loadChromium` would have rejected into `main().catch`, which calls
+ * `process.exit(1)`, and taken the vitest worker with it. `roundtrip.mjs` has since gated
+ * `main()` behind an entry-point check (issue #881). Nothing here imports Playwright or
+ * touches a socket.
  */
 import { resolve, sep } from 'node:path';
 

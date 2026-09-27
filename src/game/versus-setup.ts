@@ -312,13 +312,27 @@ export function botSlotsOf(slots: readonly VersusSlotSetup[]): Set<number> {
 /**
  * The LAST `botCount` of `playerCount` slots -- the derived fill rule a session with no
  * setup pane uses. Moved here from `loop.ts` (issue #891) unchanged, because `levels.ts`
- * needs it too and cannot import `loop.ts`.
+ * needs it too and cannot import `loop.ts` (`loop.ts` imports `levels.ts`); `loop.ts`
+ * re-exports it so its existing importers are untouched.
+ *
+ * Last-K is the n-player arc's PR2 rule: the simplest possible fill, chosen when no per-slot
+ * controller routing existed yet to arbitrate a per-slot declaration against. `botCount` may
+ * equal `playerCount` -- including at playerCount 1, where it claims the only slot, the fully
+ * autonomous match owner directive 1 asks for.
+ *
+ * When PR3 (`pad[i] -> slot[i]`) added that routing, the precedence stayed fixed by this set
+ * rather than arbitrated at the controller layer: `seedAssignment` (`loop.ts`) hands it to
+ * `deriveInitialAssignment` (`input/assignment.ts`), which makes every slot in it `'bot'`
+ * regardless of index, and `loop.ts`'s `buildRealSource` builds no source for a `'bot'`
+ * slot -- bots claim their declared slots first, controllers fill whatever remains, and a
+ * bot-claimed slot never constructs a gamepad reader at all.
  *
  * `botCount` is clamped rather than trusted: unclamped, a count larger than `playerCount`
- * starts the loop at a NEGATIVE index and returns slots that do not exist. Every shipped
- * caller clamps first (`loop.ts` does `Math.min(devFlags.bots ?? 0, playerCount)`, because
- * the two flags parse independently), so this is belt-and-braces rather than a fix -- but a
- * second caller is exactly the moment that assumption stops being checked in one place.
+ * starts the loop at a NEGATIVE index and returns slots that do not exist. `loop.ts` clamps
+ * before calling (`Math.min(devFlags.bots ?? 0, playerCount)`, because the two flags parse
+ * independently), but `levels.ts`'s dev-flag path reaches this through `botSlotDifficulties`
+ * with `flags.bots` unclamped -- `bots=4` with `players=2` is a legal flag pair -- so on that
+ * path this clamp is load-bearing, not belt-and-braces.
  */
 export function botSlotsFor(playerCount: number, botCount: number): Set<number> {
   const slots = new Set<number>();

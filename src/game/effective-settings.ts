@@ -55,10 +55,12 @@ export interface EffectiveSettings {
   readonly reducedMotion: boolean;
   readonly uiScale: UiScale;
   /**
-   * `uiScale` as a multiplier -- 100 -> 1, 125 -> 1.25. NOTHING MULTIPLIES BY IT YET: #321 is
-   * closed and did not land a consumer, and #290 is the issue that would. Reading the older
-   * form of this comment is what made issue #843 assume a seeded `uiScale` would change a
-   * capture; it does not, so treat this as derived-but-unused until #290 wires it up.
+   * `uiScale` as a multiplier -- 100 -> 1, 125 -> 1.25. Consumed since issue #290:
+   * `route-host.ts`'s `effectiveSettings` subscription hands it to `hud.setUiScale`, which
+   * writes the `--hud-ui-scale` custom property that `hud.css` multiplies its type and
+   * spacing scales by. Before #290 nothing multiplied by it (#321 closed without landing a
+   * consumer), and an older form of this comment is what made issue #843 assume a seeded
+   * `uiScale` would change a capture, which at the time it did not.
    */
   readonly uiScaleFactor: number;
   /**

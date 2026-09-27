@@ -18,11 +18,12 @@
  * `{cos(t/37), sin(t/41)}` move/aim, same fire/mine cadence) so the benchmark exercises
  * the real mix of collision, AI and bullet code the golden trace does -- not a
  * degenerate all-idle or all-firing tick. When a world stops being 'playing' (win/lose),
- * `stepInputs` skips most of the pipeline (world.ts:304), so a benchmark that let the
- * world sit dead would silently start measuring a cheap no-op path instead of real
- * per-tick cost -- this resets to a fresh (arena, seed) the same way trace.ts's own
- * bound (`t < TRACE_TICKS && w.status === 'playing'`) does, just cycling indefinitely
- * instead of stopping.
+ * `stepInputs` skips most of the pipeline (its `draft.status === 'playing'` guard in
+ * src/sim/world.ts), so a benchmark that let the world sit dead would silently start
+ * measuring a cheap no-op path instead of real per-tick cost -- this resets to a fresh
+ * (arena, seed) the same way trace.ts's own bound
+ * (`t < TRACE_TICKS && w.status === 'playing'`) does, just cycling indefinitely instead of
+ * stopping.
  */
 import { ARENAS, createWorldFor } from '../../src/sim/arena';
 import { step } from '../../src/sim/world';

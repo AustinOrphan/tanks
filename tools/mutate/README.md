@@ -207,4 +207,4 @@ decision for later.
 deliberately build-only. `allowJs`/`checkJs` also pull `run.mjs`, `lib.mjs`,
 `orchestrate.mjs`, and `reachability.mjs` into that same typecheck through
 `orchestrate.test.ts`'s direct value-level imports -- see the root `tsconfig.json` and
-`CLAUDE.md` for what that surfaced and what is still deferred.
+`docs/agent/testing-and-review.md` for what that surfaced and what is still deferred.

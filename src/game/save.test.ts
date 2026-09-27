@@ -122,8 +122,9 @@ describe('exportSave', () => {
 
   it('never exports a key belonging to another app on the shared origin', () => {
     // austinorphan.com's localStorage namespace is shared with every other project
-    // page there (CLAUDE.md). An export that dumped the whole namespace would put a
-    // neighbouring app's data in a blob the player pastes into a bug report.
+    // page there (docs/agent/commands-and-operations.md). An export that dumped the whole
+    // namespace would put a neighbouring app's data in a blob the player pastes into a bug
+    // report.
     const s = seeded();
     s.setItem('portfolio.session', 'secret');
     const blob = parse(exportSave(s, 'production'));

@@ -53,7 +53,6 @@ const RING_WIDTH = 0.12;
 const RING_Y = 0.06;
 const RING_SEGMENTS = 48;
 
-/** A flat additive ring, same family as entities.ts's makeIdentityRing. */
 /**
  * How much fatter a DETONATE band is than the shipped shockwave ring (issue #230).
  *
@@ -68,6 +67,7 @@ const RING_SEGMENTS = 48;
  */
 const DETONATE_WIDTH = 3.2;
 
+/** A flat additive ring, same family as entities.ts's makeIdentityRing. */
 export function makeSpawnRing(color: number, fat = false): THREE.Mesh {
   const width = RING_WIDTH * (fat ? DETONATE_WIDTH : 1);
   const mesh = new THREE.Mesh(

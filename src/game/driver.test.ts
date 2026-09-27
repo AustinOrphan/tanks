@@ -372,7 +372,8 @@ describe('driver: list-shaped input (couch co-op)', () => {
   // stepInputs(world, [input])) is pinned in sim/step-inputs.test.ts and is NOT
   // re-proven here -- what step-inputs.test.ts cannot see is whether THIS driver
   // actually calls stepInputs with the list its own input collaborator hands it,
-  // which is the composition-blindness gap CLAUDE.md names for step-pipeline.test.ts.
+  // which is the composition-blindness gap docs/agent/testing-and-review.md names for
+  // step-pipeline.test.ts.
 
   it('pairs slot i with the i-th controlledBy tank in a REAL 2-player world -- the driver-layer twin of step-inputs.test.ts\'s "pairs by position" test', () => {
     const base = createWorldFor(arenaById('arena-01'), 1, { lives: 3, playerCount: 2, rules: { unarmedTrigger: 'none', corpseBlocksShells: false, muzzleClearsTanks: true } });

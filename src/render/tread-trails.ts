@@ -78,8 +78,8 @@ interface Decal {
   maxLife: number;
 }
 
-// Feel constants (CLAUDE.md's "numbers that are feel, not measurement"): cheap to
-// retune by eye, kept in this one place. The three the tests reason about
+// Feel constants (docs/agent/development.md's "Numbers that are feel, not measurement"):
+// cheap to retune by eye, kept in this one place. The three the tests reason about
 // arithmetically (EMIT_SPACING, LIFETIME_SECONDS, MAX_TRAILS) are exported so
 // tread-trails.test.ts imports them rather than re-declaring literals that would
 // silently drift out of sync with a future retune.

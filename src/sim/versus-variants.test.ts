@@ -465,7 +465,7 @@ describe('pickVersusVariantGrid: the common case needs no retry', () => {
 // ---------------------------------------------------------------------------
 
 describe('loadArena: versus variants are guard-first on mode AND an explicit seed', () => {
-  it('campaign-coop is BYTE-IDENTICAL to before this feature existed, even when a real seed is passed, on all 5 shipped arenas', () => {
+  it('campaign-coop is BYTE-IDENTICAL to before this feature existed, even when a real seed is passed, on all 8 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       const withoutSeed = loadArena(arena, 1);
       const withSeed = loadArena(arena, 1, 'campaign-coop', 12345);

@@ -32,7 +32,8 @@ import { COUNTDOWN_TICKS, GRACE_TICKS, PLAYER_TURRET_TURN_RATE, DT } from './con
  * An earlier draft of this list said "three decisions" and omitted 8. That was not a
  * wording slip: the order was genuinely unpinned, and the omission is what let the
  * mutant survive review. It is stated here because a population claim that quietly
- * excludes the class a survivor lives in is the failure mode CLAUDE.md names.
+ * excludes the class a survivor lives in is the failure mode
+ * docs/agent/testing-and-review.md names.
  *
  *   1. `filter(kind === 'player')` -> `filter(kind === 'player' && t.alive)`
  *      (a dead player stops consuming its slot)   killed here only (1 test)

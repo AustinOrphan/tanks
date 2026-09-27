@@ -95,8 +95,9 @@ export interface CampaignSessionDescriptor {
 /**
  * What an isolated, run-neutral session is played ON.
  *
- * Practice is the canonical kind for "play that must not consume, restore,
- * replace, advance, or complete the active campaign run" (CLAUDE.md's rule).
+ * Practice is the canonical kind for play that must not consume, restore,
+ * replace, advance, or complete the active campaign run (see the campaign-run
+ * rule in `.claude/rules/game.md`).
  * Three shipped things have exactly that shape, and this union is what lets
  * all three be described truthfully without inventing a fourth session kind:
  *

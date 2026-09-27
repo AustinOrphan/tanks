@@ -163,9 +163,9 @@ export function botAssignmentAllowed(mode: GameMode, campaignBotsEnabled: boolea
  * A DELIBERATE UN-RETIREMENT of `loop.ts`'s `createIdleInputSource` (n-player arc PR3,
  * deleted when every co-player slot got its own dedicated `createGamepadInputSource`,
  * whose own "no pad ever connected" branch already produced the same echo -- see
- * `gamepad.ts`'s module doc comment). CLAUDE.md's retirement note says a generator
- * "rots" only while nothing calls it; `'none'` is a real call site again, so bringing the
- * shape back is warranted, not a regression of that principle.
+ * `gamepad.ts`'s module doc comment). docs/agent/architecture.md's `cumulus` retirement
+ * note says a generator "rots" only while nothing calls it; `'none'` is a real call site
+ * again, so bringing the shape back is warranted, not a regression of that principle.
  *
  * The mechanism: `world.ts`'s `driveTank` computes `aimDir = vsub(input.aim,
  * player.pos)` and skips the turret slew only when `aimDir` is EXACTLY `{0,0}`. A

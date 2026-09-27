@@ -115,9 +115,9 @@ it('the generated sandbox passes the same structural validator as a shipped aren
 
 it('round-trips EVERY enemy kind, so the two spawn-letter tables cannot drift apart', () => {
   // `sandbox.ts` keeps its own KIND_LETTER for grid GENERATION while `loadArena` reads
-  // SPAWN_LETTERS (config/arena-types.ts) to PARSE. CLAUDE.md names the hazard; nothing
-  // enforced it. Review demonstrated the hole by setting sandbox's green to 'Z': all
-  // 1165 tests still passed, while `sandboxArena({tanks:['green']})` threw
+  // SPAWN_LETTERS (config/arena-types.ts) to PARSE. docs/agent/architecture.md names the
+  // hazard; nothing enforced it. Review demonstrated the hole by setting sandbox's green
+  // to 'Z': all 1165 tests still passed, while `sandboxArena({tanks:['green']})` threw
   // "Unrecognized character 'Z'" the moment anyone actually used it.
   //
   // Derived from the canonical kind list, NOT a hand-written array -- that is what makes

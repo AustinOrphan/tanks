@@ -158,8 +158,8 @@ describe('createHud panel', () => {
   it('drives its pause and mine buttons from real clicks, not just the callback', () => {
     // Both listeners could be deleted outright and the whole suite stayed green: the
     // loop tests fake the HUD, and the only other new test checks a CSS class. This is
-    // the composition blindness CLAUDE.md documents, one layer down -- nothing
-    // dispatched an event at a real button.
+    // the composition blindness docs/agent/testing-and-review.md documents, one layer
+    // down -- nothing dispatched an event at a real button.
     const { hud: h, root } = mount();
     let pauses = 0;
     let mines = 0;

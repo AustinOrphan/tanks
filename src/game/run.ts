@@ -26,9 +26,10 @@ export const RUN_KEY = 'tanks.run.v2';
  * The v1 key this store used before issue #154 gave `currentLevelId` real campaign-
  * level ids instead of a stringified ARENAS index. A v1 record's `currentLevelId` means
  * something this build no longer reads the same way, so the bump makes it invisible
- * (`active()` returns null) rather than silently misresolved -- see CLAUDE.md's
- * Migration notes. `createRunStore` best-effort deletes it on construction so it does
- * not sit as permanently inert dead data in every returning player's storage.
+ * (`active()` returns null) rather than silently misresolved -- see the Migration
+ * section of docs/superpowers/plans/2026-08-12-campaign-level-identity.md.
+ * `createRunStore` best-effort deletes it on construction so it does not sit as
+ * permanently inert dead data in every returning player's storage.
  */
 export const LEGACY_RUN_KEY_V1 = 'tanks.run.v1';
 

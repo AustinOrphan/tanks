@@ -11,18 +11,6 @@
 import { STEP_KINDS, WEBGL_MODES } from './states.mjs';
 
 /**
- * The page-side WebGL override, as a source string for `addInitScript`.
- *
- * Patches `HTMLCanvasElement.prototype.getContext` rather than stubbing a module, so the
- * REAL probe in `render-capability.ts` runs and takes its real branch -- returning null is
- * `no-webgl2`, throwing is `probe-failed`, and those select two different branded screens.
- * A capture that injected the screen's markup instead would evidence nothing.
- *
- * Only `webgl2` is intercepted. The HUD's Customize preview and the 2D contexts the page
- * uses elsewhere keep working, so a failure state still renders the rest of the page the
- * way a player would meet it.
- */
-/**
  * Answer the entry script's request according to a state's `entry` mode (issue #781).
  *
  * SHARED, and that is the point. This began as four lines inside `captureState`, and the
@@ -56,6 +44,18 @@ export async function applyEntryMode(page, entry) {
   }
 }
 
+/**
+ * The page-side WebGL override, as a source string for `addInitScript`.
+ *
+ * Patches `HTMLCanvasElement.prototype.getContext` rather than stubbing a module, so the
+ * REAL probe in `render-capability.ts` runs and takes its real branch -- returning null is
+ * `no-webgl2`, throwing is `probe-failed`, and those select two different branded screens.
+ * A capture that injected the screen's markup instead would evidence nothing.
+ *
+ * Only `webgl2` is intercepted. The HUD's Customize preview and the 2D contexts the page
+ * uses elsewhere keep working, so a failure state still renders the rest of the page the
+ * way a player would meet it.
+ */
 export function webglOverrideSource(mode) {
   if (!WEBGL_MODES.includes(mode)) throw new Error(`unknown webgl mode '${mode}'`);
   if (mode === 'match-build-fails') {

@@ -50,12 +50,16 @@ export interface MusicBed {
   /** Stops scheduling and silences anything already scheduled. */
   stop(): void;
   /**
-   * Change SUITE: at the next cycle boundary, play `steps` of `chord` -- the
-   * incoming suite's dominant -- while the tempo ramps toward the incoming
-   * track's, then start it. This is the handled join between two sets.
+   * Change SUITE. `opts.at` picks when: 'cycle' (the default) waits for a cycle
+   * boundary once `switchLock` has run out; 'bar' lands on the next bar boundary,
+   * waiting only for an in-flight pickup to finish. The incoming track then starts
+   * on its own final bar, as a pickup, while the tempo ramps toward the incoming
+   * track's and, if a lead layer is sounding, the outgoing melody's last bar fades
+   * over it (see `ramp` and `overlay` in createMusicBed). This is the handled join
+   * between two sets.
    */
   changeSuite(next: MusicTrackDef, opts?: { at?: 'bar' | 'cycle' }): void;
-  /** True while the transition passage is sounding. */
+  /** True while a suite change is pending or its pickup bar is still playing. */
   inTransition(): boolean;
   /**
    * Queue a track to take over at the next cycle boundary. Switching mid-phrase
@@ -148,11 +152,6 @@ export function createMusicBed(
    */
   let queued: MusicTrackDef | null = null;
   /**
-   * An in-progress suite change: a short passage of the incoming suite's
-   * DOMINANT, during which the tempo ramps from the outgoing pulse to the
-   * incoming one. See the suites design doc.
-   */
-  /**
    * A tempo ramp in progress, across the incoming piece's pickup bar. This is
    * ALL that remains of the transition machinery: after four iterations of
    * composing interstitial material (a held pad, then arpeggios, then rolled
@@ -161,7 +160,7 @@ export function createMusicBed(
    * invented any more. The through-line construction ends every progression on
    * its own dominant, which means the incoming piece's FINAL BAR is already the
    * entry music: it is played first, as a pickup, and the only thing synthesised
-   * across it is the tempo interpolation.
+   * across it is the tempo interpolation. See the suites design doc.
    */
   let ramp: { played: number; steps: number; fromStep: number; toStep: number } | null = null;
   /**

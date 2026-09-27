@@ -164,15 +164,15 @@ export function controlKindFor(spec: FlagSpec): DevControlKind {
   return spec.type === undefined ? 'select' : 'input';
 }
 
+/** Where the `playtest` bundle sits: with the Diagnostics flags it expands to. */
+const BUNDLE_GROUP: DevFlagGroup = 'Diagnostics';
+
 /**
  * One control per registry field, plus one for the bundle, in group order.
  *
  * Order is `DEV_FLAG_GROUPS` then registry order within a group -- stable and derived, so a
  * menu does not have to sort and two callers cannot disagree about the order.
  */
-/** Where the `playtest` bundle sits: with the Diagnostics flags it expands to. */
-const BUNDLE_GROUP: DevFlagGroup = 'Diagnostics';
-
 export function devControls(): readonly DevControl[] {
   const fields = Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[];
   const out: DevControl[] = [];

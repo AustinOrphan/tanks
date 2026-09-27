@@ -532,8 +532,9 @@ export function createPreviewControls(
    * spin ends for good at the first interaction, and the skin animation runs as long as
    * an animated skin is selected. This is deliberately ONE loop rather than a second
    * one hung off `setAnimating`, on two grounds: the panel's repaint cost is one canvas
-   * per frame either way, and `docs/superpowers/backlog.md` spike 5 records the cost of
-   * the existing indefinite repaint as UNMEASURED -- adding a second while that is
+   * per frame either way, and item 5 of
+   * `docs/superpowers/backlog/customize-preview-residuals.md` records the cost of the
+   * existing indefinite repaint as UNMEASURED -- adding a second while that is
    * still true would double an unknown rather than an known-small number. Nothing here
    * claims either arrangement is cheap; what it avoids is claiming it twice.
    */

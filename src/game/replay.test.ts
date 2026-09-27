@@ -139,9 +139,9 @@ describe('simDataFingerprint', () => {
   it('moves when a balance scalar moves', () => {
     // Deliberately NOT a pinned literal. A literal here would make retuning
     // balance.json a three-file edit (JSON, constants.test.ts, and this), which is
-    // a pin CLAUDE.md's two-file convention does not ask for. What has to be true
-    // is the PROPERTY: perturb the data and the fingerprint moves. Measured against
-    // a copy, so nothing in the sim is touched.
+    // a pin docs/agent/architecture.md's two-file convention does not ask for. What has
+    // to be true is the PROPERTY: perturb the data and the fingerprint moves. Measured
+    // against a copy, so nothing in the sim is touched.
     const before = fingerprint({ balance: balanceJson });
     const after = fingerprint({
       balance: { ...balanceJson, tank: { ...balanceJson.tank, speed: balanceJson.tank.speed + 1 } },
