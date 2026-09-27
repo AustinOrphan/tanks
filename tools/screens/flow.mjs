@@ -168,12 +168,12 @@ export const REALTIME_READINESS_BUDGET_MS = 60_000;
  * recipe names a state) without inventing flows nothing captures yet.
  */
 /**
- * The storage both Level Select flows seed, and the steps both take to reach a level.
+ * The storage every Level Select flow seeds, and the steps each takes to reach a level.
  *
  * SHARED RATHER THAN REPEATED, and the manifest is what made that the right call: three
  * mutation entries anchor on these exact lines, and a second verbatim copy made every one of
  * them ambiguous -- `applyAt` refuses an anchor it can find twice. Extracting them keeps each
- * entry pointing at one place AND widens what it proves, since both flows now fail together
+ * entry pointing at one place AND widens what it proves, since all three flows fail together
  * if the seeding or the route is broken.
  *
  * Enough progress that Level Select offers every campaign level: the pane renders one button
@@ -192,7 +192,7 @@ const LEVEL_SELECT_STORAGE = Object.freeze({
   'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: ACHIEVEMENT_IDS }),
 });
 
-/** Dismiss the launch splash. Both flows open the same way. */
+/** Dismiss the launch splash. Every flow opens the same way. */
 const PAST_SPLASH = Object.freeze([
   Object.freeze({ press: 'Space' }),
   Object.freeze({ waitHidden: '.hud-splash' }),
@@ -218,33 +218,9 @@ export const FLOWS = Object.freeze([
       'Boot the built page with every level unlocked, dismiss the launch splash, read the '
       + 'session diagnostics, pick the requested level from Level Select, and record from the '
       + 'moment the round is playing and its start countdown has cleared.',
-    /**
-     * Enough progress that Level Select offers every campaign level: the pane renders one
-     * button per UNLOCKED level. Under `?dev=1` the page reads the developer namespace, so
-     * these are the developer-prefixed keys (`storage.ts`). No run is seeded: a practice pick
-     * neither reads nor writes one.
-     *
-     * THE ACHIEVEMENTS ARE SEEDED TOO, and that is not tidiness. Progress alone leaves the
-     * progress-shaped achievements unearned, so the first seconds of play unlock them and
-     * lay toasts over the board -- an artifact of the fixture rather than of the game, and on
-     * a short round they cover most of the clip. A player who had reached this progress would
-     * already hold them. Every id is seeded: a capture is of PLAY, not of a notification.
-     */
-    storage: Object.freeze({
-      'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-05' }),
-      'tanks.dev.tanks.achievements.v1': JSON.stringify({ earned: ACHIEVEMENT_IDS }),
-    }),
-    open: Object.freeze([
-      Object.freeze({ press: 'Space' }),
-      Object.freeze({ waitHidden: '.hud-splash' }),
-    ]),
-    start: ({ level }) => [
-      { click: '.hud-levelselect-open' },
-      { waitVisible: '.hud-levelselect' },
-      // By accessible name, not by position: the grid renders a bare digit per unlocked
-      // level and issue #629 gave each one this label.
-      { click: `.hud-level-btn[aria-label="Level ${level}"]` },
-    ],
+    storage: LEVEL_SELECT_STORAGE,
+    open: PAST_SPLASH,
+    start: ({ level }) => levelSelectSteps(level),
   }),
   Object.freeze({
     id: 'coop-round',

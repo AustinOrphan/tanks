@@ -1,8 +1,8 @@
 {
   "id": "flow-boots-without-unlocking-the-levels",
   "file": "tools/screens/flow.mjs",
-  "find": "      'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-05' }),",
-  "replace": "      'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-01' }),",
+  "find": "  'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-05' }),",
+  "replace": "  'tanks.dev.tanks.progress.v1': JSON.stringify({ levelId: 'level-01' }),",
   "expect": "killed",
   "tests": [
     "tools/screens/flow.test.ts"

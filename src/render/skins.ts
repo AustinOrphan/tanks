@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SkinId } from '../presentation/customization';
+import { rng } from './textures';
 
 /**
  * Procedural skin textures, minted at runtime like every other texture in the game --
@@ -11,17 +12,6 @@ import type { SkinId } from '../presentation/customization';
  * the same tank every session.
  */
 const SIZE = 128;
-
-/** xorshift32, as textures.ts uses: repeatable is the point. */
-function xorshift(seed: number): () => number {
-  let x = seed || 1;
-  return () => {
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    return ((x >>> 0) % 100000) / 100000;
-  };
-}
 
 export type RGB = [number, number, number];
 
@@ -323,7 +313,7 @@ function camoCells(
   baseShare: number,
   darkShare: number,
 ): void {
-  const rnd = xorshift(0xc4310);
+  const rnd = rng(0xc4310);
   const fx: number[] = [];
   const fy: number[] = [];
   const fw: number[] = [];
@@ -380,7 +370,7 @@ function blotches(
   lobes: number,
 ): void {
   for (let i = 0; i < SIZE * SIZE * 4; i += 4) fill(px, i, base);
-  const rnd = xorshift(0xc4310);
+  const rnd = rng(0xc4310);
   for (const tone of [first, second]) {
     for (let b = 0; b < count; b++) {
       const cx = rnd() * SIZE;

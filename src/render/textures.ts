@@ -28,8 +28,11 @@ export interface TextureSet {
 
 const SIZE = 256;
 
-/** xorshift32. Small, fast, and repeatable -- the point is determinism, not quality. */
-function rng(seed: number): () => number {
+/**
+ * xorshift32. Small, fast, and repeatable -- the point is determinism, not quality. Also the
+ * generator behind skins.ts's patterns.
+ */
+export function rng(seed: number): () => number {
   let x = seed | 0 || 1;
   return () => {
     x ^= x << 13;
