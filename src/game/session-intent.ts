@@ -59,10 +59,6 @@ export interface SessionContext {
   readonly developer: DeveloperMetadata;
 }
 
-export function campaignIdentity(): SessionIdentity {
-  return { kind: 'campaign' };
-}
-
 /** The identity a menu Level-Select pick switches the session to. */
 export function practiceLevelIdentity(): SessionIdentity {
   return { kind: 'practice-level' };

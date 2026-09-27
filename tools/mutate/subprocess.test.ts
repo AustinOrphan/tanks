@@ -6,10 +6,10 @@ import { applyAt } from './lib.mjs';
 import { runManifest, computeExitCode, STATUS } from './orchestrate.mjs';
 import { formatResult, runTestsReal, readReachabilityReport, relatedFilesForAll } from './run.mjs';
 import { collectReachability } from './reachability.mjs';
-import type { ManifestEntry } from './lib.mjs';
 
 /**
- * The harness's own tests. Three layers, on purpose:
+ * The harness's own tests, split across two files: orchestrate.test.ts holds the first two
+ * layers below, and this file the third. Three layers, on purpose:
  *
  * - lib.mjs and orchestrate.mjs, exercised with FAKE deps (in-memory strings, no real
  *   fs/git/vitest). Fast, and what makes edge cases like "ambiguous find" or "restore
@@ -39,9 +39,9 @@ import type { ManifestEntry } from './lib.mjs';
  *   necessarily untracked -- `git status --porcelain` on it is never empty, which the
  *   harness correctly (for real manifest entries, which always target long-committed
  *   files) treats as "dirty, refuse". That refusal path is covered separately, with
- *   fakes, in "runOne > refuses a dirty file before touching it" below.
+ *   fakes, in orchestrate.test.ts's "runOne > refuses a dirty file before touching it".
  *
- * "A guard is worth what its own tests prove" (CLAUDE.md) -- so every negative control
+ * "A guard is worth what its own tests prove" (docs/agent/testing-and-review.md) -- so every negative control
  * this tool's own doc comment promises has a test here: a find that does not match
  * must report FAILED-TO-APPLY, not SURVIVED; a manifest whose declared outcome is
  * wrong must produce a non-zero exit code; a pre-existing red test in scope must
@@ -62,132 +62,6 @@ const ROOT = new URL('../../', import.meta.url).pathname;
 // here is for contention, not for slowness in the code under test; a hang still trips
 // the harness's own 180 s subprocess kill first.
 vi.setConfig({ testTimeout: 60_000 });
-
-// ---------------------------------------------------------------------------
-// lib.mjs: pure text surgery and manifest validation
-// ---------------------------------------------------------------------------
-
-
-
-
-
-// ---------------------------------------------------------------------------
-// orchestrate.mjs: runOne / runManifest / computeExitCode, against fake deps
-// ---------------------------------------------------------------------------
-
-/**
- * A standalone `runOne` calls `runTests` TWICE when it gets far enough -- once for the
- * pre-mutation baseline, once after the mutation is applied. `runManifest` may reuse
- * the first result for later entries with the exact same scope. This fake primarily
- * serves the standalone cases and distinguishes the two phases by call order:
- *   - `overrides.baseline`: the FIRST call's result (default: a healthy 3-test run).
- *   - `overrides.baselineThrow`: an Error to throw on the first call instead.
- *   - `overrides.runTests`: the function used for every call AFTER the first (the
- *     post-mutation check) -- this is what most existing tests already set, and
- *     keeping it as "the post-mutation result" is what lets them stay unchanged.
- */
-type TestRunResult = { failed: number; total: number; failedSuites?: number };
-type FakeDepsOverrides = {
-  initialFiles?: [string, string][];
-  runTests?: (tests: string[]) => TestRunResult;
-  dirty?: string;
-  corruptRestore?: boolean;
-  baselineThrow?: unknown;
-  baseline?: TestRunResult;
-  extraDeps?: Record<string, unknown>;
-};
-function fakeDeps(overrides: FakeDepsOverrides = {}) {
-  const files = new Map(overrides.initialFiles ?? [['f.ts', 'const X = 1;']]);
-  const calls = { readFile: 0, applyToDisk: 0, restoreToDisk: 0, runTests: 0 };
-  const post = overrides.runTests ?? (() => ({ failed: 1, total: 3, failedSuites: 0 }));
-  let runTestsCalls = 0;
-  return {
-    calls,
-    files,
-    readFile: vi.fn((file: string) => {
-      calls.readFile++;
-      // Non-null assertion, not a fallback: every test here sets up `files` to already
-      // contain the key it reads, so an undefined `.get()` would be a genuine fixture
-      // bug -- a fallback like `?? ''` would hide that behind a passing-looking read
-      // instead of surfacing it as the type error / runtime mismatch it should be.
-      return files.get(file)!;
-    }),
-    gitPorcelain: vi.fn(() => overrides.dirty ?? ''),
-    applyToDisk: vi.fn((file, content) => {
-      calls.applyToDisk++;
-      files.set(file, content);
-    }),
-    restoreToDisk: vi.fn((file, content) => {
-      calls.restoreToDisk++;
-      files.set(file, overrides.corruptRestore ? content + '\n// corrupted' : content);
-    }),
-    runTests: vi.fn((tests) => {
-      calls.runTests++;
-      runTestsCalls++;
-      if (runTestsCalls === 1) {
-        if (overrides.baselineThrow) throw overrides.baselineThrow;
-        return overrides.baseline ?? { failed: 0, total: 3, failedSuites: 0 };
-      }
-      return post(tests);
-    }),
-    onResult: vi.fn(),
-    ...overrides.extraDeps,
-  };
-}
-
-const entry = (over: Partial<ManifestEntry> = {}): ManifestEntry => ({
-  id: 'e1', file: 'f.ts', find: 'const X = 1;', replace: 'const X = 2;',
-  why: 'test', expect: 'killed', tests: ['f.test.ts'], ...over,
-});
-
-
-
-
-// ---------------------------------------------------------------------------
-// run.mjs's own pure pieces: CLI args, result formatting, the dirty-check message
-// ---------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-// ---------------------------------------------------------------------------
-// End-to-end: real fs + a real vitest subprocess (run.mjs's own runTestsReal),
-// against a throwaway fixture created and destroyed within this one test.
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// End-to-end: relatedFilesForAll against REAL broken subprocesses -- this preserves
-// the exact failure boundary review found live while replacing many cold Vitest
-// processes with one worker. A failed worker must never fall through to an empty map
-// and claim "nothing tests this file at all." Reproduced with real stub executables,
-// not fakes, to prove the actual spawnSync/existsSync wiring and not just the pure
-// classifier tested above.
-// ---------------------------------------------------------------------------
-
-
-// The worktree pool's pure pieces (issue #502): how `--jobs` is read, how entries are
-// dealt to workers, and how the workers' exit codes fold into one.
-
-
-
-// `killedBy` (issue #504): the validation rules, the pure report reader, and the verdict
-// through fake deps, so the contract is pinned without spawning vitest.
-
-
-
-
-
-// The per-area manifest directory (issue #505): a pure merge that refuses an id in two
-// files, and the loader that reads a file or every *.json in a directory by name.
-
-
-// The pull-request selection (issue #506): four rules and an always-run list, each with
-// a change that must NOT select as its negative control.
 
 describe('shared Vitest reachability graph', () => {
   const fixturesDir = join(ROOT, 'tools/mutate/fixtures');
@@ -325,6 +199,10 @@ describe('shared Vitest reachability graph', () => {
   }, 30_000);
 });
 
+// ---------------------------------------------------------------------------
+// End-to-end: real fs + a real vitest subprocess (run.mjs's own runTestsReal),
+// against a throwaway fixture created and destroyed within this one test.
+// ---------------------------------------------------------------------------
 describe('end-to-end: real apply -> real vitest subprocess -> real restore', () => {
   const fixturesDir = join(ROOT, 'tools/mutate/fixtures');
 
@@ -531,6 +409,14 @@ describe('end-to-end: real apply -> real vitest subprocess -> real restore', () 
   });
 });
 
+// ---------------------------------------------------------------------------
+// End-to-end: relatedFilesForAll against REAL broken subprocesses -- this preserves
+// the exact failure boundary review found live while replacing many cold Vitest
+// processes with one worker. A failed worker must never fall through to an empty map
+// and claim "nothing tests this file at all." Reproduced with real stub executables,
+// not fakes, to prove the actual spawnSync/existsSync wiring and not just the pure
+// classifier tested above.
+// ---------------------------------------------------------------------------
 describe('relatedFilesForAll against real broken subprocesses', () => {
   const scratchDir = join(tmpdir(), `mutate-relatedFilesFor-test-${process.pid}`);
 

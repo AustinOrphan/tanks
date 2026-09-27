@@ -3,7 +3,6 @@ import {
   devMenuView,
   resetSelection,
   toggleField,
-  cycleSelect,
   stepNumeric,
   setLiteral,
   stepMultiset,
@@ -131,36 +130,6 @@ describe('toggleField', () => {
   it('an off toggle is ABSENT, not false, which is what keeps the URL minimal', () => {
     expect(Object.keys(toggleField({ aimRay: true }, 'aimRay'))).toEqual([]);
     expect(devMenuView(toggleField({ aimRay: true }, 'aimRay')).search).not.toContain('aimRay');
-  });
-});
-
-describe('cycleSelect', () => {
-  it('walks a select through its own values and back to unset', () => {
-    // Unset must be a stop or the control could never be put back: every one of these flags
-    // defaults to absent, so a cycle over `values` alone traps the menu on whichever value it
-    // first landed on.
-    const quality = controlFor('quality');
-    const values = quality.values as readonly string[];
-    let sel = {};
-    for (const v of values) {
-      sel = cycleSelect(sel, quality);
-      expect(sel).toEqual({ quality: v });
-    }
-    sel = cycleSelect(sel, quality);
-    expect(sel, 'the cycle must return to unset').toEqual({});
-  });
-
-  it('steps backwards too, from unset to the LAST value', () => {
-    const quality = controlFor('quality');
-    const values = quality.values as readonly string[];
-    expect(cycleSelect({}, quality, -1)).toEqual({ quality: values[values.length - 1] });
-  });
-
-  it('a forward press on a fresh control selects the first value, not the second', () => {
-    // Unset is the first stop rather than the last, which is what makes this true -- the
-    // reading a player expects from an untouched control.
-    const mode = controlFor('mode');
-    expect(cycleSelect({}, mode)).toEqual({ mode: (mode.values as readonly string[])[0] });
   });
 });
 

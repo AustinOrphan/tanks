@@ -510,8 +510,3 @@ export async function sha256Hex(text: string): Promise<string> {
   // hash comes out short and wrong only for inputs that happen to contain such a byte.
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
-
-/** The fingerprint: run the trace, hash it. Compare against BASELINE_HASH. */
-export async function traceFingerprint(): Promise<string> {
-  return sha256Hex(traceText());
-}

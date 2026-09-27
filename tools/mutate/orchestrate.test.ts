@@ -11,7 +11,8 @@ import { selectAffected, entryText, ALWAYS_RUN_PATTERNS } from './select.mjs';
 import type { ManifestEntry } from './lib.mjs';
 
 /**
- * The harness's own tests. Three layers, on purpose:
+ * The harness's own tests, split across two files: this one holds the first two layers
+ * below, and subprocess.test.ts the third. Three layers, on purpose:
  *
  * - lib.mjs and orchestrate.mjs, exercised with FAKE deps (in-memory strings, no real
  *   fs/git/vitest). Fast, and what makes edge cases like "ambiguous find" or "restore
@@ -43,7 +44,7 @@ import type { ManifestEntry } from './lib.mjs';
  *   files) treats as "dirty, refuse". That refusal path is covered separately, with
  *   fakes, in "runOne > refuses a dirty file before touching it" below.
  *
- * "A guard is worth what its own tests prove" (CLAUDE.md) -- so every negative control
+ * "A guard is worth what its own tests prove" (docs/agent/testing-and-review.md) -- so every negative control
  * this tool's own doc comment promises has a test here: a find that does not match
  * must report FAILED-TO-APPLY, not SURVIVED; a manifest whose declared outcome is
  * wrong must produce a non-zero exit code; a pre-existing red test in scope must
@@ -62,16 +63,14 @@ const ROOT = new URL('../../', import.meta.url).pathname;
 // 5 s per-test budget, and the whole file then reads as BASELINE-RED for every entry
 // scoped to it -- seen on 2026-09-02 as 1 of 112 failing in one worker only. The budget
 // here is for contention, not for slowness in the code under test; a hang still trips
-// the harness's own 180 s subprocess kill first.
+// the harness's own 180 s subprocess kill first. (Those vitest-subprocess suites now live in
+// subprocess.test.ts, which sets the same budget; this file's only real subprocesses are the
+// git calls in the `baseManifestById` fixture.)
 vi.setConfig({ testTimeout: 60_000 });
 
 // ---------------------------------------------------------------------------
 // lib.mjs: pure text surgery and manifest validation
 // ---------------------------------------------------------------------------
-
-
-
-
 
 // ---------------------------------------------------------------------------
 // orchestrate.mjs: runOne / runManifest / computeExitCode, against fake deps
@@ -144,51 +143,18 @@ const entry = (over: Partial<ManifestEntry> = {}): ManifestEntry => ({
   why: 'test', expect: 'killed', tests: ['f.test.ts'], ...over,
 });
 
-
-
-
 // ---------------------------------------------------------------------------
 // run.mjs's own pure pieces: CLI args, result formatting, the dirty-check message
 // ---------------------------------------------------------------------------
 
-
-
-
-
-
-
-
-// ---------------------------------------------------------------------------
-// End-to-end: real fs + a real vitest subprocess (run.mjs's own runTestsReal),
-// against a throwaway fixture created and destroyed within this one test.
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// End-to-end: relatedFilesForAll against REAL broken subprocesses -- this preserves
-// the exact failure boundary review found live while replacing many cold Vitest
-// processes with one worker. A failed worker must never fall through to an empty map
-// and claim "nothing tests this file at all." Reproduced with real stub executables,
-// not fakes, to prove the actual spawnSync/existsSync wiring and not just the pure
-// classifier tested above.
-// ---------------------------------------------------------------------------
-
-
 // The worktree pool's pure pieces (issue #502): how `--jobs` is read, how entries are
 // dealt to workers, and how the workers' exit codes fold into one.
-
-
 
 // `killedBy` (issue #504): the validation rules, the pure report reader, and the verdict
 // through fake deps, so the contract is pinned without spawning vitest.
 
-
-
-
-
 // The per-area manifest directory (issue #505): a pure merge that refuses an id in two
 // files, and the loader that reads a file or every *.json in a directory by name.
-
 
 // The pull-request selection (issue #506): four rules and an always-run list, each with
 // a change that must NOT select as its negative control.

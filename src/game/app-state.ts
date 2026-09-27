@@ -309,8 +309,6 @@ export type GameplayPhase =
   | { readonly kind: 'paused' }
   | { readonly kind: 'outcome'; readonly outcome: TypedOutcome };
 
-export type GameplayPhaseKind = GameplayPhase['kind'];
-
 // ---------------------------------------------------------------------------
 // Root application location
 // ---------------------------------------------------------------------------

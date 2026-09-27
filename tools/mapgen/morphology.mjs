@@ -21,9 +21,6 @@ import { ARENA_DEFS } from '../../src/sim/arena';
  *   npx vite-node tools/mapgen/morphology.mjs
  *   npx vite-node tools/mapgen/morphology.mjs --authored /path/to/exported/boards
  */
-const LEGEND = { '#': 'solid', x: 'destructible' };
-void LEGEND;
-
 function stats(grid, cols, rows) {
   const wall = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows && grid[r][c] !== '.';
   const kind = (c, r) => grid[r][c];

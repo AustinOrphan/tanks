@@ -135,18 +135,11 @@ export function generateMelody(
     const bar = Math.min(Math.floor(i / barSteps), chords.length - 1);
     const chord = chords[bar];
     const palette = chordTones(chord, spec.lowOctave, spec.highOctave);
-    const wanted = noteNameOfClass(chord.root);
     // Exact pitch-class match, not startsWith: 'C' prefix-matches 'C#4', which
     // only failed to bite because chordTones happens to emit naturals first.
     const rootName = palette.find((n) => pitchClassOf(n) === chord.root);
     if (rootName) notes[i] = rootName;
-    void wanted;
     break;
   }
   return notes;
-}
-
-const CLASS_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-function noteNameOfClass(pc: number): string {
-  return CLASS_NAMES[((pc % 12) + 12) % 12];
 }
