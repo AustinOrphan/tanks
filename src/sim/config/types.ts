@@ -11,8 +11,6 @@ import {
 } from './enums';
 
 // ---------------------------------------------------------------------------
-// Entity definition + balance schema.
-//
 // Adopted from the supplied tank-types.ts. The same interfaces describe the 9-type
 // Wii reference taxonomy (config/reference/) and the game's shipped roster
 // (config/roster.ts). The split (a definition names classes; a balance table
@@ -71,30 +69,26 @@ export interface AIProfileBalance {
   /**
    * How well this profile judges a hazard's true radius (mine blast, bullet danger
    * corridor) -- directive B (2026-08-16 owner ruling): AIs must not have oracle knowledge
-   * of exact mine blast radii or perfect dodge positions. Required, not optional, and
-   * strictly positive like aimAccuracy (targeting.ts's profileHazardSpread divides by it).
-   * Consumption is asymmetric by behavior, the same precedent already set for
-   * preferredDistance/minimumDistance/retreatChance under STATIONARY -- see
-   * targeting.ts's dangerAvoidMove/mineThreatensPlayer/friendlyInMineBlast call sites and
-   * player-profile.ts's own mirrored gates.
+   * of exact mine blast radii or perfect dodge positions. Strictly positive like
+   * aimAccuracy (targeting.ts's profileHazardSpread divides by it). Consumption is
+   * asymmetric by behavior: see the dangerAvoidMove/mineThreatensPlayer/friendlyInMineBlast
+   * call sites in targeting.ts and player-profile.ts's own mirrored gates.
    */
   estimationAccuracy: number;
   reactionTime: number;
   /**
    * Worst-case seconds of staleness in this profile's hazard picture (issue #223).
    *
-   * The second of the six competence axes both #223 and #267 name, and the one that makes
-   * the estimation error more than a radius offset: `perceiveHazards` (ai/hazard-perception.ts)
-   * back-dates the shells and mines a tank reacts to by a delay drawn uniformly on
-   * [0, awarenessDelay] each refresh window, so a stale read is wrong about a threat's
-   * position, its time to impact, and whether a just-dropped mine exists at all -- not
-   * merely about how wide a blast is.
+   * `perceiveHazards` (ai/hazard-perception.ts) back-dates the shells and mines a tank
+   * reacts to by a delay drawn uniformly on [0, awarenessDelay] each refresh window, so a
+   * stale read is wrong about a threat's position, its time to impact, and whether a
+   * just-dropped mine exists at all.
    *
-   * Authored strictly positive, and validation refuses zero (validate.ts). `hard` scales it
-   * down (COMPETENCE, ai/bot-difficulty.ts), and a multiplier cannot improve on zero: an axis
-   * whose neutral value is 0 admits an `easy` that is worse and a `hard` that is identical,
-   * which fails #223's monotonicity criterion. `MIN_COMPETENCE_AWARENESS_DELAY` then keeps
-   * the scaled value nonzero, which is the "never oracle-perfect" half of the same rule.
+   * Strictly positive (validate.ts refuses zero): `hard` scales it down (COMPETENCE,
+   * ai/bot-difficulty.ts), and a multiplier cannot improve on zero, so an authored 0 would
+   * make `hard` identical to `normal` and fail #223's monotonicity criterion.
+   * `MIN_COMPETENCE_AWARENESS_DELAY` then keeps the scaled value nonzero, which is the
+   * "never oracle-perfect" half of the same rule.
    *
    * 0.1s (6 ticks) across profiles, uniform for the reason targetCommitmentTime states.
    * 0.1s is chosen against the authored reaction times (0.25-0.8s) as the smallest delay
@@ -124,11 +118,10 @@ export interface AIProfileBalance {
    * sixth competence axis, "hazard-perception refresh cadence".
    *
    * Consumed by `hazardRefreshTicks` (ai/hazard-perception.ts) as
-   * `Math.round(hazardRefreshTime * TICK_HZ)` -- the same conversion every other span in
-   * this schema uses -- floored at 1 tick. It is the bucket width `estimationError` divides
-   * the tick by, so it decides how long a misjudgement is lived with: #223 asks for "a
-   * perceived hazard snapshot held for a decision window ... rather than frame-to-frame
-   * noise", and this is that window's length made a profile field instead of a constant.
+   * `Math.round(hazardRefreshTime * TICK_HZ)`, floored at 1 tick. It is the bucket width
+   * `estimationError` divides the tick by, so it decides how long a misjudgement is lived
+   * with: #223 asks for "a perceived hazard snapshot held for a decision window ... rather
+   * than frame-to-frame noise", and this is that window's length.
    *
    * Shorter is more competent, which is why `hard` scales it down: a shorter window corrects
    * a bad read sooner, so less of the encounter is spent acting on it. It is bounded below
@@ -160,7 +153,7 @@ export interface AIProfileBalance {
   /**
    * Seconds this profile holds one committed opponent before the choice may turn over
    * (issue #359). Consumed by `commitTarget` (ai/target-selection.ts) as
-   * `Math.round(targetCommitmentTime * TICK_HZ)`, the same conversion every other span uses.
+   * `Math.round(targetCommitmentTime * TICK_HZ)`.
    *
    * A fourth distinct timing, for the reason shotCommitmentTime is a third: who an AI is
    * fighting, where it is driving, where it is pointing and which shot it is planning are
@@ -194,8 +187,7 @@ export interface AIProfileBalance {
   /**
    * Seconds this profile holds its bank-first/direct-first shot plan before the plan may
    * turn over (issue #332). Consumed by `tealDecision` (ai/teal.ts) as
-   * `Math.round(shotCommitmentTime * TICK_HZ)`, the same conversion `commitMove` and
-   * `holdAimFor` use for their own spans.
+   * `Math.round(shotCommitmentTime * TICK_HZ)`.
    *
    * Distinct from commitmentTime (movement) and aimHoldTime (aim smoothing) by decision,
    * not by oversight: movement, aim tracking, and tactical shot selection are independently
@@ -207,13 +199,8 @@ export interface AIProfileBalance {
    *
    * Inert for STATIONARY and DEFENSIVE behaviours: tealDecision, which TACTICAL, OFFENSIVE
    * and BERSERKER route to (ai/index.ts), is the only decision function that evaluates a
-   * shot plan. The value is still required rather than optional, for the reason
-   * commitmentTime states -- an omitted field on a profile that later gains a shot plan
-   * would silently default to "no commitment", which is the defect this closes.
-   *
-   * Not scored by `tankDifficultyBreakdown`, for commitmentTime's reason: holding a shot
-   * plan longer makes a tank more decisive and more predictable at once, so its magnitude
-   * does not map monotonically onto threat.
+   * shot plan. Still required rather than optional, and not scored by
+   * `tankDifficultyBreakdown`, for the reasons commitmentTime states.
    *
    * 2.0s across profiles, from a sweep over 60 seeds x 2 arenas x 2 player policies
    * (ai/commitment.measure.test.ts, VITE_RUN_MEASURE=1; the table is in PR #395). The span
@@ -259,10 +246,7 @@ export interface BalanceConstants {
   invisibility: InvisibilityBalance;
 }
 
-// ---- Resolved runtime config (what gameplay code consumes) ----
-
 export interface ResolvedWeaponConfig extends ProjectileBalance {
-  /** The sim BulletType this weapon fires; how spawnBullet keys its physics. */
   bulletType: BulletType;
   /** Whole ticks between shots (native sim unit), from fireCooldowns[fireRate]. */
   fireCooldown: number;

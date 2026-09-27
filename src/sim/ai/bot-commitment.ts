@@ -14,8 +14,8 @@ import { TICK_HZ } from '../constants';
  * (`commitTarget`, run by `stepAi` for non-player tanks) never reaches them. This file gives
  * them the same kind of commitment.
  *
- * The split between write and read, and why it is not an accident. `commitBotTarget` is called
- * by `stepAi`, inside `step`, which is the only place entitled to write simulation state.
+ * The split between write and read is deliberate. `commitBotTarget` is called by `stepAi`,
+ * inside `step`, which is the only place entitled to write simulation state.
  * `committedOpponent` is called by `decidePlayerInput`, which `game/loop.ts` runs to build the
  * input before `step` -- and which is forbidden from writing to the world at all. So the bot
  * reads, one tick later, what `stepAi` wrote. The alternative shapes are both closed: keeping
@@ -25,9 +25,6 @@ import { TICK_HZ } from '../constants';
  */
 
 /**
- * The opponent this bot would pick if it had to choose right now: nearest visible, or nearest
- * outright when none is visible.
- *
  * Deliberately the same rule `assessThreats` uses for `engaged` (`nearestVisible ?? nearest`,
  * player-profile.ts, issue #893). The commitment must not be a third opinion sitting beside
  * the threat pass -- that is how movement and firing came to disagree in the first place. It
@@ -55,17 +52,14 @@ function bestCandidate(world: World, tank: Tank): Tank | undefined {
   return nearestVisible ?? nearest;
 }
 
-/** Is this tank a computer-driven versus slot -- the only kind of player tank that commits? */
 export function isBotDriven(tank: Tank): boolean {
   return tank.kind === 'player' && tank.botDifficulty !== undefined;
 }
 
 /**
- * Advance this bot's commitment. Called by `stepAi`, the one writer of simulation state.
- *
- * The span comes from `BOT_TARGET_COMMITMENT_SECONDS`, which is bot configuration keyed by
- * difficulty -- not from `configFor('player').ai.targetCommitmentTime`, which `roster.ts`
- * records as an unread value the schema demands and nobody chose (issue #891, point 1).
+ * The span comes from `BOT_TARGET_COMMITMENT_SECONDS`, not from
+ * `configFor('player').ai.targetCommitmentTime`, which `roster.ts` records as unread
+ * (issue #891, point 1).
  *
  * Distance to the opponent is the cost, where the campaign policy uses distance to the
  * profile's preferred range band. A versus bot has no preferred band that anyone picked --
@@ -86,8 +80,6 @@ export function commitBotTarget(world: World, tank: Tank): RetargetReason | null
 }
 
 /**
- * The opponent a bot is committed to, for the decision that runs a tick after the write.
- *
  * Re-validated here, not trusted. Between `stepAi` writing the commitment and
  * `decidePlayerInput` reading it, a whole `step` has run: the committed tank may have died,
  * or -- on a stock respawn -- come back. Returning it unchecked is exactly the "stuck on a

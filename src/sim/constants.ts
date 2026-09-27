@@ -1,12 +1,9 @@
 import type { BulletType } from './types';
-// The balance scalars. config/data/balance.json is their authoritative home; this
-// module derives its exports from that data (and stays the one import site the rest
-// of the sim knows). Retuning one pinned by constants.test.ts is a deliberate
-// two-file edit -- the JSON entry and its pin there -- and the JSON is a build-time
-// static import, so the sim stays pure and replays stay exact functions of their
-// inputs. Everything else (epsilons, derived radii, most tick counts, and
-// SHELL_MUZZLE_FORWARD, whose value is coupled to the rendered barrel geometry)
-// remains TypeScript below.
+// config/data/balance.json is the authoritative home of the balance scalars; this module
+// stays the one place the rest of the sim imports them from. Retuning one pinned by
+// constants.test.ts is a deliberate two-file edit -- the JSON entry and its pin there. The
+// JSON is a build-time static import, so the sim stays pure and replays stay exact
+// functions of their inputs.
 import data from './config/data/balance.json';
 
 // ---- Simulation timing ----
@@ -52,14 +49,13 @@ export const SHELL_MUZZLE_FORWARD = 0.85;
  *
  * Because the justification lives in the renderer, entities.test.ts pins this both ways
  * against the built shell mesh's measured nose reach: retuning SHELL_BODY_LEN or SHELL_R
- * without moving this number fails there. That pin is the only thing keeping the two
- * files honest, since the dependency cannot be expressed as an import.
+ * without moving this number fails there.
  */
 export const SHELL_NOSE_REACH_RADII = 3.25;
 
 /**
- * Distance from tank centre to the shell's CENTRE at spawn: the muzzle plane less the
- * shell's drawn nose reach, so its visible nose begins at the opening (issue #237).
+ * Distance from tank centre to the shell's CENTRE at spawn, inset so its visible nose begins
+ * at the opening (issue #237).
  *
  * Separate from SHELL_MUZZLE_FORWARD because a centre at the muzzle plane puts the nose clear
  * of the barrel on the first frame, which reads as a pop. Insetting the centre while leaving
@@ -75,8 +71,7 @@ export const SHELL_NOSE_REACH_RADII = 3.25;
  * only because resolveBulletHits exempts the owner while `vdot(b.vel, toOwner) <= 0`, which
  * holds for any shell leaving the muzzle; the exemption is load-bearing here.
  *
- * Derived through `shellSpawnForward` so a shell with a different radius insets by its own
- * drawn reach; bullets.test.ts varies the radius to prove the derivation is live.
+ * bullets.test.ts varies the radius to prove the derivation is live.
  */
 export function shellSpawnForward(bulletRadius: number): number {
   return SHELL_MUZZLE_FORWARD - bulletRadius * SHELL_NOSE_REACH_RADII;
@@ -106,8 +101,6 @@ export const FIRE_COOLDOWN = data.shells.cooldownSeconds;
 export const MINE_COOLDOWN = data.mines.cooldownSeconds;
 
 /**
- * The same two cooldowns as whole ticks, which is what the sim actually counts.
- *
  * Storing seconds and subtracting DT once per tick does not land on zero:
  * repeated subtraction accumulates rounding, so after the intended 24
  * decrements FIRE_COOLDOWN sits a hair above zero and the `<= 0` gate needs one
@@ -140,8 +133,8 @@ export const MINE_TIMER = data.mines.timerSeconds;
  *
  * Both values are 30 ticks (500 ms at 60 Hz) initially -- separately named and
  * separately configured because the semantics differ; #277 owns tuning each.
- * Simulation ticks, never wall clock: the proximity countdown decrements once
- * per stepMines call and the fuse window is measured on the sim's own dt timer.
+ * The proximity countdown decrements once per stepMines call; the fuse window is
+ * measured on the sim's own dt timer.
  */
 export const MINE_FUSE_WARNING_TICKS = data.mines.fuseWarningTicks;
 export const MINE_PROXIMITY_DELAY_TICKS = data.mines.proximityDelayTicks;
@@ -149,13 +142,10 @@ export const MINE_PROXIMITY_RADIUS = data.mines.proximityRadius;
 export const MINE_BLAST_RADIUS = data.mines.blastRadius;
 
 /**
- * A detonation is not instantaneous: the blast grows to MINE_BLAST_RADIUS,
- * holds there, then is gone. Very fast, but not instant -- fast enough that you
- * cannot outrun one you are standing in, slow enough that the edge sweeping
- * outward is something you can see and, at the fringe, escape.
- *
- * 5 ticks each at 60Hz: about 83ms expanding, 83ms at full size, 167ms total.
- * A tank dies on the tick the edge reaches it, not the tick the mine went off.
+ * A blast grows to MINE_BLAST_RADIUS, holds, then is gone: fast enough that you cannot
+ * outrun one you are standing in, slow enough that the edge sweeping outward is something
+ * you can see and, at the fringe, escape. A tank dies on the tick the edge reaches it, not
+ * the tick the mine went off.
  */
 export const MINE_BLAST_EXPAND_TICKS = 5;
 export const MINE_BLAST_HOLD_TICKS = 5;
@@ -170,9 +160,7 @@ export const MINE_BLAST_HOLD_TICKS = 5;
 export const MINE_TRIGGER_RADIUS = data.mines.triggerRadius;
 
 /**
- * Does a mine's blast continue past a destructible wall on its way to a tank?
- *
- * Solid walls always stop it -- being killed through intact cover is a defect,
+ * Solid walls always stop a mine's blast -- being killed through intact cover is a defect,
  * not a design. Destructible ones are a judgement call: the wall is destroyed by
  * the same detonation either way, so the question is only whether it absorbs the
  * blast on its way out. `true` says a blast strong enough to shatter a wall does
@@ -187,11 +175,11 @@ export const MINE_BLAST_THROUGH_DESTRUCTIBLE = true;
 export const LIVES = data.lives;
 
 /**
- * Versus's Smash-style life counter (n-player arc, stock PR): how many respawns each
- * player-kind tank starts an FFA/teams match with -- see Tank.stockRemaining (types.ts)
- * and world.ts's resolveStatusFfa/resolveStatusTeams. Distinct from LIVES, which is
- * campaign-coop's own shared/per-round pool (world.lives): stock is tracked per tank,
- * never shared, and a tank's last death eliminates it rather than restarting a round.
+ * Versus's Smash-style life counter: the default number of lives each player-kind tank
+ * starts an FFA/teams match with -- see Tank.stockRemaining (types.ts) and world.ts's
+ * resolveStatusFfa/resolveStatusTeams. Distinct from LIVES, which is campaign-coop's own
+ * shared/per-round pool (world.lives): stock is tracked per tank, never shared, and a
+ * tank's last death eliminates it rather than restarting a round.
  */
 export const VERSUS_STOCK = data.versusStock;
 
@@ -203,14 +191,11 @@ export const VERSUS_STOCK = data.versusStock;
 //     orient before combat starts.
 //   grace     -- everyone can move; nobody can fire or lay mines, giving both sides
 //     maneuvering room before the first shot.
-// COUNTDOWN_TICKS = 180 ticks = 3s at 60Hz (TICK_HZ).
 export const COUNTDOWN_TICKS = 180;
-// GRACE_TICKS is 0: the grace phase is off.
-//
-// It existed so a respawned player was not shot the instant a life began, but it cost
-// two seconds of standing still unable to fire, on every death, with nothing on screen
-// explaining why. The phase machinery and its tests stay -- roundPhase still returns
-// 'grace' whenever this is positive -- so restoring it is this one number.
+// The grace phase is off. It existed so a respawned player was not shot the instant a life
+// began, but it cost two seconds of standing still unable to fire, on every death, with
+// nothing on screen explaining why. The phase machinery and its tests stay -- roundPhase
+// still returns 'grace' whenever this is positive -- so restoring it is this one number.
 export const GRACE_TICKS = 0;
 
 // ---- Per-tank respawn (stepRespawns, resolveStatusCoop/resolveStatusFfa/
@@ -221,16 +206,12 @@ export const GRACE_TICKS = 0;
 // for an individual respawn would freeze every other live tank's fire/movement too, which
 // is exactly wrong mid-fight. See the coop semantics plan
 // (docs/superpowers/plans/2026-08-15-coop-semantics.md). Shared by versus's stock
-// respawns (the stock PR) rather than given a second pair of constants -- versus's
-// respawn timing and post-revival grace are not new feel values, they are coop's own.
-//
-// RESPAWN_DELAY_TICKS = 120 ticks = 2.0s at 60Hz: how long a corpse waits before
-// reviving (at its own spawn in coop; at a `pickVersusSpawnCell`-chosen cell in
-// versus -- see stepRespawns).
+// respawns rather than given a second pair of constants -- versus's respawn timing and
+// post-revival grace are not new feel values, they are coop's own.
 export const RESPAWN_DELAY_TICKS = 120;
-// RESPAWN_SHIELD_TICKS = 90 ticks = 1.5s: post-revival damage immunity. Stands in for
-// everything resetArena would otherwise have guaranteed safe (wall state, the
-// partner's live ordnance, a no-sightline spawn) -- see isDamageImmune (types.ts).
+// Post-revival damage immunity (isDamageImmune, types.ts), standing in for everything
+// resetArena would otherwise have guaranteed safe: wall state, the partner's live
+// ordnance, a no-sightline spawn.
 export const RESPAWN_SHIELD_TICKS = 90;
 
 // ---- Collision sweep (reflectSweep) ----
@@ -245,7 +226,7 @@ export const SWEEP_MAX_ITERATIONS = 16;
 export const AIM_EPS = 1e-9;
 
 // ---- AI danger avoidance (incomingThreats, dangerAvoidMove) ----
-export const VEC_EPS = 1e-6; // zero-length-vector degeneracy guard
+export const VEC_EPS = 1e-6;
 export const THREAT_HORIZON = 1.0; // seconds of lookahead for incoming bullets
 export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bullet may pass within
 
@@ -257,7 +238,7 @@ export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bull
 // lethal zone. On top of the lethal radius sits a reaction margin: fleeing at exactly the
 // kill distance is fleeing from inside the blast with zero time to leave it, so the margin
 // is the distance a tank actually covers at TANK_SPEED in AI_MINE_FLEE_TICKS.
-export const AI_MINE_FLEE_TICKS = 15; // 0.25s at 60Hz
+export const AI_MINE_FLEE_TICKS = 15;
 export const AI_MINE_FLEE_MARGIN = TANK_SPEED * AI_MINE_FLEE_TICKS * DT; // 0.75 units
 export const AI_MINE_FLEE_RADIUS = MINE_BLAST_RADIUS + TANK_RADIUS + AI_MINE_FLEE_MARGIN; // 3.25
 // How near the player has to be for laying a mine to be worth doing at all.
@@ -330,7 +311,7 @@ export const AI_HULL_CLEARANCE = TANK_RADIUS + BULLET_RADIUS + 0.15;
 export const AI_SHOT_LOOKAHEAD = 1.5;
 
 // ---- AI wander (wanderMove) ----
-export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5s at 60Hz)
+export const WANDER_TICKS = 30; // how many ticks a wander heading is held
 
 /**
  * How close a fresh movement candidate must sit to the one already committed for the two
@@ -405,9 +386,9 @@ export const SEEK_APPROACH_BIAS = 0.5;
 // free-win chaos (trajectory-sensitive self-destruction events), which is what
 // the gate's slack is for.
 export const AI_AIM_SPREAD = data.ai.aimSpread;
-// How often (in ticks) the jitter offset is re-rolled. ~0.33s at 60Hz. A constant offset
-// per tank would just be a fixed miss the AI could never correct for; re-rolling this
-// often makes shots scatter around the target instead of consistently missing to one side.
+// How often the jitter offset is re-rolled. A constant offset per tank would just be a
+// fixed miss the AI could never correct for; re-rolling this often makes shots scatter
+// around the target instead of consistently missing to one side.
 export const AI_JITTER_TICKS = 20;
 
 // ---- AI hazard estimation (targeting.ts profileHazardSpread/estimationError) ----
@@ -523,7 +504,7 @@ export const AI_TARGET_SWITCH_MARGIN = 2;
 // half-turn takes at AI_TURRET_TURN_RATE, so a heading that lands far away is still being
 // approached when the next one is chosen -- deliberately, since arriving exactly on every
 // search heading is the "perfect coverage" the issue rules out.
-export const AI_SEARCH_HOLD_TICKS = 45; // 0.75s at 60Hz
+export const AI_SEARCH_HOLD_TICKS = 45;
 
 // Bounded to a forward-ish arc rather than the full circle, so a searching tank sweeps the
 // ground it faces and never guarantees it will look behind itself. That is a deliberate
@@ -537,9 +518,8 @@ export const AI_SEARCH_SWEEP = 1.2; // radians, ~69 degrees either side of the h
 // also uses it to decelerate onto a target rather than stopping dead.
 //
 // Why this exists: slewAngle is bang-bang -- min(|error|, maxDelta) with no velocity state --
-// so without a ramp the turret can only be stopped or travelling at the full rate cap, with
-// nothing in between: the gun switching between stopped and flat out, which is what reads
-// as unpolished.
+// so without a ramp the turret is either stopped or travelling at the full rate cap, which
+// reads as unpolished.
 //
 // The player turret is deliberately excluded. world.ts's driveTank still calls slewAngle, and
 // must: easing live player input reads as input lag, not polish. Same ruling as issue #330's
@@ -568,12 +548,8 @@ export const AI_TURRET_RAMP_TICKS = data.turret.aiRampTicks;
 // 0.14 radians (8 degrees) is the midpoint of the swept range {0.07, 0.14, 0.28}, chosen
 // rather than measured because the sweep (60 seeds x 2 arenas x 2 player policies) did not
 // discriminate: dwell, losses and medianTicks moved no more than seed noise, and
-// reaction.test.ts and pacifist.test.ts passed at every value.
-//
-// So this constant is under-determined by the evidence, and the honest reading is that
-// anything in single-digit degrees behaves the same. It is pinned at the midpoint so that
-// neither end of the tested range is a surprise. If a future artefact turns out to hinge on
-// it, re-measure rather than treating this figure as load-bearing.
+// reaction.test.ts and pacifist.test.ts passed at every value. If a future artefact turns
+// out to hinge on it, re-measure rather than treating this figure as load-bearing.
 export const AI_AIM_BREAK = data.ai.aimBreak;
 
 // ---- Per-type bullet tuning ----
