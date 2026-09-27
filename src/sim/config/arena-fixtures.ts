@@ -42,10 +42,6 @@ export const WIDE_ARENA: ArenaDefinition = validateArenas(
         notes: ['17x13 fixture: proves per-level ground-plane refit and the geometry/claim validation paths at a size no shipped level uses.'],
         claims: [
           {
-            // Measured, not guessed: brown's line to the player spawn crosses the
-            // solid '#####' block at row 9 (cols 7-11), which is unaffected by breach
-            // -- only the single destructible 'x' at (8, 6) opens, and it is not on
-            // this line. So the claim is sees=false both before and after breach.
             type: 'sightlineAfterBreach', from: [1, 1], sees: false,
             why: 'The row-9 solid block still stands between brown and the player spawn after ' +
               'breach; the only destructible cell on the board is elsewhere, so brown never ' +
@@ -70,7 +66,6 @@ export const SEALED_POCKET_ARENA: ArenaDefinition = validateArenas(
       id: 'fixture-sealed',
       cols: 5, rows: 5, cellSize: 2,
       legend: { '#': 'solid' },
-      // The B in the top-left is walled off by solids: no play opens it.
       grid: ['B#...', '##...', '.....', '..P..', '.....'],
       notes: ['Negative control: a solid-sealed pocket must be reported.'],
       claims: [],
@@ -107,7 +102,6 @@ export const OPEN_SIGHTLINE_ARENA: ArenaDefinition = validateArenas(
       id: 'fixture-sightline',
       cols: 5, rows: 5, cellSize: 2,
       legend: { '#': 'solid' },
-      // Brown and the player share a column with nothing between them.
       grid: ['..B..', '.....', '.....', '.....', '..P..'],
       notes: ['Negative control: an enemy holding a straight line to the player spawn.'],
       claims: [],

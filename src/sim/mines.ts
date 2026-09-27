@@ -31,9 +31,8 @@ export function dropMine(world: World, ownerId: number, events: SimEvent[]): boo
   if (!owner || !owner.alive) return false
   // Cap applies to every owner, not just the player: a cap each caller must opt into
   // is a cap the next spawner (AI) silently escapes.
-  // `owner.mineCap ?? ...` (issue #358): the tank's own budget when a session stamped one,
-  // otherwise its kind's resolved mine capacity (configFor; pinned per kind in
-  // config/roster.test.ts). No tank carries one unless the PP1 role arm is on.
+  // Only the PP1 role arm stamps `mineCap` (issue #358); the per-kind capacity is pinned
+  // in config/roster.test.ts.
   if (owner.activeMineIds.length >= (owner.mineCap ?? configFor(owner.kind).mineCapacity)) return false
   const mine: Mine = {
     id: world.nextId++,
@@ -50,8 +49,6 @@ export function dropMine(world: World, ownerId: number, events: SimEvent[]): boo
 }
 
 /**
- * True when a blast at `from` can reach `to` without an intervening wall.
- *
  * Written here rather than reusing ai/targeting's lineOfSight because that
  * helper is blind to wall kind, which is the whole point below.
  *
@@ -68,11 +65,9 @@ export function blastReaches(
 ): boolean {
   for (const w of walls) {
     if (w.destroyed) continue
-    // Which walls the pass-through rule applies to is the same per-kind property
-    // the destroy loop in applyBlast reads (destructibleByBlast); keying it on
-    // anything else would let a wall kind be destroyed by a blast its own body
-    // still blocked. `throughDestructible` (whether the rule is on at all) is the
-    // caller's parameter.
+    // Keyed on the same per-kind property the destroy loop in applyBlast reads;
+    // keying it on anything else would let a wall kind be destroyed by a blast its
+    // own body still blocked.
     if (wallConfigFor(w.kind).destructibleByBlast && throughDestructible) continue
     if (raySegmentVsAABB(from, to, w.aabb) !== null) return false
   }
@@ -80,41 +75,31 @@ export function blastReaches(
 }
 
 /**
- * How wide the blast is on a given tick of its life.
- *
- * Grows linearly to MINE_BLAST_RADIUS over MINE_BLAST_EXPAND_TICKS, then holds.
  * Age 0 is already lethal at close range -- standing on a mine when it goes off
  * is not survivable -- but the outer edge takes MINE_BLAST_EXPAND_TICKS to
  * arrive, which is the window a tank at the fringe can use.
  */
 export function blastRadiusAt(age: number): number {
   if (age >= MINE_BLAST_EXPAND_TICKS) return MINE_BLAST_RADIUS
-  // Quadratic ease-out: fast off the mark, slowing as it approaches full size, which is
-  // how a real overpressure front behaves and reads far better than a constant rate.
+  // Quadratic ease-out, which is how a real overpressure front behaves and reads far
+  // better than a constant rate.
   // t reaches exactly 1 on the last expanding tick, so f(1) = 1 and the radius lands on
   // MINE_BLAST_RADIUS exactly rather than approaching it.
   const t = (age + 1) / MINE_BLAST_EXPAND_TICKS
   return MINE_BLAST_RADIUS * (1 - (1 - t) * (1 - t))
 }
 
-/** Ticks a blast exists for: expanding, then holding at full size. */
 export const BLAST_LIFETIME_TICKS = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS
 
 /**
- * Kill what the blast currently reaches and knock out the walls it has grown
- * into. Called once when the mine goes off and once per tick after, with a
- * larger radius each time, so lethality follows the area actually covered.
- *
  * There is no owner exemption: the tank that laid the mine dies in its blast
  * like any other (unless the teams friendly-fire gate below spares it). Owner
  * safety is a property of arming, handled in stepMines: a mine does not arm
  * until its owner has moved clear.
  *
- * Walls are re-tested every tick because the radius grows: a wall outside the
- * age-0 radius but inside the full one must still come down, just later.
- * (Re-testing does not currently let a blast see through a wall it just opened
- * -- blastReaches skips destructible walls outright while
- * MINE_BLAST_THROUGH_DESTRUCTIBLE is true, and solid walls never break.)
+ * Re-testing walls every tick does not currently let a blast see through a wall
+ * it just opened: blastReaches skips destructible walls outright while
+ * MINE_BLAST_THROUGH_DESTRUCTIBLE is true, and solid walls never break.
  */
 function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
   const radius = blastRadiusAt(blast.age)
@@ -122,16 +107,12 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
   // Resolved via the blast's credit owner, not the mine's raw ownerId -- the same tank
   // whose credit already decides who gets the kill (a shell detonating an enemy's mine
   // credits the shooter), so friendly fire is judged against whoever is actually
-  // responsible. Loop-invariant per blast, computed once rather than per tank.
+  // responsible.
   const ownerTeam = world.tanks.find((o) => o.id === blast.credit.ownerId)?.team
   for (const t of world.tanks) {
     if (!t.alive) continue
-    // A damage-immune tank (dev invincible, or the post-respawn shield -- see
-    // isDamageImmune, types.ts) stands in the blast unharmed. A teammate
-    // (`t.team === ownerTeam`, both defined) with friendly fire off stands unharmed the
-    // same way -- `!== undefined` on both sides makes this self-disabling outside
-    // 'teams' by construction, the same idiom isDamageImmune already uses.
     if (isDamageImmune(t, world.tick)) continue
+    // `!== undefined` on both sides makes the teammate skip self-disabling outside 'teams'.
     if (t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam && !world.rules.friendlyFire) continue
     // Match resolveBulletHits: a tank is a circle of TANK_RADIUS, not a point, so the
     // two damage systems agree about where a tank actually is.
@@ -145,8 +126,6 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
     }
   }
   for (const w of world.walls) {
-    // Whether a blast may destroy this wall comes from the wall's resolved config
-    // (config/walls.ts), not a kind literal.
     if (!wallConfigFor(w.kind).destructibleByBlast || w.destroyed) continue
     if (blastHitsAABB(blast.pos, radius, w.aabb)) {
       w.destroyed = true
@@ -158,8 +137,6 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
 }
 
 /**
- * Age every live blast one tick and re-apply it at its new radius.
- *
  * Runs before the stages that create blasts (resolveBulletHits/stepMines), so a blast
  * born this tick is not aged until the next one -- it gets its full age-0 tick
  * at the radius detonateMine already applied.
@@ -173,14 +150,11 @@ export function stepBlasts(world: World, events: SimEvent[]): void {
 }
 
 /**
- * Proximity entry (issue #275, owner-revised on PR #311): tripping an armed mine
- * opens a short deterministic reaction window -- `mine-triggered` fires now
- * ("you tripped this", #276's cue) and `stepMines` detonates
- * `MINE_PROXIMITY_DELAY_TICKS` calls later. Idempotent by the
- * `proximityDelayLeft` guard: staying in (or re-entering) the radius cannot
- * restart or shorten the countdown. Proximity only, by owner direction: a shell
- * hit detonates immediately (bullets.ts, skill-shot credit intact) and fuse
- * expiry detonates on the fuse's own schedule.
+ * A trip opens a deterministic reaction window before `stepMines` detonates (issue
+ * #275, owner-revised on PR #311). Idempotent: staying in (or re-entering) the
+ * radius cannot restart or shorten the countdown. Proximity only, by owner
+ * direction: a shell hit detonates immediately (bullets.ts) and fuse expiry
+ * detonates on the fuse's own schedule.
  */
 export function tripMineProximity(mine: Mine, events: SimEvent[]): void {
   if (mine.detonated || mine.proximityDelayLeft !== undefined) return
@@ -188,10 +162,6 @@ export function tripMineProximity(mine: Mine, events: SimEvent[]): void {
   events.push({ type: 'mine-triggered', mineId: mine.id, ownerId: mine.ownerId, pos: { x: mine.pos.x, y: mine.pos.y } })
 }
 
-/**
- * Set a mine off: applies the blast at its smallest radius and leaves a Blast
- * behind for stepBlasts to grow.
- */
 export function detonateMine(
   world: World,
   mine: Mine,
@@ -218,12 +188,10 @@ export function detonateMine(
 }
 
 /**
- * May a shell detonate this mine?
- *
- * An armed mine always can: a mine that is live to a footstep should be live to
- * a shell, and that half is not configurable. An unarmed one depends on the
- * world's policy, because triggering it is the "instant bomb" -- drop at an
- * enemy's feet, step back, shoot it, with no fuse and no arming delay.
+ * Armed: always -- a mine that is live to a footstep should be live to a shell,
+ * and that half is not configurable. Unarmed: the world's policy, because
+ * triggering it is the "instant bomb" -- drop at an enemy's feet, step back,
+ * shoot it, with no fuse and no arming delay.
  */
 export function shellMayDetonate(world: World, mine: Mine): boolean {
   if (mine.armed) return true
@@ -245,10 +213,8 @@ export function stepMines(world: World, dt: number, events: SimEvent[]): void {
       }
     }
     mine.timer -= dt
-    // The fuse warning is the fuse's final window, not time added after it: a
-    // one-shot event when `timer` first crosses in; expiry below is unaffected.
-    // Fires regardless of arming -- an owner camping on an unarmed mine still
-    // rides this fuse to detonation.
+    // The fuse warning is the fuse's final window, not time added after it; expiry
+    // below is unaffected.
     if (!mine.fuseWarned && mine.timer <= MINE_FUSE_WARNING_TICKS * DT) {
       mine.fuseWarned = true
       events.push({ type: 'mine-fuse-warning', mineId: mine.id, ownerId: mine.ownerId, pos: { x: mine.pos.x, y: mine.pos.y } })
@@ -270,18 +236,14 @@ export function stepMines(world: World, dt: number, events: SimEvent[]): void {
       detonateMine(world, mine, events)
       continue
     }
-    // An unarmed mine cannot be triggered by anyone. Arming is what makes a
-    // mine dangerous, and it happens only once the owner has moved clear.
-    //
     // Letting an unarmed mine trigger makes the drop itself the weapon: the
     // mine spawns at the owner's feet and the blast reaches further than the
     // trigger, so dropping one beside an enemy detonates it at once -- killing
     // both. Exempting the owner would only trade that self-kill for a free kill
     // (walk up, tap the key, walk away unharmed), and the AI wipes itself out
-    // when two enemies lay mines beside each other.
-    // Unarmed mines are inert unless the world says otherwise. See
-    // UnarmedTrigger: 'proximity' and 'both' reinstate the instant bomb on
-    // purpose, for playtesting, including the AI mutual-wipeout above.
+    // when two enemies lay mines beside each other. 'proximity' and 'both'
+    // reinstate the instant bomb on purpose, for playtesting, AI mutual wipeout
+    // included.
     if (!mine.armed && world.rules.unarmedTrigger !== 'proximity' && world.rules.unarmedTrigger !== 'both') {
       continue
     }

@@ -7,9 +7,9 @@ import type { ArenaClaim } from './config/arena-types';
 import { SPAWN_LETTERS } from './config/arena-types';
 
 /**
- * Evaluates an arena's declared design claims (config/arena-types.ts) against the
- * sim's own geometry -- lineOfSight, the same function the AI uses -- so a claim
- * means exactly what the game means by it.
+ * Evaluates an arena's declared design claims against the sim's own geometry --
+ * lineOfSight, the same function the AI uses -- so a claim means exactly what the
+ * game means by it.
  *
  * Test-facing: it imports the AI layer, which is why it lives here rather than in
  * config/ (that module stays free of AI dependencies). Nothing in the shipped
@@ -17,32 +17,23 @@ import { SPAWN_LETTERS } from './config/arena-types';
  */
 
 /**
- * The world-space centre of a grid cell, matching loadArena's spawn placement
- * (`(c + 0.5) * cellSize`, arena.ts). Exported with its inverse below so tests
- * share one copy of the formula rather than hand-rolling it; the formula also
- * lives in loadArena, and `cell-mapping.test.ts` pins the copies together.
+ * Matches loadArena's spawn placement, which keeps its own copy of the formula;
+ * `cell-mapping.test.ts` pins the copies together.
  */
 export function cellCentre(arena: Arena, [c, r]: readonly [number, number]): Vec2 {
   return { x: (c + 0.5) * arena.cellSize, y: (r + 0.5) * arena.cellSize };
 }
 
-/** The inverse of cellCentre: which cell a world point sits in. */
 export function cellOf(arena: Arena, p: Vec2): [number, number] {
   return [Math.round(p.x / arena.cellSize - 0.5), Math.round(p.y / arena.cellSize - 0.5)];
 }
 
-/**
- * Every destructible wall destroyed, as a copy -- the caller's array is left
- * intact, which an open-coded in-place mutation would not do. Exported so
- * tests share it rather than open-coding the idiom.
- */
+/** Every destructible wall destroyed, as a copy -- the caller's array is left intact. */
 export function breach(walls: Wall[]): Wall[] {
   return walls.map((w) => (w.kind === 'destructible' ? { ...w, destroyed: true } : w));
 }
 
 /**
- * The grid with `marks` overwritten as `*`, for failure messages.
- *
  * An out-of-grid mark is reported, not thrown: this runs on the failure path, so
  * a raw TypeError here would bury the failure it was called to explain. Data
  * from arenas.json cannot get here out of range (the validator bounds-checks
@@ -80,8 +71,6 @@ function isBreachable(arena: Arena, r: number, c: number): boolean {
 }
 
 /**
- * 4-neighbour flood fill over breachable cells; also names what it could not reach.
- *
  * The fill starts at the player's cell, not at the first breachable cell in scan
  * order. Connectivity is symmetric so the pass/fail answer is identical either way,
  * but the reported set is not: filling from a sealed cell that sorts first marks the
@@ -176,9 +165,8 @@ export function structuralFailures(arena: Arena): string[] {
     // level and on every respawn. That difference is the whole rule; widening it to
     // mobile tanks would reject levels the game has shipped.
     //
-    // Also gated on the weight, so it costs nothing for kinds that never bank. Intact
-    // walls only, matching the direct rule immediately above: arena-02 deliberately opens
-    // direct spawn lines once its barrier is breached, so a post-breach rule would
+    // Intact walls only, matching the direct rule immediately above: arena-02 deliberately
+    // opens direct spawn lines once its barrier is breached, so a post-breach rule would
     // contradict a shipped level's design. An arena wanting the post-breach guarantee
     // declares spawnBlockRobust, which checks both phases, banks included.
     const cfg = configFor(enemy.kind);
@@ -257,14 +245,9 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
           { name: 'intact', walls } as const,
           { name: 'breached', walls: breached } as const,
         ];
-        // A STATIONARY banker is checked for a ricochet onto the nudged spawn as well as
-        // a straight line. structuralFailures forbids it a bank onto the spawn with walls
-        // intact; this is the post-breach half, and the reason it lives here rather than
-        // there is the same reason the direct rule stops at intact -- arena-02 opens spawn
-        // lines on purpose when its barrier goes, so a universal post-breach rule would
-        // reject a shipped level. Declaring spawnBlockRobust is how an arena opts in to
-        // the stronger guarantee. Costs nothing for kinds that never bank and for every
-        // mobile one.
+        // structuralFailures forbids a STATIONARY banker a bank onto the spawn with walls
+        // intact; this is the post-breach half, kept opt-in here for the reason given
+        // there.
         for (const enemy of spawns.filter((s) => s.kind !== 'player')) {
           const cfg = configFor(enemy.kind);
           const banks = cfg.behavior === AIBehavior.STATIONARY && cfg.ai.bankShotWeight > 0;

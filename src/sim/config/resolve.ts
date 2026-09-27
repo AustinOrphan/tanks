@@ -7,9 +7,8 @@ import type {
 } from './types';
 
 /**
- * How each catalogued ProjectileType maps onto the sim's own BulletType, whose
- * physics table (constants.ts `bulletConfig`) the shell systems key off. This is
- * the one place the definition vocabulary meets the sim's bullet kinds.
+ * BulletType keys the shell physics table (constants.ts `bulletConfig`). This is the one
+ * place the definition vocabulary meets the sim's bullet kinds.
  */
 const PROJECTILE_BULLET_TYPE: Record<ProjectileType, BulletType> = {
   [ProjectileType.STANDARD_SHELL]: 'normal',
@@ -18,8 +17,6 @@ const PROJECTILE_BULLET_TYPE: Record<ProjectileType, BulletType> = {
 };
 
 /**
- * Resolve a TankDefinition + a BalanceConstants table into a flat runtime config.
- *
  * Adapted from the supplied resolved-tank-config.ts. Generalised over the key type
  * `K` so the same resolver serves both the game roster (keyed by the sim's TankKind)
  * and the Wii reference taxonomy (keyed by TankType) -- see config/reference/.
@@ -27,8 +24,6 @@ const PROJECTILE_BULLET_TYPE: Record<ProjectileType, BulletType> = {
  * Provenance (issue #783): the supplied resolver is first-party. It was written for this
  * project with ChatGPT, in a conversation that cites no other codebase. See
  * CONTENT-LICENSE.md, "Where the supplied tank configuration came from".
- *
- * Pure: definition + numbers in, plain object out. No sim/render/DOM dependency.
  */
 export function resolveTankConfig<K extends string>(
   key: K,

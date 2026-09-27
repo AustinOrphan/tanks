@@ -5,15 +5,10 @@ import { driveVelocity } from '../collision';
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
-// The STATIONARY-behaviour implementation (decideAi routes here for any tank whose
-// resolved profile behaviour is STATIONARY -- brown and green). `cfg` is injectable so
-// tests can probe profile consumption; the default is the tank's own resolved config.
+// decideAi routes every STATIONARY-behaviour profile here -- brown and green. `cfg` is
+// injectable so tests can probe profile consumption.
 export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig = configFor(tank.kind)): AiDecision {
-  // The tank's weapon comes from its resolved config, not a hardcoded 'normal': each
-  // kind fires the projectile its definition names (config/data/tank-defs.json).
   const weapon = cfg.weapon;
-  // Resolved centrally (issue #359): every behaviour reads the same committed opponent
-  // from the same function, so movement and firing agree on who is being fought.
   const player = resolveOpponent(world, tank, cfg);
   if (!player) {
     return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
@@ -26,11 +21,9 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
   // angle: jittering a held angle would make it visibly drift every tick with nothing to
   // aim at, which is a bug, not difficulty.
   //
-  // Both shot types are profile-gated on their weight, exactly as teal.ts gates its two.
-  // STATIC_BASIC carries bankShotWeight 0, so `bankAngle` is null on every tick and brown
-  // never banks; RICOCHET_SNIPER (0.45/0.55) is what turns banking on. `aimJitter` is a
-  // pure hash of (seed, tank.id, tick bucket) rather than threaded PRNG state, so the extra
-  // call a banking profile makes cannot desync any other draw.
+  // STATIC_BASIC (brown) has bankShotWeight 0 and never banks; RICOCHET_SNIPER (green)
+  // does. `aimJitter` is a pure hash of (seed, tank.id, tick bucket) rather than threaded
+  // PRNG state, so the extra call a banking profile makes cannot desync any other draw.
   const directAngle = los && cfg.ai.directShotWeight > 0
     ? aimLead(tank.pos, player.pos, targetVel, speed) + aimJitter(world, tank, profileAimSpread(cfg))
     : null;
@@ -42,20 +35,15 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
     ? null
     : bankRaw + aimJitter(world, tank, profileAimSpread(cfg));
 
-  // A stationary gunner prefers the direct shot whenever it has one and falls back to the
-  // bank, rather than alternating the way teal does. Teal alternates so a mobile tank
-  // visibly performs both; a turret that can already see you has no reason to take the
-  // longer, more easily dodged path, and "shoots you round the corner when it cannot see
-  // you" is the sniper's whole read on screen. The weights are therefore inclinations
-  // (attempted at all), not a mix ratio -- the same reading teal.ts documents.
+  // Prefers the direct shot and falls back to the bank, rather than alternating the way
+  // teal does: a turret that can already see you has no reason to take the longer, more
+  // easily dodged path, and "shoots you round the corner when it cannot see you" is the
+  // sniper's whole read on screen. The weights are therefore inclinations (attempted at
+  // all), not a mix ratio.
   const aimAngle = directAngle ?? bankAngle;
   const turretAngle = aimAngle ?? tank.turretAngle;
-  // The reaction clock's input: a solution exists, whether direct or banked.
   const hasSolution = aimAngle !== null;
 
-  // lineOfSight only tests walls. resolveBulletHits kills any non-owner tank the shell
-  // touches, so a clear wall-line with Grey or Teal standing on it is a teammate kill, not
-  // a shot. Evaluated against the jittered angle actually being aimed, not the ideal one.
   // Deliberately not folded into the aim above (teal returns null instead): brown holds
   // its aim on the player while a teammate crosses the lane, so it fires the instant the
   // lane clears. Dropping the aim would cost a re-acquire every time that happens.
@@ -68,10 +56,8 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
       nextState = hasSolution ? 'aim' : 'idle';
       break;
     case 'aim':
-      // Hold in 'aim' (not 'idle') while a teammate is on the line: a stationary gunner
-      // never moves, so the block clears when the teammate walks off, and dropping back
-      // to 'idle' would cost an extra tick re-walking the state machine every time that
-      // happens.
+      // Hold in 'aim' (not 'idle') while a teammate is on the line: dropping back to
+      // 'idle' would cost an extra tick re-walking the state machine when the lane clears.
       if (clearOfFriendlies) { fire = true; nextState = 'fire'; }
       else if (!hasSolution) nextState = 'idle';
       break;
@@ -83,7 +69,5 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
       break;
   }
 
-  // avoid: null on every path -- a STATIONARY behaviour never calls dangerAvoidMove, and
-  // its zero desiredMove means the commitment layer holds nothing for it (commitment.ts).
   return { desiredMove: { x: 0, y: 0 }, turretAngle, fire, hasSolution, fireType: weapon.bulletType, mine: false, nextState, nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
 }

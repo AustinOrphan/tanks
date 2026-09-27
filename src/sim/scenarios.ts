@@ -5,8 +5,7 @@
  * builds legal worlds from an explicit seed -- a shipped arena, a mode and player count the
  * catalogs allow, rule values a world can be created with -- drives them for a bounded
  * number of ticks through `stepInputs`, the entry point the game itself uses, and checks
- * structural invariants after every tick. A failure names the seed, the resolved scenario,
- * the tick and the invariant, and prints the command that reruns exactly that case.
+ * structural invariants after every tick.
  *
  * It never builds a world by hand, never steps a second simulation path, and
  * asserts nothing about balance or feel. It is testing infrastructure: nothing in the game
@@ -29,13 +28,12 @@ import type { SimEvent } from './events';
 import type { AiTargetPerception, GameMode, InputState, UnarmedTrigger } from './types';
 
 /**
- * How one player tank is driven. `ai` is the shipped player-profile bot; `scripted` is a
- * seeded walk through the whole input space, including fire and mine presses the rules must
- * refuse; `idle` sends the zero input every tick.
+ * `scripted` is a seeded walk through the whole input space, including fire and mine presses
+ * the rules must refuse.
  */
 export type ScenarioDriver = 'ai' | 'scripted' | 'idle';
 
-/** Everything that determines a generated run. Printed whole on a failure. */
+/** Everything that determines a generated run. */
 export interface ScenarioConfig {
   readonly seed: number;
   readonly ticks: number;
@@ -68,12 +66,8 @@ function pick<T>(rnd: () => number, items: readonly T[]): T {
 }
 
 /**
- * The scenario a seed resolves to. A pure function of (seed, ticks): the same arguments give
- * the same scenario on every run, which is what makes a reported seed a reproduction.
- *
- * Legal by construction. Campaign-coop draws from the campaign's own arenas at 1 to 4
- * players. Versus draws an entry from the validated versus catalog, and only the player
- * counts and modes that entry lists.
+ * A pure function of (seed, ticks): the same arguments give the same scenario on every run,
+ * which is what makes a reported seed a reproduction. Legal by construction.
  */
 export function generateScenario(seed: number, ticks: number): ScenarioConfig {
   const rnd = mulberry32(seed);
@@ -107,7 +101,6 @@ export function generateScenario(seed: number, ticks: number): ScenarioConfig {
   };
 }
 
-/** The tick-0 world, built the way the game builds one. */
 export function buildScenarioWorld(cfg: ScenarioConfig): World {
   return createWorldFor(arenaById(cfg.arenaId), cfg.seed, {
     playerCount: cfg.playerCount,
@@ -116,7 +109,6 @@ export function buildScenarioWorld(cfg: ScenarioConfig): World {
   });
 }
 
-/** One broken invariant, located. */
 export interface Violation {
   readonly tick: number;
   readonly invariant: InvariantName;
@@ -135,7 +127,6 @@ export type InvariantName =
   | 'bounce-budget'
   | 'fire-legal';
 
-/** What a run observed. */
 export interface ScenarioRun {
   readonly config: ScenarioConfig;
   /** Violations of the first violating tick; empty when every tick held. */
@@ -150,7 +141,6 @@ export interface ScenarioRun {
   readonly eventCounts: Readonly<Record<string, number>>;
 }
 
-/** Every number anywhere in `value` that is not finite, with its path. */
 function nonFinite(value: unknown, path: string, out: string[]): void {
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) out.push(`${path} = ${value}`);
@@ -164,7 +154,6 @@ function nonFinite(value: unknown, path: string, out: string[]): void {
   for (const [k, v] of Object.entries(value)) nonFinite(v, `${path}.${k}`, out);
 }
 
-/** What the checks remember across ticks. */
 export interface InvariantMemory {
   /** Shell and mine ids that have left the world or died; neither may come back. */
   readonly retiredShells: Set<number>;
@@ -176,9 +165,8 @@ export function createInvariantMemory(): InvariantMemory {
 }
 
 /**
- * The structural invariants, checked across one step: `prev` is the world handed to
- * `stepInputs`, `curr` the world it returned, `events` what it emitted. Records what later
- * ticks need in `memory`.
+ * `prev` is the world handed to `stepInputs`, `curr` the world it returned, `events` what it
+ * emitted. Records what later ticks need in `memory`.
  */
 export function checkTick(
   prev: World,
@@ -192,14 +180,12 @@ export function checkTick(
     out.push({ tick, invariant, detail });
   };
 
-  // Every number in the world is finite -- the whole world, not a chosen list of fields, so
-  // a field added later is covered without anyone remembering to add it here.
+  // The whole world, not a chosen list of fields, so a field added later is covered without
+  // anyone remembering to add it here.
   const bad: string[] = [];
   nonFinite(curr, 'world', bad);
   if (bad.length > 0) fail('finite-numbers', bad.slice(0, 5).join('; '));
 
-  // Ids are unique within each collection and were issued (below nextId); every shell and
-  // mine names an owner that is a tank.
   const tankIds = new Set<number>();
   for (const t of curr.tanks) {
     if (tankIds.has(t.id)) fail('unique-ids', `tank id ${t.id} appears twice`);
@@ -221,9 +207,7 @@ export function checkTick(
     if (!tankIds.has(m.ownerId)) fail('owners-exist', `mine ${m.id} names owner ${m.ownerId}, which is not a tank`);
   }
 
-  // Nothing comes back from the dead except by a rule that says so. A tank revives only with
-  // a `respawn` event naming it, or with a round restart (resetArena moves roundStartTick).
-  // A shell or mine that has left the world, or died, never returns.
+  // A round restart revives tanks with no respawn event; resetArena moves roundStartTick.
   const respawned = new Set<number>();
   for (const e of events) if (e.type === 'respawn') respawned.add(e.tankId);
   const roundRestarted = curr.roundStartTick !== prev.roundStartTick;
@@ -248,15 +232,12 @@ export function checkTick(
   const minesNow = new Set(curr.mines.map((m) => m.id));
   for (const m of prev.mines) if (!minesNow.has(m.id)) memory.retiredMines.add(m.id);
 
-  // Phase transitions: every step advances the clock by exactly one tick, and a finished
-  // game stays finished.
   if (curr.tick !== prev.tick + 1) fail('tick-advances', `tick went from ${prev.tick} to ${curr.tick}`);
   if (prev.status !== 'playing' && curr.status !== prev.status) {
     fail('status-latched', `status went from ${prev.status} to ${curr.status}`);
   }
 
-  // Populations stay inside their authoritative caps: the same expressions the gates read
-  // (bullets.ts shellCapReached, mines.ts), and the shell type's bounce budget.
+  // The same cap expressions the gates read (bullets.ts shellCapReached, mines.ts).
   for (const t of curr.tanks) {
     const cfg = configFor(t.kind);
     let shells = 0;
@@ -278,8 +259,6 @@ export function checkTick(
     }
   }
 
-  // No shot bypasses the fire rules: the shooter was a live tank, off cooldown, and fired
-  // once this tick.
   const shotsBy = new Map<number, number>();
   for (const e of events) {
     if (e.type !== 'fire') continue;
@@ -350,9 +329,8 @@ export interface ScenarioStep {
 }
 
 /**
- * The scenario's steps, one per tick up to `ticks`: the generator's drivers feeding
- * `stepInputs`. The only place a scenario is stepped, so `runScenario` and a test that needs
- * a mid-run world cannot drive the same seed differently.
+ * The only place a scenario is stepped, so `runScenario` and a test that needs a mid-run
+ * world cannot drive the same seed differently.
  */
 export function* scenarioSteps(cfg: ScenarioConfig): Generator<ScenarioStep> {
   let world = buildScenarioWorld(cfg);
@@ -369,10 +347,6 @@ export function* scenarioSteps(cfg: ScenarioConfig): Generator<ScenarioStep> {
   }
 }
 
-/**
- * Drive a scenario, checking every tick. Stops at the first violating tick, or
- * TERMINAL_WATCH_TICKS after the status leaves 'playing', or at `ticks`.
- */
 export function runScenario(cfg: ScenarioConfig): ScenarioRun {
   const memory = createInvariantMemory();
   const digests: number[] = [];
@@ -407,20 +381,17 @@ export function parseSeedList(text: string): number[] {
   return seeds;
 }
 
-/** The first index at which two runs' digests differ, or -1 when they agree throughout. */
 export function firstDivergence(a: readonly number[], b: readonly number[]): number {
   const n = Math.max(a.length, b.length);
   for (let i = 0; i < n; i++) if (a[i] !== b[i]) return i;
   return -1;
 }
 
-/** The copy-paste command that reruns exactly one seed at one tick budget. */
 export function reproductionCommand(cfg: Pick<ScenarioConfig, 'seed' | 'ticks'>): string {
   return `VITE_RUN_MEASURE=1 VITE_SCENARIO_SEEDS=${cfg.seed} VITE_SCENARIO_TICKS=${cfg.ticks} `
     + 'npx vitest run tools/scenarios/generated-scenarios.measure.test.ts';
 }
 
-/** A failure report: everything needed to rerun and read the case, in one string. */
 export function describeFailure(run: ScenarioRun): string {
   const lines = run.violations.map((v) => `  tick ${v.tick} '${v.invariant}': ${v.detail}`);
   return [
@@ -431,7 +402,6 @@ export function describeFailure(run: ScenarioRun): string {
   ].join('\n');
 }
 
-/** A repeat-run report: where two runs of one scenario first disagreed. */
 export function describeDivergence(cfg: ScenarioConfig, a: ScenarioRun, b: ScenarioRun): string {
   const at = firstDivergence(a.digests, b.digests);
   return [

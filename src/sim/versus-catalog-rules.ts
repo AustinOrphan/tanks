@@ -9,9 +9,7 @@ import { VERSUS_CATALOG } from './config/versus-catalog';
 /**
  * Deterministic geometry validators for the VS arena catalog (issue #270): prove
  * every declaration a `versus-catalog.json` entry makes -- supported player counts
- * and modes, advertised variants -- against the real spawn/sightline machinery,
- * and report each violation as one line naming the exact entry, player count,
- * mode, variant, and failed rule.
+ * and modes, advertised variants -- against the real spawn/sightline machinery.
  *
  * Layering: `validateVersusCatalog` (config/validate.ts) already rejected
  * malformed entries at load; this module answers the question the schema cannot
@@ -20,13 +18,9 @@ import { VERSUS_CATALOG } from './config/versus-catalog';
  * shipped menu trusts the declarations precisely because the sweep pins them to
  * measured ground truth in CI.
  *
- * Import graph: imports `arena.ts`, `versus-board.ts`, `versus-variants.ts`,
- * `versus-spawns.ts` and `config/versus-catalog.ts`. No production module imports
- * this one, so none of those edges can close a cycle. Everything here is a pure
- * function of validated static data.
+ * No production module imports this one, so none of its imports can close a cycle.
  */
 
-/** Everything a spawn-clearance rule (issue #225) receives. */
 export interface SpawnClearanceContext {
   readonly arena: Arena;
   readonly grid: string[];
@@ -35,20 +29,15 @@ export interface SpawnClearanceContext {
 }
 
 /**
- * The #225 consumption seam: an injectable rule receiving the real picked spawn
- * positions for one declared player count on the authored grid, returning
- * human-readable violations (empty = clean). Defaults to the real rule
- * (`defaultClearanceRule` below, issue #312); inject to override.
+ * The #225 seam: receives the real picked spawn positions for one declared player
+ * count on the authored grid and returns human-readable violations (empty = clean).
  */
 export type SpawnClearanceRule = (ctx: SpawnClearanceContext) => string[];
 
 /**
- * The default clearance rule (issue #312): #225's real
- * `versusSpawnClearanceFailures`. Spawn positions are already clearance-filtered
- * at pick time (#225), so on healthy boards this re-verifies to zero lines; a
- * board whose eligible pool empties (the picker's documented fallback) is exactly
- * what it surfaces in the sweep. Injectable: tests and future policies override
- * via `VersusCatalogRuleOptions.clearanceRule`.
+ * Spawn positions are already clearance-filtered at pick time (#225), so on healthy
+ * boards this re-verifies to zero lines; a board whose eligible pool empties (the
+ * picker's documented fallback) is exactly what it surfaces in the sweep (issue #312).
  */
 const defaultClearanceRule: SpawnClearanceRule = (ctx) =>
   versusSpawnClearanceFailures(
@@ -56,28 +45,25 @@ const defaultClearanceRule: SpawnClearanceRule = (ctx) =>
   );
 
 /**
- * The pinned seed sample behind every `seeded-destructible` declaration: 5 seeds
- * x each declared N, ungated draws at the shipped operating fraction
- * (`DESTRUCTIBLE_REMOVAL_FRACTION`, 0.4). Pinned constants keep the check
- * deterministic -- same tree, same verdict, forever. Population context: the
- * map-variants plan measured 0 unsuitable draws in 1500 at this fraction, so a
- * failure here is signal, not sampling noise; the runtime additionally gates
- * every real draw (`pickVersusVariantGrid`'s retry/fallback), so this validates
- * the advertisement's health, not the last line of defence.
+ * Seeds for ungated `seeded-destructible` draws at the shipped fraction
+ * (`DESTRUCTIBLE_REMOVAL_FRACTION`, 0.4), pinned so the check stays deterministic --
+ * same tree, same verdict. The map-variants plan measured 0 unsuitable draws in 1500
+ * at this fraction, so a failure here is signal, not sampling noise; the runtime
+ * additionally gates every real draw (`pickVersusVariantGrid`'s retry/fallback), so
+ * this validates the advertisement's health, not the last line of defence.
  */
 export const VARIANT_VALIDATION_SEEDS: readonly number[] = [1, 2, 3, 4, 5];
 
 export interface VersusCatalogRuleOptions {
-  /** Arena lookup seam; defaults to the real `arenaById`. Fixtures inject theirs. */
+  /** Defaults to `arenaById`. */
   arenaFor?: (arenaId: string) => Arena;
-  /** Seed sample for variant coverage; defaults to `VARIANT_VALIDATION_SEEDS`. */
+  /** Defaults to `VARIANT_VALIDATION_SEEDS`. */
   variantSeeds?: readonly number[];
-  /** The #225 seam -- see `SpawnClearanceRule`. */
+  /** Defaults to `defaultClearanceRule`. */
   clearanceRule?: SpawnClearanceRule;
 }
 
-/** One failure line: entry, player count, mode, variant, rule, detail -- issue
- * #270's required identification, in one grep-able shape. `N=any mode=any` marks
+/** Issue #270's required identification, in one grep-able line. `N=any mode=any` marks
  * entry-level failures no specific combination owns. */
 function diag(
   entry: VersusCatalogEntry,
@@ -90,9 +76,8 @@ function diag(
   return `${entry.id} (${entry.arenaId}) N=${n} mode=${mode} variant=${variant}: ${rule}: ${detail}`;
 }
 
-/** The real placement sequence for one (arena, N) -- the same
- * `loadArena(..., 'ffa')` call `evaluateVersusBoard` makes (its own doc comment
- * covers why 'ffa' stands for both modes: placement is mode-identical). */
+/** The same `loadArena(..., 'ffa')` call `evaluateVersusBoard` makes: placement is
+ * mode-identical, so 'ffa' stands for both modes. */
 function playerPositions(arena: Arena, playerCount: number): { x: number; y: number }[] {
   return loadArena(arena, playerCount, 'ffa')
     .tanks.filter((t) => t.kind === 'player')
@@ -100,9 +85,8 @@ function playerPositions(arena: Arena, playerCount: number): { x: number; y: num
 }
 
 /**
- * Spawn cells not reachable from the P cell through non-solid cells. Destructible
- * cells count as traversable here: they are breachable, so a spawn behind them is
- * eventually reachable -- the same solid/breachable distinction
+ * Destructible cells count as traversable here: they are breachable, so a spawn
+ * behind them is eventually reachable -- the same solid/breachable distinction
  * `arena-claims.ts`'s sealed-pocket rule draws. What this catches is the case
  * `evaluateVersusBoard` cannot see: the maximin picker gladly places a spawn
  * across a fully solid divider (distance is exactly what it maximises, and the
@@ -146,8 +130,6 @@ function unreachableSpawnCells(
   return out;
 }
 
-/** Count of cells whose legend kind is `destructible` -- the population a
- * `seeded-destructible` declaration draws from; zero makes it vacuous. */
 function destructibleCellCount(arena: Arena): number {
   let count = 0;
   for (const row of arena.grid) {
@@ -157,9 +139,8 @@ function destructibleCellCount(arena: Arena): number {
 }
 
 /**
- * Every violation of one entry's declarations, as diagnostic lines (empty =
- * clean). Deterministic: pure function of the entry, the arena data, and the
- * pinned seeds -- no RNG outside `buildVariantGrid`'s seeded draw.
+ * Deterministic: a pure function of the entry, the arena data, and the pinned
+ * seeds -- no RNG outside `buildVariantGrid`'s seeded draw.
  */
 export function versusCatalogEntryFailures(
   entry: VersusCatalogEntry,
@@ -178,9 +159,7 @@ export function versusCatalogEntryFailures(
   }
 
   for (const n of entry.players) {
-    // Declared support on the authored grid -- the real evaluateVersusBoard
-    // criteria, one evaluation per N (geometry is mode-independent; see
-    // versus-board.ts's 'ffa'-stands-for-both note), reported per declared mode.
+    // One evaluation per N, reported per declared mode: geometry is mode-independent.
     const authored = evaluateVersusBoard(arena, n);
     // One placement per (entry, N), shared with the clearance rule below (issue #664):
     // each call runs a full `loadArena` spawn placement, the single most expensive thing
@@ -190,9 +169,8 @@ export function versusCatalogEntryFailures(
     const positions = playerPositions(arena, n);
     const unreachable = unreachableSpawnCells(arena, positions);
 
-    // Advertised seeded variants, ungated draws at the shipped fraction: the two
-    // criteria destructible removal can regress (the map-variants plan's proof
-    // covers why room cannot).
+    // Only the two criteria destructible removal can regress (the map-variants plan's
+    // proof covers why room cannot).
     const variantFailures: { seed: number; detail: string }[] = [];
     if (entry.variants.includes('seeded-destructible') && destructibles > 0) {
       for (const seed of seeds) {
@@ -241,7 +219,6 @@ export function versusCatalogEntryFailures(
   return failures;
 }
 
-/** The whole catalog's violations -- the sweep test's single entry point. */
 export function versusCatalogFailures(
   entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
   opts: VersusCatalogRuleOptions = {},

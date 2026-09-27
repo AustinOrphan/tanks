@@ -7,18 +7,16 @@ import type { WorldRulesInit } from './rules';
 import { LIVES } from './constants';
 
 /**
- * The dev sandbox: an open floor whose contents come from plain options.
- *
- * This file is pure -- options in, Arena/World out. The query-string parsing that
- * produces the options lives in the game layer (devflags), the same route `seed` takes,
- * so runtime flags never enter src/sim/ and a sandbox session replays exactly.
+ * The query-string parsing that produces these options lives in the game layer (devflags),
+ * the same route `seed` takes, so runtime flags never enter src/sim/ and a sandbox session
+ * replays exactly.
  */
 export interface SandboxOptions {
   /** Enemy kinds to spawn, any multiset. Default: the classic trio (brown, grey, teal) -- deliberately not every kind, so existing sandbox links keep meaning what they meant. */
   tanks?: TankKind[];
   /** Weapons off for every enemy. Default true: the sandbox is scenery until asked. */
   disarmed?: boolean;
-  /** Interior wall cells to scatter, seeded. Default 0: open floor. */
+  /** Interior walls to scatter, seeded, one authored block each. Default 0: open floor. */
   walls?: number;
   /** Drives wall placement here and every AI draw once the world runs. */
   seed?: number;
@@ -30,7 +28,7 @@ export interface SandboxOptions {
  * same place -- a sandbox exists to make observations repeatable.
  *
  * Authored in cells of `SANDBOX_AUTHORED_CELL` world units and rescaled to whatever
- * resolution ARENA_01 currently uses -- see `blockScale`. They are not grid indices.
+ * resolution ARENA_01 currently uses. They are not grid indices.
  */
 export const SANDBOX_ENEMY_ANCHORS: ReadonlyArray<readonly [number, number]> = [
   [1, 2], [9, 2], [3, 1], [7, 1], [5, 2], [1, 3], [9, 3], [3, 3], [7, 3], [5, 1],
@@ -44,14 +42,11 @@ const PLAYER_CELL: readonly [number, number] = [5, 7];
  * cell size those numbers silently change meaning: the anchors collapse into the board's
  * top-left corner and `walls=N` scatters sub-tank-sized pillars.
  *
- * Everything here is therefore expressed in these units and scaled through `blockScale`,
- * so a resolution change moves the sandbox with the arenas instead of past them.
  * `sandbox.test.ts` pins the resulting world positions and wall sizes, not just grid
  * characters.
  */
 const SANDBOX_AUTHORED_CELL = 2;
 
-/** How many of today's cells make up one authored block. 1 if nothing was rescaled. */
 function blockScale(cellSize: number): number {
   return Math.max(1, Math.round(SANDBOX_AUTHORED_CELL / cellSize));
 }
@@ -71,9 +66,8 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   grey: 'G',
   teal: 'T',
   olive: 'O',
-  // 'N' because grey already holds 'G'. Re-lettering grey would rewrite every
-  // campaign grid, so the newcomer takes the free letter -- see SPAWN_LETTERS,
-  // which this table must agree with.
+  // 'N' because grey already holds 'G'. Must agree with SPAWN_LETTERS
+  // (config/arena-types.ts).
   green: 'N',
   yellow: 'Y',
 };
@@ -93,7 +87,6 @@ function nearSpawn(
   return spawnCells.some(([sc, sr]) => Math.abs(sc - c) <= reach && Math.abs(sr - r) <= reach);
 }
 
-/** 4-neighbour flood fill over open cells; true when every open cell is reached. */
 function fullyConnected(grid: string[], legend: Arena['legend']): boolean {
   const rows = grid.length;
   const cols = grid[0].length;
@@ -135,7 +128,7 @@ export function sandboxArena(opts: SandboxOptions): Arena {
       `sandbox holds at most ${SANDBOX_ENEMY_ANCHORS.length} enemies, got ${kinds.length}`,
     );
   }
-  const { cols, rows, cellSize } = ARENA_01; // the one board size the renderer can show
+  const { cols, rows, cellSize } = ARENA_01;
   const legend: Arena['legend'] = { '#': 'solid' };
   const k = blockScale(cellSize);
 
@@ -150,9 +143,8 @@ export function sandboxArena(opts: SandboxOptions): Arena {
     spawnCells.push([c, r]);
   });
 
-  // Scatter walls: seeded shuffle of the eligible cells, then take placements one at a
-  // time, skipping any that would seal a pocket. Refusing loudly beats returning fewer
-  // than asked -- a silent cap reads as "the board has 12 walls" when it has 7.
+  // Refusing loudly (below) beats returning fewer walls than asked -- a silent cap reads as
+  // "the board has 12 walls" when it has 7.
   // A "wall" is one authored block (k x k of today's cells), not one cell: at k=3 a single
   // cell is 0.667 units against a 1.0 tank diameter, which is a pillar rather than the
   // cover this knob exists to place.
@@ -209,11 +201,6 @@ export function sandboxArena(opts: SandboxOptions): Arena {
   return { cols, rows, cellSize, legend, grid: cells.map((row) => row.join('')) };
 }
 
-/**
- * Rules arrive as one `WorldRulesInit` object rather than trailing optional positionals
- * (issue #493), which made a caller naming the last one carry an `undefined` for each
- * before it. A rule added to `WorldRules` grows `WorldRulesInit` and no signature here.
- */
 export function createSandboxWorld(opts: SandboxOptions, rules: WorldRulesInit = {}): World {
   const loaded = loadArena(sandboxArena(opts));
   const disarmed = opts.disarmed ?? true;

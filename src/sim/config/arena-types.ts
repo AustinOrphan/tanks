@@ -1,10 +1,9 @@
 import type { TankKind, WallKind } from '../types';
 
 /**
- * Spawn letters, the single source. `arena.ts` imports this rather than keeping
- * its own copy: the validator must reject a grid character no loader can resolve,
- * and two tables would drift. Wall characters live in each arena's `legend`; `.`
- * is open floor.
+ * The single source of spawn letters: the validator must reject a grid character no loader
+ * can resolve, and two tables would drift. Wall characters live in each arena's `legend`;
+ * `.` is open floor.
  */
 export const SPAWN_LETTERS: Record<string, TankKind> = {
   P: 'player',
@@ -18,7 +17,7 @@ export const SPAWN_LETTERS: Record<string, TankKind> = {
   Y: 'yellow',
 };
 
-/** The geometry half of a definition -- what a bare `Arena` already is. */
+/** Structurally identical to arena.ts's `Arena`. */
 export interface ArenaShape {
   cols: number;
   rows: number;
@@ -29,25 +28,21 @@ export interface ArenaShape {
 
 /**
  * A machine-checkable statement of design intent, verified by the runner in
- * src/sim/arena-claims.ts. Every claim carries `why`: the rationale travels with
- * the property it protects, so porting a grid cannot strand it.
+ * src/sim/arena-claims.ts. `why` travels with the property it protects, so porting a grid
+ * cannot strand the rationale.
  *
- * Every coordinate pair below (`from`, `to`) is `[col, row]` -- the order
- * validate.ts's `cell()` reads it in and arena-claims.ts's `cellCentre` destructures
- * it in (`[c, r]`), while the grid itself is indexed `grid[r][c]`.
- * The runner and its tests both trust this order; a transposition compiles fine
- * (both are `[number, number]`) and only shows up as a misdrawn board or a wrong
- * cell in a failure message.
+ * Every coordinate pair (`from`, `to`) is `[col, row]` -- the order validate.ts's `cell()`
+ * reads and arena-claims.ts's `cellCentre` destructures -- while the grid is indexed
+ * `grid[r][c]`. A transposition compiles (both are `[number, number]`) and only shows up
+ * as a misdrawn board or a wrong cell in a failure message.
  */
 export type ArenaClaim =
   | {
       /**
        * All or nothing per arena: declaring one `sightlineAfterBreach` claim commits
        * the arena to declaring one for every enemy spawn. arena-validation.test.ts
-       * checks this by set equality between the claimed `from` cells and the arena's
-       * actual enemy-spawn cells, in both directions, so an arena's claims of this
-       * type are a complete statement of its post-breach spawn lines, never a
-       * sample. An arena may still declare zero of them (arena-01 does).
+       * checks set equality between the claimed `from` cells and the arena's actual
+       * enemy-spawn cells. An arena may still declare zero of them (arena-01 does).
        */
       type: 'sightlineAfterBreach';
       from: [number, number];
@@ -56,13 +51,11 @@ export type ArenaClaim =
     }
   | {
       /**
-       * A line between two points, checked in both wall phases. Hazard: `from`/`to`
-       * are literal grid cells, routed through the plain `cell()` validator rather
-       * than `enemySpawnCell()` -- nothing ties an endpoint to a spawn. Moving a
-       * spawn away from an endpoint does not invalidate the claim: the lane keeps
-       * measuring the same two cells (now possibly empty floor) and keeps passing.
+       * Hazard: `from`/`to` go through validate.ts's plain `cell()`, not
+       * `enemySpawnCell()`, so nothing ties an endpoint to a spawn. Moving a spawn off
+       * an endpoint leaves the lane measuring the same two cells, still passing.
        * Co-locate a `sightlineAfterBreach` claim at the same cell -- that variant
-       * does require a live spawn there, so it catches the move at load time -- or
+       * requires a live spawn there, so it catches the move at load time -- or
        * re-check the lane by hand after moving any spawn it references.
        */
       type: 'lane';

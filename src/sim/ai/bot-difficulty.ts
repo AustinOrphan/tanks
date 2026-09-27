@@ -12,31 +12,15 @@ import type { BotDifficulty } from '../types';
  *
  * Multipliers, not values: an absolute table would be a tank-by-difficulty profile matrix,
  * which both issues forbid by name, and it would silently stop tracking the authored profile
- * the first time anyone retuned it -- `hard` would keep asserting the number it was written
- * with. A multiplier composes: retune the profile and all three difficulties move with it,
- * which is what "over the authored profile" has to mean.
- *
- * All six competence axes are here: `aimAccuracy`, `estimationAccuracy`, `reactionTime`,
- * `awarenessDelay`, `safetyMargin` and `hazardRefreshTime`. Nothing else in
- * `AIProfileBalance` is reachable from here, which is the personality/competence split made
- * structural.
- *
- * Two composition kinds, and the reason is arithmetic rather than taste. Five axes are
- * scaled multiplicatively, because they are magnitudes with a meaningful zero the profile
- * never authors and a multiplier is what lets a retuned profile carry all three difficulties
- * with it. `safetyMargin` is composed additively because it is signed and authored at 0: a
- * multiplier cannot move zero, so an additive offset is the only composition under which
- * `easy` can cut a corner and `hard` can keep room while `normal` stays exactly the authored
- * value. Both kinds are explicit, bounded and validated, which is what both issues require;
- * neither introduces a per-kind override or a tank-by-difficulty table.
+ * the first time anyone retuned it. A multiplier composes: retune the profile and all three
+ * difficulties move with it.
  *
  * The numbers are provisional. ai/bot-difficulty.measure.test.ts (16 seeds per arm on
  * vs-duel-01) found `easy` separating decisively (0 wins in 16, kill ledger inverted) and
  * `hard` busier but not measurably better, and records the mechanism: the `AI_AIM_SPREAD`
  * anchor, not the accuracy ceiling. Choosing new multipliers needs the normal-speed human
  * read #223 also requires. What is not provisional is the structure: `normal` is exactly
- * identity, the ordering is monotone on every axis, and `hard` cannot reach perfection --
- * see the bounds below.
+ * identity, the ordering is monotone on every axis, and `hard` cannot reach perfection.
  */
 export type { BotDifficulty };
 
@@ -44,11 +28,8 @@ export type { BotDifficulty };
 export const BOT_DIFFICULTIES: readonly BotDifficulty[] = ['easy', 'normal', 'hard'];
 
 /**
- * What a slot with no explicit choice plays at.
- *
- * `normal` is the exact no-op, so this default is what makes the whole feature additive:
- * a config saved before difficulty existed, and a slot the player never touched, both
- * resolve to the profile the game already shipped.
+ * `normal` is the exact no-op, so a config saved before difficulty existed, and a slot the
+ * player never touched, both resolve to the profile the game already shipped.
  */
 export const DEFAULT_BOT_DIFFICULTY: BotDifficulty = 'normal';
 
@@ -57,14 +38,12 @@ export function isBotDifficulty(value: unknown): value is BotDifficulty {
 }
 
 /**
- * How long a versus bot holds its committed opponent, in seconds, per difficulty (issue #891).
+ * How long a versus bot holds its committed opponent (issue #891).
  *
  * It lives here and not in `ai-profiles.json` because a versus bot fills a player slot, and
- * `roster.ts` records that the player "carries an (inert) aiProfile only because the schema
- * requires" one -- so `configFor('player').ai.targetCommitmentTime` is a number nobody chose.
- * Reading a bot's commitment span through it would be a value with no owner. This table is the
- * owner: it is bot configuration, in the file that already owns bot competence, which is where
- * #267 would tune it.
+ * `roster.ts` records that the player's `targetCommitmentTime` goes unread -- so
+ * `configFor('player').ai.targetCommitmentTime` is a number nobody chose. This table is its
+ * owner, beside the rest of bot competence, which is where #267 would tune it.
  *
  * All three are 1.5, exactly `targetCommitmentTime` in all 8 entries of `ai-profiles.json`, so
  * a versus bot commits for the same span the campaign AI does. Differentiating the columns is
@@ -77,7 +56,6 @@ export const BOT_TARGET_COMMITMENT_SECONDS: Record<BotDifficulty, number> = {
   hard: 1.5,
 };
 
-/** The modifier applied to each competence axis, per preset. */
 interface CompetenceScale {
   /** Multiplier. Higher is better: `profileAimSpread` divides the anchor spread by this. */
   readonly aimAccuracy: number;
@@ -93,9 +71,10 @@ interface CompetenceScale {
    */
   readonly awarenessDelay: number;
   /**
-   * ADDITIVE, world units, and the only signed entry in this table. Higher is BETTER: it is
-   * extra clearance kept beyond the hazard radius a bot believes in, so `easy` goes negative
-   * and cuts the corner while `hard` keeps room.
+   * ADDITIVE, world units, and the only signed entry in this table: every profile authors it
+   * at 0, and a multiplier cannot move zero. Higher is BETTER: it is extra clearance kept
+   * beyond the hazard radius a bot believes in, so `easy` goes negative and cuts the corner
+   * while `hard` keeps room.
    */
   readonly safetyMargin: number;
   /**
@@ -108,13 +87,10 @@ interface CompetenceScale {
 }
 
 /**
- * The presets.
- *
- * `normal` is the identity on every axis (1 for each multiplier, 0 for the additive
- * `safetyMargin`) and is additionally short-circuited in `withBotDifficulty`, so it is
- * identity by construction and not merely by arithmetic -- floating-point multiplication
- * by 1 is exact, but a "byte-identical no-op" claim should not depend on every `normal`
- * entry staying exactly 1.
+ * `normal` is the identity on every axis and is additionally short-circuited in
+ * `withBotDifficulty`, so it is identity by construction and not merely by arithmetic --
+ * floating-point multiplication by 1 is exact, but a "byte-identical no-op" claim should not
+ * depend on every `normal` entry staying exactly 1.
  *
  * The asymmetry between `easy` and `hard` is deliberate. `easy` moves further from
  * `normal` than `hard` does, because the shipped player profile (`STATIC_BASIC`: aim 0.55,
@@ -137,8 +113,6 @@ const COMPETENCE: Record<BotDifficulty, CompetenceScale> = {
 };
 
 /**
- * The ceiling on either accuracy axis, and the reason `hard` can never be an oracle.
- *
  * Both `profileAimSpread` and `profileHazardSpread` derive a spread by DIVIDING an anchor
  * by the accuracy, so spread shrinks to nothing only as accuracy grows without bound. A
  * ceiling below 1 therefore guarantees a nonzero spread: some seeded error survives at
@@ -155,41 +129,32 @@ export const MAX_COMPETENCE_ACCURACY = 0.95;
 export const MIN_COMPETENCE_ACCURACY = 0.15;
 
 /**
- * The shortest reaction a preset may produce, in seconds.
- *
- * 0.2s is 12 ticks at 60Hz, and below the fastest authored profile (`BERSERKER_ROCKET`,
- * 0.25s). The floor is the second half of "retains nonzero reaction limitations": without
- * it a large enough `hard` multiplier would eventually reach a bot that fires on the tick
- * it acquires.
+ * Seconds, below the fastest authored profile (`BERSERKER_ROCKET`, 0.25s). The floor is the
+ * second half of "retains nonzero reaction limitations": without it a large enough `hard`
+ * multiplier would eventually reach a bot that fires on the tick it acquires.
  */
 export const MIN_COMPETENCE_REACTION_TIME = 0.2;
 
 /**
- * The shortest hazard-picture staleness a preset may produce, in seconds.
- *
- * The reaction-time floor's twin, and load-bearing for the same rule read the other way: a
- * bot whose picture is current to the tick reacts to the shell's TRUE position, which is
- * precisely the oracle escape solve issue #223 opens against. 0.05s is 3 ticks at 60Hz --
- * shorter than the perception window of the fastest authored reaction (0.25s) and long
+ * Seconds of hazard-picture staleness. The reaction-time floor's twin, and load-bearing for
+ * the same rule read the other way: a bot whose picture is current to the tick reacts to the
+ * shell's TRUE position, which is precisely the oracle escape solve issue #223 opens against.
+ * It is shorter than the perception window of the fastest authored reaction (0.25s) and long
  * enough that a shell at the slowest shell speed has visibly moved.
  */
 export const MIN_COMPETENCE_AWARENESS_DELAY = 0.05;
 
 /**
- * The shortest hazard-refresh window a preset may produce, in seconds.
- *
- * The limit case is the defect: a bot that re-draws its hazard error every tick averages the
- * error away over the frames of a single dodge and behaves as if it had none, which is the
- * "frame-to-frame noise" #223 names and the oracle by another route. 0.1s is 6 ticks, still
- * a fifth of the authored 0.5s window, so `hard` has real room before the floor binds.
+ * Seconds. The limit case is the defect: a bot that re-draws its hazard error every tick
+ * averages the error away over the frames of a single dodge and behaves as if it had none,
+ * which is the "frame-to-frame noise" #223 names and the oracle by another route. The floor
+ * is a fifth of the authored 0.5s window, so `hard` has real room before it binds.
  */
 export const MIN_COMPETENCE_HAZARD_REFRESH = 0.1;
 
 /**
- * The largest magnitude, in world units, either direction of `safetyMargin` may reach.
- *
- * Symmetric and applied to the RESOLVED value, so it bounds an authored margin plus the
- * preset's offset rather than the offset alone. 0.5 is one TANK_RADIUS: at the top a bot
+ * World units. Symmetric and applied to the RESOLVED value, so it bounds an authored margin
+ * plus the preset's offset rather than the offset alone. 0.5 is one TANK_RADIUS: at the top a bot
  * keeps a tank radius of extra room, at the bottom it cuts a tank radius off the radius it
  * would otherwise flee to -- past which "cautious" and "careless" stop being adjustments to
  * a judgment and start being a different judgment.
@@ -199,8 +164,6 @@ export const MAX_COMPETENCE_SAFETY_MARGIN = 0.5;
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
 /**
- * A resolved config with its competence axes scaled by `difficulty`.
- *
  * Returns the input object unchanged for `normal` -- referential identity, not an equal
  * copy. That is what lets the no-op claim be checked with `toBe` rather than `toEqual`,
  * and it means a `normal` bot cannot differ from the authored profile even by object shape.
@@ -238,10 +201,9 @@ export function withBotDifficulty(
         cfg.ai.awarenessDelay * scale.awarenessDelay,
         MIN_COMPETENCE_AWARENESS_DELAY,
       ),
-      // The one ADDITIVE axis (see CompetenceScale.safetyMargin). Clamped symmetrically
-      // rather than floored at zero: a negative resolved margin is `easy` cutting the
-      // corner, which is the behaviour the preset is defined to produce, not a degenerate
-      // value to be rescued.
+      // Clamped symmetrically rather than floored at zero: a negative resolved margin is
+      // `easy` cutting the corner, which is the behaviour the preset is defined to produce,
+      // not a degenerate value to be rescued.
       safetyMargin: clamp(
         cfg.ai.safetyMargin + scale.safetyMargin,
         -MAX_COMPETENCE_SAFETY_MARGIN,
