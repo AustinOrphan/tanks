@@ -157,7 +157,13 @@ describe('the Claude Code project skills', () => {
     expect(mutation).toMatch(/For local candidate verification, run each entry relevant/);
     expect(mutation).toMatch(/only for a concrete exception/);
     expect(verify).toMatch(/Do not run `npm run verify:full` locally by default/);
-    expect(verify).toMatch(/`verify \(current\)` runs the complete mutation manifest/);
+    // On a pull request `verify (current)` runs only the entries the diff can affect (#506); the
+    // complete manifest runs on `main`. This line once pinned the pre-#506 claim that every pull
+    // request runs the complete manifest, which kept that claim in the skill.
+    expect(verify).toMatch(
+      /`verify \(current\)` runs every mutation entry a pull request can affect and,\s+on `main`, the complete mutation manifest/,
+    );
+    expect(verify).not.toMatch(/`verify \(current\)` runs the complete mutation manifest/);
     expect(verify).toMatch(/Never call a candidate fully verified while required CI is pending/);
     expect(visual).toMatch(/Do not run `npm run verify:full` merely because/);
   });
