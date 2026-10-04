@@ -32,9 +32,12 @@ Verify the status against live state before acting on it:
 gh pr list -R AustinOrphan/tanks --state open
 gh pr checks <n> -R AustinOrphan/tanks                    # for each open pull request
 gh pr view <n> -R AustinOrphan/tanks --comments           # owner comments and reviews
-gh api graphql -f query='query { repository(owner: "AustinOrphan", name: "tanks") {
-  pullRequest(number: <n>) { reviewThreads(first: 100) { nodes { isResolved path } } } } }' \
-  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)]'
+# Unresolved review threads, one line each:
+gh api graphql --paginate -f query='query($endCursor: String) {
+  repository(owner: "AustinOrphan", name: "tanks") { pullRequest(number: <n>) {
+  reviewThreads(first: 100, after: $endCursor) { nodes { isResolved path }
+  pageInfo { hasNextPage endCursor } } } } }' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | .path'
 gh run list -R AustinOrphan/tanks --branch main --limit 10
 gh pr list -R AustinOrphan/tanks --state merged --limit 10
 gh issue list -R AustinOrphan/tanks --state open -l priority:now
@@ -122,9 +125,9 @@ Module C's steps, read for this repository:
    and nothing merges them
    ([Dependency updates](commands-and-operations.md#dependency-updates)). Report their checks;
    regenerate output on an update branch only when the owner asks.
-2. Valid `priority:now` issues that no open or draft pull request implements. The dry run
-   below lists Now items the audit rejects separately; those wait for a person.
-3. The `priority:next` issues the dry-run reconciliation lists as eligible, in its order. The
+2. Valid `priority:now` issues that no open or draft pull request implements. An issue the
+   audit reports an error against waits for a person.
+3. The `priority:next` issues the audit's queue plan lists as eligible, in its order. The
    [eligibility rules](task-sizing.md#now-queue-automation) also check size, blockers and
    sub-issues, so do not filter labels by hand.
 4. Does not apply. The owner sets priority through these labels. When steps 1 to 3 yield
@@ -132,13 +135,15 @@ Module C's steps, read for this repository:
    `priority:now` or `agent-ready` to make work. Add them only on the owner's instruction.
 
 ```sh
-npm run issues:reconcile -- --dry-run      # eligible candidates, in rank order
+npm run issues:audit                       # metadata errors, then the queue plan (dry run)
 npm run issues:frontier                    # dependency graph: what is unblocked
 ```
 
-Both need a GitHub token in `GH_TOKEN` (`gh auth token` supplies one). Without it, reconcile
-refuses to run and frontier hits the anonymous rate limit. Frontier's "ready" means only "no
-open blocker"; it does not check eligibility.
+The audit names every metadata error, such as an issue with two horizons, which the queue
+plan alone can leave out. Both commands need a GitHub token in `GH_TOKEN` (`gh auth token`
+supplies one). Without it they can hit the anonymous rate limit, and the audit cannot see
+which pull requests implement which issues. Frontier's "ready" means only "no open blocker";
+it does not check eligibility.
 
 An issue is claimed by an open or draft pull request whose closing references name it
 (`Closes #N`); there is no assignee convention. Before starting an issue, also check whether
