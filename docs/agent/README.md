@@ -18,6 +18,7 @@ heading and read only the required section.
 | `known-holes.md` | untested seams, deferred-work policy, rejected collision fixes |
 | `context-budget.md` | exact global instruction-size measurement and enforced budget |
 | `document-metadata.md` | plan/spec metadata, the research inventory, and validation workflow |
+| `kickoff.md` | the `kickoff` skill's local overlay: status, working copies, queue, merge policy |
 
 For product direction, plans, specifications, backlog topics, and research, start from
 [`docs/README.md`](../README.md). It is generated from each document's own metadata, so it
