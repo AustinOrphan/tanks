@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const SKILLS_DIR = fileURLToPath(new URL('../.claude/skills/', import.meta.url));
 const CLAUDE = fileURLToPath(new URL('../CLAUDE.md', import.meta.url));
+const TESTING_RULE = fileURLToPath(new URL('../.claude/rules/testing.md', import.meta.url));
 
 const MAX_SKILL_LINES = 70;
 const MAX_SKILL_BYTES = 6_000;
@@ -166,6 +167,17 @@ describe('the Claude Code project skills', () => {
     expect(verify).not.toMatch(/`verify \(current\)` runs the complete mutation manifest/);
     expect(verify).toMatch(/Never call a candidate fully verified while required CI is pending/);
     expect(visual).toMatch(/Do not run `npm run verify:full` merely because/);
+
+    // The testing rule loads beside these skills whenever tests are touched, and the
+    // mutation-check skill states the same authority, so neither may tell an agent that a
+    // passing pull request covers the complete manifest.
+    const testingRule = readFileSync(TESTING_RULE, 'utf8');
+    expect(testingRule).toMatch(
+      /repository-wide\s+mutation verification comes only from `main`'s run, never from a pull request's/,
+    );
+    expect(testingRule).not.toMatch(/authoritative for the complete mutation manifest/);
+    expect(mutation).toMatch(/`verify \(current\)` run on `main` remains authoritative for the complete manifest/);
+    expect(mutation).not.toMatch(/`verify \(current\)` result remains authoritative/);
   });
 
   it('makes malformed metadata, permission grants, missing procedures, and command drift fail the guard', () => {

@@ -21,7 +21,7 @@ Treat invocation arguments as an optional mutation ID, source behavior, test fil
    - `BASELINE-RED`: stop; the mutation did not cause the existing failure.
    - A mismatch, unreachable target, failed apply, interruption, or restore warning is a harness/manifest failure until explained.
 6. If the final tree legitimately changes the failure population, remeasure it after the last test edit and record why the manifest count changed. Never update a count merely to make the gate green.
-7. Run the complete manifest with `npm run mutate` or as part of `npm run verify:full` only for a concrete exception: mutation-harness work, broad manifest edits, CI mutation-failure diagnosis, cross-cutting behavior that targeted selection cannot cover, or another named repository-wide risk. CI's `verify (current)` result remains authoritative for the complete manifest.
+7. Run the complete manifest with `npm run mutate` or as part of `npm run verify:full` only for a concrete exception: mutation-harness work, broad manifest edits, CI mutation-failure diagnosis, cross-cutting behavior that targeted selection cannot cover, or another named repository-wide risk. CI's `verify (current)` run on `main` remains authoritative for the complete manifest; on a pull request it runs only the entries the diff can affect.
 
 ## Stop conditions
 
