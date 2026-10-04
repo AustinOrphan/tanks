@@ -130,9 +130,12 @@ Module C's steps, read for this repository:
 3. The `priority:next` issues the audit's queue plan lists as eligible, in its order. The
    [eligibility rules](task-sizing.md#now-queue-automation) also check size, blockers and
    sub-issues, so do not filter labels by hand.
-4. Does not apply. The owner sets priority through these labels. When steps 1 to 3 yield
-   nothing, the run is blocked on triage: say so in the status document, and do not add
-   `priority:now` or `agent-ready` to make work. Add them only on the owner's instruction.
+4. Does not apply. The owner sets priority through these labels, so when steps 1 to 3 yield
+   nothing, the run is blocked on triage. Before stopping, check the `priority:next` issues
+   that carry neither `human-required` nor `needs-split` against the
+   [readiness checklist](task-sizing.md#readiness-labels), and list the ones that pass in
+   the status document as proposals, with the evidence. Repeat that only when the set of
+   issues has changed. Add `priority:now` or `agent-ready` only on the owner's instruction.
 
 ```sh
 npm run issues:audit                       # metadata errors, then the queue plan (dry run)
@@ -175,9 +178,10 @@ the `verify-change` skill.
 
 ## Merge policy
 
-- **The owner merges.** An agent never merges, enables auto-merge, or pushes to `main`. A
-  pull request whose required checks pass and whose review threads are all resolved is
-  reported as merge-ready and left.
+- **The owner merges.** An agent merges only when the owner says so in that session, and it
+  never enables auto-merge or pushes to `main`. A pull request whose required checks pass and
+  whose review threads are all resolved is reported as merge-ready and left. Merging is how
+  the owner accepts a pull request's judgment calls, and it deploys the public site.
 - The owner merges green pull requests while other work is still running, and a merge deletes
   the head branch. Run `gh pr view <n> --json state` before pushing to a pull request's branch
   or editing the pull request; `[new branch]` in push output means it had already merged.
@@ -186,7 +190,10 @@ the `verify-change` skill.
 - Do not merge `main` into a pull request's branch just because `main` moved; this narrows
   the skill's module B. The required checks are not strict, and every push re-runs them,
   mutation shards included, which puts a green pull request back to pending. Merge
-  `origin/main` in only to resolve a conflict or to pick up code the branch needs.
+  `origin/main` in only to resolve a conflict, to pick up code the branch needs, or when
+  `main` has changed a file the pull request touches or a path in `ALWAYS_RUN_PATTERNS`
+  (`tools/mutate/select.mjs`), such as `package.json`, the lockfile or `ci.yml`. File overlap
+  still misses conflicts that travel through shared imports.
 - A stacked branch is rebased or retargeted when its predecessor lands
   ([CI-pending execution](testing-and-review.md#ci-pending-execution)). A branch that carries
   commits already squash-merged through another pull request conflicts with `main` even though
