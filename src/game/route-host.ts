@@ -58,10 +58,10 @@ import type { DevExportPort } from './dev-exports';
  * is empty -- exactly the shape `route-ui.ts`'s `setStyleSink(sink | null)` already uses,
  * and for the same reason.
  *
- * WHAT IS NOT HERE. Match creation timing is unchanged: `boot.ts` still starts a session
- * eagerly, and `requestVersusSession`/`requestCampaignSession` still reboot one. Issue
- * #428 owns removing that; this issue owns only the ownership boundary that makes it
- * possible. Route history, Back semantics and focus restoration are issue #318's.
+ * WHAT IS NOT HERE. Building a session. The page boots with an empty host (issue #428),
+ * and a start gesture made while the slot is empty goes to `SessionRequests.requestStart`,
+ * which `boot.ts` binds to the session host. Route history, Back semantics and focus
+ * restoration are issue #318's.
  */
 
 /** Everything the page-scoped route UI needs, and deliberately nothing session-shaped. */
