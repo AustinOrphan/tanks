@@ -63,7 +63,7 @@
   },
   "dependencies": {
     "howler": "^2.2.4",
-    "three": "^0.186.0"
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@types/howler": "^2.2.11",
