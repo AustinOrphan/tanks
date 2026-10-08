@@ -23,9 +23,9 @@ paths:
   `npm run verify:full` for mutation-harness changes, broad manifest edits, CI mutation
   diagnosis, cross-cutting work that targeted selection cannot cover, or another named
   repository-wide risk. High-risk classification alone is not a reason.
-- CI's `verify (current)` job is authoritative for the complete mutation manifest. Report
-  selected local mutation evidence precisely and do not claim repository-wide mutation
-  verification before that required check passes.
+- CI's `verify (current)` job runs the entries a pull request can affect and, on `main`, the
+  complete manifest. Report selected local mutation evidence precisely; repository-wide
+  mutation verification comes only from `main`'s run, never from a pull request's.
 - Unit tests that call a stage directly cannot prove composition. Pipeline ordering and
   invocation belong in integration/pipeline tests that enter through the public boundary.
 - Event assertions identify the producer/owner and validate payloads; presence-only checks

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const SKILLS_DIR = fileURLToPath(new URL('../.claude/skills/', import.meta.url));
 const CLAUDE = fileURLToPath(new URL('../CLAUDE.md', import.meta.url));
+const TESTING_RULE = fileURLToPath(new URL('../.claude/rules/testing.md', import.meta.url));
 
 const MAX_SKILL_LINES = 70;
 const MAX_SKILL_BYTES = 6_000;
@@ -157,9 +158,26 @@ describe('the Claude Code project skills', () => {
     expect(mutation).toMatch(/For local candidate verification, run each entry relevant/);
     expect(mutation).toMatch(/only for a concrete exception/);
     expect(verify).toMatch(/Do not run `npm run verify:full` locally by default/);
-    expect(verify).toMatch(/`verify \(current\)` runs the complete mutation manifest/);
+    // On a pull request `verify (current)` runs only the entries the diff can affect (#506); the
+    // complete manifest runs on `main`. This line once pinned the pre-#506 claim that every pull
+    // request runs the complete manifest, which kept that claim in the skill.
+    expect(verify).toMatch(
+      /`verify \(current\)` runs every mutation entry a pull request can affect and,\s+on `main`, the complete mutation manifest/,
+    );
+    expect(verify).not.toMatch(/`verify \(current\)` runs the complete mutation manifest/);
     expect(verify).toMatch(/Never call a candidate fully verified while required CI is pending/);
     expect(visual).toMatch(/Do not run `npm run verify:full` merely because/);
+
+    // The testing rule loads beside these skills whenever tests are touched, and the
+    // mutation-check skill states the same authority, so neither may tell an agent that a
+    // passing pull request covers the complete manifest.
+    const testingRule = readFileSync(TESTING_RULE, 'utf8');
+    expect(testingRule).toMatch(
+      /repository-wide\s+mutation verification comes only from `main`'s run, never from a pull request's/,
+    );
+    expect(testingRule).not.toMatch(/authoritative for the complete mutation manifest/);
+    expect(mutation).toMatch(/`verify \(current\)` run on `main` remains authoritative for the complete manifest/);
+    expect(mutation).not.toMatch(/`verify \(current\)` result remains authoritative/);
   });
 
   it('makes malformed metadata, permission grants, missing procedures, and command drift fail the guard', () => {
