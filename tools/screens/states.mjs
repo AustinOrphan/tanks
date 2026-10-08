@@ -1269,7 +1269,7 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-versus-setup' },
       { click: '.hud-versus-start' },
       // Budget: twice the 2244-2255 simulated ticks this match took over 4 measured runs.
-      { playUntil: { visible: '.hud-action', maxTicks: 4600, expect: { selector: '.hud-title', text: 'Team 1 wins' } } },
+      { playUntil: { visible: '.hud-action', maxTicks: 4600, expect: { selector: '.hud-title', text: 'Team A wins' } } },
     ],
     measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-change-setup', '.hud-quit'],
   }),

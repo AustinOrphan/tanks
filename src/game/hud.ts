@@ -118,7 +118,7 @@ export type HudRelaunchTarget = 'campaign-levels' | 'versus-setup';
  * does this panel tally? -- and it has exactly four answers.
  *
  * INDICES, NEVER COLOURS (issue #473). `kills` and `deaths` are indexed by slot
- * (`Tank.controlledBy`), and `'teams'` is summed per team through `teamOf(slot)`. The
+ * (`Tank.controlledBy`), and `'teams'` is summed per team through its own `teams`. The
  * HUD looks its hues up in `presentation/identity.ts`; a session hands over none.
  */
 export type GameplayOutcome = {
@@ -169,16 +169,24 @@ export type GameplayOutcome = {
 } & (
   | { tally: 'solo' }
   | { tally: 'coop'; kills: number[] }
+  | ({ tally: 'ffa' } & VersusTally)
   /**
-   * A versus result, per slot. `kills`/`deaths` are the eliminations; `shots` and
-   * `shellKills` exist only to compute per-player ACCURACY (owner ruling), and are
-   * separate from `kills` for the same reason the campaign line's are: `kills` counts
-   * every elimination including mine kills, while accuracy has always meant shells that
-   * found a tank over shells fired. Reusing `kills` as the numerator would quietly rate a
-   * mine-heavy player above a marksman.
+   * `teams` is the team each slot's tank played on (`Tank.team`), indexed by slot like the
+   * counts (issue #993). It rides the outcome because setup can put any slot on any of
+   * three teams, so the slot index alone cannot say which side a slot's numbers belong to.
    */
-  | { tally: 'ffa' | 'teams'; kills: number[]; deaths: number[]; shots: number[]; shellKills: number[] }
+  | ({ tally: 'teams'; teams: number[] } & VersusTally)
 );
+
+/**
+ * A versus result, per slot. `kills`/`deaths` are the eliminations; `shots` and
+ * `shellKills` exist only to compute per-player ACCURACY (owner ruling), and are separate
+ * from `kills` for the same reason the campaign line's are: `kills` counts every
+ * elimination including mine kills, while accuracy has always meant shells that found a
+ * tank over shells fired. Reusing `kills` as the numerator would quietly rate a mine-heavy
+ * player above a marksman.
+ */
+type VersusTally = { kills: number[]; deaths: number[]; shots: number[]; shellKills: number[] };
 
 /**
  * One player's remaining stock in a versus match (spec §3a, owner addition 2026-08-21).
@@ -3257,9 +3265,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * campaign coop; players killed and lost in versus) and a session has exactly one of
    * them, which is what `GameplayOutcome`'s `tally` now states.
    *
-   * `'teams'` sums kills/deaths PER TEAM (`teamOf(slot)`) rather than showing one entry
-   * per slot: teams mode cares which SIDE won. `'ffa'` shows one entry per slot,
-   * kills/deaths as `k/d`.
+   * `'teams'` sums kills/deaths PER TEAM (the outcome's `teams`) rather than showing one
+   * entry per slot: teams mode cares which SIDE won. `'ffa'` shows one entry per slot.
    */
   function renderVersusResultsLine(): void {
     if (outcomeData?.tally !== 'ffa' && outcomeData?.tally !== 'teams') {
@@ -3277,28 +3284,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
      *
      * The row LABEL is what differs between the two tallies and it is the whole reason
      * teams is not just ffa with different arithmetic: teams mode cares which SIDE won, so
-     * its rows are the two teams with each side's slots summed, and a per-player breakdown
+     * its rows are the teams with each side's slots summed, and a per-player breakdown
      * there would answer a question the mode is not asking.
      */
     const rows: Array<[string, number, number, string]> = [];
     if (tally === 'teams') {
-      const teamKills = [0, 0];
-      const teamDeaths = [0, 0];
-      const teamShots = [0, 0];
-      const teamShellKills = [0, 0];
-      for (let slot = 0; slot < slots; slot++) {
-        const team = teamOf(slot);
-        teamKills[team] += kills[slot] ?? 0;
-        teamDeaths[team] += deaths[slot] ?? 0;
-        teamShots[team] += shots[slot] ?? 0;
-        teamShellKills[team] += shellKills[slot] ?? 0;
-      }
-      for (const team of [0, 1]) {
+      /*
+       * One row per team that a slot PLAYED ON, in team order -- grouped by the outcome's
+       * `teams` rather than by `teamOf(slot)` (issue #993). Slot parity is only setup's
+       * default split: a match set up as A A B B summed P1 with P3 under it, and a 2v1v1
+       * lost its third side. A team no slot chose gets no row of zeroes. The label is the
+       * same letter setup's team selector and the stock strip show.
+       */
+      const sums = new Map<number, { kills: number; deaths: number; shots: number; shellKills: number }>();
+      outcomeData.teams.forEach((team, slot) => {
+        const sum = sums.get(team) ?? { kills: 0, deaths: 0, shots: 0, shellKills: 0 };
+        sum.kills += kills[slot] ?? 0;
+        sum.deaths += deaths[slot] ?? 0;
+        sum.shots += shots[slot] ?? 0;
+        sum.shellKills += shellKills[slot] ?? 0;
+        sums.set(team, sum);
+      });
+      for (const [team, sum] of [...sums].sort(([a], [b]) => a - b)) {
         rows.push([
-          `Team ${team + 1}`,
-          teamKills[team],
-          teamDeaths[team],
-          pct(teamShellKills[team], teamShots[team]),
+          `Team ${TEAM_LABELS[team] ?? '?'}`,
+          sum.kills,
+          sum.deaths,
+          pct(sum.shellKills, sum.shots),
         ]);
       }
     } else {
@@ -6001,7 +6013,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (typed?.kind !== 'vs-match-end') return null;
     const { result } = typed;
     if (result.kind === 'draw') return 'Draw';
-    if (result.kind === 'winner-team') return `Team ${result.team + 1} wins`;
+    // A team by setup's LETTER (issue #993): the results table below names its rows the
+    // same way, and "Team 1 wins" over a "Team A" row would leave the reader to match them.
+    if (result.kind === 'winner-team') return `Team ${TEAM_LABELS[result.team] ?? '?'} wins`;
     // `slot` is `Tank.controlledBy`, 0-based; players are named from 1 on every other
     // surface (the stock strip, the who's-playing cards), so it is named from 1 here too.
     return `Player ${result.slot + 1} wins`;

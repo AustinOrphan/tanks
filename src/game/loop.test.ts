@@ -4793,6 +4793,34 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(versus?.deaths[0]).toBe(1); // P1's slot died
       h.handle.dispose();
     });
+
+    it('a teams outcome carries the team each slot PLAYED ON, read off Tank.team (issue #993)', () => {
+      // The HUD groups the results table by this array, so it has to be the configured
+      // team rather than slot parity. A A B B is a split setup allows and parity does not
+      // produce, so the assertion below fails against `teamOf(slot)` (A B A B).
+      const h = boot(makeDeps({ devFlags: { players: 4, mode: 'teams' } }));
+      const world = h.rec.builtWorlds[0];
+      expect(world.rules.mode).toBe('teams');
+      const bySlot = (slot: number): Tank =>
+        world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === slot)!;
+      [0, 0, 1, 1].forEach((team, slot) => {
+        bySlot(slot).team = team;
+      });
+      // A kill across teams, so the frame really ends in an outcome push.
+      const p1 = bySlot(0);
+      world.bullets.push({
+        id: 901, ownerId: bySlot(2).id, type: 'normal', pos: { x: p1.pos.x, y: p1.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      const last = h.rec.outcomePushes.at(-1);
+      expect(last?.tally).toBe('teams');
+      const teams = last?.tally === 'teams' ? last : null;
+      expect(teams?.deaths[0], 'the frame did not land the kill').toBe(1);
+      expect(teams?.teams).toEqual([0, 0, 1, 1]);
+      h.handle.dispose();
+    });
   });
 
   describe('the in-match stock readout (Task 6, spec §3a)', () => {
