@@ -1,0 +1,14 @@
+{
+  "id": "teams-results-rows-in-first-seen-order",
+  "file": "src/game/hud.ts",
+  "find": "      for (const [team, sum] of [...sums].sort(([a], [b]) => a - b)) {",
+  "replace": "      for (const [team, sum] of sums) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) lists the teams in letter order even when P1 is not on team A"
+  ],
+  "why": "Lists the team rows in the order their first slot appears instead of A, B, C. Every fixture where P1 is on team A reads the same either way, so the killer puts P1 on team B; a table that opened on \"Team B\" would read as B being first or best."
+}

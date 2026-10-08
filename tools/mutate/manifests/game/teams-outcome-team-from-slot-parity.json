@@ -1,0 +1,14 @@
+{
+  "id": "teams-outcome-team-from-slot-parity",
+  "file": "src/game/loop.ts",
+  "find": "    if (t.kind === 'player' && t.team !== undefined) teams[t.controlledBy ?? 0] = t.team;",
+  "replace": "    if (t.kind === 'player' && t.team !== undefined) teams[t.controlledBy ?? 0] = (t.controlledBy ?? 0) % 2;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "startGameWith: the active campaign run (issues #153/#152) coop kill attribution, end to end (coop semantics plan) a teams outcome carries the team each slot PLAYED ON, read off Tank.team (issue #993)"
+  ],
+  "why": "Re-derives each slot's team from slot parity (`teamOf(slot)`) instead of reading the `Tank.team` loadArena stamped from setup. The HUD trusts the outcome's `teams`, so this would bring issue #993 back with every HUD test still green: they hand the HUD a `teams` array directly and never see where it came from."
+}

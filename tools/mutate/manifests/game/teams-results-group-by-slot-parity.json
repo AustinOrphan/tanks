@@ -1,0 +1,15 @@
+{
+  "id": "teams-results-group-by-slot-parity",
+  "file": "src/game/hud.ts",
+  "find": "      outcomeData.teams.forEach((team, slot) => {",
+  "replace": "      outcomeData.teams.forEach((_team, slot) => {\n        const team = teamOf(slot);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) groups by the team each slot PLAYED ON, not by slot parity (issue #993)",
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) gives a 2v1v1 match a row for each of its THREE teams, lettered as setup letters them"
+  ],
+  "why": "Puts back the grouping issue #993 removed: summing each slot into `teamOf(slot)`, which is slot parity and only setup's DEFAULT split. Setup can put any slot on any of three teams, so a match set up as A A B B reports P1+P3 as one side, and a 2v1v1 folds team C's player into B. The test that predates the fix uses the default split, where parity happens to agree, which is why it stays green under this mutation and the killers use A A B B and A A B C."
+}

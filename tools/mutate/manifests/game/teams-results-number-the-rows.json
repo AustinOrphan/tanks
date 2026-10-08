@@ -1,0 +1,15 @@
+{
+  "id": "teams-results-number-the-rows",
+  "file": "src/game/hud.ts",
+  "find": "          `Team ${TEAM_LABELS[team] ?? '?'}`,",
+  "replace": "          `Team ${team + 1}`,",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) win panel carries the teams results line as PER-TEAM sums, not per-slot",
+    "hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent) gives a 2v1v1 match a row for each of its THREE teams, lettered as setup letters them"
+  ],
+  "why": "Names the rows \"Team 1\", \"Team 2\" again, which is what they read before issue #993. Setup's team selector and the in-match stock strip both letter the sides A, B, C, so a numbered table leaves the reader to work out that Team 2 is the B they picked."
+}
