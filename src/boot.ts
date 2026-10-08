@@ -289,12 +289,9 @@ export function boot(deps: BootDeps): void {
     // away microseconds later by the catch below. The shell now carries the answer
     // (`app-shell.ts`'s `render`), taken from a detached canvas that is already gone.
     //
-    // What this changes on the unsupported path: `bootCanvas` and `startGame` are no
-    // longer called at all, so nothing is appended to the root for `root.innerHTML = ''`
-    // to have to clear. What it deliberately does NOT change: the player still lands on
-    // exactly the same message. Issue #325 owns replacing it with a branded screen, and
-    // #428 owns removing the eager `sessions.start()` on the SUPPORTED path below -- both
-    // of which need this answer to exist first, which is all this line provides.
+    // On the unsupported path `bootCanvas` and `startGame` are never called, so nothing is
+    // appended to the root for `root.innerHTML = ''` to have to clear, and the catch below
+    // shows the failure page `classifyStartupFailure` picks for the probe's reason.
     //
     // `?? 'no-webgl2'` is unreachable through `probeRenderCapability`, which never reports
     // `webgl2: false` with a null failure. It is here because `AppShell` is an interface

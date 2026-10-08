@@ -112,9 +112,9 @@ export function createBrowserAppShell(): AppShell {
   return createAppShell({
     settings: createBrowserAppSettings(),
     audio: createAudioEngine(AUDIO_MANIFEST),
-    // The one real probe on the page. It runs BEFORE the first session by construction --
-    // `boot.ts` builds the shell, then starts the host -- which is the ordering issue #470
-    // asks for and issue #428 will rely on once eager startup goes away.
+    // The one real probe on the page. It answers before any session exists: `boot.ts`
+    // builds the shell first and reads this before building anything else (issue #470),
+    // and since issue #428 no session starts until the player asks for one.
     render: probeRenderCapability(),
   });
 }
