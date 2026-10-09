@@ -12,7 +12,7 @@ import { THREE_PLAYER_SPREAD_CEILING, passesSpreadGate } from './spread-gate.mjs
  * Generate boards from every ruleset over a seed sample, filter them through the SHIPPED
  * acceptance rules, measure the survivors, and print one row per (ruleset, player count).
  *
- * THE THREE TIERS STAY SEPARATE, and the order matters:
+ * THE THREE TIERS STAY SEPARATE, one ruled stage follows them, and the order matters:
  *
  *   1. GENERATE -- the ruleset's own rules build a board from a seed.
  *   2. ACCEPT   -- `evaluateVersusBoard` and `versusSpawnClearanceFailures`, unchanged and
