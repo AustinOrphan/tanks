@@ -9,6 +9,6 @@
   ],
   "why": "The pair-count check removed: a 3-player board with an unreachable spawn pair contributes nothing to `pathSpread` from that pair, so its spread can read low over two pairs and pass while one player cannot reach another at all.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "the 3-player spread gate (issue #820) refuses a 3-player board whose three pairs were not all measured"
   ]
 }

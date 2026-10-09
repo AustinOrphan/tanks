@@ -9,6 +9,9 @@
   ],
   "why": "The ceiling comparison flipped: the gate passes exactly the 3-player boards it exists to refuse and refuses every fair one, including all 6 shipped boards offered at three players. Issue #820's ruling is a guarantee of comparable opportunity at three players; inverted, the sweep reports the least fair boards as the accepted ones.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "the 3-player spread gate (issue #820) passes a 3-player board well inside the ceiling and refuses one well outside it",
+    "the 3-player spread gate (issue #820) refuses a 3-player board whose three pairs were not all measured",
+    "the 3-player spread gate (issue #820) holds its tolerance at float noise on either side of the ceiling",
+    "the 3-player spread gate (issue #820) derives its ceiling from the boards offered at three players, and passes every one of them"
   ]
 }
