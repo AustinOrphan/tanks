@@ -1,0 +1,39 @@
+budget 254.1px at a 390px viewport
+
+pips
+2p x 1     10/3      61.8px   fits, 192.3px spare
+2p x 2     10/3      87.8px   fits, 166.3px spare
+2p x 3     10/3     113.8px   fits, 140.3px spare
+2p x 4     10/3     139.8px   fits, 114.3px spare
+2p x 5     10/3     165.8px   fits, 88.3px spare
+3p x 1     10/3      92.7px   fits, 161.4px spare
+3p x 2     10/3     131.7px   fits, 122.4px spare
+3p x 3     10/3     170.7px   fits, 83.4px spare
+3p x 4     10/3     209.7px   fits, 44.4px spare
+3p x 5      9/2     221.7px   fits, 32.4px spare
+4p x 1      9/2     119.6px   fits, 134.5px spare
+4p x 2      9/2     163.6px   fits, 90.5px spare
+4p x 3      9/2     207.6px   fits, 46.5px spare
+4p x 4    pip+n     171.6px   fits, 82.5px spare
+4p x 5    pip+n     171.6px   fits, 82.5px spare
+pips: 15 of 15 configurations fit
+
+marks
+2p x 1     full      61.6px   fits, 192.5px spare
+2p x 2     full      85.4px   fits, 168.7px spare
+2p x 3     full     109.3px   fits, 144.8px spare
+2p x 4     full     133.1px   fits, 121.0px spare
+2p x 5     full     156.9px   fits, 97.2px spare
+3p x 1     full      92.4px   fits, 161.7px spare
+3p x 2     full     128.2px   fits, 125.9px spare
+3p x 3     full     163.9px   fits, 90.2px spare
+3p x 4     full     199.6px   fits, 54.5px spare
+3p x 5     full     235.3px   fits, 18.8px spare
+4p x 1     full     123.3px   fits, 130.8px spare
+4p x 2     full     170.9px   fits, 83.2px spare
+4p x 3     full     218.5px   fits, 35.6px spare
+4p x 4      8/2     235.6px   fits, 18.5px spare
+4p x 5   mark+n     171.3px   fits, 82.8px spare
+marks: 15 of 15 configurations fit
+
+every configuration fits
