@@ -72,7 +72,4 @@ Node 24 LTS line, but the deploy does not reuse CI's artifact. Whether two separ
 produce byte-identical bundles is unmeasured. Nothing ships from the Node 22.13.0 floor
 build, so there is no path from that build to the live site.
 
-**6. No Open Graph or canonical tags** in `dist/index.html` (0 matches for
-`og:|twitter:|rel="canonical"`), so sharing the link gives no preview card.
-
 ---

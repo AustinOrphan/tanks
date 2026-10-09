@@ -15,9 +15,10 @@
       content="A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus."
     />
     <meta name="theme-color" content="#1a1a1a" />
-    <!-- Absolute, unlike every other URL-bearing tag below it in this file: canonical and
-         Open Graph URLs are read by crawlers and link-unfurlers off-origin, not resolved
-         by a browser that already has /tanks/ as its base, so the relative-href rule the
+    <!-- Absolute, unlike every URL-bearing tag below it in this file except the two share
+         image URLs, which are absolute for the same reason: canonical and Open Graph URLs
+         are read by crawlers and link-unfurlers off-origin, not resolved by a browser that
+         already has /tanks/ as its base, so the relative-href rule the
          favicon/manifest/icon comments describe does not apply here. This is the one
          live location the game is served from. -->
     <link rel="canonical" href="https://austinorphan.com/tanks/" />
@@ -32,11 +33,26 @@
       property="og:description"
       content="A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus."
     />
-    <!-- No og:image/twitter:image: no share-image asset exists in this repo yet, and a
-         summary card renders fine without one. Inventing a placeholder file here would be
-         worse than omitting the tag; adding a real one is deferred, tracked separately
-         from this change. -->
-    <meta name="twitter:card" content="summary" />
+    <!-- The link-card image is public/share-image.png, which vite copies into dist/ and the
+         same deploy serves (issue #973): a 1200x630 PNG cropped from one frame of
+         `npm run gallery -- --scene game`, the real game shot through its real camera with no
+         developer query. Absolute for the reason canonical and og:url are. Replacing the
+         picture is a swap of that one file; tools/webmanifest.test.ts holds these tags to the
+         file's real size, and tools/portability/check.mjs checks the BUILT output carries it. -->
+    <meta property="og:image" content="https://austinorphan.com/tanks/share-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="A tilted top-down view of a green arena walled in grey: a blue tank near the bottom faces brown, grey and teal tanks near the top, among grey blocks and two wooden crates, as a shell from the teal tank streaks across the floor."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://austinorphan.com/tanks/share-image.png" />
+    <meta
+      name="twitter:image:alt"
+      content="A tilted top-down view of a green arena walled in grey: a blue tank near the bottom faces brown, grey and teal tanks near the top, among grey blocks and two wooden crates, as a shell from the teal tank streaks across the floor."
+    />
     <!-- Relative href, deliberately: on a GitHub Pages PROJECT page the browser
          resolves a bare /favicon.ico against the ORIGIN root, not the project
          subpath, so dropping a file in public/ is not enough on its own. -->
