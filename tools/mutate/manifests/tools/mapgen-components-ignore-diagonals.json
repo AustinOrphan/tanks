@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-components-ignore-diagonals",
+  "file": "tools/mapgen/measure.ts",
+  "find": "    ? [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]\n",
+  "replace": "    ? [[1, 0], [-1, 0], [0, 1], [0, -1]]\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "why": "The 8-connected neighbour set loses its diagonals, so asking for 8-connectivity silently returns the 4-connected count: two blocks meeting at a corner read as two shapes, and vs-quad-01 reads 13 components where 8-connectivity finds 9. The two connectivities disagree on three shipped boards, which is why both are reported.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

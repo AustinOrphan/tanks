@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-wall-test-counts-letters",
+  "file": "tools/mapgen/measure.ts",
+  "find": "    const kind = legend[grid[r][c]];\n    return kind === 'solid' || kind === 'destructible';\n",
+  "replace": "    return grid[r][c] !== '.';\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "why": "The wall test reverted to 'not floor', the definition issue #1028 corrected: every spawn and enemy letter becomes a one-cell wall component, so arena-05 reads 13 shapes instead of 5 and every generated board gains a one-cell block from its `P`. The block counts quoted on #821 carried exactly this, and the control used to check them shared it.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}
