@@ -84,6 +84,27 @@
         "margin-top": "0px",
         "margin-bottom": "0px"
       }
+    },
+    {
+      "selector": ".hud-settings .ui-hint",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 368,
+        "y": 286,
+        "w": 544,
+        "h": 18
+      },
+      "text": "No connected controller reports a rumble motor. Connect one that does and this turns on.",
+      "style": {
+        "display": "block",
+        "opacity": "0.7",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "13.6px",
+        "margin-top": "13.6px",
+        "margin-bottom": "13.6px"
+      }
     }
   ]
 }

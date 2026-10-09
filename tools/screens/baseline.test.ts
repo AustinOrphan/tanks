@@ -383,3 +383,82 @@ describe('the screen baseline: how far a box may move between platforms (issue #
     expect(BOX_TOLERANCE_PX).toBe(2);
   });
 });
+
+/**
+ * THE UI-SCALE CAPTURE CAN TELL A WORKING SCALE FROM A DEAD ONE (issue #1031).
+ *
+ * `screen.settings.ui-scale` exists to show the player's 150% setting, and it measures the same
+ * selectors as `screen.settings`. Before #1031 only two of its four showed the scale, and "the
+ * two baselines differ" already passed on the title's y alone. This holds EVERY selector the
+ * scaled state measures to a font-size exactly 1.5 times the same selector's in the default
+ * state, read from the two committed baseline files.
+ */
+describe('the UI-scale capture shows the scale on every selector (issue #1031)', () => {
+  type Measured = ReturnType<typeof m>;
+  /** Selectors whose element must be on screen with text in both, because `measure` takes the first DOM match. */
+  const MUST_SHOW = ['.hud-settings .ui-hint'];
+
+  function ratioFailures(base: Measured[], scaled: Measured[], ratio: number): string[] {
+    const failures: string[] = [];
+    const bySel = new Map(base.map((e) => [e.selector, e]));
+    if (scaled.length === 0) failures.push('the scaled state measures nothing');
+    for (const s of scaled) {
+      const b = bySel.get(s.selector);
+      if (b === undefined || !b.present || !s.present) {
+        failures.push(`${s.selector} is not measured in both states`);
+        continue;
+      }
+      if (MUST_SHOW.includes(s.selector)) {
+        for (const [name, e] of [['default', b], ['scaled', s]] as const) {
+          if (!e.visible || e.text.trim() === '') failures.push(`${s.selector} is hidden or empty in the ${name} state`);
+        }
+      }
+      const from = parseFloat(String(b.style['font-size']));
+      const to = parseFloat(String(s.style['font-size']));
+      if (!(Math.abs(to - from * ratio) <= 0.01)) {
+        failures.push(`${s.selector}: font-size ${from}px -> ${to}px is not x${ratio}`);
+      }
+    }
+    return failures;
+  }
+
+  const read = (id: string): Measured[] =>
+    JSON.parse(readFileSync(new URL(`./baseline/${id}.json`, import.meta.url), 'utf8')).measurements;
+
+  it('holds on the committed pair, over the scaled state\'s own selector list', () => {
+    const scaled = read('screen.settings.ui-scale');
+    // The population is the selector list the scaled state measures, stated so a selector
+    // dropped from it is a visible change here rather than one fewer thing checked.
+    expect(scaled.map((e) => e.selector)).toEqual(
+      ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint'],
+    );
+    expect(ratioFailures(read('screen.settings'), scaled, 1.5)).toEqual([]);
+  });
+
+  it('measures the same selectors in both states, as the catalogue declares them', () => {
+    const byId = (id: string) => SCREEN_STATES.find((s: { id: string }) => s.id === id)?.measure;
+    expect(byId('screen.settings.ui-scale')).toEqual(byId('screen.settings'));
+  });
+
+  // THE NEGATIVE CONTROLS: known-bad pairs, each failing for the one reason it names.
+  it.each([
+    ['a selector that did not scale -- the pre-#1031 title, 32px in both',
+      [m({ selector: '.t', style: { 'font-size': '32px' } })], [m({ selector: '.t', style: { 'font-size': '32px' } })],
+      /\.t: font-size 32px -> 32px is not x1\.5/],
+    ['a selector the default state does not measure',
+      [m({ selector: '.a' })], [m({ selector: '.b', style: { 'font-size': '24px' } })],
+      /\.b is not measured in both states/],
+    ['the hint resolving to a hidden element',
+      [m({ selector: '.hud-settings .ui-hint', style: { 'font-size': '13.6px' } })],
+      [m({ selector: '.hud-settings .ui-hint', visible: false, style: { 'font-size': '20.4px' } })],
+      /hidden or empty in the scaled state/],
+    ['the hint resolving to an empty element',
+      [m({ selector: '.hud-settings .ui-hint', text: '', style: { 'font-size': '13.6px' } })],
+      [m({ selector: '.hud-settings .ui-hint', style: { 'font-size': '20.4px' } })],
+      /hidden or empty in the default state/],
+  ] as const)('fails on %s', (_label, base, scaled, message) => {
+    const failures = ratioFailures([...base] as Measured[], [...scaled] as Measured[], 1.5);
+    expect(failures, JSON.stringify(failures)).toHaveLength(1);
+    expect(failures[0]).toMatch(message);
+  });
+});
