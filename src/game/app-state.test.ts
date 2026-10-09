@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { defaultSlots } from './versus-setup';
 import type { VersusConfig } from './versus-config';
-import type { VersusRules } from './app-state';
+import type { AppLocation, VersusRules } from './app-state';
 import {
   campaignCompleteOutcome,
   campaignDescriptor,
@@ -44,6 +44,7 @@ import {
   versusWinnerTeam,
   versusDraw,
   versusSetupRoute,
+  surfaceName,
   vsMatchEndOutcome,
 } from './app-state';
 
@@ -491,5 +492,14 @@ describe('DeveloperMetadata -- orthogonal to descriptors', () => {
       versusDescriptor(versusRulesFromConfig(versusConfigFixture())).kind,
     ];
     expect(kinds).toEqual(['campaign', 'practice', 'versus']);
+  });
+});
+
+describe('surfaceName names the route or the gameplay phase', () => {
+  it('prefixes each with where it came from', () => {
+    expect(surfaceName({ kind: 'route', route: { kind: 'main-menu' } })).toBe('route/main-menu');
+    expect(
+      surfaceName({ kind: 'gameplay', session: {}, phase: { kind: 'paused' } } as unknown as AppLocation),
+    ).toBe('gameplay/paused');
   });
 });

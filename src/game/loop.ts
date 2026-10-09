@@ -63,7 +63,7 @@ import {
   type PreviewFrameScheduler,
   type TankPreview,
 } from '../render/preview';
-import { WORKBENCH_CATALOG, createWorkbench, type WorkbenchSceneOptions } from '../render/gallery/workbench-scene';
+import type { WorkbenchSceneOptions } from '../render/gallery/workbench-scene';
 import type { AudioEngine } from '../audio/engine';
 import type { StorageNamespace } from './storage';
 import type { SuiteContext } from '../audio/suites';
@@ -84,6 +84,7 @@ import {
   type VersusResult,
   legacyOutcomePresentation,
   resolveSession,
+  surfaceName,
   versusDraw,
   versusWinnerSlot,
   versusWinnerTeam,
@@ -122,7 +123,7 @@ import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } from './devflags';
 import { sessionIdentityMarker, stripIdentityMarker } from './identity-marker-flag';
-import { developerExitSearch } from './dev-config';
+import { developerExitSearch } from './dev-params';
 import { gallerySearch } from './gallery-link';
 import type { GalleryCatalog } from './gallery-selection';
 import { downloadCanvasStill } from './canvas-still';
@@ -136,7 +137,6 @@ import {
 } from '../render/quality';
 import type { SessionDiagnostics } from './dev-diagnostics';
 import { readBuildIdentity } from './build-identity';
-import { surfaceName } from './dev-exports';
 import { downloadCanvas, downloadText } from './downloads';
 import { resetDeveloperData, resolveStorage } from './storage';
 
@@ -270,17 +270,24 @@ export interface GameDeps {
    */
   readonly readPadDiagnostics: () => PadDiagnostic[];
   /**
-   * The Developer Tools gallery workbench (issue #730): the render registries' catalog, the
-   * WebGL scene handle, the page's `?gallery=` value and how to write a link.
+   * The Developer Tools gallery workbench (issue #730): a loader for the render registries'
+   * catalog and the WebGL scene handle, the page's `?gallery=` value and how to write a link.
    *
    * Bound in `createBrowserDeps`, the one place that may import `render/gallery/` (see
    * GAME_WIRING), and OPTIONAL: absent from every injected deps, which keeps the route tests
    * off WebGL. `route-ui.ts` mounts the pane only when it is present, and the HUD hides the
    * entry unless `createBrowserDeps` also tells it the workbench exists.
+   *
+   * `load` rather than the catalog and handle themselves (issue #1012): the scene modules
+   * behind them are developer-only, so the pane fetches them when it opens instead of every
+   * page fetching them at startup. Whether the entry is offered is still decided here, before
+   * anything loads.
    */
   readonly galleryWorkbench?: {
-    readonly catalog: GalleryCatalog;
-    readonly create: GalleryWorkbenchDeps['create'];
+    readonly load: () => Promise<{
+      readonly catalog: GalleryCatalog;
+      readonly create: GalleryWorkbenchDeps['create'];
+    }>;
     readonly initial: string | null;
     readonly linkFor?: (value: string) => string;
     readonly saveStill?: GalleryWorkbenchDeps['saveStill'];
@@ -1235,9 +1242,16 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
     // here because this is the wiring GAME_WIRING lets import them; the pane's body sees only
     // structural types. The link keeps the page's path, other parameters and hash, for the
     // reason `applyDeveloperConfig` below does.
+    //
+    // Imported when the pane opens, not here (issue #1012): `workbench-scene` brings
+    // `moment-scene`, `moments` and `subjects` with it, and none of them belongs in the chunk
+    // an ordinary page downloads.
     galleryWorkbench: {
-      catalog: WORKBENCH_CATALOG,
-      create: (canvas, w, h, opts) => createWorkbench(canvas, w, h, opts as WorkbenchSceneOptions),
+      load: () =>
+        import('../render/gallery/workbench-scene').then(({ WORKBENCH_CATALOG, createWorkbench }) => ({
+          catalog: WORKBENCH_CATALOG,
+          create: (canvas, w, h, opts) => createWorkbench(canvas, w, h, opts as WorkbenchSceneOptions),
+        })),
       initial: devFlags.gallery,
       linkFor: (value) =>
         `${globalThis.location.pathname}${gallerySearch(search, value)}${globalThis.location.hash}`,
