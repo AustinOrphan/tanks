@@ -9,6 +9,6 @@
   ],
   "why": "The mark reads a literal size instead of the row's `--hud-mark`, so the 8px that hud.ts sets on a phone's four-by-four row is ignored and the strip overflows again. jsdom lays nothing out, so every HUD case still sees the custom property set on the row and passes; only the stylesheet pin and tools/hud/strip-width.mjs can see it.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "hud.css: the stock-loss cue arms (issue #230) sizes the marks from the row's custom properties, defaulting to the full size (issue #1021)"
   ]
 }

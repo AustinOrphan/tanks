@@ -9,6 +9,6 @@
   ],
   "why": "The phone rule applied at every width: a desktop strip at four players and four or five stocks would shrink its marks or fall back to one mark and a digit with room to spare. #1021 changes only what a viewport of 480px or less draws, and the desktop control in hud.match.test.ts is the only case that renders a crowded strip WITHOUT the narrow seam, so it is the one that has to catch this.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) THE CONTROL for the narrow cases: the desktop strip draws every mark at full size"
   ]
 }
