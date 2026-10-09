@@ -1,0 +1,14 @@
+{
+  "id": "frontier-person-labels-drop-needs-review",
+  "file": "tools/issues/frontier.mjs",
+  "find": "export const PERSON_LABELS = Object.freeze(['human-required', 'playtest-required', 'hardware-required', 'needs-review']);",
+  "replace": "export const PERSON_LABELS = Object.freeze(['human-required', 'playtest-required', 'hardware-required']);",
+  "expect": "killed",
+  "tests": [
+    "tools/issues/frontier.test.ts"
+  ],
+  "why": "`needs-review` falls out of the person-label set, so an issue waiting only on a review is listed as ready. It moves no number on the live graph today -- measured on 2026-10-09, every open `needs-review` issue also carries `human-required` -- which is exactly why only a fixture carrying that label ALONE can see it. `docs/agent/kickoff.md` names four labels as needing a person, and issue #1025 holds the set to all four.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

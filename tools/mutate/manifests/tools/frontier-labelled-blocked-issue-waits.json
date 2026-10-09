@@ -1,0 +1,15 @@
+{
+  "id": "frontier-labelled-blocked-issue-waits",
+  "file": "tools/issues/frontier.mjs",
+  "find": "    if (verdict.readiness === 'blocked') blocked.push(row);\n    else if (verdict.readiness === 'unknown') unknown.push(row);\n    else if (verdict.readiness === 'ready' && personLabels.length > 0) waiting.push(row);\n    else if (verdict.readiness === 'ready') ready.push(row);\n",
+  "replace": "    if (personLabels.length > 0) waiting.push(row);\n    else if (verdict.readiness === 'blocked') blocked.push(row);\n    else if (verdict.readiness === 'unknown') unknown.push(row);\n    else if (verdict.readiness === 'ready') ready.push(row);\n",
+  "expect": "killed",
+  "tests": [
+    "tools/issues/frontier.test.ts",
+    "tools/issues/run.test.ts"
+  ],
+  "why": "The label is consulted before the graph: a labelled issue with a standing blocker, or with blockers nobody read, lands in `waiting` -- which reads as 'free of blockers, just needs a person' and so hides the blocker. Issue #1025's rule is that graph facts outrank labels; `unknown` especially must never look like either ready or waiting.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

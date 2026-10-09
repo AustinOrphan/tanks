@@ -200,7 +200,10 @@ describe('frontier: bucketing and filters', () => {
 
   it('buckets by readiness and reports the population it considered', () => {
     const f = frontierOf(snap(graph));
-    expect(f.ready.map((r) => r.number)).toEqual([1, 2, 6]);
+    // #2 carries `human-required`: unblocked, but a person must act, so it is WAITING, not
+    // ready (issue #1025). Before that issue this list read [1, 2, 6].
+    expect(f.ready.map((r) => r.number)).toEqual([1, 6]);
+    expect(f.waiting.map((r) => r.number)).toEqual([2]);
     expect(f.blocked.map((r) => r.number)).toEqual([3]);
     expect(f.unknown.map((r) => r.number)).toEqual([4]);
     // 6 issues, one closed and therefore not considered at all.
@@ -212,8 +215,10 @@ describe('frontier: bucketing and filters', () => {
     expect(frontierOf(snap(graph), { labels: ['agent-ready'] }).ready.map((r) => r.number)).toEqual([1]);
     const notHuman = frontierOf(snap(graph), { excludeLabels: ['human-required'] });
     expect(notHuman.ready.map((r) => r.number)).toEqual([1, 6]);
-    // The control for the exclusion: without it, #2 is on the frontier.
-    expect(frontierOf(snap(graph)).ready.map((r) => r.number)).toContain(2);
+    expect(notHuman.waiting).toEqual([]);
+    // The control for the exclusion: without it, #2 is in scope -- in `waiting` since issue
+    // #1025, where this control used to find it among the ready.
+    expect(frontierOf(snap(graph)).waiting.map((r) => r.number)).toContain(2);
   });
 
   it('never puts an unknown issue in the ready bucket, whatever the filter', () => {
@@ -251,7 +256,7 @@ describe('frontier: the rendered report', () => {
 
   it('carries the denominator on the headline and the priority/size on each row', () => {
     const text = renderFrontier(snap(graph));
-    expect(text).toContain('**1 ready / 1 blocked / 1 unknown**, of 3 open issues in scope');
+    expect(text).toContain('**1 ready / 0 waiting / 1 blocked / 1 unknown**, of 3 open issues in scope');
     expect(text).toContain('- #1 [now/m] a ready one');
     expect(text).toContain('#2 blocked by #1');
     expect(text).toContain('#3 2 blocker(s) this snapshot did not read');
@@ -260,14 +265,15 @@ describe('frontier: the rendered report', () => {
   it('says in the output that ready does not mean startable', () => {
     // LOAD-BEARING, not decoration. Measured on this repository, the native graph called 24
     // of 28 issues ready while about 8 were waiting on a maintainer ruling -- a decision
-    // carries no blocked-by edge, so no relationship data can see it. A reader who takes
-    // this list as a work queue picks one up and stalls.
+    // carries no blocked-by edge, so no relationship data can see it. The `waiting` bucket
+    // (issue #1025) takes the ones a LABEL records; this sentence keeps saying the rest exist.
     const text = renderFrontier(snap(graph));
-    expect(text).toContain('READY MEANS "NO BLOCKER IN THE GRAPH"');
-    expect(text).toContain('decision carries no blocked-by edge');
+    expect(text).toContain('READY STILL MEANS "NO BLOCKER AND NO PERSON LABEL"');
+    expect(text).toContain('decision that no label records carries no blocked-by edge');
+    expect(text).toContain('needs-split, size and agent-ready are not checked');
   });
 
-  it('separates "makes ready" from "reaches" wherever it prints both', () => {
+  it('separates "unblocks" from "reaches" wherever it prints both', () => {
     // The other load-bearing sentence: "closing this unblocks 12" is exactly the claim that
     // gets repeated from a number printed without the qualifier.
     const chain = [
@@ -277,7 +283,8 @@ describe('frontier: the rendered report', () => {
     ];
     const text = renderFrontier(snap(chain));
     expect(text).toContain('LAST standing blocker');
-    expect(text).toContain('- #1: makes 1 ready (#2), reaches 2');
+    // `unblocks`, not "makes ready", since issue #1025: an unblocked issue can be waiting.
+    expect(text).toContain('- #1: unblocks 1 (#2), reaches 2');
   });
 
   it('refuses the chain on a cyclic snapshot and says why, in the report itself', () => {
