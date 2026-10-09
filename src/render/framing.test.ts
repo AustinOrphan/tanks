@@ -31,8 +31,8 @@ const ASPECTS = [0.42, 0.46, 0.75, 1.0, 1.33, 1.6, 1.78, 2.33, 2.39, 3.0];
 /**
  * Every (arena, aspect) pair -- population: 5 shipped arenas x 10 aspects = 50.
  *
- * The sweep used to run against one board alone (then `STANDARD_ARENA`, now the standard test
- * board `STANDARD_ARENA`), which is one BOARD SHAPE: three
+ * The sweep used to run against one board alone (campaign level 1's, which the camera helpers
+ * below still use as the standard test board `STANDARD_ARENA`), which is one BOARD SHAPE: three
  * of the five shipped arenas are 33x27, and arena-04 and arena-05 (both 45x33) are the
  * only ones that differ. A per-arena refit is exactly what the fit exists to do, so
  * testing it at one shape tested half the function.

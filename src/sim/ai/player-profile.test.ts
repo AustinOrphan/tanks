@@ -637,7 +637,8 @@ describe('the scripted player cannot perturb what it measures', () => {
     // `step` clones its input and never mutates what it is given, so a frozen world can
     // be stepped safely.
     //
-    // Population: one world per shipped arena, up to 400 ticks each, every decision made
+    // Population: one world per board in `boards` below (the standard test board, then every
+    // shipped arena after arena-01: 8 today), up to 400 ticks each, every decision made
     // against a fully frozen world. The counters below assert the sweep genuinely
     // reached the fire and mine branches rather than idling -- without them this could
     // pass by never doing anything interesting.
