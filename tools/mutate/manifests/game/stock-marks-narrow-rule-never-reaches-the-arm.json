@@ -1,0 +1,14 @@
+{
+  "id": "stock-marks-narrow-rule-never-reaches-the-arm",
+  "file": "src/game/hud.ts",
+  "find": "      const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };",
+  "replace": "      const layout: MarkLayout = { kind: 'full' };",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Issue #1021's whole change, cut at the seam: the measured table in stock-cue.ts is correct and pinned, but the `marks` builder never consults it, so a phone draws every mark at full size and four players at four or five stocks clips the last entry off the screen -- the silent overflow #835 measured for pips. stock-cue.test.ts stays green, because the rule itself is untouched; only the HUD cases driven through the narrow-viewport seam can see it.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

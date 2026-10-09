@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-marks-ignore-the-row-size",
+  "file": "src/game/hud.css",
+  "find": "  width: var(--hud-mark, 0.62em);\n  height: var(--hud-mark, 0.62em);",
+  "replace": "  width: 0.62em;\n  height: 0.62em;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The mark reads a literal size instead of the row's `--hud-mark`, so the 8px that hud.ts sets on a phone's four-by-four row is ignored and the strip overflows again. jsdom lays nothing out, so every HUD case still sees the custom property set on the row and passes; only the stylesheet pin and tools/hud/strip-width.mjs can see it.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

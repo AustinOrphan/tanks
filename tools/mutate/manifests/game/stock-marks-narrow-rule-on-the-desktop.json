@@ -1,0 +1,14 @@
+{
+  "id": "stock-marks-narrow-rule-on-the-desktop",
+  "file": "src/game/hud.ts",
+  "find": "      const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };",
+  "replace": "      const layout: MarkLayout = narrowMarkLayout(slots, total);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The phone rule applied at every width: a desktop strip at four players and four or five stocks would shrink its marks or fall back to one mark and a digit with room to spare. #1021 changes only what a viewport of 480px or less draws, and the desktop control in hud.match.test.ts is the only case that renders a crowded strip WITHOUT the narrow seam, so it is the one that has to catch this.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

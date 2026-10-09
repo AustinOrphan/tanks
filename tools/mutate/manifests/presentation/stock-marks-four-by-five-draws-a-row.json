@@ -1,0 +1,15 @@
+{
+  "id": "stock-marks-four-by-five-draws-a-row",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "  if (total === 4) return { kind: 'row', mark: 8, gap: 2 };\n  return { kind: 'one' };",
+  "replace": "  return { kind: 'row', mark: 8, gap: 2 };",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/stock-cue.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Four players at five stocks loses its fallback and draws a row of 8px marks, which measured 21.5px over the 254.1px budget at a 2px gap (5.5px over even at 1px): the strip overflows a 390px phone and clips its last entry. The fallback -- one full-size mark and the count -- is what #838 established for pips and #1021 carries over.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}
