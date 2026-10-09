@@ -1,0 +1,14 @@
+{
+  "id": "spread-gate-skips-the-pair-count",
+  "file": "tools/mapgen/spread-gate.mjs",
+  "find": "  if (measures.spawnPairs !== 3 || measures.unreachablePairs !== 0) return false;\n",
+  "replace": "  void measures.spawnPairs;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/spread-gate.test.ts"
+  ],
+  "why": "The pair-count check removed: a 3-player board with an unreachable spawn pair contributes nothing to `pathSpread` from that pair, so its spread can read low over two pairs and pass while one player cannot reach another at all.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

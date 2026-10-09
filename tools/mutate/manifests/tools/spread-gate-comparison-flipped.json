@@ -1,0 +1,14 @@
+{
+  "id": "spread-gate-comparison-flipped",
+  "file": "tools/mapgen/spread-gate.mjs",
+  "find": "  return measures.pathSpread <= THREE_PLAYER_SPREAD_CEILING + SPREAD_TOLERANCE;",
+  "replace": "  return measures.pathSpread > THREE_PLAYER_SPREAD_CEILING + SPREAD_TOLERANCE;",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/spread-gate.test.ts"
+  ],
+  "why": "The ceiling comparison flipped: the gate passes exactly the 3-player boards it exists to refuse and refuses every fair one, including all 6 shipped boards offered at three players. Issue #820's ruling is a guarantee of comparable opportunity at three players; inverted, the sweep reports the least fair boards as the accepted ones.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}
