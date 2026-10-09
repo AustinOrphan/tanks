@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-title-ignores-the-ui-scale",
+  "file": "src/game/hud.css",
+  "find": "  font-size: calc(3.5rem * var(--hud-ui-scale));",
+  "replace": "  font-size: 3.5rem;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The main menu's title, one of the five player-facing display literals issue #1031 wrapped, goes back to a bare rem: at 150% every other line of the menu grows and the title alone does not. The guard names the selector; the screen gate cannot, because no state photographs the main menu at a raised scale.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}
