@@ -34,7 +34,7 @@ import type { VersusConfig } from './versus-config';
 import type { TankPreview } from '../render/preview';
 import { WORKBENCH_CATALOG } from '../render/gallery/workbench-scene';
 import { defaultGallerySelection, formatGallerySelection, parseGallerySelection } from './gallery-selection';
-import type { GalleryWorkbenchSceneOptions } from './gallery-workbench';
+import type { GalleryWorkbenchDeps, GalleryWorkbenchSceneOptions } from './gallery-workbench';
 import type { GamepadLike } from '../input/gamepad';
 import type { ControllerLayoutModel } from './controller-layout';
 
@@ -731,33 +731,36 @@ describe('the application routes work with no gameplay session behind them', () 
 });
 
 describe('the gallery workbench is mounted with its pane and released with it (issue #730)', () => {
-  /** A recorder in the WebGL handle's place, over the REAL registry catalog. */
+  /**
+   * A recorder in the WebGL handle's place, over the REAL registry catalog, behind a loader as
+   * the page's is (issue #1012).
+   */
   function bench(initial: string | null) {
     const rec = { built: [] as GalleryWorkbenchSceneOptions[], shown: [] as GalleryWorkbenchSceneOptions[], disposed: 0 };
+    const create: GalleryWorkbenchDeps['create'] = (_canvas, _w, _h, opts) => {
+      rec.built.push(opts);
+      let frame = 0;
+      return {
+        frames: 30,
+        get frame() {
+          return frame;
+        },
+        show: (next) => {
+          rec.shown.push(next);
+          frame = 0;
+        },
+        seek: (f) => {
+          frame = Math.min(Math.max(0, Math.floor(f)), 29);
+        },
+        dispose: () => {
+          rec.disposed += 1;
+        },
+      };
+    };
     const value: NonNullable<RouteUiDeps['galleryWorkbench']> = {
-      catalog: WORKBENCH_CATALOG,
+      load: async () => ({ catalog: WORKBENCH_CATALOG, create }),
       initial,
       linkFor: (v) => `?dev=1&gallery=${v}`,
-      create: (_canvas, _w, _h, opts) => {
-        rec.built.push(opts);
-        let frame = 0;
-        return {
-          frames: 30,
-          get frame() {
-            return frame;
-          },
-          show: (next) => {
-            rec.shown.push(next);
-            frame = 0;
-          },
-          seek: (f) => {
-            frame = Math.min(Math.max(0, Math.floor(f)), 29);
-          },
-          dispose: () => {
-            rec.disposed += 1;
-          },
-        };
-      },
     };
     return { rec, value };
   }

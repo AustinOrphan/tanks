@@ -1,5 +1,5 @@
 import type { TankPreview } from '../render/preview';
-import type { GalleryCatalog, GallerySelection } from './gallery-selection';
+import type { GallerySelection } from './gallery-selection';
 import type { GalleryWorkbenchView } from './gallery-workbench';
 import type { SkinId } from '../presentation/customization';
 import type { GameStateMachine } from './state';
@@ -583,13 +583,17 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
    * takes a generation and every dispose spends one; a mount that is no longer the current
    * generation is dropped.
    *
-   * `formatGallerySelection` is captured at load rather than imported, because `disposeGallery`
-   * runs synchronously on close and cannot await. It is only ever needed when a mount happened,
-   * which is exactly when the module is already resolved.
+   * The render layer's scene modules arrive the same way, through `deps.galleryWorkbench.load`
+   * (issue #1012), and join the same wait: one generation covers all three loads, so a close
+   * during any of them drops the mount.
+   *
+   * `formatGallerySelection` and the catalog are captured at load rather than imported, because
+   * `disposeGallery` runs synchronously on close and cannot await. They are only ever needed
+   * when a mount happened, which is exactly when both are already resolved.
    */
   let gallery: GalleryWorkbenchView | null = null;
   let galleryValue: string | null = deps.galleryWorkbench?.initial ?? null;
-  let formatGallery: ((s: GallerySelection, c: GalleryCatalog) => string) | null = null;
+  let formatGallery: ((s: GallerySelection) => string) | null = null;
   let galleryGeneration = 0;
   const disposeGallery = (): void => {
     // Bumped BEFORE the early return, so a dispose that arrives while the import is still in
@@ -597,9 +601,7 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     // `gallery` is null in exactly the window where a late mount would do the damage.
     galleryGeneration += 1;
     if (gallery === null) return;
-    if (deps.galleryWorkbench !== undefined && formatGallery !== null) {
-      galleryValue = formatGallery(gallery.selection, deps.galleryWorkbench.catalog);
-    }
+    if (formatGallery !== null) galleryValue = formatGallery(gallery.selection);
     gallery.dispose();
     gallery = null;
   };
@@ -608,13 +610,13 @@ export function createRouteUi(hud: Hud, sm: GameStateMachine, deps: RouteUiDeps)
     if (bench === undefined) return;
     disposeGallery();
     const generation = (galleryGeneration += 1);
-    void Promise.all([import('./gallery-workbench'), import('./gallery-selection')]).then(
-      ([{ mountGalleryWorkbench }, { formatGallerySelection }]) => {
+    void Promise.all([import('./gallery-workbench'), import('./gallery-selection'), bench.load()]).then(
+      ([{ mountGalleryWorkbench }, { formatGallerySelection }, scene]) => {
         if (generation !== galleryGeneration) return;
-        formatGallery = formatGallerySelection;
+        formatGallery = (s) => formatGallerySelection(s, scene.catalog);
         gallery = mountGalleryWorkbench(hud.galleryBody, {
-          catalog: bench.catalog,
-          create: bench.create,
+          catalog: scene.catalog,
+          create: scene.create,
           raf: deps.raf,
           initial: galleryValue,
           linkFor: bench.linkFor,
