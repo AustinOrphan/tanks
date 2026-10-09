@@ -236,7 +236,9 @@ describe('frontier: waiting on a person (issue #1025)', () => {
     expect([...PERSON_LABELS]).toEqual(['human-required', 'playtest-required', 'hardware-required', 'needs-review']);
   });
 
-  it.each(PERSON_LABELS.map((label) => [label]))(
+  // A LITERAL list, not `PERSON_LABELS`: generated from the production constant, a label
+  // dropped from the set would take its own control with it.
+  it.each([['human-required'], ['playtest-required'], ['hardware-required'], ['needs-review']])(
     '%s alone moves an otherwise-ready issue to waiting, and its unlabelled twin stays ready',
     (label) => {
       const f = frontierOf(snap([issue(1, { labels: [label] }), issue(2)]));
