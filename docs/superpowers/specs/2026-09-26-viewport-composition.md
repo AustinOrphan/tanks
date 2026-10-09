@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-09-26
-last-reviewed: 2026-10-10
+last-reviewed: 2026-10-09
 scope: What the HUD's composition actually is at each viewport in issue #290's emulated matrix
 implementation-issues: [985]
 implementation-prs: []
@@ -130,7 +130,7 @@ whose Back control sits furthest below the fold, measured separately at 632 px d
 
 ## Versus Setup
 
-Re-measured 2026-10-10 for issue #1032, on a production build of that change, default
+Re-measured 2026-10-09 for issue #1032, on a production build of that change, default
 configuration (FFA, two players, Random) opened from the main menu, the method above:
 
 | viewport | scrolls | content h | visible h | wrapped rows | controls |
