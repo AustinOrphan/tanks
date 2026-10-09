@@ -3939,8 +3939,11 @@ describe('hud.css: the UI scale reaches all text (issue #1031)', () => {
   ] as const)('reports it when %s', (_label, edit, message) => {
     const bad = edit(css);
     expect(bad, 'the fixture edit matched nothing').not.toBe(css);
-    const failures = scaleFailures(bad);
-    expect(failures, JSON.stringify(failures)).toHaveLength(1);
-    expect(failures[0]).toMatch(message);
+    // The failures the EDIT adds, so each control judges its own edit and not the state of
+    // the real stylesheet, which the first case above judges.
+    const before = new Set(scaleFailures(css));
+    const added = scaleFailures(bad).filter((f) => !before.has(f));
+    expect(added, JSON.stringify(added)).toHaveLength(1);
+    expect(added[0]).toMatch(message);
   });
 });
