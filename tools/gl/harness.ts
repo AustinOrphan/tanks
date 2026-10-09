@@ -28,6 +28,10 @@ import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createTankPreview, PREVIEW_RENDER_SETTINGS } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subjects';
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
+import {
+  LEVER_PAIRS, ZERO_BY_CONSTRUCTION, cell, colours, createCueRig, differing, patched,
+  type CueKind, type CueLever,
+} from './role-cue-cells';
 import { MOMENTS } from '../../src/render/gallery/moments';
 import { createWorkbench, type WorkbenchSceneOptions } from '../../src/render/gallery/workbench-scene';
 import { GALLERY_STILL } from '../../src/game/gallery-workbench';
@@ -580,6 +584,64 @@ await checkAsync('createRenderer forwards its enemyRole option, and draws the sh
   return changed > 0
     ? null
     : 'enemyRole: both drew a frame identical to the shipped board: the option is typed but not forwarded';
+});
+
+await checkAsync('the role cue overlap measurement: its two controls, its staging guard and one fixed cell (issue #1018)', async () => {
+  // The part of `node tools/gl/role-cue-overlap.mjs` that can FAIL, run on every test:gl. The
+  // table itself is published, not asserted: what it says about the cue is for a person to read.
+  // Here: (i) two unarmed renderers under smoke plus burst agree to the pixel, which is what
+  // makes any armed-vs-unarmed difference mean the cue; (ii) an opaque patch over the footprint
+  // reads ~0 retained; the staging guard, a nonzero no-effect footprint for each (kind, lever)
+  // pair, and brown's flare at 0 by construction; and one cell, teal's flare under smoke plus
+  // burst six ticks after a shot on `high`, which must read a retained fraction inside (0, 1].
+  //
+  // Two groups of renderers, each fed one sequence list, because only renderers with the same
+  // history are compared: the no-smoke group gives the footprints, the smoke group the rest.
+  const size = { width: 240, height: 180 };
+  const rig = (lever: CueLever | null, smoke: boolean) =>
+    createCueRig({ lever, preset: 'high', smoke, motion: 'full', ...size });
+  const off = { none: rig(null, false), flare: rig('flare', false), riser: rig('riser', false) };
+  const on = { none: rig(null, true), none2: rig(null, true), flare: rig('flare', true) };
+  const all = [...Object.values(off), ...Object.values(on)];
+  try {
+    for (const r of all) await r.sequence('brown', 'fire-blocked', false, [0]);
+    // The no-smoke group, with the burst moved off the board: the footprint of every pair.
+    const KINDS: CueKind[] = ['olive', 'teal', 'brown'];
+    const still: Record<string, Record<CueKind, Uint8ClampedArray[]>> = {};
+    for (const [key, r] of Object.entries(off)) {
+      still[key] = {} as Record<CueKind, Uint8ClampedArray[]>;
+      for (const kind of KINDS) still[key][kind] = await r.sequence(kind, 'fire', false, [6, 15]);
+    }
+    // The smoke group: teal's shot with the burst where it lands.
+    const lit: Record<string, Uint8ClampedArray[]> = {};
+    for (const [key, r] of Object.entries(on)) lit[key] = await r.sequence('teal', 'fire', true, [0, 6]);
+    for (const frame of [...Object.values(still).flatMap((k) => Object.values(k).flat()), ...Object.values(lit).flat()]) {
+      if (colours(frame) < 8) return `a captured frame has ${colours(frame)} distinct sampled colours -- a cleared buffer, not a drawn board`;
+    }
+
+    const drift = Math.max(...[0, 1].map((t) => differing(lit.none[t], lit.none2[t]).length));
+    if (drift !== 0) return `control (i) failed: two unarmed renderers under smoke and burst differ in ${drift} pixels -- nothing here measures the cue`;
+
+    for (const { kind, lever } of LEVER_PAIRS) {
+      const footprint = differing(still[lever][kind][1], still.none[kind][1]).length;
+      if (footprint === 0) return `staging guard: ${kind}'s ${lever} has an empty footprint at rest -- the staging or the forwarding is broken`;
+    }
+    const zero = differing(still[ZERO_BY_CONSTRUCTION.lever][ZERO_BY_CONSTRUCTION.kind][1], still.none.brown[1]).length;
+    if (zero !== 0) return `brown's flare footprint is ${zero}, want 0 by construction: a standard shell draws the shipped flare`;
+
+    const sample = cell(still.flare.teal[0], still.none.teal[0], lit.flare[1], lit.none[1]);
+    if (sample.retainedFraction === null || sample.retainedFraction <= 0 || sample.retainedFraction > 1) {
+      return `the fixed cell read retained ${sample.retained} of ${sample.footprint}: outside (0, 1]`;
+    }
+    const fp = differing(still.flare.teal[0], still.none.teal[0]);
+    const covered = cell(still.flare.teal[0], still.none.teal[0], patched(lit.flare[1], fp), patched(lit.none[1], fp));
+    if (covered.retainedFraction === null || covered.retainedFraction >= 0.01) {
+      return `control (ii) failed: an opaque patch over the footprint still reads ${covered.retained} of ${covered.footprint} retained`;
+    }
+    return null;
+  } finally {
+    for (const r of all) r.dispose();
+  }
 });
 
 check('createRenderer forwards its quality option through to the scene it builds', () => {

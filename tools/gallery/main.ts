@@ -59,6 +59,9 @@ const g = moment
       blockedFire: blockedFireParam,
       arrival: arrivalParam,
       shellTrail: shellTrailParam,
+      // Forwarded here too (issue #1018): only a moment fires, so only a moment can show the
+      // role cue under the muzzle smoke and barrel recoil.
+      enemyRole: enemyRoleParam,
       motion: motionParam,
     })
   : buildGallery(canvas, W, H, {
