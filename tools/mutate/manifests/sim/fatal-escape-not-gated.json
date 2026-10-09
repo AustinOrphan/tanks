@@ -10,6 +10,6 @@
   ],
   "killedBy": [
     "spawn egress: a tank, not a cell (issue #423) a destructible seal is FATAL when the pocket is smaller than the mine blast",
-    "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
+    "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 9 arenas x {2,3,4}"
   ]
 }

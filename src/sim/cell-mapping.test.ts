@@ -19,13 +19,14 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 8 shipped arenas -- FOUR at 33x27 now, arena-04 and
-    // arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x), and the two
-    // remaining dedicated boards at their own sizes -- plus the 17x13 fixture, untouched
-    // by the upscale = 891 + 891 + 891 + 891 + 1485 + 1485 + 567 + 459 + 221 = 7781 cells.
+    // Population: all cells of all 9 shipped arenas -- FIVE at 33x27 now, arena-04 and
+    // arena-05 at 45x33 (the campaign 33x27s are the old 11x9 board upscaled 3x), and the
+    // two remaining dedicated boards at their own sizes -- plus the 17x13 fixture, untouched
+    // by the upscale = 891 x 5 + 1485 + 1485 + 567 + 459 + 221 = 8672 cells.
     // The fourth 891 is issue #425's rebuilt vs-quad-01, which moved from 27x17 to 33x27
-    // and so joins the campaign boards' shape; the 567 is issue #271's 27x21 vs-duel-01
-    // and the 459 is #272's vs-tri-01, still 27x17.
+    // and so joins the campaign boards' shape, and the fifth is issue #1036's vs-quad-02,
+    // authored at that shape; the 567 is issue #271's 27x21 vs-duel-01 and the 459 is
+    // #272's vs-tri-01, still 27x17.
     //
     // Recomputed in full rather than incremented, because the enumeration here had already
     // drifted from its own total once. The non-square boards matter: a formula that
@@ -40,7 +41,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(7781);
+    expect(checked).toBe(8672);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {
@@ -86,7 +87,8 @@ describe("loadArena's spawn placement is the formula cellCentre encodes", () => 
     // enemy letter, the minimum arenas.json accepts, and all six sit on the
     // 1-(mod 3) lattice this test pins -- vs-quad-01's pair (issue #273) at column 13
     // on the mirror axis, deliberately away from the four corners its versus spawns
-    // are picked at.
-    expect(spawnsChecked).toBe(39);
+    // are picked at. 41 with issue #1036's vs-quad-02, which authors the same minimum
+    // pair, at (13,4) and (19,22), also on the lattice and also away from its corners.
+    expect(spawnsChecked).toBe(41);
   });
 });

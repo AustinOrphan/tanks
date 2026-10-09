@@ -451,11 +451,21 @@ import { step } from '../../src/sim/world';
  * byte of arenas 0 through 6. Only the final 5,541 bytes (old) / 5,214 bytes (new) differ.
  * Total length 133,166 -> 132,839.
  *
+ * TENTH CHANGE, an append again (issue #1036): `vs-quad-02` was appended to ARENA_DEFS as
+ * arena index 8. MEASURED through the real `traceText()`: the new text's first 132,839
+ * characters, every byte through arena 7's last marker, hash to the previous value
+ * e2b9b204..., so the old text is exactly a prefix of the new and `newText.startsWith(oldText)`
+ * holds by construction. The appended tail is 7,189 characters and holds exactly 6 new
+ * `|a:seed:status:tick|` markers, `|8:1:lose:1383|` through `|8:6:lose:1383|`, one per traced
+ * seed. Markers 48 -> 54 (9 arenas x 6 seeds). Total length 132,839 -> 140,028.
+ *
  * No existing arena's simulation moved on any of the first three occasions, on the fourth
  * exactly one did and it is named above, on the fifth every arena's turret track did, on
  * the sixth five runs' timing did, on the seventh five runs' timing moved back, on the
- * eighth nine runs' timing did, and on the ninth only the rebuilt board's own six runs did.
+ * eighth nine runs' timing did, on the ninth only the rebuilt board's own six runs did, and on
+ * the tenth, an append, none did.
  * Previous values, newest first:
+ * e2b9b204c6eadbae8a5c0ba65460e383d54475e23719cc12798cb2c33d9d6f76
  * 4db707174e770eb813f062138f418a476e17c4809fdc75282b7eca4dab484e29
  * 8584bf34ddca8347c7fe9f3c8bdbdd5b43c292c06c7af214398884d44edc50be
  * 64013a606e3dce459ff04d01e4364be477e340ae9b287c14cf865c9e16e7d85a
@@ -468,7 +478,7 @@ import { step } from '../../src/sim/world';
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = 'e2b9b204c6eadbae8a5c0ba65460e383d54475e23719cc12798cb2c33d9d6f76';
+export const BASELINE_HASH = 'b46dec3cfda633989bf6962a0ade4b3d9b81c91447a7ce2781b97949845170ce';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

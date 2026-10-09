@@ -32,6 +32,8 @@ describe('versusMapChoices', () => {
    *  and given `teams` alongside `ffa` by issue #627). */
   const TRI = 'vs-tri-01';
   const QUAD = 'vs-quad-01';
+  /** N=4's second dedicated board (issue #1036), offered at 4 in both modes like Quarters. */
+  const QUAD2 = 'vs-quad-02';
 
   it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its own count', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
@@ -65,8 +67,9 @@ describe('versusMapChoices', () => {
         // three-player split produces is a supported match rather than the unfairness
         // the old `ffa`-only declaration was justified by. vs-quad-01 (issue #425)
         // splits its four corner spawns into a top pair and a bottom pair holding
-        // mirrored territory. All three arms are now unconditional on mode.
-        const extra = n === 2 ? [DUEL] : n === 3 ? [TRI] : n === 4 ? [QUAD] : [];
+        // mirrored territory. All three arms are now unconditional on mode. vs-quad-02
+        // (issue #1036) joins N=4 beside it, in both modes, so N=4 offers two boards.
+        const extra = n === 2 ? [DUEL] : n === 3 ? [TRI] : n === 4 ? [QUAD, QUAD2] : [];
         expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }
@@ -103,9 +106,12 @@ describe('versusMapChoices', () => {
     // nobody wrote down still fails here.
     // Both dedicated multi-player boards are now measured suitable everywhere and curated
     // to one count each, so each is withheld at the two counts it was not authored for.
+    // vs-quad-02 (issue #1036) is measured suitable at N=2 and N=3 too, which #1036
+    // required of it, and curated to N=4 alone, so it is withheld at both the way
+    // vs-quad-01 is. Offering it at those counts later is a curation edit.
     const WITHHELD: Record<number, string[]> = {
-      2: ['vs-tri-01', 'vs-quad-01'],
-      3: ['vs-quad-01'],
+      2: ['vs-tri-01', 'vs-quad-01', 'vs-quad-02'],
+      3: ['vs-quad-01', 'vs-quad-02'],
       4: ['vs-tri-01'],
     };
     const rows = versusBoardCatalog();

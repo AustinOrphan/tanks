@@ -3,7 +3,7 @@ import { VERSUS_CATALOG, versusCatalogEntryById } from './versus-catalog';
 import { ARENA_DEFS } from './arenas';
 
 describe('VERSUS_CATALOG', () => {
-  it('ships 8 entries whose ids equal their arena ids, in arena order', () => {
+  it('ships 9 entries whose ids equal their arena ids, in arena order', () => {
     // Population pin: the catalog began as a straight migration of the 5 campaign arenas
     // (setup-menu spec ruling 2), and said a 6th entry would move this count
     // deliberately. That was issue #271's vs-duel-01, the first entry that is not a
@@ -20,9 +20,12 @@ describe('VERSUS_CATALOG', () => {
     // sealedSpawns 0 and fatalEscapes 0 for each, where Keystone reported 3 of 3 spawns
     // fatal at N=3 and Quarters reported every spawn in a disjoint region. That is the
     // whole of the difference between the two rows below.
+    //
+    // **9** with issue #1036's vs-quad-02, the second purpose-built four-player board,
+    // appended last so no earlier entry's position moves.
     expect(VERSUS_CATALOG.map((e) => e.id)).toEqual([
       'arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05', 'vs-duel-01', 'vs-tri-01',
-      'vs-quad-01',
+      'vs-quad-01', 'vs-quad-02',
     ]);
     for (const e of VERSUS_CATALOG) expect(e.arenaId, e.id).toBe(e.id);
   });
@@ -55,6 +58,10 @@ describe('VERSUS_CATALOG', () => {
       // it to 4 is a design choice about the board it was authored for, not a limit the
       // measurements impose.
       'vs-quad-01': [4],
+      // vs-quad-02 (issue #1036) at [4] alone, by the same rule: versusBoardCatalog reports
+      // it suitable at N=2, 3 and 4 (25 of 27 suitable, the 2 failures still vs-duel-01's),
+      // which #1036 required, and offering it at 2 or 3 would be a separate curation edit.
+      'vs-quad-02': [4],
     };
     // Set equality first, so a new entry cannot ship without a row here to review.
     expect(new Set(VERSUS_CATALOG.map((e) => e.id))).toEqual(new Set(Object.keys(CURATED_COUNTS)));

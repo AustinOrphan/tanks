@@ -23,9 +23,10 @@ import { TANK_RADIUS } from './constants';
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 8 shipped entries validate clean: 0 failures over 36 declared (entry, N, mode) combinations', () => {
-    // 36, not 48: five entries declare 3 player counts x 2 modes (30), and issue #271's
-    // vs-duel-01, issue #272's vs-tri-01 and issue #273's vs-quad-01 each declare 1 x 2.
+  it('all 9 shipped entries validate clean: 0 failures over 38 declared (entry, N, mode) combinations', () => {
+    // 38, not 54: five entries declare 3 player counts x 2 modes (30), and issue #271's
+    // vs-duel-01, issue #272's vs-tri-01, issue #273's vs-quad-01 and issue #1036's
+    // vs-quad-02 each declare 1 x 2.
     // The sweep covers what each entry PROMISES, so a narrowed declaration shrinks this
     // denominator rather than leaving combinations silently unchecked.
     //
@@ -33,8 +34,9 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     // eight entries, then 32 when vs-tri-01 (then 1 x 1) and vs-quad-01 (1 x 2) were
     // WITHDRAWN pending #424/#425 because human playtesting found players could not leave
     // their spawns on either board; 33 when #424's rebuild returned vs-tri-01's one
-    // combination; 35 when #425's rebuild returned vs-quad-01's two; and 36 now that
-    // issue #627 gives vs-tri-01 `teams` alongside `ffa`.
+    // combination; 35 when #425's rebuild returned vs-quad-01's two; 36 when issue #627
+    // gave vs-tri-01 `teams` alongside `ffa`; and 38 now that issue #1036 appends vs-quad-02
+    // at N=4 in both modes.
     //
     // That last step is the first that widens a DECLARATION rather than restoring a
     // withdrawn board, and it adds a combination this sweep had never run: (vs-tri-01,
@@ -45,11 +47,11 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     // second mode on an already-clean N cannot fail here. The corollary matters more
     // than the pass: this sweep is mode-BLIND, so it is not evidence that Keystone plays
     // well as 2v1. That question is #627's, and it is answered by play, not by geometry.
-    expect(VERSUS_CATALOG.length).toBe(8);
+    expect(VERSUS_CATALOG.length).toBe(9);
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(36);
+    ).toBe(38);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }
