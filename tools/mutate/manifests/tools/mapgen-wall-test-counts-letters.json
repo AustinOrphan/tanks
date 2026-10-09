@@ -9,6 +9,9 @@
   ],
   "why": "The wall test reverted to 'not floor', the definition issue #1028 corrected: every spawn and enemy letter becomes a one-cell wall component, so arena-05 reads 13 shapes instead of 5 and every generated board gains a one-cell block from its `P`. The block counts quoted on #821 carried exactly this, and the control used to check them shared it.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "mapgen morphology: wall components over wall cells only (issue #1028) pins the walls-only table, both connectivities, for the 8 boards it was measured on",
+    "mapgen morphology: wall components over wall cells only (issue #1028) THE CONTROL: the old \"not floor\" count exceeds the new one by exactly the board s letters",
+    "mapgen morphology: wall components over wall cells only (issue #1028) changes no walls-only count or size when every letter is floored",
+    "mapgen morphology: wall components over wall cells only (issue #1028) counts a spawn letter beside a wall as no wall at all"
   ]
 }

@@ -9,6 +9,6 @@
   ],
   "why": "The block-size threshold drops from 5 to 4 cells, so a 2x2 block -- four cells, the smallest thing #821's ruling calls a small block -- stops counting as small. No shipped component is below 5 either way, so only the 2x2 fixture can see it.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "mapgen morphology: wall components over wall cells only (issue #1028) reports a 2x2 block as one component of 4, below the threshold"
   ]
 }
