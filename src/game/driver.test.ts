@@ -6,7 +6,8 @@
 // blind to whether the loop actually simulates, which is the entire defect
 // being closed here.
 import { describe, it, expect } from 'vitest';
-import { createArenaWorld, createWorldFor, arenaById } from '../sim/arena';
+import { createWorldFor, arenaById } from '../sim/arena';
+import { createArenaWorld } from '../sim/config/arena-fixtures';
 import { step, type World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { InputState } from '../sim/types';

@@ -3,7 +3,7 @@
 // the render layer holding `prev` while `curr` advances, and any future replay
 // or netcode. It was verified once by hand; this pins it.
 import { describe, it, expect } from 'vitest';
-import { createArenaWorld } from './arena';
+import { createArenaWorld } from './config/arena-fixtures';
 import { cloneWorld, step, type World } from './world';
 import type { InputState } from './types';
 import { nextRng } from './types';
