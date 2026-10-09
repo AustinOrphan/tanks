@@ -637,15 +637,22 @@ describe('the scripted player cannot perturb what it measures', () => {
     // `step` clones its input and never mutates what it is given, so a frozen world can
     // be stepped safely.
     //
-    // Population: all 4 shipped arenas x 400 ticks = 1600 decisions, every one made
+    // Population: one world per shipped arena, up to 400 ticks each, every decision made
     // against a fully frozen world. The counters below assert the sweep genuinely
     // reached the fire and mine branches rather than idling -- without them this could
     // pass by never doing anything interesting.
+    //
+    // The FIRST slot is the standard test board (issue #1009), not campaign level 1. It is
+    // the board that reaches the mine branch: measured by re-authoring level 1 to a lone
+    // brown, as #1010 will, the sweep laid 0 mines. Today the two boards hold the same grid
+    // and roster, and the slot keeps level 1's seed, so the sweep is unchanged; it simply
+    // stops depending on the first level's roster to prove anything.
+    const boards = [STANDARD_ARENA, ...ARENAS.slice(1)];
     let fires = 0;
     let mines = 0;
     let decisions = 0;
-    for (let a = 0; a < ARENAS.length; a++) {
-      let w = createWorldFor(ARENAS[a], 40 + a);
+    for (let a = 0; a < boards.length; a++) {
+      let w = createWorldFor(boards[a], 40 + a);
       const rnd = mulberry32(9000 + a);
       const state = createPlayerAiState(rnd);
       for (let tick = 0; tick < 400; tick++) {
