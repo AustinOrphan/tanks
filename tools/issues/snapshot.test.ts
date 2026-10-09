@@ -147,6 +147,42 @@ describe('snapshotIssue', () => {
   });
 });
 
+describe('snapshotIssue publishes only the fields it names (issue #1025)', () => {
+  // The snapshot is a published artifact, so its privacy rests on the field allow-list in
+  // `snapshotIssue`. The `issue()` fixture above carries no body, no comment count and empty
+  // assignee objects, so a `not.toContain('login')` over it could not fail. This input is the
+  // REST shape, with every one of those planted.
+  const SNAPSHOT_ISSUE_KEYS = [
+    'number', 'title', 'url', 'state', 'labels', 'milestone', 'assignees', 'parent', 'parentSource',
+    'children', 'childrenLoaded', 'subIssueProgress', 'blockedBy', 'blockedByLoaded',
+    'declaredBlockedBy', 'declaredBlocking',
+  ];
+  const PLANTED = ['PLANTED-BODY-TEXT', 'planted-author-login', 'planted-assignee-one', 'planted-assignee-two'];
+  const rest = {
+    ...issue(7, { title: 'a public title', labels: ['size:s', 'human-required'] }),
+    body: 'PLANTED-BODY-TEXT, which only the issue page may show',
+    comments: 12,
+    user: { login: 'planted-author-login', id: 1 },
+    assignees: [{ login: 'planted-assignee-one', id: 2 }, { login: 'planted-assignee-two', id: 3 }],
+  };
+
+  it('keeps exactly the SnapshotIssue fields, and none of the planted strings', () => {
+    const shaped = snapshotIssue(rest, issueLabelNames);
+    expect(Object.keys(shaped).sort()).toEqual([...SNAPSHOT_ISSUE_KEYS].sort());
+    const serialised = JSON.stringify(build([rest]));
+    for (const planted of PLANTED) expect(serialised, planted).not.toContain(planted);
+    expect(serialised).not.toContain('"comments"');
+  });
+
+  it('THE CONTROL: the allow-listed fields of the same record survive', () => {
+    // Without this, a shaper that dropped everything would pass the case above.
+    const shaped = snapshotIssue(rest, issueLabelNames);
+    expect(shaped.title).toBe('a public title');
+    expect(shaped.labels).toEqual(['human-required', 'size:s']);
+    expect(shaped.assignees).toBe(2);
+  });
+});
+
 describe('normaliseCycles', () => {
   it('rotates every cycle to its lowest member and orders the list', () => {
     expect(normaliseCycles([[12, 10, 11], [2, 1]])).toEqual([[1, 2], [10, 11, 12]]);
