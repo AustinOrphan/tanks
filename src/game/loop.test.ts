@@ -6,7 +6,7 @@ import { defaultSlots, type VersusSlotSetup } from './versus-setup';
 // around. frame.test.ts and driver.test.ts deliberately do NOT use jsdom.
 import { describe, it, expect } from 'vitest';
 import { resolveWorldRules } from '../sim/rules';
-import { DEV_FLAGS_OFF, FLAG_REGISTRY, type DevFlags } from './devflags';
+import { DEV_FLAGS_OFF, FLAG_REGISTRY, parseDevFlags, type DevFlags } from './devflags';
 import { NO_RENDER_OVERRIDES, QUALITY_PRESETS } from '../render/quality';
 import { ZERO_STATS } from './stats';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from '../presentation/customization';
@@ -47,6 +47,7 @@ import {
   resolveSession,
 } from './app-state';
 import { ENEMY_ROLE_CUES } from '../presentation/enemy-role';
+import { IDENTITY_MARKER_STYLES, shapeOutlineFor } from '../presentation/identity-marker';
 import type {
   CampaignRunSummary,
   GameplayOutcome,
@@ -55,6 +56,7 @@ import type {
   HudRelaunchTarget,
   HudSessionKind,
   HudSurface,
+  VersusStock,
 } from './hud';
 
 /**
@@ -5156,21 +5158,74 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 
   it('threads the identityMarker dev flag through to the renderer (issue #630)', () => {
-    // Two candidate second channels for player identity live in the tree at once, because
-    // the owner has not chosen between them and the evidence that decides it is a real
-    // match. Both arms are asserted rather than one: the wiring that would hand the
-    // renderer a hardcoded 'arcs' for either value passes a single-arm test.
-    for (const style of ['arcs', 'shape'] as const) {
+    // The flag is a kept rollback lever (#922), so every style stays selectable by name, here
+    // in a single-player session where nothing is drawn by default. Every style is asserted
+    // rather than one: the wiring that would hand the renderer a hardcoded 'arcs' for any
+    // value passes a single-arm test.
+    for (const style of IDENTITY_MARKER_STYLES) {
       const h = boot(makeDeps({ devFlags: { identityMarker: style } }));
       const options = h.rec.rendererArgs[0][4] as { identityMarker?: string | null };
       expect(options.identityMarker, style).toBe(style);
       h.handle.dispose();
     }
-    // ...and the default stays off, which is the whole posture of this change: neither
-    // candidate ships as the shipped rendering until it is played and chosen.
+    // ...and an unflagged single-player session still draws the solid ring: the shipped
+    // `shape` default is FFA-only.
     const off = boot();
     expect((off.rec.rendererArgs[0][4] as { identityMarker?: string | null }).identityMarker).toBeNull();
     off.handle.dispose();
+  });
+
+  describe('the shipped FFA identity marker reaches FFA sessions only (issue #922)', () => {
+    const markerOf = (h: ReturnType<typeof makeDeps>): string | null | undefined =>
+      (h.rec.rendererArgs[0][4] as { identityMarker?: string | null }).identityMarker;
+    const noop = (_config: VersusConfig): void => {};
+    const FFA: VersusConfig = { mode: 'ffa', players: 4, arenaId: 'arena-01', stock: 3, friendlyFire: false, slots: defaultSlots(4) };
+    const TEAMS: VersusConfig = { ...FFA, mode: 'teams' };
+
+    /** A session started from the Versus Setup pane: `applyVersusToDeps` stamps its mode. */
+    function bootFromPane(config: VersusConfig, devFlags: Partial<DevFlags> = {}): ReturnType<typeof boot> {
+      const base = makeDeps({ devFlags });
+      return boot({ ...base, deps: { ...base.deps, ...applyVersusToDeps(base.deps, { config }, noop) } });
+    }
+
+    it('draws `shape` in an FFA match started from the Versus Setup pane, with no ?dev', () => {
+      const h = bootFromPane(FFA);
+      expect(h.deps.devFlags.identityMarker, 'the premise: no flag reached the session').toBeNull();
+      expect(markerOf(h)).toBe('shape');
+      h.handle.dispose();
+    });
+
+    it('draws `shape` in an FFA session entered by ?dev=1&mode=ffa&players=4, with no identityMarker', () => {
+      // The developer entry path reaches the loop through `parseDevFlags`, not the pane.
+      const h = boot(makeDeps({ devFlags: parseDevFlags('?dev=1&mode=ffa&players=4') }));
+      expect(markerOf(h)).toBe('shape');
+      h.handle.dispose();
+    });
+
+    it('keeps the solid ring in teams, co-op campaign and single-player sessions', () => {
+      // The ruling covers FFA only. Each session is unflagged; a mode-blind default would fail
+      // the first two.
+      const teams = bootFromPane(TEAMS);
+      expect(markerOf(teams), 'teams from the pane').toBeNull();
+      teams.handle.dispose();
+      const coop = boot(makeDeps({ devFlags: { players: 2 } }));
+      expect(markerOf(coop), 'co-op campaign').toBeNull();
+      coop.handle.dispose();
+      const single = boot();
+      expect(markerOf(single), 'single-player').toBeNull();
+      single.handle.dispose();
+    });
+
+    it('draws the solid ring in an FFA session for the reversal value, and a named style in any mode', () => {
+      const solid = bootFromPane(FFA, { identityMarker: 'solid' });
+      expect(markerOf(solid), 'solid in FFA').toBeNull();
+      solid.handle.dispose();
+      for (const style of IDENTITY_MARKER_STYLES) {
+        const h = bootFromPane(TEAMS, { identityMarker: style });
+        expect(markerOf(h), `${style} in teams`).toBe(style);
+        h.handle.dispose();
+      }
+    });
   });
 
   it('threads the shellTrail dev flag through to the renderer (issue #688)', () => {
@@ -7661,6 +7716,40 @@ describe('createBrowserDeps', () => {
       const deps = withSearch('?dev=1&aimRay=1', () => createBrowserDeps());
       expect(deps.developerMode).toBe(true);
       expect(deps.devFlags.aimRay).toBe(true);
+    });
+
+    it('hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)', () => {
+      // The HUD half of #922, through the page's real HUD factory: an injected HUD in any
+      // other test is built with no `identityMarker` and draws no mark, so only this path
+      // shows what a production page puts in the stock strip. Each mark is read as the
+      // outline it draws: 'circle', or the polygon's corner count.
+      const strip = (search: string, stocks: VersusStock[]): Array<'circle' | number> => {
+        const deps = withSearch(search, () => createBrowserDeps());
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const hud = deps.createHud(root);
+        try {
+          hud.setState('playing');
+          hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks });
+          return Array.from(root.querySelectorAll('.hud-versus-stocks .hud-stock-marker')).map((mark) =>
+            mark.querySelector('circle') !== null
+              ? 'circle'
+              : mark.querySelector('polygon')!.getAttribute('points')!.trim().split(/\s+/).length / 2);
+        } finally {
+          hud.dispose();
+          root.remove();
+        }
+      };
+      const ffa: VersusStock[] = [0, 1, 2, 3].map((slot) => ({ slot, stock: 3 }));
+      const want = ffa.map(({ slot }) => {
+        const outline = shapeOutlineFor(slot);
+        return outline.kind === 'circle' ? 'circle' : outline.kind === 'polygon' ? outline.sides : outline.points * 2;
+      });
+      expect(strip('', ffa), 'a production page, no ?dev').toEqual(want);
+      expect(strip('?dev=1&identityMarker=solid', ffa), 'the reversal value').toEqual([]);
+      // Teams entries stay unmarked under the shipped default: the HUD's own per-entry gate,
+      // which is why the page HUD can resolve without a session mode.
+      expect(strip('', [{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]), 'teams').toEqual([]);
     });
 
     it('leaves the URL exactly as it found it', () => {

@@ -31,10 +31,10 @@ import {
   SHELL_TRAIL_STYLES, isShellTrailStyle, type ShellTrailStyle,
 } from '../presentation/shell-trail';
 import {
-  IDENTITY_MARKER_STYLES,
-  isIdentityMarkerStyle,
-  type IdentityMarkerStyle,
-} from '../presentation/identity-marker';
+  IDENTITY_MARKER_FLAG_VALUES,
+  isIdentityMarkerFlag,
+  type IdentityMarkerFlag,
+} from './identity-marker-flag';
 import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
 import { BLOCKED_FIRE_CUES, isBlockedFireCue, type BlockedFireCue } from '../presentation/blocked-fire';
 import { MENU_TRANSITIONS, isMenuTransition, type MenuTransition } from './menu-transition';
@@ -407,16 +407,15 @@ export interface DevFlags {
    */
   mineWarn: MineWarnStyle | null;
   /**
-   * Which experimental SECOND IDENTITY CHANNEL to draw on the identity ring (issue #630).
-   * `null` -- absent or unrecognised -- keeps today's solid ring, where WHO a tank belongs
-   * to is carried by hue and nothing else.
-   *
-   * Two candidates are in the tree because the owner has not chosen between them and the
-   * evidence that settles it is a real match, not a mockup: `arcs` counts, `shape`
-   * recognises. See render/identity-marker.ts for both, and why the marker is held
-   * world-fixed rather than spinning with the hull.
+   * Which SECOND IDENTITY CHANNEL to draw on the identity ring and the stock strip (issues
+   * #630, #922). A KEPT ROLLBACK LEVER, not an open question: `shape` won on #234 and ships.
+   * The ruled arm is `null` -- absent or unrecognised -- in an FFA session, which draws
+   * `shape`; in teams, co-op and single-player `null` keeps the solid hue-only ring. `solid`
+   * restores the pre-ruling ring and strip, and `arcs`, `shape` and `roof` select themselves
+   * in any session. See `identity-marker-flag.ts` for the resolution and why `solid` is not
+   * a drawable style.
    */
-  identityMarker: IdentityMarkerStyle | null;
+  identityMarker: IdentityMarkerFlag | null;
   /**
    * Which experimental non-colour ROLE cue to draw on every tank (issues #357, #773). `null`
    * -- absent or unrecognised -- keeps the shipped board, where what an enemy does is carried
@@ -803,11 +802,11 @@ function asHudFont(params: URLSearchParams): HudFont | null {
   return isHudFont(raw) ? raw : null;
 }
 
-/** One of the named identity-marker candidates, or null when absent or unrecognised. */
-function asIdentityMarker(params: URLSearchParams): IdentityMarkerStyle | null {
+/** A named identity-marker style or the reversal value, or null when absent or unrecognised. */
+function asIdentityMarker(params: URLSearchParams): IdentityMarkerFlag | null {
   const raw = params.get('identityMarker');
   if (raw === null) return null;
-  return isIdentityMarkerStyle(raw) ? raw : null;
+  return isIdentityMarkerFlag(raw) ? raw : null;
 }
 
 /** One of the named role cues, or null when absent or unrecognised. */
@@ -1479,16 +1478,21 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
   },
   identityMarker: {
     kind: 'valued',
-    values: [...IDENTITY_MARKER_STYLES],
+    values: [...IDENTITY_MARKER_FLAG_VALUES],
     description:
-      'Adds a second, non-colour channel to player identity (issue #630). On the ground ' +
-      "ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own " +
-      "outline. On the turret crown instead: 'roof' leaves the ring exactly as shipped " +
-      'and counts the slot in blades, trading the ring\'s area for a surface nothing can ' +
-      'occlude. In an FFA match the same mark is drawn beside that player in the HUD stock ' +
-      'strip (issue #778), so the ground and the readout can be judged as a pair; teams ' +
-      'entries are unchanged, since they already carry the A/B/C letter. The shipped ' +
-      'default carries identity in hue alone.',
+      'Selects the second, non-colour channel of player identity (issues #630, #922). On the ' +
+      "ground ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own " +
+      "outline. On the turret crown instead: 'roof' leaves the ring solid and counts the " +
+      'slot in blades. In an FFA match the same mark is drawn beside that player in the HUD ' +
+      'stock strip (issue #778); teams entries are unchanged, since they already carry the ' +
+      "A/B/C letter. 'shape' ships as the FFA default; 'solid' restores the pre-ruling " +
+      'solid ring and unmarked strip.',
+    notes: [
+      'A kept rollback lever: the comparison is settled (#234), and the flag stays so the ' +
+        'default can be reversed and a regression report checked.',
+      "Absent is the ruled arm: 'shape' in an FFA session, and the solid ring in teams, " +
+        'co-op and single-player. A named style applies in any session.',
+    ],
   },
   enemyRole: {
     kind: 'valued',

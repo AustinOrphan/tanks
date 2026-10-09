@@ -1,0 +1,19 @@
+{
+  "id": "identity-marker-parse-drops-the-reversal-value",
+  "file": "src/game/identity-marker-flag.ts",
+  "find": "  return raw === IDENTITY_MARKER_REVERSAL || isIdentityMarkerStyle(raw);",
+  "replace": "  return isIdentityMarkerStyle(raw);",
+  "expect": "killed",
+  "tests": [
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/devflags.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Rejects `?dev=1&identityMarker=solid` to null at the parse (issue #922). Null is the ruled arm, so the reversal value would select the shipped `shape` marker it exists to undo, and the developer pane would report it as a rejected value. The registry would still list `solid`, so nothing in the flag's own documentation would show the break. Killed by the vocabulary case, the parse case for the reversal value, and the page-HUD case that loads `?dev=1&identityMarker=solid`.",
+  "killedBy": [
+    "the identity-marker flag vocabulary (issue #922) accepts every flag value and rejects anything else -- population: 4 values, 7 rejects",
+    "parseDevFlags: identityMarker (issues #630, #922 -- the kept identity-marker lever) accepts the reversal value, so the pre-ruling ring is reachable and not reported rejected",
+    "parseDevFlags: identityMarker (issues #630, #922 -- the kept identity-marker lever) does not disturb the other flags",
+    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)"
+  ]
+}

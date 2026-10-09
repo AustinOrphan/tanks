@@ -1,0 +1,19 @@
+{
+  "id": "identity-marker-default-reaches-every-mode",
+  "file": "src/game/identity-marker-flag.ts",
+  "find": "  return mode === 'ffa' ? SHIPPED_FFA_IDENTITY_MARKER : null;",
+  "replace": "  return SHIPPED_FFA_IDENTITY_MARKER;",
+  "expect": "killed",
+  "tests": [
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Makes the shipped `shape` marker mode-blind (issue #922): teams tanks get slot shapes in team colours, which is the confusion #923 describes, and co-op campaign rings change although the ruling on #234 covered FFA only. The single-player ring is still gated by `identityApplies` (two or more player tanks) in entities.ts, so only the renderer OPTION shows it there. Killed by the resolver's non-FFA case and by the loop case that boots teams from the pane, co-op and single-player.",
+  "killedBy": [
+    "sessionIdentityMarker: what a session renderer draws (issue #922) keeps the solid ring in every unflagged session that is not FFA -- population: 3 modes",
+    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) keeps the solid ring in teams, co-op campaign and single-player sessions",
+    "startGameWith: dev flags stay off by default threads the identityMarker dev flag through to the renderer (issue #630)",
+    "startGameWith: dev flags stay off by default asks the renderer for every dev overlay OFF by default",
+    "startGameWith: dev flags stay off by default asks for each overlay only when its own flag is on"
+  ]
+}

@@ -3,6 +3,8 @@ import { TANK_KINDS } from '../sim/config';
 import { BLOCKED_FIRE_CUES } from '../presentation/blocked-fire';
 import { HUD_FONTS } from '../presentation/hud-font';
 import { ENEMY_ROLE_CUES } from '../presentation/enemy-role';
+import { IDENTITY_MARKER_STYLES } from '../presentation/identity-marker';
+import { IDENTITY_MARKER_REVERSAL } from './identity-marker-flag';
 import {
   parseDevFlags,
   parseDeveloperMode,
@@ -660,6 +662,46 @@ describe('parseDevFlags: enemyRole (issues #357, #773 -- the non-colour role cue
 
   it('does not disturb the boolean flags', () => {
     expect(parseDevFlags('?dev=1&enemyRole=both')).toEqual({ ...DEV_FLAGS_OFF, enemyRole: 'both' });
+  });
+});
+
+describe('parseDevFlags: identityMarker (issues #630, #922 -- the kept identity-marker lever)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    // Null is the RULED arm (`shape` in an FFA session), so a shut gate must not let a shared
+    // link take a player's marker off: `solid` is asserted as well as a style.
+    expect(parseDevFlags('?identityMarker=shape').identityMarker).toBeNull();
+    expect(parseDevFlags('?identityMarker=solid').identityMarker).toBeNull();
+  });
+
+  it('is null when absent -- the ruled arm, resolved per session in identity-marker-flag.ts', () => {
+    expect(parseDevFlags('?dev=1').identityMarker).toBeNull();
+  });
+
+  it('accepts each drawable style -- population: every value in IDENTITY_MARKER_STYLES', () => {
+    for (const v of IDENTITY_MARKER_STYLES) {
+      expect(parseDevFlags(`?dev=1&identityMarker=${v}`).identityMarker).toBe(v);
+    }
+  });
+
+  it('accepts the reversal value, so the pre-ruling ring is reachable and not reported rejected', () => {
+    // A parse that dropped `solid` to null would hand the session the shipped `shape` marker:
+    // the one way back would select the thing it exists to undo.
+    expect(parseDevFlags(`?dev=1&identityMarker=${IDENTITY_MARKER_REVERSAL}`).identityMarker)
+      .toBe(IDENTITY_MARKER_REVERSAL);
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 7 forms below', () => {
+    // `none`, `off` and `ring` are the words someone reaching for the reversal would type;
+    // accepting any of them would put a value in the field that no resolver branch names.
+    for (const v of ['', 'none', 'off', 'ring', 'Solid', 'SHAPE', 'circle']) {
+      expect(parseDevFlags(`?dev=1&identityMarker=${encodeURIComponent(v)}`).identityMarker, v)
+        .toBeNull();
+    }
+  });
+
+  it('does not disturb the other flags', () => {
+    expect(parseDevFlags('?dev=1&identityMarker=solid'))
+      .toEqual({ ...DEV_FLAGS_OFF, identityMarker: 'solid' });
   });
 });
 

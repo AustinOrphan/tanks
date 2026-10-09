@@ -25,7 +25,7 @@ import {
 } from './flow.mjs';
 import { FLAG_REGISTRY } from '../../src/game/devflags';
 import { ENEMY_ROLE_CUES } from '../../src/presentation/enemy-role';
-import { IDENTITY_MARKER_STYLES } from '../../src/presentation/identity-marker';
+import { IDENTITY_MARKER_FLAG_VALUES } from '../../src/game/identity-marker-flag';
 import { WRECK_EFFECTS } from '../../src/presentation/wreck';
 import { ACHIEVEMENTS } from '../../src/game/achievements';
 
@@ -83,7 +83,7 @@ describe('the flow catalogue (issue #815)', () => {
     // flow module cannot, which is what makes the two-way pin possible.
     const vocabularies: Record<string, readonly string[]> = {
       enemyRole: ENEMY_ROLE_CUES,
-      identityMarker: IDENTITY_MARKER_STYLES,
+      identityMarker: IDENTITY_MARKER_FLAG_VALUES,
       wreck: WRECK_EFFECTS,
     };
     for (const id of FLOW_FLAG_IDS) {

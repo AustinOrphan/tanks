@@ -15,8 +15,9 @@ import { IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R } from './entities';
 import { TANK_RADIUS } from '../sim/constants';
 
 // ---------------------------------------------------------------------------
-// Issue #630. Two candidate second channels for player identity, both selectable and
-// neither the default, so the owner can choose from real play rather than a mockup.
+// Issue #630. Second channels for player identity, all selectable by name. `shape` won on
+// #234 and ships in FFA (issue #922), resolved by the game layer before this module sees a
+// style; here `null` is still "no marker", the solid ring every other mode draws.
 //
 // NOTHING IN THIS SUITE ASSERTED RING GEOMETRY BEFORE. The identity ring was well guarded
 // on COLOUR -- a pairwise distinctness sweep over all four hues plus the roster -- and not
