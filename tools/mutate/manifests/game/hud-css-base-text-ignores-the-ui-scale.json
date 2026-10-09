@@ -9,6 +9,7 @@
   ],
   "why": "The base text loses its multiplier: `.hud` sizes at the page's 1rem whatever the player's UI scale, so every `em` under it -- pane titles at the UA's 2em, the disabled-reason `.ui-hint` at 0.85em, the Records tables -- stays put while the controls around it grow. Measured before issue #1031 with exactly this rule: at 150%, 3 of 40 text elements on Records and 16 of 19 on Settings scaled. jsdom resolves no `var()`, so only the stylesheet guard sees it.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "hud.css: the UI scale reaches all text (issue #1031) holds for the real stylesheet, over a stated population",
+    "hud.css: the UI scale reaches all text (issue #1031) reports it when .hud stops scaling the base text"
   ]
 }

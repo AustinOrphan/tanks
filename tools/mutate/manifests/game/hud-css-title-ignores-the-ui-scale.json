@@ -9,6 +9,7 @@
   ],
   "why": "The main menu's title, one of the five player-facing display literals issue #1031 wrapped, goes back to a bare rem: at 150% every other line of the menu grows and the title alone does not. The guard names the selector; the screen gate cannot, because no state photographs the main menu at a raised scale.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "hud.css: the UI scale reaches all text (issue #1031) holds for the real stylesheet, over a stated population",
+    "hud.css: the UI scale reaches all text (issue #1031) reports it when a display literal loses its multiplier"
   ]
 }

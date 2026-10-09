@@ -9,6 +9,6 @@
   ],
   "why": "The scaled Settings capture's title reads the default 32px again -- exactly what the committed pair said before issue #1031, when the title (the UA's 2em of the unscaled base) did not move and a 'differs from screen.settings' check still passed on its y alone. The ratio test holds every selector the scaled state measures to 1.5x the default state's font-size, so it names this one.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "the UI-scale capture shows the scale on every selector (issue #1031) holds on the committed pair, over the scaled state's own selector list"
   ]
 }
