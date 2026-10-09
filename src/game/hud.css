@@ -4774,7 +4774,11 @@
 .hud-versus-actions {
   position: sticky;
   bottom: 0;
-  z-index: 1;
+  /* 3, above the selected-state check badge (`.ui-selectable--on::after` is z-index 2, its ring
+   * 1): the badges share this pane's stacking context, so at 1 a selected Stock or role button
+   * scrolling under the bar painted its check over Start (issue #1032 measured it at 1280x800,
+   * where the narrower pane puts the slot cards under the bar at rest). */
+  z-index: 3;
   /* The pane centres its children; without this the bar shrinks to its buttons and the
      backdrop stops short of the edges, leaving scrolled content visible either side. */
   align-self: stretch;
