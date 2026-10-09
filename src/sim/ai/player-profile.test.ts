@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ARENAS, createWorldFor } from '../arena';
+import { STANDARD_ARENA } from '../config/arena-fixtures';
 import { step, createWorld } from '../world';
 import type { Tank, Vec2 } from '../types';
 import { fromAngle, vnorm, vsub, vdist } from '../types';
@@ -609,7 +610,9 @@ describe('the scripted player cannot perturb what it measures', () => {
     // interference is structurally impossible -- but a true property defended by an
     // invalid witness is exactly what this repo's bar exists to catch. A future edit
     // that made this function mutate `world` would have passed every test in the suite.
-    const world = createWorldFor(ARENAS[0], 7);
+    // The standard test board (issue #1009): every branch below needs enemies of more than one
+    // kind to react to, and none of it is about campaign level 1.
+    const world = createWorldFor(STANDARD_ARENA, 7);
     const playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     expect(playerId, 'no player to drive').toBeDefined();
     const rnd = mulberry32(1234);
@@ -666,7 +669,7 @@ describe('the scripted player cannot perturb what it measures', () => {
   it('is a pure function of its inputs: same seed, same decision', () => {
     // The other half of determinism. `state` is caller-owned and deliberately mutable,
     // so two runs need their own.
-    const world = createWorldFor(ARENAS[0], 11);
+    const world = createWorldFor(STANDARD_ARENA, 11);
     const playerId = world.tanks.find((t) => t.kind === 'player')?.id as number;
     const a = decidePlayerInput(world, playerId, mulberry32(99), createPlayerAiState(mulberry32(99)));
     const b = decidePlayerInput(world, playerId, mulberry32(99), createPlayerAiState(mulberry32(99)));
