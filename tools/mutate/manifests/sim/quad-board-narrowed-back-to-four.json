@@ -9,6 +9,10 @@
   ],
   "why": "Undoes issue #1035 for Quarters: vs-quad-01 goes back to four players only, so the 3-FFA and 3-Teams options each offer one board that is not a campaign arena (vs-tri-01) and fall under the floor the ruling on #355 sets. Issue #1035 asks for this entry specifically: it shows the floor test reads the offer, since no other three-player board exists to meet it. The parity pin and the withheld cross-check in the same file catch it too. Anchored on the entry's own preview token, because the five campaign entries share vs-quad-01's [2, 3, 4] players block.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "versusMapChoices parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its declared counts",
+    "versusMapChoices cross-check: everything offered is measured suitable, and what is withheld is named",
+    "the versus board floor (issue #355): boards that are not campaign arenas, per option offers each covered option at least two boards that are not campaign arenas",
+    "pickVersusArena distributes: two measured seeds pick different arenas -- the negative control for a constant/broken resolver",
+    "resolveVersusConfig (issue #278: the Start-boundary resolver) 'random' resolves to pickVersusArena's own pick for that seed, and honors its OWN seed argument"
   ]
 }
