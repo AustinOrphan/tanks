@@ -6,13 +6,14 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { framedBounds, fitCameraToArea, framedAreaFits, FRAME_MARGIN, VIEW_DIR } from './framing';
-import { CURRENT_ARENA, ARENAS, arenaBounds, loadArena } from '../sim/arena';
+import { ARENAS, arenaBounds, loadArena } from '../sim/arena';
+import { STANDARD_ARENA } from '../sim/config/arena-fixtures';
 // The SHIPPED field of view, not a copy: a test that hardcoded 30 would keep passing
 // after someone widened the real camera back out, which is the regression this guards.
 import { BASE_FOV } from './scene';
 
-const { width: W, height: H } = arenaBounds(CURRENT_ARENA);
-const BOUNDARY = CURRENT_ARENA.cellSize;
+const { width: W, height: H } = arenaBounds(STANDARD_ARENA);
+const BOUNDARY = STANDARD_ARENA.cellSize;
 const TARGET = new THREE.Vector3(W / 2, 0, H / 2);
 
 // Portrait phone through to ultrawide. A fixed camera cannot scroll, so anything
@@ -30,7 +31,8 @@ const ASPECTS = [0.42, 0.46, 0.75, 1.0, 1.33, 1.6, 1.78, 2.33, 2.39, 3.0];
 /**
  * Every (arena, aspect) pair -- population: 5 shipped arenas x 10 aspects = 50.
  *
- * The sweep used to run against `CURRENT_ARENA` alone, which is one BOARD SHAPE: three
+ * The sweep used to run against one board alone (then `STANDARD_ARENA`, now the standard test
+ * board `STANDARD_ARENA`), which is one BOARD SHAPE: three
  * of the five shipped arenas are 33x27, and arena-04 and arena-05 (both 45x33) are the
  * only ones that differ. A per-arena refit is exactly what the fit exists to do, so
  * testing it at one shape tested half the function.
@@ -56,7 +58,7 @@ function fitted(
 }
 
 function cameraAt(aspect: number): THREE.PerspectiveCamera {
-  return fitted(CURRENT_ARENA, aspect).cam;
+  return fitted(STANDARD_ARENA, aspect).cam;
 }
 
 describe('framedBounds', () => {
@@ -64,7 +66,7 @@ describe('framedBounds', () => {
     // The ring is one cell thick and sits OUTSIDE play, so the framed area is two
     // rings wider and taller than the board. Larger than this and a strip of ground
     // shows beyond the walls; smaller and the walls hang over the clear colour.
-    // BOUNDARY (= CURRENT_ARENA.cellSize) is now 2/3, was 2, so the ring adds
+    // BOUNDARY (= STANDARD_ARENA.cellSize) is now 2/3, was 2, so the ring adds
     // 2 * 2/3 = 4/3 per axis rather than the old flat 4. Written as the literal
     // fraction `4/3`, not `BOUNDARY * 2`, so this still fails if framedBounds'
     // multiplier or sign drifts -- referencing BOUNDARY here would just restate
@@ -77,7 +79,7 @@ describe('framedBounds', () => {
     // builds. Restating `W + BOUNDARY * 2` here -- as this test used to -- only
     // re-derives framedBounds' own body, so it could not fail; it left the ring
     // thickness free to drift away from what the camera frames.
-    const { walls } = loadArena(CURRENT_ARENA);
+    const { walls } = loadArena(STANDARD_ARENA);
     const minX = Math.min(...walls.map((w) => w.aabb.minX));
     const maxX = Math.max(...walls.map((w) => w.aabb.maxX));
     const minY = Math.min(...walls.map((w) => w.aabb.minY));

@@ -15,7 +15,8 @@ import type { SessionDiagnostics } from './dev-diagnostics';
 import type { DevActionPort } from './dev-actions';
 import type { DevExportPort } from './dev-exports';
 import { TANK_KINDS, configFor } from '../sim/config';
-import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
+import { arenaBounds } from '../sim/arena';
+import { STANDARD_ARENA, createArenaWorld } from '../sim/config/arena-fixtures';
 import { roundPhase } from '../sim/round';
 import {
   type TouchIndicator,
@@ -2290,11 +2291,11 @@ describe('isMuteHotkey', () => {
 describe('startGameWith: construction', () => {
   it('sizes the renderer to the arena and its boundary ring', () => {
     const h = boot();
-    const { width, height } = arenaBounds(CURRENT_ARENA);
+    const { width, height } = arenaBounds(STANDARD_ARENA);
     const [, w, ht, boundary] = h.rec.rendererArgs[0];
     expect(w).toBe(width);
     expect(ht).toBe(height);
-    // The FAKE's cellSize, which is not CURRENT_ARENA.cellSize -- see the bounds fake.
+    // The FAKE's cellSize, which is not STANDARD_ARENA.cellSize -- see the bounds fake.
     expect(boundary).toBe(1.5);
     h.handle.dispose();
   });

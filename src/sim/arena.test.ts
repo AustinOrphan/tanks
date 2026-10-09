@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createArenaWorld, createWorldFor } from './arena';
+import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createWorldFor } from './arena';
+import { createArenaWorld } from './config/arena-fixtures';
 // The module's own text, for the signature assertion in `createWorldFor's init object`
 // below: a parameter list is a property of the source, and `Function.length` cannot see a
 // positional appended after a defaulted one.
