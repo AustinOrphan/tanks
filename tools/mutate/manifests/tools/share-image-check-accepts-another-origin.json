@@ -1,0 +1,14 @@
+{
+  "id": "share-image-check-accepts-another-origin",
+  "file": "tools/portability/check.mjs",
+  "find": "  if (!url.startsWith(canonical)) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/portability/check.test.ts"
+  ],
+  "why": "The canonical-prefix test, gone: an og:image on another origin, or on this origin without the /tanks/ subpath, is accepted, and a shared link fetches its card from a location this deploy does not serve. The page itself is unaffected, which is why issue #973 put the check ahead of the Pages deploy. With the test skipped the path is sliced off at the canonical length regardless, so the in-listing test still fires, but with the wrong message -- the case pins the message, which is what makes it see this.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}
