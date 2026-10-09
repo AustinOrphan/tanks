@@ -14,7 +14,8 @@ countdown has cleared. All four use the same seed and level, so the board and sp
 | `ffa-solid.png` | the same, with the reversal value | the same `&identityMarker=solid` |
 | `teams-default.png` | teams, 4 players, no `identityMarker` (control) | the same with `mode=teams` |
 | `coop-default.png` | co-op campaign, 2 players, no `identityMarker` (control) | `?dev=1&replay=1&level=1&seed=20260918&players=2&bots=2&autoplay=1` (`coop-round` flow) |
-| `*-strip.png` | the stock strip of the three versus frames, cropped and scaled 3x (nearest neighbour) | |
+| `ffa-360.png` | `ffa-default` at 360x740, 2x device pixels: the marked strip at the narrowest width the HUD supports | the `ffa-default` URL |
+| `*-strip.png` | the stock strip of the three 1280x800 versus frames, cropped and scaled 3x (nearest neighbour) | |
 
 ## What each shows
 
@@ -25,6 +26,7 @@ countdown has cleared. All four use the same seed and level, so the board and sp
 - `teams-default`: solid rings in team colours and lettered strip entries with no mark,
   unchanged by this change.
 - `coop-default`: solid rings, unchanged by this change.
+- `ffa-360`: the four marks add about 60px to the strip, which still ends near x=280 of 360.
 
 ## Commands
 
@@ -35,6 +37,7 @@ node tools/screens/record.mjs --flow versus-round --level 1 --seed 20260918 --dr
   --timeout 180000 --out <dir> --report <dir>/report.json --mode ffa --players 4 --bots 4 \
   [--flag identityMarker=solid]
 # teams: --mode teams; co-op: --flow coop-round --players 2 --bots 2 (no --mode)
+# phone: --w 360 --h 740 --dpr 2
 ```
 
 ## Limitations
