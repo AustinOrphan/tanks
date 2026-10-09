@@ -1,12 +1,17 @@
 {
   "id": "identity-marker-flag-ignored-by-the-renderer",
   "file": "src/game/loop.ts",
-  "find": "    identityMarker: deps.devFlags.identityMarker,",
+  "find": "    identityMarker: sessionIdentityMarker(deps.devFlags.identityMarker, deps.devFlags.mode),",
   "replace": "    identityMarker: null,",
   "expect": "killed",
-  "expectFailures": 1,
   "tests": [
     "src/game/loop.test.ts"
   ],
-  "why": "Severs the dev flag from the renderer, so `?dev=1&identityMarker=shape` parses, validates, reports as ACCEPTED in the developer pane, and changes nothing on screen. That is the worst shape of failure for a feature whose entire purpose is to be turned on and compared -- the owner would conclude the candidate looks identical to the default rather than that it never ran. Invisible to every test of the marker geometry itself, which never goes through loop.ts. Killed by the threads-the-identityMarker-dev-flag case, which asserts BOTH arms: a wiring that hardcoded one style would pass a single-arm test."
+  "why": "Severs the session's renderer from the identity marker, so every arena ring is the solid hue-only ring: an unflagged FFA match loses the `shape` marker that ships as its default (issue #922), and `?dev=1&identityMarker=shape` still parses, validates and reports as accepted in the developer pane while changing nothing on screen. Invisible to every test of the marker geometry and of the resolver, neither of which goes through loop.ts. Killed by the threads-the-identityMarker-dev-flag case, which asserts every style rather than one, and by the #922 cases that boot an FFA session from the setup pane and from the URL.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default threads the identityMarker dev flag through to the renderer (issue #630)",
+    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws `shape` in an FFA match started from the Versus Setup pane, with no ?dev",
+    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws `shape` in an FFA session entered by ?dev=1&mode=ffa&players=4, with no identityMarker",
+    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws the solid ring in an FFA session for the reversal value, and a named style in any mode"
+  ]
 }

@@ -1,0 +1,18 @@
+{
+  "id": "identity-marker-reversal-value-passes-through",
+  "file": "src/game/identity-marker-flag.ts",
+  "find": "  if (flag === IDENTITY_MARKER_REVERSAL) return null;",
+  "replace": "  if (flag === IDENTITY_MARKER_REVERSAL) return flag;",
+  "expect": "killed",
+  "tests": [
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Lets the reversal value `solid` through as if it were a style (issue #922). The renderer happens to draw a solid ring for it, because `ringMarkerFor` maps any unknown style to none, but the HUD's `identityMarkerIcon` draws the `shape` outline for any style that is neither `arcs` nor `roof`, so the one way back to the pre-ruling strip draws the shipped mark. Killed by the resolver's reversal cases, the loop case that boots an FFA session with `solid`, and the page-HUD case.",
+  "killedBy": [
+    "sessionIdentityMarker: what a session renderer draws (issue #922) draws no marker for the reversal value, in every mode -- population: 4 modes",
+    "stripIdentityMarker: what the page HUD draws on FFA entries (issue #922) draws the shipped mark unflagged, none for the reversal value, and a named style as named",
+    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws the solid ring in an FFA session for the reversal value, and a named style in any mode",
+    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)"
+  ]
+}

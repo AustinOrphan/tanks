@@ -1478,8 +1478,8 @@ const ACHIEVEMENT_LOCK_ICON =
  * WHY IT READS THE SHARED TABLE. `shapeOutlineFor`, `markerCount` and `MARKER_ARC_GAP` are
  * the same values `render/identity-marker.ts` extrudes into the arena ring. Two copies is
  * the failure this pairing exists to rule out: a strip still claiming a square for slot 3
- * after the ring moved on would look right and be wrong, and #234 would be ruling on a
- * pairing that no longer existed.
+ * after the ring moved on would look right and be wrong, and the pairing #234 ruled on
+ * would no longer exist.
  *
  * SIZES ARE THIS FILE'S OWN, and deliberately not shared. The arena's radii are tuned
  * against a constraint that does not exist here -- every outline's edge has to clear
@@ -1699,8 +1699,11 @@ export interface HudOptions {
   readonly stockCue?: StockCue | null;
   /**
    * Issue #778's identity marker in the stock strip: the same mark that slot wears in the
-   * arena, so the owner can rule on the pairing #234 asked for. `null` (and absent, which is
-   * every injected HUD) is the shipped strip, which carries identity in hue alone.
+   * arena, which #234 ruled on as a pair. `null` (and absent, which is every injected HUD)
+   * draws no mark, the strip with identity in hue alone. The page's HUD is handed the
+   * shipped `shape` here unless the flag says otherwise (issue #922): `loop.ts` resolves the
+   * flag before this option sees it, so the default lives in `identity-marker-flag.ts`, not
+   * in this file.
    *
    * FFA ONLY, which is the owner's direction on #234. A teams entry already carries a second
    * non-colour channel -- the A/B/C letter beside the player number -- so a mark there would
@@ -3398,7 +3401,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // gaining its third entry: a 2v1v1 rendered team 2's stock white, which is also the
       // unstyled-slot placeholder.
       // Issue #778: the mark this slot wears in the arena, ahead of its label, so the
-      // strip and the ground ring can be ruled on as a pair (#234). AFTER the two branches
+      // strip and the ground ring read as one channel (#234's pair). AFTER the two branches
       // above, because `textContent =` would drop a child written before it.
       //
       // FFA ONLY, by `entry.team === undefined` -- the same test the label and the colour
@@ -3422,9 +3425,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /** Issue #230's stock-loss cue arm, or `null` for the shipped strip -- see presentation/stock-cue.ts. */
   const stockCue: StockCue | null = opts.stockCue ?? null;
   /**
-   * Issue #778's identity mark in the stock strip, or `null` for the shipped strip, which
-   * carries identity in hue alone. See presentation/identity-marker.ts for the shared table
-   * this and the arena ring both read.
+   * Issue #778's identity mark in the stock strip, or `null` for none -- the strip with
+   * identity in hue alone, which is what every injected HUD draws. The page's HUD is handed
+   * the shipped `shape` (issue #922; see `identity-marker-flag.ts`). See
+   * presentation/identity-marker.ts for the shared table this and the arena ring both read.
    */
   const identityMarker: IdentityMarkerStyle | null = opts.identityMarker ?? null;
   /**

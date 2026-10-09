@@ -1,0 +1,14 @@
+{
+  "id": "page-hud-identity-mark-passes-the-raw-flag",
+  "file": "src/game/loop.ts",
+  "find": "        identityMarker: stripIdentityMarker(devFlags.identityMarker),",
+  "replace": "        identityMarker: devFlags.identityMarker,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Hands the page's HUD the raw flag instead of the resolved style, which is the pre-#922 wiring: the arena ring of an unflagged FFA match draws `shape` while the stock strip beside it draws no mark, splitting the pair #234 ruled on, and `solid` reaches the HUD as a style its icon function draws as a `shape` outline. Every injected HUD in the suite is built without this factory, so only the case that builds the page HUD through `createBrowserDeps` can see it.",
+  "killedBy": [
+    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)"
+  ]
+}

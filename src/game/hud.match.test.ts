@@ -928,8 +928,9 @@ describe('standard VS ordnance limits (issue #268)', () => {
  * THE IDENTITY MARK IN THE STOCK STRIP (issue #778).
  *
  * The strip tells players apart by hue alone, which is the largest colour-only gap left in
- * #630 and #327. This arm draws the same mark that slot wears on the ground, so #234 can be
- * ruled on the PAIR rather than on either half.
+ * #630 and #327. This option draws the same mark that slot wears on the ground, the PAIR #234
+ * ruled on; the page's HUD is handed the shipped `shape` (issue #922), and these cases set
+ * the option directly because an injected HUD defaults to no mark.
  *
  * This is the strip's side of the shared table; `render/identity-marker.test.ts` holds the
  * ring's. Both derive their expectations from `shapeOutlineFor`/`markerCount` rather than

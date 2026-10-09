@@ -458,8 +458,10 @@ export function createEntityViews(
    */
   mineWarnStyle: MineWarnStyle | null = null,
   /**
-   * Experimental second identity channel (the `identityMarker` dev flag, issue #630);
-   * null/absent = today's solid hue-only ring. See identity-marker.ts.
+   * Second identity channel (issues #630, #922): the style to draw, already resolved from
+   * the `identityMarker` flag and the session's mode by `game/identity-marker-flag.ts`, so
+   * an FFA session arrives with the shipped `shape`. null/absent = the solid hue-only ring.
+   * See identity-marker.ts.
    */
   identityMarker: IdentityMarkerStyle | null = null,
   /**
