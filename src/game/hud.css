@@ -3722,19 +3722,25 @@
  * background, so forced colours repaints it instead.
  *
  * The leading identity marker is suppressed by hud.ts while this arm runs, so `em` sizing
- * here is measured against an entry that has one fewer glyph than the `pips` arm does. */
+ * here is measured against an entry that has one fewer glyph than the `pips` arm does.
+ *
+ * `--hud-mark` and `--hud-mark-gap` default to the full size and are overridden per row on a
+ * narrow viewport (issue #1021), where four players at four stocks overflowed a 390px phone.
+ * The sizes come from the measured table in `presentation/stock-cue.ts`; where no row of 8px
+ * marks fits, the builder draws one mark and the count instead, because CSS cannot swap the
+ * content. */
 .hud-stock-marks {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--hud-mark-gap, 2px);
   vertical-align: middle;
 }
 
 .hud-stock-mark {
   display: block;
   flex: none;
-  width: 0.62em;
-  height: 0.62em;
+  width: var(--hud-mark, 0.62em);
+  height: var(--hud-mark, 0.62em);
 }
 
 /* The mark that just emptied swells and settles. Scale only -- it must not move off its own
@@ -3862,9 +3868,10 @@
   border-width: 2px;
 }
 
-/* The count beside a single pip, where a full row will not fit (issue #835). The pip keeps the
- * shape channel and the cue's target; this states the number exactly. */
-.hud-stock-pip-count {
+/* The count beside a single pip or mark, where a full row will not fit (issues #835, #1021).
+ * The glyph keeps the shape channel and the cue's target; this states the number exactly. */
+.hud-stock-pip-count,
+.hud-stock-mark-count {
   margin-left: 4px;
 }
 

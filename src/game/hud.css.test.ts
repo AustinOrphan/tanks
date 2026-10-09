@@ -3265,6 +3265,17 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     expect(ruleBody('.hud-stock-pip.hud-stock-cue::after')).toMatch(/animation-delay:\s*inherit/);
   });
 
+  it('sizes the marks from the row\'s custom properties, defaulting to the full size (issue #1021)', () => {
+    // hud.ts sets `--hud-mark` and `--hud-mark-gap` on a narrow viewport's row; a rule that read
+    // a literal would ignore them and the four-by-four strip would overflow a phone again, with
+    // every jsdom test still green, since jsdom lays nothing out. The defaults are the arm's
+    // full size, so the desktop strip draws exactly as it did.
+    const mark = ruleBody('.hud-stock-mark');
+    expect(mark).toMatch(/\bwidth:\s*var\(--hud-mark,\s*0\.62em\)/);
+    expect(mark).toMatch(/\bheight:\s*var\(--hud-mark,\s*0\.62em\)/);
+    expect(ruleBody('.hud-stock-marks')).toMatch(/\bgap:\s*var\(--hud-mark-gap,\s*2px\)/);
+  });
+
   it('asks for the BUNDLED faces first, in both token stacks (issue #326)', () => {
     // The whole reason these are bundled: `system-ui` and `ui-monospace` resolve to a
     // different face per platform, and text METRICS move with the face. The screen gate's

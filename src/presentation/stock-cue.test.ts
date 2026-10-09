@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { narrowPipLayout, NARROW_STRIP_QUERY, STOCK_CUES } from './stock-cue';
+import { narrowMarkLayout, narrowPipLayout, NARROW_STRIP_QUERY, STOCK_CUES, type MarkLayout } from './stock-cue';
 
 /**
  * Issue #835: the `pips` arm overflowed a 390px viewport and clipped its last entry silently,
@@ -67,5 +67,78 @@ describe('stock cue: pip sizing on a narrow viewport (issue #835)', () => {
     // #230's ruling is between the arms, so a change that quietly reshaped a sibling would
     // corrupt the comparison it exists to serve.
     expect([...STOCK_CUES]).toEqual(['pips', 'marks', 'strike', 'badge']);
+  });
+});
+
+/**
+ * Issue #1021: the `marks` arm had no narrow-viewport handling at all, so four players at four
+ * or five stocks drew a strip wider than a 390px phone and clipped the last entry silently.
+ *
+ * The table is measured, by `tools/hud/strip-width.mjs` at 390px against the real stylesheet;
+ * these cases pin it, the tool proves the widths.
+ */
+describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
+  /** The measured table, every configuration the game offers: 2-4 players x 1-5 stocks. */
+  const EXPECTED: Record<string, MarkLayout> = {};
+  for (let slots = 2; slots <= 4; slots++) {
+    for (let total = 1; total <= 5; total++) EXPECTED[`${slots}x${total}`] = { kind: 'full' };
+  }
+  EXPECTED['4x4'] = { kind: 'row', mark: 8, gap: 2 };
+  EXPECTED['4x5'] = { kind: 'one' };
+
+  /** The cells where `rule` disagrees with the measured table. */
+  const mismatches = (rule: (slots: number, total: number) => MarkLayout): string[] =>
+    Object.entries(EXPECTED)
+      .filter(([cell, want]) => {
+        const [slots, total] = cell.split('x').map(Number);
+        return JSON.stringify(rule(slots, total)) !== JSON.stringify(want);
+      })
+      .map(([cell]) => cell);
+
+  it('matches the measured table in every one of the 15 configurations', () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(15);
+    expect(mismatches(narrowMarkLayout)).toEqual([]);
+  });
+
+  it('THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there', () => {
+    // Without these the table check could be comparing nothing -- a `mismatches` that never
+    // reported a cell would pass the case above for any rule at all.
+    const other = (l: MarkLayout): MarkLayout => (l.kind === 'one' ? { kind: 'full' } : { kind: 'one' });
+    for (const cell of Object.keys(EXPECTED)) {
+      const [s, t] = cell.split('x').map(Number);
+      const wrongHere = (slots: number, total: number): MarkLayout =>
+        slots === s && total === t ? other(narrowMarkLayout(slots, total)) : narrowMarkLayout(slots, total);
+      expect(mismatches(wrongHere), cell).toEqual([cell]);
+    }
+  });
+
+  it('leaves every strip that already fits at the full size, including 3x5 and 4x3', () => {
+    // The derivation in the issue expected 3x5 over by about 4px; measured, it is 18.8px inside
+    // the budget, and 4x3 35.6px inside. Shrinking them would be a cost with nothing bought.
+    expect(narrowMarkLayout(3, 5)).toEqual({ kind: 'full' });
+    expect(narrowMarkLayout(4, 3)).toEqual({ kind: 'full' });
+  });
+
+  it('shrinks four players at four stocks to an 8px row, not a fallback', () => {
+    // Measured 12px over at full size and 18.5px inside at 8/2. The 9/2 row fits by 2.5px,
+    // which is the one-pixel fragility the pips table refused.
+    expect(narrowMarkLayout(4, 4)).toEqual({ kind: 'row', mark: 8, gap: 2 });
+  });
+
+  it('falls back to one mark and the count at four players and five stocks', () => {
+    // 8px marks overflow by 5.5px even at a 1px gap; only 7px fits, below the floor.
+    expect(narrowMarkLayout(4, 5)).toEqual({ kind: 'one' });
+  });
+
+  it('never draws a row of marks below the 8px floor, or with a gap under 2px', () => {
+    // Population: every player count the game allows (2-4) against every stock setting (1-5).
+    for (let slots = 2; slots <= 4; slots++) {
+      for (let total = 1; total <= 5; total++) {
+        const layout = narrowMarkLayout(slots, total);
+        if (layout.kind !== 'row') continue;
+        expect(layout.mark, `${slots}p x ${total}`).toBeGreaterThanOrEqual(8);
+        expect(layout.gap, `${slots}p x ${total}`).toBeGreaterThanOrEqual(2);
+      }
+    }
   });
 });
