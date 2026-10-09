@@ -30,14 +30,16 @@ describe('versusMapChoices', () => {
   const CAMPAIGN_BOARDS = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
   /** N=2 additionally offers the dedicated duel board (issue #271). */
   const DUEL = 'vs-duel-01';
-  /** N=3 additionally offers the dedicated tri board (issue #272, rebuilt by #424,
-   *  and given `teams` alongside `ffa` by issue #627). */
+  /** The dedicated tri board (issue #272, rebuilt by #424, and given `teams` alongside `ffa`
+   *  by issue #627), offered at N=3 and, since issue #1035, at N=2. */
   const TRI = 'vs-tri-01';
+  /** Quarters (issue #273, rebuilt by #425), offered at N=4 and, since issue #1035, at N=2
+   *  and N=3. */
   const QUAD = 'vs-quad-01';
   /** N=4's second dedicated board (issue #1036), offered at 4 in both modes like Quarters. */
   const QUAD2 = 'vs-quad-02';
 
-  it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its own count', () => {
+  it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its declared counts', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
     // suitable, versus-board-rules plan), and the declared catalog must not move that
     // offer. Each dedicated board adds to it at exactly one count rather than moving it:
@@ -71,7 +73,12 @@ describe('versusMapChoices', () => {
         // splits its four corner spawns into a top pair and a bottom pair holding
         // mirrored territory. All three arms are now unconditional on mode. vs-quad-02
         // (issue #1036) joins N=4 beside it, in both modes, so N=4 offers two boards.
-        const extra = n === 2 ? [DUEL] : n === 3 ? [TRI] : n === 4 ? [QUAD, QUAD2] : [];
+        //
+        // Issue #1035 offers vs-tri-01 at N=2 and vs-quad-01 at N=2 and N=3, the lower counts
+        // each already measures suitable at, under the "offer now; the sign-off can withdraw"
+        // ruling on #229. A dedicated board is therefore no longer offered at exactly one
+        // count, and the lists below are its declared counts in catalogue order.
+        const extra = n === 2 ? [DUEL, TRI, QUAD] : n === 3 ? [TRI, QUAD] : n === 4 ? [QUAD, QUAD2] : [];
         expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }
@@ -109,11 +116,17 @@ describe('versusMapChoices', () => {
     // Both dedicated multi-player boards are now measured suitable everywhere and curated
     // to one count each, so each is withheld at the two counts it was not authored for.
     // vs-quad-02 (issue #1036) is measured suitable at N=2 and N=3 too, which #1036
-    // required of it, and curated to N=4 alone, so it is withheld at both the way
-    // vs-quad-01 is. Offering it at those counts later is a curation edit.
+    // required of it, and curated to N=4 alone, so it is withheld at both. Offering it at
+    // those counts later is a curation edit.
+    //
+    // REVERSED ON PURPOSE for three pairs by issue #1035: vs-tri-01 at N=2 and vs-quad-01 at
+    // N=2 and N=3 left this list for the offer, because a follow-up ruling on #229 offers a
+    // dedicated board at the lower counts it measures suitable at, to meet the #355 floor.
+    // What stays withheld is still curation, not measurement: vs-tri-01 at N=4 (the upward
+    // direction, which that ruling does not cover) and vs-quad-02 at N=2 and N=3.
     const WITHHELD: Record<number, string[]> = {
-      2: ['vs-tri-01', 'vs-quad-01', 'vs-quad-02'],
-      3: ['vs-quad-01', 'vs-quad-02'],
+      2: ['vs-quad-02'],
+      3: ['vs-quad-02'],
       4: ['vs-tri-01'],
     };
     const rows = versusBoardCatalog();
@@ -156,6 +169,9 @@ describe('the versus board floor (issue #355): boards that are not campaign aren
    * list it finds rather than writing a second test.
    */
   const FLOOR_OPTIONS: readonly { players: 2 | 3 | 4; mode: VersusMode }[] = [
+    { players: 2, mode: 'ffa' },
+    { players: 3, mode: 'ffa' },
+    { players: 3, mode: 'teams' },
     { players: 4, mode: 'ffa' },
     { players: 4, mode: 'teams' },
   ];
@@ -257,22 +273,22 @@ describe('pickVersusArena', () => {
   });
 
   it('distributes: two measured seeds pick different arenas -- the negative control for a constant/broken resolver', () => {
-    // RE-MEASURED again: issue #424's rebuild returns vs-tri-01 to the N=3 offer, taking it
-    // to SIX boards, which moves every pick that reads `seed % choices.length`.
+    // RE-MEASURED again: issue #1035 adds vs-quad-01 to the N=3 offer, taking it to SEVEN
+    // boards, which moves every pick that reads the draw against `choices.length`.
     //
     // Both seeds are checked against the measured distribution rather than assumed to have
-    // survived. Over seeds 1..20 at N=3 on this tree the picks land arena-04 x6
-    // (1,6,10,11,13,16), arena-05 x5 (2,3,5,17,20), arena-01 x3 (7,8,19), arena-02 x3
-    // (9,12,15), arena-03 x2 (14,18), vs-tri-01 x1 (seed 4 alone).
+    // survived. Over seeds 1..20 at N=3 on this tree the picks land arena-04 x5
+    // (6,10,11,13,14), arena-05 x4 (1,5,16,17), vs-tri-01 x3 (2,3,20), arena-02 x3
+    // (8,9,15), arena-01 x2 (7,19), arena-03 x2 (12,18), vs-quad-01 x1 (seed 4 alone).
     //
-    // The pinned pair is unchanged -- seed 1 -> 'arena-04' and seed 7 -> 'arena-01' both
-    // still hold, which is luck rather than design and is worth saying so nobody reads an
+    // Seed 1 moved, from 'arena-04' on the six-board offer to 'arena-05'; seed 7 still lands
+    // on 'arena-01', which is luck rather than design and is worth saying so nobody reads an
     // unmoved literal as evidence the offer did not move. Both sit in multi-seed buckets
-    // (six and three), so neither is on a knife edge; vs-tri-01's seed 4 is a SINGLETON and
+    // (four and two), so neither is on a knife edge; vs-quad-01's seed 4 is a SINGLETON and
     // is deliberately not pinned here.
     // Pinned literals, not swept at runtime -- fails if pickVersusArena collapses to a
     // constant pick (e.g. always choices[0]) or stops reading `seed`.
-    expect(pickVersusArena(base, 1)).toBe('arena-04');
+    expect(pickVersusArena(base, 1)).toBe('arena-05');
     expect(pickVersusArena(base, 7)).toBe('arena-01');
   });
 });
@@ -290,9 +306,9 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
   });
 
   it("'random' resolves to pickVersusArena's own pick for that seed, and honors its OWN seed argument", () => {
-    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 7 ->
-    // 'arena-01' at players:3, re-derived against the SIX-board N=3 offer that issue
-    // #424's rebuild restored -- both literals happen to be unchanged. Two seeds, not
+    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-05', seed 7 ->
+    // 'arena-01' at players:3, re-derived against the SEVEN-board N=3 offer that issue
+    // #1035 made by adding vs-quad-01 -- seed 1's literal moved and seed 7's did not. Two seeds, not
     // one: a single-seed assertion here would not catch a mutation that hardcodes the
     // seed it forwards to `pickVersusArena` (e.g. always `pickVersusArena(config, 1)`) --
     // this negative control was found empirically while mutating this function for issue
@@ -300,7 +316,7 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
     // mutation). The two seeds must keep resolving to DIFFERENT boards for that to hold,
     // which is why the pair is rechosen from the measured distribution rather than
     // renumbered.
-    expect(resolveVersusConfig(random3, 1).arenaId).toBe('arena-04');
+    expect(resolveVersusConfig(random3, 1).arenaId).toBe('arena-05');
     expect(resolveVersusConfig(random3, 7).arenaId).toBe('arena-01');
   });
 

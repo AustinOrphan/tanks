@@ -280,14 +280,14 @@ describe('room: openFloorCells rises by EXACTLY the removed count, on all 9 ship
 // ---------------------------------------------------------------------------
 
 describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measured', () => {
-  it('0 of 190 OFFERED (arena, N, seed) draws are unsuitable, and the 80 unoffered ones are accounted for', () => {
+  it('0 of 220 OFFERED (arena, N, seed) draws are unsuitable, and the 50 unoffered ones are accounted for', () => {
     // Population re-derived for the tank-egress gate (issue #423). It used to sweep all
     // 240 draws and claim 0 unsuitable, which held only because nothing checked whether a
     // tank could leave its spawn.
     //
     // The sweep that MATTERS is the offered one, re-derived from the catalogue rather than
     // restated: 5 campaign boards at [2,3,4] x 10 seeds (150), plus vs-duel-01 [2],
-    // vs-tri-01 [3], vs-quad-01 [4] and vs-quad-02 [4] at 10 each (40) = 190 draws,
+    // vs-tri-01 [2,3], vs-quad-01 [2,3,4] and vs-quad-02 [4] at 10 each (70) = 220 draws,
     // 0 unsuitable. Every
     // combination the menu can actually serve survives destructible removal at fraction 0.4
     // on all ten seeds.
@@ -297,12 +297,12 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
     // the note beside `unofferedUnsuitable` below already explained while this one did not.
     // Both halves now come from one walk of `VERSUS_CATALOG`, so they cannot disagree again.
     //
-    // The other 80 are not swept for suitability, they are ACCOUNTED for, so the number
-    // cannot drift silently: vs-quad-01 is still withdrawn (#425) and fails every one of
-    // its 30 draws, vs-duel-01 fails 14 of the 20 draws at the counts it is not offered at
-    // (5 of 10 at N=3, 9 of 10 at N=4), and vs-tri-01's remaining 20 -- N=2 and N=4, the
-    // counts it is not offered at -- all PASS, which is why 30 + 14 + 0 = 44 rather than
-    // the 74 this pinned while the board was broken.
+    // The other 50 are not swept for suitability, they are ACCOUNTED for, so the number
+    // cannot drift silently: vs-duel-01 fails 14 of the 20 draws at the counts it is not
+    // offered at (5 of 10 at N=3, 9 of 10 at N=4), and vs-tri-01's 10 at N=4 and
+    // vs-quad-02's 20 at N=2 and N=3 all PASS. (This paragraph once accounted for 80 with
+    // vs-quad-01 withdrawn under #425 and failing all 30 of its draws; the count below
+    // records how that moved.)
     const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     // DERIVED from the catalogue, not restated here (issue #722's "evaluate only player
     // counts for which each board is actually offered").
@@ -339,11 +339,13 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
         }
       }
     }
-    expect(checked, 'the offered (arena, N, seed) population').toBe(190);
+    expect(checked, 'the offered (arena, N, seed) population').toBe(220);
     expect(unsuitable).toBe(0);
     // 80, up from 60 with issue #1036: vs-quad-02 is offered at N=4 only, so its 20 draws at
     // N=2 and N=3 are unoffered -- and all 20 pass, which is what keeps the count below at 14.
-    expect(unofferedChecked).toBe(80);
+    // 50 with issue #1035, which offers vs-tri-01 at N=2 and vs-quad-01 at N=2 and N=3: those
+    // 30 draws move into the offered half above, where all 30 pass.
+    expect(unofferedChecked).toBe(50);
     // 14, down from 44 when issue #425 rebuilt vs-quad-01. The derivation, because the
     // drop is large enough to look like a broken sweep: the old board failed all 30 of its
     // draws (3 counts x 10 seeds) since it failed egress before any destructible was drawn.

@@ -1269,7 +1269,11 @@ describe('hud.css is syntactically whole', () => {
     // not a controller is painted; the body's `hidden` tracks that, and `hidden` is not what this
     // sweep filters on. The entry and the eight carry `.ui-btn--sm` and Back `.ui-btn--slab`, so
     // `unstyled` stays empty.
-    expect(buttons.length).toBe(159 + 2 + devMenuButtons());
+    // Issue #1035 adds ONE, and like #627's it is a catalog edit, not a UI change: vs-quad-01
+    // (Quarters) is offered at three players, so this fixture's `versusMapChoices(3, 'teams')`
+    // row gains its card. 159 -> 160. It is the same `.ui-btn.ui-selectable.hud-versus-option-btn`
+    // as the cards beside it, so `unstyled` stays empty.
+    expect(buttons.length).toBe(160 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1401,7 +1405,9 @@ describe('hud.css is syntactically whole', () => {
     // `.ui-btn--slab`.
     // Issue #754 adds TEN, the same ten as the button sweep above: 133 -> 143, nine sized by
     // `.ui-btn--sm` and the pane's Back by `.ui-btn--slab`.
-    expect(controls.length).toBe(143 + 2 + devMenuButtons());
+    // Issue #1035 adds ONE, the same Quarters map card as the button sweep above: 143 -> 144,
+    // sized by the rule its sibling cards share.
+    expect(controls.length).toBe(144 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

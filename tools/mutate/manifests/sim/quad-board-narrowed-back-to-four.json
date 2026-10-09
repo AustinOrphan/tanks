@@ -1,0 +1,14 @@
+{
+  "id": "quad-board-narrowed-back-to-four",
+  "file": "src/sim/config/data/versus-catalog.json",
+  "find": "\"preview\": \"vs-quad-01\",\n      \"players\": [\n        2,\n        3,\n        4\n      ],",
+  "replace": "\"preview\": \"vs-quad-01\",\n      \"players\": [\n        4\n      ],",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "why": "Undoes issue #1035 for Quarters: vs-quad-01 goes back to four players only, so the 3-FFA and 3-Teams options each offer one board that is not a campaign arena (vs-tri-01) and fall under the floor the ruling on #355 sets. Issue #1035 asks for this entry specifically: it shows the floor test reads the offer, since no other three-player board exists to meet it. The parity pin and the withheld cross-check in the same file catch it too. Anchored on the entry's own preview token, because the five campaign entries share vs-quad-01's [2, 3, 4] players block.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}
