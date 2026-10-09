@@ -361,7 +361,7 @@
    * Here rather than on the tertiary, because the gap is the primitive's: every other `.ui-btn`
    * is padded or sized by a rule LATER in this file (`--sm`, `--slab`, `--primary`,
    * `.hud-skin`, `.hud-versus-option-btn`, `.hud-versus-map-card`, `.hud-controller-source-btn`,
-   * and `.hud-level-btn`'s fixed 44x44), so each of them overrides this and the fallback
+   * and `.hud-level-btn`'s `padding: 0`), so each of them overrides this and the fallback
    * reaches only a control that declared none. Slab values, since a variant-less control sits
    * among slabs.
    *
@@ -3542,6 +3542,10 @@
 .hud-level-btn {
   width: var(--hud-control-min);
   height: var(--hud-control-min);
+  /* The box is the size, so no padding. Without this the primitive's fallback `8px 20px`
+   * reaches the button and leaves a 4px content box inside the 44px: a number wider than that
+   * is start-aligned instead of centred, measured 3.41px right of centre on every tile. */
+  padding: 0;
   font-size: var(--hud-type-5);
   font-weight: var(--hud-weight-strong);
 }
