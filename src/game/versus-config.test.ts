@@ -42,10 +42,11 @@ describe('versusMapChoices', () => {
   it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its declared counts', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
     // suitable, versus-board-rules plan), and the declared catalog must not move that
-    // offer. Each dedicated board adds to it at exactly one count rather than moving it:
-    // 6 (N, mode) combinations swept, and since issue #627 each dedicated board appears
-    // in 2 of them -- the duel board at N=2, the tri board at N=3 and the quad board at
-    // N=4, each in both modes.
+    // offer. Each dedicated board adds to it rather than moving it: 6 (N, mode)
+    // combinations swept, and since issue #627 every dedicated board declares both modes.
+    // Each appeared at exactly one count -- the duel board at N=2, the tri board at N=3, the
+    // quad boards at N=4 -- until issue #1035 offered the tri board at N=2 and Quarters at
+    // N=2 and N=3, so the tri board now appears in 4 combinations and Quarters in 6.
     //
     // THE MODE PREDICATE NO LONGER HAS SHIPPED-DATA COVERAGE HERE, and that is a
     // deliberate, recorded loss rather than an oversight. vs-tri-01's `ffa`-only
@@ -64,7 +65,7 @@ describe('versusMapChoices', () => {
     // instead of finding a loop that silently cannot express it.
     for (const n of [2, 3, 4] as const) {
       for (const mode of ['ffa', 'teams'] as const) {
-        // Each dedicated board returns at its own count and at BOTH modes. vs-tri-01
+        // Each dedicated board returns at its declared counts and at BOTH modes. vs-tri-01
         // (issue #424 rebuilt its geometry; it clears the tank-egress gate in
         // versus-board.test.ts at N=2, 3 and 4) gained `teams` in issue #627: #584
         // established that asymmetric Teams are intentionally supported, so the 2v1 a
@@ -103,9 +104,9 @@ describe('versusMapChoices', () => {
     // vs-tri-01, vs-quad-01 and vs-duel-01 (at N=3/N=4) from `measured` entirely, so
     // "offered exactly equals suitable" held trivially and there was nothing left being
     // curated. Issue #424's rebuild of vs-tri-01 restores the judgement: it now measures
-    // suitable at all three counts and is offered at N=3 alone, so N=2 and N=4 hold it
-    // back the same way vs-duel-01's [2] holds that board back -- playable, but not the
-    // count it was designed for.
+    // suitable at all three counts and was offered at N=3 alone, so N=2 and N=4 held it
+    // back the same way vs-duel-01's [2] held that board back -- playable, but not the
+    // count it was designed for (until issue #1035, below).
     //
     // vs-duel-01 contributes nothing here despite the same curation, because it no longer
     // measures suitable at N=3 or N=4: its third and fourth maximin spawns land in pockets
