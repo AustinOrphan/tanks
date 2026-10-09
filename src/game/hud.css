@@ -3683,12 +3683,12 @@
   display: none;
 }
 
-/* ---- Identity mark in the stock strip (issue #778, `?dev=1&identityMarker=`) ------ */
+/* ---- Identity mark in the stock strip (issues #778, #922; `?dev=1&identityMarker=`) */
 
-/* A TEMPORARY OPEN-QUESTION ARM, like the cue arms below: it pairs each FFA entry with the
- * mark that slot wears on the ground so #234 can be ruled on the pair rather than on the
- * strip alone. With no flag the element is never rendered, so the shipped strip is
- * untouched by construction.
+/* SHIPPED in FFA: each FFA entry carries the mark that slot wears on the ground, the pair
+ * #234 ruled on, and `shape` is drawn with the flag absent. Teams entries never get one
+ * (they carry the A/B/C letter), and `?dev=1&identityMarker=solid` takes it off, which
+ * leaves the strip as it was before the ruling: the element is not rendered at all.
  *
  * STROKE, NEVER `background`, for the same reason stated below and enforced by
  * hud.css.test.ts for every `hud-stock-` rule: forced colours drops a background outright,

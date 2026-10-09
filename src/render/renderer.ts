@@ -105,8 +105,8 @@ export interface RendererOptions {
   readonly mineTimer?: boolean;
   /** Experimental mine-warning treatment (`mineWarn` dev flag); absent = shipped default. */
   readonly mineWarn?: MineWarnStyle | null;
-  /** Experimental second identity channel (`identityMarker` dev flag, issue #630);
-   *  absent = today's solid hue-only ring. */
+  /** Second identity channel (issues #630, #922), already resolved by the game layer: an
+   *  FFA session passes the shipped `shape`; absent = the solid hue-only ring. */
   readonly identityMarker?: IdentityMarkerStyle | null;
   /** Experimental arrival/destruction language (`arrival` dev flag, issue #230); absent =
    *  the shipped pair, which both expand a ring. */

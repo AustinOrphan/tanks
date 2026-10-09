@@ -121,6 +121,7 @@ import {
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, parseDeveloperMode, type DevFlags, type OutcomeArm } from './devflags';
+import { sessionIdentityMarker, stripIdentityMarker } from './identity-marker-flag';
 import { developerExitSearch } from './dev-config';
 import { gallerySearch } from './gallery-link';
 import type { GalleryCatalog } from './gallery-selection';
@@ -1310,11 +1311,13 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // developer flag no injected HUD in a test has an opinion about. `null` is the shipped
         // strip, with no cue.
         stockCue: devFlags.stockCue,
-        // Issue #778's identity mark in the stock strip, bound for the same reason as the
-        // four above: a developer flag no injected HUD in a test has an opinion about. The
-        // renderer is handed the same flag for the arena ring; this is the HUD half of the
-        // pairing #234 asks the owner to rule on.
-        identityMarker: devFlags.identityMarker,
+        // Issue #778's identity mark in the stock strip, bound here rather than defaulted
+        // inside the HUD: every injected HUD in a test keeps `null`, the unmarked strip.
+        // RESOLVED, not passed through (issue #922): the page's HUD draws the shipped `shape`
+        // mark with the flag absent, and none for `solid`. It resolves with no session mode
+        // because its own per-entry test already keeps teams entries unmarked; the renderer
+        // resolves per session in `startGameWith`. See identity-marker-flag.ts.
+        identityMarker: stripIdentityMarker(devFlags.identityMarker),
         // Issue #243's developer shell. The EFFECTIVE GATE, read from the same `search`
         // the flags came from: `parseDevFlags` returns `DEV_FLAGS_OFF` for a bare
         // `?dev=1`, so nothing on `devFlags` can distinguish "developer mode, nothing
@@ -1996,7 +1999,10 @@ export function startGameWith(
     blockedFire: deps.devFlags.blockedFire,
     mineTimer: deps.devFlags.mineTimer,
     mineWarn: deps.devFlags.mineWarn,
-    identityMarker: deps.devFlags.identityMarker,
+    // Issue #922: the shipped `shape` marker for an unflagged FFA session, and the solid
+    // ring everywhere else unless a style is named. Resolved from THIS session's mode, which
+    // the setup pane (`applyVersusToDeps`) or `?dev=1&mode=` has already put on its flags.
+    identityMarker: sessionIdentityMarker(deps.devFlags.identityMarker, deps.devFlags.mode),
     shellTrail: deps.devFlags.shellTrail,
     arrival: deps.devFlags.arrival,
     enemyRole: deps.devFlags.enemyRole,

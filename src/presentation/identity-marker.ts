@@ -16,15 +16,17 @@
  * twelve has a red-green deficiency, and under forced colours every hue here is replaced
  * outright.
  *
- * TWO CANDIDATES, NEITHER SHIPPED AS THE DEFAULT. The owner has not chosen between them,
- * so both are built and selectable (`?dev=1&identityMarker=arcs|shape`) and the default
- * stays exactly today's solid ring. This is the same posture `aiPerception=los` holds for
- * an alternative targeting policy: a candidate that can be played, not a change of
- * behaviour made on an agent's taste. The evidence that settles it is a real match, and
- * a flat mockup cannot produce it -- which is the whole reason both exist in the tree.
+ * `shape` SHIPS AS THE FFA DEFAULT; `arcs` AND `roof` STAY SELECTABLE. Three styles were
+ * built and compared behind `?dev=1&identityMarker=`, and the ruling on #234 chose `shape`
+ * on still evidence (issue #922). This module still says nothing about defaults: a `null`
+ * style here is "no marker", which is what teams, co-op and single-player draw. WHICH
+ * sessions get `shape` without asking, and the `solid` value that takes it back off, are
+ * the flag layer's (`game/identity-marker-flag.ts`), which resolves both before the
+ * renderer or the HUD is handed a style. The `identityMarker` flag is a kept rollback
+ * lever, so the other two styles are still drawn when named.
  *
  *  - `arcs`  -- the ring broken into (slot + 1) arcs. Counting.
- *  - `shape` -- circle / triangle / square / diamond outline. Recognition.
+ *  - `shape` -- circle / triangle / square / starburst outline. Recognition. Ships in FFA.
  *
  * WHY THE MARKER IS WORLD-ALIGNED, and the thing a mockup cannot tell you: the ring is
  * parented to the tank's group, and `view.group.rotation.y = -bodyA` is written every
@@ -118,7 +120,8 @@ export function identityMarkerSpin(bodyAngle: number): number {
  * the HUD draws the same mark: two consumers reading two copies is the second-source-of-
  * truth problem `identity.ts` already exists to prevent, and the failure mode is specific
  * and silent -- the strip would keep claiming a square for slot 3 after the ring moved to
- * something else, which is precisely the pairing #234 asks the owner to rule on.
+ * something else, which breaks precisely the pairing #234 ruled on: the ring and the strip
+ * ship as one channel.
  *
  * So it is a DESCRIPTION, not a path and not a BufferGeometry. `render/identity-marker.ts`
  * extrudes it into a 3D annulus band; `game/hud.ts` projects it into a 2D SVG outline. Each
