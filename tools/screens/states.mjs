@@ -544,7 +544,11 @@ export const SCREEN_STATES = Object.freeze([
       { click: '.hud-stats .hud-records-tab-achievements' },
       { waitVisible: '.hud-achievements' },
     ],
-    measure: ['.hud-achievements', '.hud-achievement-list', '.hud-achievements-count'],
+    // The first row and its description (issue #971). This seed earns none of the achievements,
+    // so both are a LOCKED row: the row records the locked 0.45 and the description its own 1
+    // -- it no longer carries an opacity of its own, which is the fix. The product is pinned in
+    // hud.css.test.ts; a baseline records each element's own value, not the product.
+    measure: ['.hud-achievements', '.hud-achievement-list', '.hud-achievements-count', '.hud-achievement', '.hud-achievement-desc'],
   }),
   state({
     id: 'screen.settings',

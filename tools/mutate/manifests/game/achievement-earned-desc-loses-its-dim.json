@@ -1,0 +1,14 @@
+{
+  "id": "achievement-earned-desc-loses-its-dim",
+  "file": "src/game/hud.css",
+  "find": ".hud-achievement--earned .hud-achievement-desc {\n  opacity: 0.8;\n}",
+  "replace": ".hud-achievement--earned .hud-achievement-desc {\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The earned re-declaration is dropped, so an earned description brightens from the 0.8 it always rendered at to 1.0. Issue #971's ruling was about locked rows only; brightening earned descriptions was not ruled on, and the guard's earned control holds them at 0.8.",
+  "killedBy": [
+    "PLACEHOLDER: filled from --report"
+  ]
+}

@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-09-26
-last-reviewed: 2026-09-26
+last-reviewed: 2026-10-09
 scope: What the HUD's composition actually is at each viewport in issue #290's emulated matrix
 implementation-issues: [985]
 implementation-prs: []
@@ -157,6 +157,14 @@ have broken and which panes have a scrollbar.
 Whether that meets the criterion is a product judgement and this document does not make it. What the
 document supplies is the thing the criterion asked for — the composition, per viewport, in numbers
 that can be re-measured.
+
+**The judgement has since been made** (issue #971, recording the ruling on #985's criterion 1):
+for Public Prototype 1.0, wrap-and-scroll is the accepted response to size, and the stylesheet is
+mobile-first by choice — its base rules are the phone layout and it has no `min-width` media query
+(0 against 5 `max-width`), with root-relative type already following the reader. That is a choice
+for Public Prototype 1.0, not a statement that large displays never get a composition of their own:
+that is #1033, after the cutover. A `min-width` query added before then is a scoped exception, which
+its pull request records here and beside the note in `hud.css`.
 
 Two things fall out of it that look like findings rather than description, and both are recorded on
 issue #985 rather than resolved here:
