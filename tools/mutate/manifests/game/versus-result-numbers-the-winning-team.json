@@ -1,0 +1,14 @@
+{
+  "id": "versus-result-numbers-the-winning-team",
+  "file": "src/game/hud.ts",
+  "find": "    if (result.kind === 'winner-team') return `Team ${TEAM_LABELS[result.team] ?? '?'} wins`;",
+  "replace": "    if (result.kind === 'winner-team') return `Team ${result.team + 1} wins`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "killedBy": [
+    "hud: every ending gets its own screen (issue #323) keeps the VERSUS result screen OUT of the copy table, and gives it the #279 action set"
+  ],
+  "why": "Numbers the winning team again (\"Team 2 wins\"), which is what the title read before issue #993. The results table under it names its rows by setup's letters, so a numbered title over a \"Team B\" row leaves the reader to match the two."
+}

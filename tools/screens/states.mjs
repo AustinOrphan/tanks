@@ -201,7 +201,7 @@ const VERSUS_FFA_DEV = Object.freeze({
 const VERSUS_TEAMS_DEV = Object.freeze({
   ...MID_CAMPAIGN_DEV,
   // Teams is not offered at two players (issue #281), so the Teams ending needs three. The
-  // pane assigns 0 -> team 1, 1 -> team 2, 2 -> team 1, which is the 2v1 the board supports.
+  // pane assigns 0 -> team A, 1 -> team B, 2 -> team A, which is the 2v1 the board supports.
   'tanks.dev.tanks.versus.v1': versusSetup('teams', 3, [{ role: 'human' }, { role: 'bot' }, { role: 'bot' }]),
 });
 
@@ -1269,7 +1269,7 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-versus-setup' },
       { click: '.hud-versus-start' },
       // Budget: twice the 2244-2255 simulated ticks this match took over 4 measured runs.
-      { playUntil: { visible: '.hud-action', maxTicks: 4600, expect: { selector: '.hud-title', text: 'Team 1 wins' } } },
+      { playUntil: { visible: '.hud-action', maxTicks: 4600, expect: { selector: '.hud-title', text: 'Team A wins' } } },
     ],
     measure: ['.hud-panel', '.hud-title', '.hud-action', '.hud-change-setup', '.hud-quit'],
   }),

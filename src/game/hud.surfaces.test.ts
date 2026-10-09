@@ -2013,10 +2013,11 @@ describe('hud: every ending gets its own screen (issue #323)', () => {
 
     // ...and a TEAMS win names the side, not a player: the same result type carries both,
     // and a screen that read `slot` for a team outcome would name a player who may not
-    // even have been the last one standing.
+    // even have been the last one standing. By setup's letter (issue #993), which is how
+    // the results table names its rows.
     h.setState('outcome-win');
     h.setOutcome(versus({ kind: 'vs-match-end', result: { kind: 'winner-team', team: 1 } }));
-    expect(title(root)).toBe('Team 2 wins');
+    expect(title(root)).toBe('Team B wins');
     expect(action(root)).toBe('Rematch');
     expect(chooseLevelShown(root)).toBe(false);
     expect(

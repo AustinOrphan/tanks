@@ -913,10 +913,9 @@ export function tallyVersusAccuracy(
  *    where campaign-coop is killer-only.
  *
  * Teams sums a per-team total from these same per-slot figures as a DERIVED reduction
- * at render/HUD time (no new storage here) -- grouped by `teamOf(slot)`, which is slot
- * parity, not the configured `Tank.team`; the two disagree whenever versus setup
- * departs from the default split (issue #993). This function stays unaware of teams
- * beyond dispatching on `world.rules.mode`.
+ * at render/HUD time (no new storage here) -- grouped by each slot's `Tank.team`, which
+ * the outcome carries beside these arrays (`slotTeamsOf`, issue #993). This function
+ * stays unaware of teams beyond dispatching on `world.rules.mode`.
  *
  * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
  * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
@@ -1139,6 +1138,22 @@ function versusStocksOf(world: World): VersusStock[] | null {
     .filter((t) => t.kind === 'player')
     .map((t) => ({ slot: t.controlledBy ?? 0, stock: t.stockRemaining ?? 0, team: t.team }))
     .sort((a, b) => a.slot - b.slot);
+}
+
+/**
+ * The team each slot's tank played on, indexed by slot (`controlledBy`) like the results
+ * tally's arrays -- what a Teams outcome groups its rows by (issue #993).
+ *
+ * Read off `Tank.team`, which `loadArena` stamps on every player tank in teams mode from
+ * setup's per-slot choice, rather than re-derived with `teamOf(slot)`: that is only the
+ * default split, and setup can put any slot on any of three teams.
+ */
+function slotTeamsOf(world: World): number[] {
+  const teams: number[] = [];
+  for (const t of world.tanks) {
+    if (t.kind === 'player' && t.team !== undefined) teams[t.controlledBy ?? 0] = t.team;
+  }
+  return teams;
 }
 
 /**
@@ -2542,8 +2557,11 @@ export function startGameWith(
         ? deps.stats.run()
         : undefined;
     const mode = forWorld.rules.mode;
-    if (mode === 'ffa' || mode === 'teams') {
-      hud.setOutcome({ tally: mode, attempt, run, action: relaunchTarget, kills: coopKills, deaths: versusDeaths, shots: versusShots, shellKills: versusShellKills, typedOutcome });
+    const versus = { kills: coopKills, deaths: versusDeaths, shots: versusShots, shellKills: versusShellKills };
+    if (mode === 'teams') {
+      hud.setOutcome({ tally: mode, attempt, run, action: relaunchTarget, ...versus, teams: slotTeamsOf(forWorld), typedOutcome });
+    } else if (mode === 'ffa') {
+      hud.setOutcome({ tally: mode, attempt, run, action: relaunchTarget, ...versus, typedOutcome });
     } else if (countPlayerTanks(forWorld) >= 2) {
       hud.setOutcome({ tally: 'coop', attempt, run, action: relaunchTarget, kills: coopKills, typedOutcome });
     } else {

@@ -196,18 +196,59 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
 
   it('win panel carries the teams results line as PER-TEAM sums, not per-slot', () => {
     const { hud: h, root } = mount();
-    // slots 0,2 -> team 0; slot 1 -> team 1 (teamOf(slot) = slot % 2).
-    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 1, 3], deaths: [1, 4, 0], shots: [8, 4, 12], shellKills: [2, 1, 3] });
+    // slots 0,2 -> team A; slot 1 -> team B: setup's default split.
+    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [2, 1, 3], deaths: [1, 4, 0], shots: [8, 4, 12], shellKills: [2, 1, 3], teams: [0, 1, 0] });
     h.setState('outcome-win');
     // PER-TEAM rows, not per-slot: teams mode cares which side won, and a per-player
     // breakdown here would answer a question the mode is not asking.
     expect(versusRows(root)).toEqual([
       ['', 'Kills', 'Deaths', 'Accuracy'],
-      // Accuracy sums per SIDE too -- slots 0 and 2 are team 1, so 5 shell kills of 20
+      // Accuracy sums per SIDE too -- slots 0 and 2 are team A, so 5 shell kills of 20
       // shots, not the average of two per-player percentages, which would weight a slot
       // that barely fired the same as one that carried the match.
-      ['Team 1', '5', '1', '25%'],
-      ['Team 2', '1', '4', '25%'],
+      ['Team A', '5', '1', '25%'],
+      ['Team B', '1', '4', '25%'],
+      // And no "Team C" row of zeroes: setup offers three teams, but nobody chose C.
+    ]);
+  });
+
+  it('groups by the team each slot PLAYED ON, not by slot parity (issue #993)', () => {
+    // A A B B, which setup allows and slot parity (A B A B) gets wrong: summing by
+    // `teamOf(slot)` reads Team A as P1+P3 = 1+4 kills and Team B as P2+P4 = 2+8.
+    // Every slot's figures differ, so any wrong grouping changes some cell.
+    const { hud: h, root } = mount();
+    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 2, 4, 8], deaths: [3, 3, 0, 1], shots: [4, 8, 8, 16], shellKills: [1, 2, 4, 8], teams: [0, 0, 1, 1] });
+    h.setState('outcome-win');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Team A', '3', '6', '25%'],
+      ['Team B', '12', '1', '50%'],
+    ]);
+  });
+
+  it('gives a 2v1v1 match a row for each of its THREE teams, lettered as setup letters them', () => {
+    // The third side is the one the old two-row loop dropped outright: P4's kills were
+    // summed into Team 2 and team C never got a row at all.
+    const { hud: h, root } = mount();
+    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 2, 4, 8], deaths: [3, 3, 0, 1], shots: [4, 8, 8, 16], shellKills: [1, 2, 4, 8], teams: [0, 0, 1, 2] });
+    h.setState('outcome-win');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Team A', '3', '6', '25%'],
+      ['Team B', '4', '0', '50%'],
+      ['Team C', '8', '1', '50%'],
+    ]);
+  });
+
+  it('lists the teams in letter order even when P1 is not on team A', () => {
+    // First-seen order would put B first here, because slot 0 chose it.
+    const { hud: h, root } = mount();
+    h.setOutcome({ tally: 'teams', action: 'versus-setup', attempt: NO_ATTEMPT, kills: [1, 2, 4], deaths: [0, 3, 1], shots: [4, 8, 8], shellKills: [1, 2, 4], teams: [1, 0, 1] });
+    h.setState('outcome-win');
+    expect(versusRows(root)).toEqual([
+      ['', 'Kills', 'Deaths', 'Accuracy'],
+      ['Team A', '2', '3', '25%'],
+      ['Team B', '5', '1', '42%'],
     ]);
   });
 
