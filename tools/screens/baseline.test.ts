@@ -10,6 +10,8 @@ import {
 import { judgeState, checkExitCode, formatVerdict, recipeFor } from './check.mjs';
 import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
+import settingsBaseline from './baseline/screen.settings.json';
+import uiScaleBaseline from './baseline/screen.settings.ui-scale.json';
 
 const m = (over: Record<string, unknown> = {}) => ({
   selector: '.a', present: true, visible: true, text: 'x',
@@ -422,8 +424,13 @@ describe('the UI-scale capture shows the scale on every selector (issue #1031)',
     return failures;
   }
 
-  const read = (id: string): Measured[] =>
-    JSON.parse(readFileSync(new URL(`./baseline/${id}.json`, import.meta.url), 'utf8')).measurements;
+  // IMPORTED, not read with readFileSync: an import is an edge the mutation harness can follow
+  // from these files to this test, which is what lets a manifest entry mutate a baseline.
+  const BASELINES: Record<string, { measurements: Measured[] }> = {
+    'screen.settings': settingsBaseline,
+    'screen.settings.ui-scale': uiScaleBaseline,
+  };
+  const read = (id: string): Measured[] => BASELINES[id].measurements;
 
   it('holds on the committed pair, over the scaled state\'s own selector list', () => {
     const scaled = read('screen.settings.ui-scale');
