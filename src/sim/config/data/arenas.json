@@ -663,6 +663,57 @@
         "Destructibles are the four avenue flanks and the two centre-island shoulders only, all free-standing with open modules on every side, so no draw of the seeded-destructible variant generator can seal a pocket. evaluateSpawnEgress strips destructibles before measuring: they are cover for play, never structure for movement."
       ],
       "claims": []
+    },
+    {
+      "id": "vs-quad-02",
+      "cols": 33,
+      "rows": 27,
+      "cellSize": 0.6666666666666666,
+      "legend": {
+        "#": "solid",
+        "x": "destructible"
+      },
+      "grid": [
+        "...............###...............",
+        "...............###...............",
+        "...............###...............",
+        "......###...............###......",
+        "......###....P..........###......",
+        "......###...............###......",
+        "......###...............###......",
+        "......###...............###......",
+        "......###...............###......",
+        "###.........###xxx###.........###",
+        "###.........###xxx###.........###",
+        "###.........###xxx###.........###",
+        "######......xxx...xxx......######",
+        "######......xxx...xxx......######",
+        "######......xxx...xxx......######",
+        "###.........###xxx###.........###",
+        "###.........###xxx###.........###",
+        "###.........###xxx###.........###",
+        "......###...............###......",
+        "......###...............###......",
+        "......###...............###......",
+        "......###...............###......",
+        "......###..........B....###......",
+        "......###...............###......",
+        "...............###...............",
+        "...............###...............",
+        "...............###..............."
+      ],
+      "notes": [
+        "Issue #1036 authored this board: the second purpose-built four-player board, so 4-player FFA and 4-player Teams each offer two boards that are not campaign arenas. Named for its centre, a walled court with a breakable gate on each side.",
+        "THE VOCABULARY, carried over from vs-quad-01 because it is what makes a pinch inexpressible. A tank is 2 * TANK_RADIUS = 1.0 world units across and cellSize is 0.6667, so a tank spans 1.5 cells and a one-cell gap has no legal tank-centre position. Every wall mass here is a union of whole 3x3 modules on a 3-cell lattice, so every lane between masses is at least one module, 3 cells, against the 2 a tank needs.",
+        "SPAWNS ARE DERIVED, NOT AUTHORED. pickVersusSpawnSet is a greedy farthest-point chain with a relaxation pass, so it settles on a local optimum, and a symmetric grid can still yield a spawn set that is not an orbit of its symmetry group. Two drafts of this board did: with only the centre ring and the side bastions, the vertical corner-to-corner route was 6 cell-steps shorter than the horizontal one (the 33x27 frame's own difference), and the chain took one corner plus a cell four steps inside each of two others. The vertical bars at module columns 2 and 8 lengthen the vertical route until the two are equal, 34 cell-steps each on the picker's graph (diagonal 54), and that is what makes the four corners the maximin set. Verified against the real loadArena at N=4: (1,1) (31,25) (31,1) (1,25).",
+        "CONCEALMENT, by which wall breaks which line. The pillar on the top and bottom edges (module column 5) breaks the corner-to-corner rows, the side bastions break the edge columns, and the court's solid corners break both diagonals; the court's gates are not load-bearing for any of these, which is why removing destructibles cannot open an opening sightline.",
+        "THE COURT. The centre module is open floor enclosed by the court's four solid corners and its four destructible gates (36 cells, the board's only destructibles). It is reachable only by breaching a gate, and a breach opens a route through the centre rather than a dead-end notch: that is the tempo decision. No gate caps a spawn pocket, so sealedSpawns is 0 at N=2, 3 and 4, and the seeded-destructible variant generator holds suitability at every count over seeds 1..10.",
+        "THE CORNERS each have two ways out: along the edge past the bar, and down between the bar and the side bastion. An earlier draft put the spawns in a 3x3 pocket with one exit, which passed every gate and would have been campable.",
+        "33x27 is arena-01/02/03's and vs-quad-01's shape, so camera framing at this size is a solved and pinned case.",
+        "The authored P and B letters serve the campaign-facing loadArena path and the grid rule that every authored spawn index is congruent to 1 mod 3; they are NOT the versus spawns. P sits on connected floor because it anchors the catalog connectivity check.",
+        "claims is empty deliberately, as for the other versus boards: campaign-intent vocabulary does not apply, and versus boards are validated by versus-catalog-rules.ts instead."
+      ],
+      "claims": []
     }
   ]
 }

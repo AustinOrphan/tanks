@@ -237,11 +237,13 @@ describe('the board actually fills the screen', () => {
   ];
 
   it('covers at least 48% of the frame, on every shipped arena at every common aspect', () => {
-    // Population: all 8 shipped arenas x 4 aspects = 32, every one checked -- not a
+    // Population: all 9 shipped arenas x 4 aspects = 36, every one checked -- not a
     // sample. The floor sits just under the measured worst case (49.1%, arena-01 on a
     // phone) and comfortably above what the old camera managed anywhere (39.9% there).
     // Issue #271's 27x21 vs-duel-01 is the first board of a different shape to join
-    // this sweep and clears the floor with nothing retuned for it.
+    // this sweep and clears the floor with nothing retuned for it. Issue #1036's vs-quad-02
+    // is 33x27, arena-01's shape, so its coverage is arena-01's at every aspect and the
+    // floor needed no re-measure beyond confirming that.
     const thin: string[] = [];
     let checked = 0;
     for (const [i, arena] of ARENAS.entries()) {
@@ -259,7 +261,7 @@ describe('the board actually fills the screen', () => {
     // re-measuring. Scoped to the raw catalog on purpose (issue #154: ARENAS is
     // catalog order, not campaign/level order) -- this floor is a property of the
     // BOARDS that ship, independent of which level plays which.
-    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(8);
+    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(9);
     expect(checked).toBe(ARENAS.length * ASPECTS.length);
     expect(thin).toEqual([]);
   });
@@ -289,10 +291,10 @@ describe('the board actually fills the screen', () => {
     // `framing-frame-margin-doubled`. The bands are wide enough to survive a retune and
     // narrow enough to catch a different camera.
     const at = (aspect: number): number[] => ARENAS.map((arena) => coverage(arena, aspect));
-    // Population: all 8 shipped arenas, at each of the two aspects issue #108 names.
+    // Population: all 9 shipped arenas, at each of the two aspects issue #108 names.
     const portrait = at(0.42); // 20:9 upright
     const ultrawide = at(2.39); // 21:9 sideways
-    expect(portrait).toHaveLength(8);
+    expect(portrait).toHaveLength(9);
     for (const f of portrait) {
       expect(f, 'portrait now fills a quarter of the frame -- re-read the orientation decision').toBeLessThan(0.25);
       expect(f).toBeGreaterThan(0.15);

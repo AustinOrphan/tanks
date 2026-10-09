@@ -77,6 +77,11 @@ const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>
   // seeded variant -- declared in versus-catalog.json and proved by
   // versus-catalog-rules.ts.
   'vs-quad-01': {},
+  // And for `vs-quad-02` (issue #1036), the second four-player board, by the same
+  // reasoning: four corner spawns forming one orbit of its two mirrors, all six pairs
+  // concealed, room, connectivity, clearance and every seeded variant -- declared in
+  // versus-catalog.json and proved by versus-catalog-rules.ts.
+  'vs-quad-02': {},
 };
 
 it('each shipped arena declares its claim inventory exactly, per this table', () => {

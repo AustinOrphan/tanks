@@ -316,7 +316,7 @@ describe('mapgen quality measures: the duplicated lattice agrees with the shippe
   // (`spawnsInLargestRegion` 3/3 and 4/4, `fatalEscapes` 1 and 2), and pinning the wrong one
   // of the two is what this comment exists to stop the next reader repeating.
   //
-  // Population: all 8 shipped boards x counts 2, 3 and 4 = 24 combinations.
+  // Population: all 9 shipped boards x counts 2, 3 and 4 = 27 combinations.
   const cases = ARENA_DEFS.flatMap((def) => [2, 3, 4].map((n) => ({ def, n })));
 
   it.each(cases)('agrees on $def.id at $n players', ({ def, n }) => {
@@ -510,27 +510,30 @@ describe('mapgen quality measures: the gap taxonomy (issue #822)', () => {
 
   it('reports where the shipped boards sit against the imported 60% budget, without gating on it', () => {
     // CALIBRATION. #822 states its budget as "at least 60% of tank-navigable positions in a
-    // corridor 3 cells or wider". Measured at N=2 over all 8 shipped boards:
+    // corridor 3 cells or wider". Measured at N=2 over all 9 shipped boards:
     //
     //   arena-01 0.718  arena-02 0.767  arena-03 0.712  arena-04 0.832
     //   arena-05 0.848  vs-duel-01 0.473  vs-tri-01 0.198  vs-quad-01 0.626
+    //   vs-quad-02 0.598
     //
-    // SIX of the eight clear it. The two that do not are the two smallest boards authored
-    // for versus, and that is reported rather than read as a defect -- a budget imported
-    // from another game's scale does not transfer to a 27x17 board without being re-derived
-    // against boards people have actually played here.
+    // SIX of the nine clear it. Two that do not are the two smallest boards authored for
+    // versus; the third, issue #1036's vs-quad-02, misses by 0.002, because its court and
+    // bars are built from single 3-cell modules where Quarters has wider plazas. All three
+    // are reported rather than read as defects -- a budget imported from another game's
+    // scale does not transfer without being re-derived against boards people have actually
+    // played here.
     //
-    // Slits, the same 8 boards: every campaign arena reads exactly 0.0000, and only
-    // vs-duel-01 (0.0268) and vs-tri-01 (0.0554) have any shell-only geometry at all. #822
-    // wants slits "bounded but NON-ZERO", so on that half of the rule six of the eight
-    // shipped boards are the ones outside it.
+    // Slits, the same 9 boards: every campaign arena reads exactly 0.0000, as do both
+    // four-player boards, and only vs-duel-01 (0.0268) and vs-tri-01 (0.0554) have any
+    // shell-only geometry at all. #822 wants slits "bounded but NON-ZERO", so on that half
+    // of the rule seven of the nine shipped boards are the ones outside it.
     const rows = ARENA_DEFS.map((d) => ({ id: d.id, m: measureBoard(d, 2, d.id) }));
     const campaign = rows.filter((r) => r.id.startsWith('arena-'));
     const versus = rows.filter((r) => r.id.startsWith('vs-'));
 
     // Asserted as an ORDERING and a population, not as the budget itself.
     expect(campaign).toHaveLength(5);
-    expect(versus).toHaveLength(3);
+    expect(versus).toHaveLength(4);
     for (const r of campaign) {
       expect(r.m.wideCorridorFraction, `${r.id} clears 0.60`).toBeGreaterThan(0.6);
       expect(r.m.slitCellFraction, `${r.id} has no slits`).toBe(0);
@@ -636,7 +639,7 @@ describe('mapgen quality measures: bot jam corridors (issue #822)', () => {
   });
 
   it('flags exactly one shipped board, and three other measures agree about which', () => {
-    // CALIBRATION, not a gate. Measured at N=2 over all 8 shipped boards: seven report zero,
+    // CALIBRATION, not a gate. Measured at N=2 over all 9 shipped boards: eight report zero,
     // and vs-tri-01 reports 3 corridors with the longest at 7.58 units.
     //
     // That is not this measure on its own: vs-tri-01 is also the only shipped board whose
@@ -646,7 +649,7 @@ describe('mapgen quality measures: bot jam corridors (issue #822)', () => {
     const rows = ARENA_DEFS.map((def) => ({ id: def.id, m: measureBoard(def, 2, def.id) }));
     const flagged = rows.filter((r) => r.m.jamCorridors > 0);
     expect(flagged.map((r) => r.id)).toEqual(['vs-tri-01']);
-    expect(rows).toHaveLength(8);
+    expect(rows).toHaveLength(9);
 
     const tri = rows.find((r) => r.id === 'vs-tri-01');
     expect(tri?.m.jamCorridors).toBeGreaterThan(0);
@@ -675,7 +678,7 @@ describe('mapgen quality measures: 3-fold symmetry (issue #820)', () => {
    * and on a rectangle a 180-degree rotation maps cell centres exactly onto cell centres, so
    * the two must agree EXACTLY rather than approximately.
    *
-   * Over all 8 shipped boards, which is the whole population `ARENA_DEFS` offers. If this ever
+   * Over all 9 shipped boards, which is the whole population `ARENA_DEFS` offers. If this ever
    * fails, the C3 figures reported beside it are wrong and nothing should be derived from them.
    */
   it('reproduces the shipped 180-degree measure at two turns, on every shipped board', () => {
@@ -749,7 +752,8 @@ describe('mapgen quality measures: 3-fold symmetry (issue #820)', () => {
     // tolerance" has changed and this issue's reasoning deserves revisiting -- which is
     // exactly when a reader wants to be told.
     const scores = ARENA_DEFS.map((d) => ({ id: d.id, c3: rotationalAsymmetry(d, 3, 'disc') }));
-    expect(scores.length, 'no boards to measure').toBe(8);
+    // 9 boards; issue #1036's vs-quad-02 scores 0.355 on the disc, well clear of the floor.
+    expect(scores.length, 'no boards to measure').toBe(9);
     const best = scores.reduce((a, b) => (a.c3 <= b.c3 ? a : b));
     expect(best.c3, `${best.id} is now nearly 3-fold symmetric; see issue #820`)
       .toBeGreaterThan(0.2);
