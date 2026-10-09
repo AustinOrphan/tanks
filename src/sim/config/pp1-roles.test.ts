@@ -4,6 +4,7 @@ import { PP1_ROLE_SHELL_CAPS, PP1_ROLE_BANDS, PP1_ROLE_MINE_CAPS } from './pp1-r
 import { configFor, TANK_KINDS } from './roster';
 import { loadArena } from '../arena';
 import { ARENAS } from '../arena';
+import { STANDARD_ARENA } from './arena-fixtures';
 
 describe('the PP1 role matrix', () => {
   it('sits inside every band the issue authorised', () => {
@@ -43,7 +44,9 @@ describe('the PP1 role matrix', () => {
 });
 
 describe('stamping the arm at spawn', () => {
-  const arena = ARENAS[0];
+  // The standard test board (issue #1009): one brown, grey and teal, each a kind the matrix
+  // lowers, so the stamp is checked on three enemy kinds whatever campaign level 1 becomes.
+  const arena = STANDARD_ARENA;
 
   it('stamps nothing at all when the arm is off, which is every shipped session', () => {
     const { tanks } = loadArena(arena);

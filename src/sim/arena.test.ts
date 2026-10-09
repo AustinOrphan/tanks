@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createWorldFor } from './arena';
-import { createArenaWorld } from './config/arena-fixtures';
+import { STANDARD_ARENA, createArenaWorld } from './config/arena-fixtures';
 // The module's own text, for the signature assertion in `createWorldFor's init object`
 // below: a parameter list is a property of the source, and `Function.length` cannot see a
 // positional appended after a defaulted one.
@@ -83,7 +83,8 @@ describe('loadArena', () => {
   });
 
   it('maps spawn chars to the right TankKind at grid-to-world coordinates', () => {
-    const { tanks } = loadArena(ARENA_01);
+    // The standard test board (issue #1009): this needs one spawn of every kind, not level 1.
+    const { tanks } = loadArena(STANDARD_ARENA);
     const kinds = tanks.map((t) => t.kind).sort();
     expect(kinds).toEqual(['brown', 'grey', 'player', 'teal']);
 

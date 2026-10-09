@@ -126,8 +126,9 @@ export const OPEN_SIGHTLINE_ARENA: ArenaDefinition = validateArenas(
  *
  * Test-only, like every board in this file: never in ARENAS, ARENA_DEFS, the versus catalog or
  * the campaign, and absent from the production bundle, because nothing outside tests and tools
- * imports this module (the dist search in #1009's PR pins that). It runs through the same
- * validator as the shipped file, so it cannot rot into something the real pipeline would reject.
+ * imports this module (#1009 checked that once by searching the built `dist` for its id; no test
+ * re-checks it). It runs through the same validator as the shipped file, so it cannot rot into
+ * something the real pipeline would reject.
  */
 export const STANDARD_ARENA: ArenaDefinition = validateArenas(
   {

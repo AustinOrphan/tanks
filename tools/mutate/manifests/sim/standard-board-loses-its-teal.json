@@ -1,0 +1,14 @@
+{
+  "id": "standard-board-loses-its-teal",
+  "file": "src/sim/config/arena-fixtures.ts",
+  "find": "          '................T................',",
+  "replace": "          '.................................',",
+  "expect": "killed",
+  "tests": [
+    "src/sim/arena-validation.test.ts"
+  ],
+  "why": "The standard test board (issue #1009) is what `createArenaWorld` builds, and the suites on it -- the pacifist suite's mine bound most of all, since brown lays no mines -- rely on its mixed roster. The roster is pinned in arena-validation.test.ts by value, apart from arenas.json, so re-authoring campaign level 1 (#1010) cannot move it. This entry is that pin's real failing mutation: the fixture's own teal glyph becomes floor, which is the edit #1010 makes to arena-01, applied to the wrong board. The board still validates, so only the roster pin sees it.",
+  "killedBy": [
+    "the standard test board (issue #1009) holds exactly one brown, one grey, one teal and one player -- pinned apart from arenas.json"
+  ]
+}
