@@ -11,7 +11,9 @@ import {
   type VersusConfig,
 } from './versus-config';
 import { versusBoardCatalog } from '../sim/versus-board';
-import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
+import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalog-types';
+import { VERSUS_CATALOG } from '../sim/config/versus-catalog';
+import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 
 /** Synthetic catalog entries for the filter/translation negative controls below --
  * plain literals, same idiom as versus-catalog-rules.test.ts's fixtures (the schema
@@ -134,6 +136,36 @@ describe('versusMapChoices', () => {
     expect(versusMapChoices(2, 'teams', entries)).toEqual(['vs-both']); // mode predicate
     expect(versusMapChoices(3, 'ffa', entries)).toEqual(['vs-both']); // players predicate
     expect(versusMapChoices(4, 'ffa', entries)).toEqual([]); // both predicates
+  });
+});
+
+describe('the versus board floor (issue #355): boards that are not campaign arenas, per option', () => {
+  // The ruling on #355 sets a floor: each startable versus option offers at least two boards
+  // that are not campaign arenas. Campaign membership is read from campaign.json's levels, not
+  // from board ids, so a board is "not a campaign arena" because no level plays it, whatever
+  // it is called.
+  const campaignArenas = new Set(CAMPAIGN_LEVELS.map((level) => level.arenaId));
+  const arenaOf = (entryId: string): string =>
+    (VERSUS_CATALOG.find((e) => e.id === entryId) as VersusCatalogEntry).arenaId;
+  const nonCampaignBoards = (players: 2 | 3 | 4, mode: VersusMode): string[] =>
+    versusMapChoices(players, mode).filter((id) => !campaignArenas.has(arenaOf(id)));
+
+  /**
+   * The options this floor is asserted for. Issue #1036 adds the two four-player options;
+   * #1035 adds 2-FFA, 3-FFA and 3-Teams, and whichever of the two lands second extends the
+   * list it finds rather than writing a second test.
+   */
+  const FLOOR_OPTIONS: readonly { players: 2 | 3 | 4; mode: VersusMode }[] = [
+    { players: 4, mode: 'ffa' },
+    { players: 4, mode: 'teams' },
+  ];
+
+  it('offers each covered option at least two boards that are not campaign arenas', () => {
+    expect(campaignArenas.size, 'the campaign plays some arenas').toBeGreaterThan(0);
+    for (const { players, mode } of FLOOR_OPTIONS) {
+      const boards = nonCampaignBoards(players, mode);
+      expect(boards.length, `${players}-${mode} offers ${boards.join(', ') || 'none'}`).toBeGreaterThanOrEqual(2);
+    }
   });
 });
 
