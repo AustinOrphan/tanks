@@ -9,6 +9,7 @@
   ],
   "why": "The in-listing test, gone: og:image names a file the build never emitted -- renamed in public/, or dropped -- and the checker passes, so the deploy ships a card URL that answers 404. Pages caches that 404 for four hours (measured on this site, issue #973), so the mistake outlives its fix. Both the unit case and the CLI case for a missing share image see it.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "share image portability catches an og:image whose file the build did not emit",
+    "the CLI runs both checkers over a real directory exits non-zero when only the SHARE IMAGE is missing (issue #973)"
   ]
 }

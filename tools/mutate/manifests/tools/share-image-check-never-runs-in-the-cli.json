@@ -9,6 +9,6 @@
   ],
   "why": "Composition blindness, the third time in this file: the pure function is correct and fully pinned, but `npm run portability` never calls it, so verify:build, ci.yml and pages.yml check nothing about the share image while every unit case stays green. Only the CLI case that breaks the share image alone can see it.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "the CLI runs both checkers over a real directory exits non-zero when only the SHARE IMAGE is missing (issue #973)"
   ]
 }
