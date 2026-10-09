@@ -1,0 +1,14 @@
+{
+  "id": "moment-scene-recoil-ignores-the-motion-policy",
+  "file": "src/render/gallery/moment-scene.ts",
+  "find": "  barrelRecoil.setReducedMotion(calm);",
+  "replace": "  barrelRecoil.setReducedMotion(false);",
+  "expect": "killed",
+  "tests": [
+    "src/render/gallery/moment-scene.test.ts"
+  ],
+  "why": "Leaves the moment scene's barrel recoil on full motion whatever the policy, as it was before issue #1018: a `--motion reduced` frame of a fire moment shows the gun springing through its stutter instead of holding half its kick, so the reduced presentation the frame is labelled with is not the one it shows. Killed by the wiring case that records what each system is pushed under a reduced policy.",
+  "killedBy": [
+    "buildMomentScene wiring (issue #1018) pushes a reduced motion policy to the barrel recoil and the muzzle smoke"
+  ]
+}

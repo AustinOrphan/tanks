@@ -47,6 +47,8 @@ import { configFor } from '../sim/config';
 import { TANK_KINDS } from '../sim/config/validate';
 import { createSkinTexture } from './skins';
 import { createDeathPulseSystem } from './death-pulse';
+import { createBarrelRecoilSystem } from './barrel-recoil';
+import type { SimEvent } from '../sim/events';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
   return {
@@ -3058,5 +3060,119 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
       expect(mineBlocks(scene), `mineCap ${cap}`).toHaveLength(0);
       views.dispose();
     }
+  });
+});
+
+describe('the role cue under reduced motion (issue #1018)', () => {
+  // The three weapon classes the cue distinguishes, each with `both` (the approved arm): brown
+  // carries the shipped flare and a riser, olive a small flare and no riser, teal both levers.
+  const KINDS: Tank['kind'][] = ['brown', 'olive', 'teal'];
+  const PARTS = ['hull', 'turret', 'barrel', 'mine-block'] as const;
+
+  function rig(reduced: boolean): { views: ReturnType<typeof createEntityViews>; w: World } {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene, undefined, null, null, null, 'both');
+    // BEFORE the first sync, so the tanks are built under the preference: a cue that read it
+    // at construction would differ here, which is the dependency this guards against.
+    views.setReducedMotion(reduced);
+    const tanks = KINDS.map((kind, i) => makeTank(i + 1, kind, 3 + i * 3, 5));
+    const spawns: Spawn[] = tanks.map((t) => ({ kind: t.kind, pos: { ...t.pos }, angle: 0 }));
+    const w = createWorld({ walls: [], tanks, spawns, lives: 3 });
+    views.sync(w, w, 0);
+    scene.updateMatrixWorld(true);
+    return { views, w };
+  }
+
+  /** The root group of tank `id`, found from its barrel. */
+  function rootOf(views: ReturnType<typeof createEntityViews>, id: number): THREE.Object3D {
+    let root = views.barrelOf(id) as THREE.Object3D;
+    while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
+    return root;
+  }
+
+  /** Every named cue part of tank `id`: its vertices and where it sits in the world. */
+  function partsOf(views: ReturnType<typeof createEntityViews>, id: number): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    rootOf(views, id).traverse((o) => {
+      if (!(PARTS as readonly string[]).includes(o.name)) return;
+      const mesh = o as THREE.Mesh;
+      out[o.name] = {
+        vertices: Array.from(mesh.geometry.getAttribute('position').array as Float32Array),
+        matrixWorld: [...mesh.matrixWorld.elements],
+      };
+    });
+    return out;
+  }
+
+  /** The widest radius of the barrel's lathe profile: the muzzle flare, for every cue state. */
+  function flareRadius(views: ReturnType<typeof createEntityViews>, id: number): number {
+    const barrel = views.barrelOf(id) as THREE.Mesh;
+    const pos = barrel.geometry.getAttribute('position');
+    let r = 0;
+    for (let i = 0; i < pos.count; i++) r = Math.max(r, Math.hypot(pos.getX(i), pos.getZ(i)));
+    return r * barrel.scale.x;
+  }
+
+  const blocksOf = (views: ReturnType<typeof createEntityViews>, id: number): number => {
+    let n = 0;
+    rootOf(views, id).traverse((o) => { if (o.name === 'mine-block') n++; });
+    return n;
+  };
+
+  it('builds the same hull, turret, barrel, flare and mine block either way, at rest -- population: 3 kinds', () => {
+    const full = rig(false);
+    const calm = rig(true);
+    for (const [i, kind] of KINDS.entries()) {
+      const a = partsOf(full.views, i + 1);
+      // The cue is really there, or this compares two empty records: every kind has the three
+      // body parts, and the block is present exactly where the tank carries mines.
+      expect(Object.keys(a).sort(), kind).toEqual(
+        configFor(kind).mineCapacity > 0 ? ['barrel', 'hull', 'mine-block', 'turret'] : ['barrel', 'hull', 'turret'],
+      );
+      expect(partsOf(calm.views, i + 1), kind).toEqual(a);
+    }
+    full.views.dispose();
+    calm.views.dispose();
+  });
+
+  it('the flare differs by weapon class, so the comparison above can see a flare change', () => {
+    // The negative control's premise, measured: teal's ricochet-rocket flare is wider than
+    // brown's standard one and olive's rocket flare narrower. A reduced-motion preference that
+    // reshaped the flare would move one of these, and the case above would fail.
+    const full = rig(false);
+    const [brown, olive, teal] = KINDS.map((_, i) => flareRadius(full.views, i + 1));
+    expect(teal).toBeGreaterThan(brown);
+    expect(olive).toBeLessThan(brown);
+    full.views.dispose();
+  });
+
+  it('a reduced recoil holds the gun back without touching the flare or the block, then returns', () => {
+    // REST_KICK: half of KICK, held for the recoil's 0.16 s life (barrel-recoil.ts). The recoil
+    // writes only the barrel's POSITION, so the flare's radius and the block's presence must
+    // read the same on every tick of it.
+    const calm = rig(true);
+    const recoil = createBarrelRecoilSystem(calm.views);
+    recoil.setReducedMotion(true);
+    const ids = KINDS.map((_, i) => i + 1);
+    const flares = ids.map((id) => flareRadius(calm.views, id));
+    const blocksAtRest = ids.map((id) => blocksOf(calm.views, id));
+    recoil.spawn(ids.map((ownerId) => ({ type: 'fire', ownerId }) as SimEvent), calm.w);
+    const held: number[] = [];
+    // 9 ticks of 1/60 s is 0.15 s, inside the 0.16 s life; the tenth tick crosses it.
+    for (let tick = 0; tick < 9; tick++) {
+      recoil.update(1 / 60);
+      for (const [j, id] of ids.entries()) {
+        held.push(0 - (calm.views.barrelOf(id) as THREE.Object3D).position.x);
+        expect(flareRadius(calm.views, id), `${KINDS[j]} flare at tick ${tick}`).toBe(flares[j]);
+      }
+      expect(ids.map((id) => blocksOf(calm.views, id)), `blocks at tick ${tick}`).toEqual(blocksAtRest);
+    }
+    // The gun MOVED, and by one constant offset rather than an animation.
+    expect(held[0]).toBeGreaterThan(0);
+    expect(new Set(held).size).toBe(1);
+    recoil.update(1 / 60);
+    for (const id of ids) expect(0 - (calm.views.barrelOf(id) as THREE.Object3D).position.x).toBe(0);
+    recoil.dispose();
+    calm.views.dispose();
   });
 });

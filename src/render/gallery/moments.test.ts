@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from './moments';
 import type { World } from '../../sim/world';
+import type { TankKind } from '../../sim/types';
+import { configFor } from '../../sim/config/roster';
 import {
   RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ, TANK_RADIUS,
   AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, AI_LAST_SEEN_TICKS, AI_TARGET_SWITCH_MARGIN,
@@ -693,5 +695,48 @@ describe('ai-retarget moment specifics', () => {
     // no tank-destroyed. A death would reset a position AND roundStartTick mid-clip.
     const tl = simulateMoment(DEF);
     expect(tl.events.flat().map((e) => e.type).filter((t) => t !== 'fire')).toEqual([]);
+  });
+});
+
+describe('ordnance-fire: the three weapon classes firing (issue #1018)', () => {
+  const DEF = MOMENTS['ordnance-fire'];
+  // Which tank fired at each pinned tick, by kind. MEASURED with simulateMoment; the ticks are
+  // emergent (all three fire through their own AI), so this is what the fixture produces, and a
+  // drift in any AI's timing fails here rather than as a mislabelled frame.
+  const FIRED_BY: Record<number, string[]> = {
+    36: ['teal'], 39: ['olive'], 50: ['brown', 'teal'], 64: ['teal'], 78: ['teal'], 90: ['brown'],
+    92: ['teal'],
+  };
+
+  it('each pinned fire is the kind the moment says, firing its own weapon class', () => {
+    const tl = simulateMoment(DEF);
+    const kindOf = (id: number): TankKind => tl.worlds[0].tanks.find((t) => t.id === id)!.kind;
+    for (const [tick, kinds] of Object.entries(FIRED_BY)) {
+      const fires = tl.events[Number(tick)].flatMap((e) => (e.type === 'fire' ? [e] : []));
+      expect(fires.map((e) => kindOf(e.ownerId)).sort(), `tick ${tick}`).toEqual([...kinds].sort());
+      for (const e of fires) {
+        // From the roster, not quoted: a kind re-armed in tank-defs.json moves this with it.
+        expect(e.bulletType, `tick ${tick} ${kindOf(e.ownerId)}`)
+          .toBe(configFor(kindOf(e.ownerId)).weapon.bulletType);
+      }
+    }
+    expect(Object.keys(FIRED_BY).map(Number).sort((a, b) => a - b))
+      .toEqual(DEF.expect.filter((e) => e.type === 'fire').map((e) => e.tick));
+  });
+
+  it('covers three distinct weapon classes, so every flare state is staged', () => {
+    // The staging guard at the fixture level: brown's standard shell, olive's rocket and teal's
+    // ricochet rocket must be three different bullet types, or one flare state is missing.
+    const tl = simulateMoment(DEF);
+    const types = new Set(tl.events.flat().flatMap((e) => (e.type === 'fire' ? [e.bulletType] : [])));
+    expect(types.size).toBe(3);
+  });
+
+  it('the refusal at tick 77 is olive\'s, and nothing is destroyed in the clip', () => {
+    const tl = simulateMoment(DEF);
+    const blocked = tl.events[77].flatMap((e) => (e.type === 'fire-blocked' ? [e] : []))[0];
+    expect(blocked && tl.worlds[0].tanks.find((t) => t.id === blocked.ownerId)?.kind).toBe('olive');
+    // MEASURED: the player at (14, 0) is first destroyed on tick 101, past the 96-tick window.
+    expect(tl.events.flat().filter((e) => e.type === 'tank-destroyed')).toEqual([]);
   });
 });

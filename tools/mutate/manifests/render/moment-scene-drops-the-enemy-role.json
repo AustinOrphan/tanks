@@ -1,0 +1,14 @@
+{
+  "id": "moment-scene-drops-the-enemy-role",
+  "file": "src/render/gallery/moment-scene.ts",
+  "find": "    scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null, opts.enemyRole ?? null,",
+  "replace": "    scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null, null,",
+  "expect": "killed",
+  "tests": [
+    "src/render/gallery/moment-scene.test.ts"
+  ],
+  "why": "Drops the role cue from the moment scene, which is how it stood before issue #1018: `--scene ordnance-fire --enemyRole both` parses, the CLI forwards it, and every frame shows the shipped board, so a capture meant to show the cue under its muzzle smoke shows no cue at all and nothing fails. Killed by the wiring case that records `createEntityViews`' sixth argument for every cue.",
+  "killedBy": [
+    "buildMomentScene wiring (issue #1018) hands its enemyRole to createEntityViews -- population: every cue in ENEMY_ROLE_CUES"
+  ]
+}
