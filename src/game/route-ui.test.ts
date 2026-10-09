@@ -834,6 +834,87 @@ describe('the gallery workbench is mounted with its pane and released with it (i
     expect(rec.disposed).toBe(1);
   });
 
+  describe('a close while the scene modules are still loading (issue #1012)', () => {
+    /**
+     * The bench behind a loader the test releases by hand, so the close lands inside the load.
+     *
+     * `settled` resolves once every load the mount waits on has, plus a macrotask: by then the
+     * pane's `.then` has run, so an assertion of absence after it is not merely early.
+     */
+    function heldBench(initial: string | null) {
+      const { rec, value } = bench(initial);
+      let release!: () => void;
+      const held = new Promise<void>((r) => {
+        release = r;
+      });
+      let loads = 0;
+      const gated: NonNullable<RouteUiDeps['galleryWorkbench']> = {
+        ...value,
+        load: async () => {
+          loads += 1;
+          await held;
+          return value.load();
+        },
+      };
+      const settled = async (): Promise<void> => {
+        await Promise.all([import('./gallery-workbench'), import('./gallery-selection'), held]);
+        await new Promise((r) => setTimeout(r, 0));
+      };
+      return { rec, value: gated, release, settled, loads: () => loads };
+    }
+
+    it('THE CONTROL: released with the pane still open, the held load does mount', async () => {
+      // Without this, the cases below could pass because a held load never mounts at all.
+      const h = heldBench('scene:destroyed');
+      const f = fixture({ galleryWorkbench: h.value });
+      f.fire('onGalleryOpen');
+      expect(h.loads()).toBe(1);
+      h.release();
+      await h.settled();
+      expect(h.rec.built).toHaveLength(1);
+      expect(f.hud.galleryBody.childElementCount).toBeGreaterThan(0);
+    });
+
+    it('a close during the load leaves no body and builds no handle', async () => {
+      const h = heldBench('scene:destroyed');
+      const f = fixture({ galleryWorkbench: h.value });
+      f.fire('onGalleryOpen');
+      f.fire('onGalleryClose');
+      h.release();
+      await h.settled();
+      expect(h.rec.built, 'a late mount built a WebGL handle for a closed pane').toEqual([]);
+      expect(f.hud.galleryBody.childElementCount).toBe(0);
+    });
+
+    it('a teardown during the load leaves no body and builds no handle', async () => {
+      // Teardown reaches `disposeGallery` directly, with no `onGalleryClose`: the window the
+      // generation bump BEFORE the early return exists for.
+      const h = heldBench(null);
+      const f = fixture({ galleryWorkbench: h.value });
+      f.fire('onGalleryOpen');
+      f.routeUi.disposeGallery();
+      h.release();
+      await h.settled();
+      expect(h.rec.built).toEqual([]);
+      expect(f.hud.galleryBody.childElementCount).toBe(0);
+    });
+
+    it('a close and reopen during the load mounts once, for the reopen', async () => {
+      const h = heldBench('scene:destroyed');
+      const f = fixture({ galleryWorkbench: h.value });
+      f.fire('onGalleryOpen');
+      f.fire('onGalleryClose');
+      f.fire('onGalleryOpen');
+      expect(h.loads()).toBe(2);
+      h.release();
+      await h.settled();
+      expect(h.rec.built, 'the superseded open mounted too').toHaveLength(1);
+      f.fire('onGalleryClose');
+      expect(h.rec.disposed).toBe(1);
+      expect(f.hud.galleryBody.childElementCount).toBe(0);
+    });
+  });
+
   it('mounts nothing on a page without the workbench', () => {
     const f = fixture();
     f.fire('onGalleryOpen');
