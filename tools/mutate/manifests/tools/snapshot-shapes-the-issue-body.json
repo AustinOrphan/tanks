@@ -9,6 +9,6 @@
   ],
   "why": "The issue body joins the published snapshot, a privacy regression the field allow-list in `snapshotIssue` exists to prevent. It survived every test before issue #1025: the `issue()` fixture has no body, and an undefined key drops out of `JSON.stringify`, so a `not.toContain` over the serialised output could not fail. The privacy case plants a body, a comment count and logins in the REST shape and asserts the shaped keys are exactly the typedef's.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "snapshotIssue publishes only the fields it names (issue #1025) keeps exactly the SnapshotIssue fields, and none of the planted strings"
   ]
 }

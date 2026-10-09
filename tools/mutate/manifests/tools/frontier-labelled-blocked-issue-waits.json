@@ -10,6 +10,7 @@
   ],
   "why": "The label is consulted before the graph: a labelled issue with a standing blocker, or with blockers nobody read, lands in `waiting` -- which reads as 'free of blockers, just needs a person' and so hides the blocker. Issue #1025's rule is that graph facts outrank labels; `unknown` especially must never look like either ready or waiting.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "frontier: waiting on a person (issue #1025) lets graph facts outrank labels: a labelled issue that is blocked or unread is neither ready nor waiting",
+    "frontier report reads a snapshot file and reaches no network at all"
   ]
 }

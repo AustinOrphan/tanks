@@ -9,6 +9,7 @@
   ],
   "why": "`needs-review` falls out of the person-label set, so an issue waiting only on a review is listed as ready. It moves no number on the live graph today -- measured on 2026-10-09, every open `needs-review` issue also carries `human-required` -- which is exactly why only a fixture carrying that label ALONE can see it. `docs/agent/kickoff.md` names four labels as needing a person, and issue #1025 holds the set to all four.",
   "killedBy": [
-    "PLACEHOLDER: filled from --report"
+    "frontier: waiting on a person (issue #1025) names the four person labels docs/agent/kickoff.md names, and no others",
+    "frontier: waiting on a person (issue #1025) needs-review alone moves an otherwise-ready issue to waiting, and its unlabelled twin stays ready"
   ]
 }
