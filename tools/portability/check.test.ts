@@ -287,7 +287,7 @@ describe('share image portability', () => {
   });
 });
 
-describe('the CLI runs both checkers over a real directory', () => {
+describe('the CLI runs every checker over a real directory', () => {
   // Composition blindness, one layer up from the unit cases above: every assertion in
   // this file so far calls the pure functions directly, so DELETING the manifestFailures
   // call from the CLI -- or the whole `readDist` change that feeds it -- leaves all of
