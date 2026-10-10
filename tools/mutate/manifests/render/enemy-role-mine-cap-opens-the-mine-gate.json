@@ -1,0 +1,11 @@
+{
+  "id": "enemy-role-mine-cap-opens-the-mine-gate",
+  "file": "src/render/entities.ts",
+  "find": "    const mineLoad = hasAbility(kind, TankAbility.MINE_LAYER) ? (mineCap ?? cfg.mineCapacity) : 0;",
+  "replace": "    const mineLoad = mineCap ?? (hasAbility(kind, TankAbility.MINE_LAYER) ? cfg.mineCapacity : 0);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The precedence slip: a session's `Tank.mineCap` bypasses the MINE_LAYER gate instead of sizing the block inside it. The roster reads correctly, so every case without a per-tank budget passes; but a kind without MINE_LAYER given a budget would draw a block for mines the simulation never lets it lay, since the simulation checks the ability before the budget (issue #1059)."
+}

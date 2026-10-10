@@ -1,0 +1,11 @@
+{
+  "id": "enemy-role-mine-cue-ignores-mine-layer",
+  "file": "src/render/entities.ts",
+  "find": "    const mineLoad = hasAbility(kind, TankAbility.MINE_LAYER) ? (mineCap ?? cfg.mineCapacity) : 0;",
+  "replace": "    const mineLoad = mineCap ?? cfg.mineCapacity;",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Drops the MINE_LAYER gate, so the mine cue keys on raw capacity again. Brown and Green carry a capacity of 2 and no MINE_LAYER, and the simulation refuses every mine from them (world.ts, ai/index.ts), so `deck`, `riser` and `both` would draw a 0.3 block and `crown` the shipped turret on two tanks that cannot lay a mine -- the failure PR #830 named -- and the drawn roster would fall from six groups to four, brown reading as grey and green as teal (issue #1059)."
+}

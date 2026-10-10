@@ -7,7 +7,7 @@
   "tests": [
     "src/presentation/enemy-role.test.ts"
   ],
-  "why": "The zero-bounce arm collapsed onto the standard shell, so olive's rocket wears the same barrel as a shell that bounces. Olive is one of only TWO kinds this grammar separates from the pack at all -- it is the sole zero-bounce, no-mine kind -- so this quietly drops a quarter of what the cue buys while every other tank still looks correct.",
+  "why": "The zero-bounce arm collapsed onto the standard shell, so olive's rocket wears the same barrel as a shell that bounces. Olive is the one kind its weapon class alone separates, and it lays no mines, like brown, so under this mutation it reads as brown and the grammar separates five enemy kinds rather than six (issue #1059) while every other tank still looks correct.",
   "killedBy": [
     "enemy role cues: the mapping is the number the player needs orders EVERY weapon lever by the bounce budget -- population: all 3 levers x 3 types"
   ]
