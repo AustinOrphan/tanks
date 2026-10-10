@@ -137,9 +137,10 @@ export function narrowPipLayout(slots: number, total: number): PipLayout {
  * that cannot burst is not a degraded arm, it is the absence of one, and #230 would have been
  * ranking a blank.
  *
- * One full-size pip plus the digit measures 205.1px at four players against the 254.1px budget,
- * 49px of room, so the glyph does not even need shrinking to fit. The count stays exact, the
- * shape stays present, and the cue keeps its target.
+ * Measured on the real HUD at 390px (issue #1055), one full-size pip plus the digit leaves 39.4px
+ * inside the topbar's content box at four FFA players and 54.4px at four teams, so the glyph does
+ * not even need shrinking to fit. The count stays exact, the shape stays present, and the cue
+ * keeps its target.
  */
 export type PipLayout =
   | { kind: 'row'; pip: number; gap: number }
