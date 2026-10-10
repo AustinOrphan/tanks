@@ -51,6 +51,12 @@ level anyone plays, the fullest arrangement arrives exactly on the last kill in 
 (population: the same 24 members). The easiest level gets
 the payoff the hardest one does not.
 
+**Since issue #1010 (2026-10-10)** level 1 is a lone brown, so `enemiesAtRoundStart` is 1
+and `musicIntensity`'s `total <= 1` guard returns 1 from the first frame: level 1 now plays
+the full arrangement for the whole round, never the build. The arena-01 row above (measured
+at `60bdcfa`, three enemies) no longer describes level 1, and the inversion is sharper than
+it records: the easiest level now has the payoff before its first shot.
+
 **What would answer it:**
 
 - **Cheapest experiment for the destination half:** an affine remap, `lo(level) +
@@ -83,8 +89,8 @@ the payoff the hardest one does not.
   (`loop.ts`, named function) — per LEVEL, not per round — so losing a life still takes the target from
   1.0 to 0.0. A per-level floor shortens that fall, which is half the appeal.
 - **`total <= 1` returns 1.** A one-enemy round sits at the full arrangement start to
-  finish. Not reachable in a shipped level (the minimum is 3) but reachable today via
-  `?dev=1&level=sandbox&tanks=brown`.
+  finish. Since issue #1010 that is level 1 itself; before it no shipped level had fewer
+  than 3 enemies, and the only route was `?dev=1&level=sandbox&tanks=brown`.
 - **If the difficulty term becomes data**, `arenas.json` is the validated home for it and
   `validateArenas` the place a bad edit should fail — not a new parallel table.
 
