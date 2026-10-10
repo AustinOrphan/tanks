@@ -846,6 +846,36 @@ export const SCREEN_STATES = Object.freeze([
     ],
     measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-note'],
   }),
+  state({
+    id: 'screen.versus-setup.fresh',
+    title: 'Versus Setup, nothing played',
+    description:
+      'The Map row a player with no campaign progress sees, at three players (issue #983). ' +
+      'Every campaign board is locked, so the row holds Keystone, Quarters and Random: fewer ' +
+      'cards than the five columns it has room for at desktop width.',
+    // A FRESH save, and the only Versus Setup state on one: the other four use MID_CAMPAIGN,
+    // whose two unlocked arenas fill the row's first line. Three players rather than the
+    // default two because three is the shortest row a fresh save can show -- three cards, at
+    // 3-FFA, 3-Teams, 4-FFA and 4-Teams alike -- where two players shows four.
+    //
+    // `.hud-versus-map-card` is measured for its WIDTH, which records how the row lays out a
+    // short line. With `auto-fill` the grid kept five tracks and left the three cards against
+    // the left edge, 243px each with about 500px empty beside them, under rows that are all
+    // centred; `auto-fit` (hud.css) collapses the empty tracks, so the three span the row.
+    //
+    // Waiting on Pinwheel's card to GO is what proves the row was rebuilt for three players:
+    // that board is two-player only. A wait on a card the row keeps would pass with the
+    // Players click silently ignored.
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { waitVisible: '.hud-versus-map-row [data-map="vs-duel-01"]' },
+      { click: '.hud-versus-players-row [data-players="3"]' },
+      { waitHidden: '.hud-versus-map-row [data-map="vs-duel-01"]' },
+    ],
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-card'],
+  }),
   // ---- Developer Tools -------------------------------------------------------------
   state({
     id: 'screen.devtools',
