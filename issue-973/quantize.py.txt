@@ -1,0 +1,78 @@
+# Palette-quantise the truecolour card to an optimised 8-bit PNG.
+# Usage: python3 -I quantize.py <in-rgb.png> <out.png> [seam-top seam-bot [panel-dither]]
+#
+# Without seam arguments this is option C's quantize.py: one 256-colour palette built from the
+# whole image with Pillow's fast-octree method, and Floyd-Steinberg error diffusion, which keeps
+# the felt's grain (without dithering the felt flattens) and the tank colours' means within about
+# 1 level.
+#
+# Given the seam's outer x at the top and bottom of the card, the panel's darks get palette entries
+# of their own, because a fast octree of the whole card gives the near-black panel and plate
+# gradients only 4-5 entries 4-5 levels apart, and diffusion between them and the board's coloured
+# entries leaves faint orange and red speckle in the plate:
+#   - 32 entries are a median cut of the panel side's gradient pixels: every pixel left of the
+#     seam's outer edge, minus the lockup's box. They run from #0d0e12 to #1f242c, mostly 1 level
+#     apart.
+#   - 224 entries are a fast octree of the whole card, as before, for the board, the lockup's
+#     antialiasing and the green rules.
+#   - The board side is remapped onto the joint palette with Floyd-Steinberg, as before.
+#   - The panel side is remapped onto it without dithering (panel-dither 0, the default) or with
+#     Floyd-Steinberg (panel-dither 1). Undithered, each panel colour goes to its exact nearest
+#     entry, computed here: Pillow's own undithered lookup buckets colours 4 levels to a step,
+#     which bands the gradient and darkens it by 1-2 levels on average.
+import sys
+from PIL import Image
+
+PANEL_DARKS = 32
+LOCKUP_BOX = (300, 170, 640, 470)  # x0, y0, x1, y1: excluded from the darks' median cut
+
+src = Image.open(sys.argv[1]).convert('RGB')
+if len(sys.argv) <= 3:
+    palette = src.quantize(256, method=Image.Quantize.FASTOCTREE)
+    out = src.quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG)
+    out.save(sys.argv[2], 'PNG', optimize=True)
+    sys.exit(0)
+
+top, bot = float(sys.argv[3]), float(sys.argv[4])
+panel_dither = len(sys.argv) > 5 and sys.argv[5] == '1'
+w, h = src.size
+px = src.load()
+mask = Image.new('L', src.size, 0)
+mpx = mask.load()
+darks = []
+x0, y0, x1, y1 = LOCKUP_BOX
+for y in range(h):
+    # Panel side: left of the seam's outer edge, plus the edge's own antialiased pixel.
+    edge = int(top + (bot - top) * ((y + 0.5) / h)) + 1
+    for x in range(min(w, edge)):
+        mpx[x, y] = 255
+        # Gradient pixels only: outside the lockup's box and short of the green rule.
+        if x < edge - 12 and not (x0 <= x < x1 and y0 <= y < y1):
+            darks.append(px[x, y])
+
+strip = Image.new('RGB', (len(darks), 1))
+strip.putdata(darks)
+dark_pal = strip.quantize(PANEL_DARKS, method=Image.Quantize.MEDIANCUT).getpalette()
+dark_pal = dark_pal[: PANEL_DARKS * 3]
+main_pal = src.quantize(256 - PANEL_DARKS, method=Image.Quantize.FASTOCTREE).getpalette()
+main_pal = main_pal[: (256 - PANEL_DARKS) * 3]
+joint = Image.new('P', (1, 1))
+joint.putpalette(main_pal + dark_pal)
+
+out = src.quantize(palette=joint, dither=Image.Dither.FLOYDSTEINBERG)
+if not panel_dither:
+    entries = [tuple(main_pal[i:i + 3]) for i in range(0, len(main_pal), 3)]
+    entries += [tuple(dark_pal[i:i + 3]) for i in range(0, len(dark_pal), 3)]
+    nearest = {}
+    opx = out.load()
+    for y in range(h):
+        for x in range(w):
+            if not mpx[x, y]:
+                continue
+            c = px[x, y]
+            if c not in nearest:
+                nearest[c] = min(range(len(entries)), key=lambda i: (
+                    (entries[i][0] - c[0]) ** 2 + (entries[i][1] - c[1]) ** 2
+                    + (entries[i][2] - c[2]) ** 2))
+            opx[x, y] = nearest[c]
+out.save(sys.argv[2], 'PNG', optimize=True)

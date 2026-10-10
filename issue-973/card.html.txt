@@ -1,0 +1,137 @@
+<!doctype html>
+<!-- v1-seam-centred, round 2: the 1200x630 share card. Rendered at deviceScaleFactor 2 by
+     render.mjs, then downscaled to 1200x630. Every asset is a file:// path relative to this file:
+     work/board.png is main/main-compact-stack.png cropped to 1390x1150 at (934, 467) and
+     Lanczos-scaled by 1.1 to 1529x1265 device px (764.5x632.5 CSS px) by build.sh, a net 0.55 of
+     source size in the card, the same board scale as option C. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('../../brand/ibm-plex-sans-latin-wght-normal.woff2') format('woff2');
+    font-weight: 100 700;
+  }
+
+  /* HUD tokens from brand/tokens.txt (src/game/hud.css). */
+  :root {
+    --hud-text: #d8dde6;
+    --hud-text-bright: #f2f5fa;
+    --hud-app-ground: #181c24;
+    --void: #14161c;
+    --primary: #4fd06a;
+    --hint: #aeb6c2;
+    /* The panel's outer (board-side) edge at the top and bottom of the card: 111 px over 630, the
+       same 10.0 degree forward lean as option C, moved right so the seam crosses the card's middle
+       (x 627.5 at mid-height). */
+    --seam-top: 683px;
+    --seam-bot: 572px;
+    --rule: 8px;
+    /* The left plate's edge, parallel to the seam and left of x 285 at every height, so the
+       centred square never shows it. */
+    --plate-top: 256px;
+    --plate-bot: 145px;
+    --hud-quiet-fill: rgba(216, 221, 230, 0.16);
+    /* The lockup's shared left ink edge: 35 px inside the centred square (x 285-915). */
+    --copy-left: 320px;
+  }
+
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body { background: var(--void); position: relative; font-family: 'IBM Plex Sans', sans-serif; }
+
+  /* Right: the gameplay crop. Card x = 440 + (source x - 934) * 0.55, card y = (source y - 467) *
+     0.55. Its left 132-243 CSS px sit under the leaning panel, over felt and scenery only. The
+     board overhangs the card by 4.5 px right and 2.5 px down; the page clips it. No grade. */
+  .board {
+    position: absolute; left: 440px; top: 0; width: 764.5px; height: 632.5px;
+    background: url('work/board.png') no-repeat 0 0 / 764.5px 632.5px;
+  }
+
+  /* Left: the panel, a slab with a hard edge shadow (the splash title's hard-shadow language,
+     turned sideways) and a primary-green rule along its edge. As option C. */
+  .panel-wrap {
+    position: absolute; inset: 0;
+    filter: drop-shadow(7px 0 0 rgba(0, 0, 0, 0.45));
+  }
+  .panel {
+    position: absolute; inset: 0;
+    clip-path: polygon(0 0, var(--seam-top) 0, var(--seam-bot) 100%, 0 100%);
+    background: linear-gradient(170deg, #1d222c 0%, var(--hud-app-ground) 48%, #121419 100%);
+  }
+  .edge {
+    position: absolute; inset: 0;
+    clip-path: polygon(calc(var(--seam-top) - var(--rule)) 0, var(--seam-top) 0,
+      var(--seam-bot) 100%, calc(var(--seam-bot) - var(--rule)) 100%);
+    background: var(--primary);
+  }
+
+  /* The left band (x 0-285, outside the centred square): the panel's own gradient under the
+     splash's hard-shadow black, ramped from .26 to .45 alpha so the plate sits a near-constant
+     8-10 levels below the panel from top to bottom. Its edge is a hairline in --hud-quiet-fill,
+     parallel to the seam. */
+  .plate {
+    position: absolute; inset: 0;
+    clip-path: polygon(0 0, var(--plate-top) 0, var(--plate-bot) 100%, 0 100%);
+    background:
+      linear-gradient(170deg, rgba(0, 0, 0, 0.26) 0%, rgba(0, 0, 0, 0.45) 100%),
+      linear-gradient(170deg, #1d222c 0%, var(--hud-app-ground) 48%, #121419 100%);
+  }
+  .plate-edge {
+    position: absolute; inset: 0;
+    clip-path: polygon(calc(var(--plate-top) - 3px) 0, var(--plate-top) 0,
+      var(--plate-bot) 100%, calc(var(--plate-bot) - 3px) 100%);
+    background: var(--hud-quiet-fill);
+  }
+
+  /* The lockup: option C's flush-left column, vertically centred. Ink gaps, measured on the
+     render by work/ink.py: 35 px from the title's baseline to the tagline, a 38 px tagline line
+     pitch, then 30 px either side of the rule, so it divides the tagline from the play line. Each
+     line's margin-left cancels its first glyph's side bearing, so all five ink edges sit on
+     x 320. */
+  .copy {
+    position: absolute; left: var(--copy-left); top: 0; height: 630px; width: 360px;
+    display: flex; flex-direction: column; justify-content: center;
+    box-sizing: border-box; padding-bottom: 8px; /* centres the ink, not the line boxes, on y 315 */
+  }
+  .title {
+    margin: 0 0 0 -2px;
+    font-size: 80px; line-height: 0.92; font-weight: 700;
+    letter-spacing: 2.2px; /* splash: 2px at 72px, scaled */
+    color: var(--hud-text-bright);
+    text-shadow: 0 4px 0 rgba(0, 0, 0, 0.45); /* splash: 0 4px 0 at 72px */
+  }
+  .tagline {
+    margin: 17px 0 0;
+    font-size: 34px; line-height: 1.12; font-weight: 500; /* --hud-weight-normal */
+    color: var(--hud-text);
+  }
+  .rule {
+    width: 48px; height: 6px; border-radius: 3px; margin: 24px 0 25px; /* 30 px ink gap each side */
+    background: var(--primary);
+  }
+  .play {
+    margin: 0 0 0 -2px;
+    font-size: 27px; line-height: 1.2; font-weight: 600;
+    color: var(--hint);
+  }
+</style>
+</head>
+<body>
+  <div class="board"></div>
+  <div class="panel-wrap"><div class="panel"></div></div>
+  <div class="edge"></div>
+  <div class="plate"></div>
+  <div class="plate-edge"></div>
+  <div class="copy">
+    <h1 class="title">TANKS!</h1>
+    <p class="tagline">Top-down arena<br>tank battles</p>
+    <div class="rule"></div>
+    <p class="play">Play in your browser</p>
+  </div>
+  <script>
+    // render.mjs waits for this flag, set once the bundled face has loaded.
+    document.fonts.ready.then(() => { window.__laidOut = true; });
+  </script>
+</body>
+</html>

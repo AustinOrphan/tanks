@@ -1,0 +1,53 @@
+#!/bin/zsh
+# Build variant v1-seam-centred (round 2) of option C (split card): crop and scale the gameplay
+# frame, render the card at 2x, downscale, palette-quantise, then write the check copies (300 and
+# 150 px wide full card, 600 px beside option C, the centred 630x630 square at 630 and 200 px) and
+# print sizes. Round 1's sources are in v1/.
+set -euo pipefail
+DIR=/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/share-pool/c-variants/v1-repro
+SRC=/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/share-pool/main
+C=/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/share-pool/options/c-split-card
+mkdir -p "$DIR/work"
+
+# 1. Board: source x 934-2324, y 467-1617 (1390x1150) of the 3280x1880 main frame, Lanczos-scaled
+#    by 1.1 to 1529x1265 device px (764.5x632.5 CSS px at card x 440; a net 0.55 of source size in
+#    the final 1200x630, option C's board scale). Card x = 440 + (sx - 934) * 0.55 and
+#    card y = (sy - 467) * 0.55. The window sits well below the HUD topbar (y 30-100) and above the
+#    bottom wall (y 1722). It starts 108 px above brown's top (y 575) and ends 105 px below the
+#    player (y 1512).
+ffmpeg -loglevel error -y -i "$SRC/main-compact-stack.png" \
+  -vf "crop=1390:1150:934:467,scale=1529:1265:flags=lanczos" "$DIR/work/board.png"
+
+# 2. Render the card at deviceScaleFactor 2 (2400x1260).
+node "$DIR/render.mjs" "$DIR/card.html" "$DIR/work/card-2x.png"
+
+# 3. Downscale with Lanczos to exactly 1200x630 (truecolour intermediate).
+ffmpeg -loglevel error -y -i "$DIR/work/card-2x.png" \
+  -vf "scale=1200:630:flags=lanczos" "$DIR/work/card-1x-rgb.png"
+
+# 4. Quantise to one 256-colour palette built from this image: Floyd-Steinberg on the board, plain
+#    nearest-colour on the flat panel and plate, so the darks carry no coloured dither speckle.
+python3 -I "$DIR/quantize.py" "$DIR/work/card-1x-rgb.png" "$DIR/option.png" 683 572
+
+# 5. Check copies. format=rgb24 on both sides, or ffmpeg re-palettises the pal8 input with its
+#    own dithered palette and the copy looks far noisier than the card.
+ffmpeg -loglevel error -y -i "$DIR/option.png" \
+  -vf "format=rgb24,scale=300:-1:flags=lanczos,format=rgb24" "$DIR/option-300.png"
+ffmpeg -loglevel error -y -i "$DIR/option.png" \
+  -vf "format=rgb24,scale=150:-1:flags=lanczos,format=rgb24" "$DIR/work/option-150.png"
+# The centred square that compact link previews show: 630x630 at x 285-915.
+ffmpeg -loglevel error -y -i "$DIR/option.png" \
+  -vf "format=rgb24,crop=630:630:285:0,format=rgb24" "$DIR/work/square-630.png"
+ffmpeg -loglevel error -y -i "$DIR/option.png" \
+  -vf "format=rgb24,crop=630:630:285:0,scale=200:200:flags=lanczos,format=rgb24" \
+  "$DIR/square-200.png"
+ffmpeg -loglevel error -y -i "$DIR/option.png" \
+  -vf "format=rgb24,crop=630:630:285:0,scale=100:100:flags=lanczos,format=rgb24" \
+  "$DIR/work/square-100.png"
+# Feed size beside option C: C on top, this variant below, both 600 px wide, 12 px void between.
+ffmpeg -loglevel error -y -i "$C/option.png" -i "$DIR/option.png" -filter_complex \
+  "[0]format=rgb24,scale=600:-1:flags=lanczos,pad=600:327:0:0:0x14161c[a];[1]format=rgb24,scale=600:-1:flags=lanczos[b];[a][b]vstack,format=rgb24" \
+  "$DIR/work/compare-600.png"
+
+sips -g pixelWidth -g pixelHeight "$DIR/option.png" "$DIR/option-300.png" "$DIR/square-200.png"
+ls -l "$DIR/option.png" "$DIR/option-300.png" "$DIR/square-200.png"
