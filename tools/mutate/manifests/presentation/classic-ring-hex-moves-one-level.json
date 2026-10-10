@@ -1,0 +1,11 @@
+{
+  "id": "classic-ring-hex-moves-one-level",
+  "file": "src/presentation/identity.ts",
+  "find": "0x9d3bff",
+  "replace": "0x9d3bfe",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts"
+  ],
+  "why": "Classic must stay byte-identical (issue #1056): moves Classic ring 3 by ONE level in blue. No floor and no tightest-pair name notices a one-level move, which is the point: the literal pin of the seven shipped hexes is the only guard that a Classic colour moved at all, and a Classic move is a visible change to every existing player."
+}

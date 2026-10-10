@@ -135,10 +135,10 @@ describe('colour-vision simulation (Machado 2009, severity 1)', () => {
     expect(deutan, 'deutan collapses them').toBeLessThan(10);
   });
 
-  it('pins one colour under each type, so a swapped matrix or a skipped linearisation fails', () => {
+  it('pins one colour under each type, so a swapped matrix fails', () => {
     // Each type gives #d64545 a different answer, so exchanging any two matrices fails two of
-    // these lines. Applying the matrix to the sRGB values directly, without linearising, reads
-    // #7a6e43 for deutan; applying it transposed reads #8ccf00.
+    // these lines. The values also hold the order of operations: the matrix applies to LINEAR
+    // light, so applying it to the 8-bit sRGB values, or transposed, gives other colours.
     expect(simulateColourVision(0xd64545, 'protan').toString(16)).toBe('6d6544');
     expect(simulateColourVision(0xd64545, 'deutan').toString(16)).toBe('918441');
     expect(simulateColourVision(0xd64545, 'tritan').toString(16)).toBe('eb1c47');

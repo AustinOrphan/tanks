@@ -1,0 +1,12 @@
+{
+  "id": "high-contrast-ring-nears-a-hull-paint",
+  "file": "src/presentation/identity.ts",
+  "find": "0xfdbbc6",
+  "replace": "0xe6c8c8",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "PAINT family (issue #1056). Moves High contrast ring 2 to the greyed pink #e6c8c8, which composites to 14.63 from the White hull paint #e8ecf2, under OWNER_FLOOR 15. Ring pairs keep their names and values (ring2 vs ring3 becomes the tritan runner-up at 13.79, behind 11.26), ground contrast is 3.28, and ring 2 is 35.22 from the placeholder. Classic is deliberately NOT held to this floor -- #586 tolerates its ring 1 at 1.17 from the orange paint, guarded by #975's floor of 1 in customization.test.ts. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056)."
+}
