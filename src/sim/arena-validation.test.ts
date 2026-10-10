@@ -9,7 +9,10 @@ import { structuralFailures, claimFailures, cellCentre, cellOf, breach } from '.
 import { ARENA_DEFS, arenaById } from './config/arenas';
 import { CAMPAIGN_ARENA_DEFS } from './config/campaign';
 import { configFor } from './config';
-import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, BANK_SIGHTLINE_ARENA } from './config/arena-fixtures';
+import {
+  WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, BANK_SIGHTLINE_ARENA, STANDARD_ARENA,
+} from './config/arena-fixtures';
+import { VERSUS_CATALOG } from './config/versus-catalog';
 import type { ArenaClaim } from './config/arena-types';
 
 describe('the shipped arena sequence', () => {
@@ -77,6 +80,11 @@ const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>
   // seeded variant -- declared in versus-catalog.json and proved by
   // versus-catalog-rules.ts.
   'vs-quad-01': {},
+  // And for `vs-quad-02` (issue #1036), the second four-player board, by the same
+  // reasoning: four corner spawns forming one orbit of its two mirrors, all six pairs
+  // concealed, room, connectivity, clearance and every seeded variant -- declared in
+  // versus-catalog.json and proved by versus-catalog-rules.ts.
+  'vs-quad-02': {},
 };
 
 it('each shipped arena declares its claim inventory exactly, per this table', () => {
@@ -146,6 +154,41 @@ describe('variable arena dimensions', () => {
 
   it('is never in the shipped sequence', () => {
     expect(ARENA_DEFS.map((a) => a.id)).not.toContain('fixture-wide');
+  });
+});
+
+describe('the standard test board (issue #1009)', () => {
+  /** The board's roster by kind, read from the tanks `loadArena` really builds. */
+  const rosterOf = (arena: Parameters<typeof loadArena>[0]): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const t of loadArena(arena).tanks) out[t.kind] = (out[t.kind] ?? 0) + 1;
+    return out;
+  };
+
+  it('holds exactly one brown, one grey, one teal and one player -- pinned apart from arenas.json', () => {
+    // The roster every suite that builds `createArenaWorld` relies on, written here rather
+    // than read from arena-01, so re-authoring campaign level 1 (#1010) cannot move it.
+    expect(rosterOf(STANDARD_ARENA)).toEqual({ brown: 1, grey: 1, teal: 1, player: 1 });
+  });
+
+  it('the roster pin fails for the same board with its teal removed -- the negative control', () => {
+    // Synthetic, derived in place from the fixture rather than pointed at a shipped board, so
+    // the control cannot be deleted by the edit it guards against.
+    const noTeal = { ...STANDARD_ARENA, grid: STANDARD_ARENA.grid.map((row) => row.replace('T', '.')) };
+    expect(noTeal.grid.join('')).not.toContain('T');
+    expect(rosterOf(noTeal)).not.toEqual({ brown: 1, grey: 1, teal: 1, player: 1 });
+  });
+
+  it('validates, and is in no shipped list: ARENAS, ARENA_DEFS, the campaign or the versus catalog', () => {
+    // `validateArenas` ran when the module loaded (arena-fixtures.ts); the structural rules
+    // run here, as they do for every shipped board.
+    expect(structuralFailures(STANDARD_ARENA)).toEqual([]);
+    const id = STANDARD_ARENA.id;
+    expect(id).toBe('fixture-standard');
+    expect(ARENAS.map((a) => (a as { id?: string }).id)).not.toContain(id);
+    expect(ARENA_DEFS.map((a) => a.id)).not.toContain(id);
+    expect(CAMPAIGN_ARENA_DEFS.map((a) => a.id)).not.toContain(id);
+    expect(VERSUS_CATALOG.map((e) => e.arenaId)).not.toContain(id);
   });
 });
 

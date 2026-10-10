@@ -28,7 +28,9 @@ import {
  *   acceptance (src/sim/versus-board.ts)  pass/fail, gates, already shipped, unchanged
  *   quality    (this file)                numbers, never gates, ranks passing boards
  *
- * NOTHING HERE GATES ANYTHING and nothing here is imported by the game. It lives under
+ * NOTHING HERE GATES ANYTHING and nothing here is imported by the game. The one ruled gate a
+ * quality measure feeds -- `pathSpread` at three players (issue #820) -- lives in
+ * `spread-gate.mjs` and runs in `sweep.mjs`, not here: this file stays numbers. It lives under
  * `tools/` rather than `src/sim/` for exactly that reason: a new field on an arena or a new
  * module under `src/sim/` is a determinism-surface change (`arena-types.ts` records that the
  * validator rejects unknown keys, and `versus-board.ts` records that it was kept unreachable
@@ -1228,6 +1230,79 @@ export function rotationalAsymmetry(
     }
   }
   return considered ? mismatch / considered : 0;
+}
+
+/** The part of an `Arena` the board's morphology reads: its character grid and its legend. */
+export type GridBoard = Pick<Arena, 'cols' | 'rows' | 'grid' | 'legend'>;
+
+/**
+ * Whether a cell is WALL: its character is a legend kind, solid or destructible (issue #1028).
+ *
+ * Not "anything but floor". A spawn or enemy letter (`P`, `B`, `G`, `T`, `O`, `N`) is not `.`,
+ * and the old `!== '.'` test counted every one as a one-cell wall component -- and every
+ * generated board carries one `P` the same way -- so the block counts quoted on #821 read
+ * spawns as walls. Off the board is not wall.
+ */
+export function wallCellTest(board: GridBoard): (c: number, r: number) => boolean {
+  const { cols, rows, grid, legend } = board;
+  return (c, r) => {
+    if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
+    const kind = legend[grid[r][c]];
+    return kind === 'solid' || kind === 'destructible';
+  };
+}
+
+/**
+ * The block-size reporting threshold (issue #1028): a wall component of fewer cells than this
+ * is a SMALL block. Every one of the 54 walls-only components (8-connected) on the 8 shipped
+ * boards has 5 cells or more, measured when this was added. REPORTED, NOT GATED: nothing
+ * accepts or refuses a board on it.
+ */
+export const MIN_WALL_BLOCK_CELLS = 5;
+
+/**
+ * The size of every connected wall component, largest first, over wall cells only (see
+ * `wallCellTest`), solid and destructible together.
+ *
+ * `connectivity` is 8 (diagonal neighbours join) or 4 (only orthogonal ones). Both are
+ * reported because they disagree where blocks touch at a corner -- shipped, 54 components
+ * 8-connected against 62 4-connected over the 8 boards. Not part of `BoardMeasures`: it does
+ * not depend on a player count.
+ */
+export function wallComponentSizes(board: GridBoard, connectivity: 4 | 8): number[] {
+  const { cols, rows } = board;
+  const wall = wallCellTest(board);
+  const neighbours = connectivity === 8
+    ? [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]
+    : [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const seen = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
+  const sizes: number[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!wall(c, r) || seen[r][c]) continue;
+      let size = 0;
+      const stack: [number, number][] = [[c, r]];
+      seen[r][c] = true;
+      while (stack.length > 0) {
+        const [cc, rr] = stack.pop() as [number, number];
+        size++;
+        for (const [dc, dr] of neighbours) {
+          const nc = cc + dc;
+          const nr = rr + dr;
+          if (!wall(nc, nr) || seen[nr][nc]) continue;
+          seen[nr][nc] = true;
+          stack.push([nc, nr]);
+        }
+      }
+      sizes.push(size);
+    }
+  }
+  return sizes.sort((a, b) => b - a);
+}
+
+/** How many of a board's wall components are below `MIN_WALL_BLOCK_CELLS`. */
+export function smallWallComponents(board: GridBoard, connectivity: 4 | 8): number {
+  return wallComponentSizes(board, connectivity).filter((size) => size < MIN_WALL_BLOCK_CELLS).length;
 }
 
 /**

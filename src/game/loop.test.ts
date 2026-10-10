@@ -15,7 +15,8 @@ import type { SessionDiagnostics } from './dev-diagnostics';
 import type { DevActionPort } from './dev-actions';
 import type { DevExportPort } from './dev-exports';
 import { TANK_KINDS, configFor } from '../sim/config';
-import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
+import { arenaBounds } from '../sim/arena';
+import { STANDARD_ARENA, createArenaWorld } from '../sim/config/arena-fixtures';
 import { roundPhase } from '../sim/round';
 import {
   type TouchIndicator,
@@ -1726,7 +1727,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // means a `mode: 'ffa'` fixture can never quietly get a campaign-coop world.
         const wantsVersus = (opts.devFlags?.mode ?? 'campaign-coop') !== 'campaign-coop';
         if ((playerCount !== undefined && playerCount > 1) || wantsVersus) {
-          const real = createWorldFor(arenaById(fakeLevels[i].arenaId), seed, {
+          // Level 0 is the standard test board (issue #1009), the same board the
+          // single-player branch below builds through createArenaWorld, so a co-op or bot
+          // fixture on the first level does not move when campaign level 1's roster does.
+          // Its nominal arenaId stays arena-01's, which the replay stamping test pins.
+          const board = i === 0 ? STANDARD_ARENA : arenaById(fakeLevels[i].arenaId);
+          const real = createWorldFor(board, seed, {
             lives,
             // playerCount defaults to 1 when the branch was entered for versus alone.
             playerCount: playerCount ?? 1,
@@ -2290,11 +2296,11 @@ describe('isMuteHotkey', () => {
 describe('startGameWith: construction', () => {
   it('sizes the renderer to the arena and its boundary ring', () => {
     const h = boot();
-    const { width, height } = arenaBounds(CURRENT_ARENA);
+    const { width, height } = arenaBounds(STANDARD_ARENA);
     const [, w, ht, boundary] = h.rec.rendererArgs[0];
     expect(w).toBe(width);
     expect(ht).toBe(height);
-    // The FAKE's cellSize, which is not CURRENT_ARENA.cellSize -- see the bounds fake.
+    // The FAKE's cellSize, which is not STANDARD_ARENA.cellSize -- see the bounds fake.
     expect(boundary).toBe(1.5);
     h.handle.dispose();
   });
@@ -8335,35 +8341,34 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
   });
 
   describe('issue #278: the VS floor/camera are sized to the rolled arena, not the largest candidate', () => {
-    // players:3, all 5 campaign arenas plus vs-tri-01 offerable (versus-config.test.ts) --
-    // pinned wallMs values, not swept at runtime, matched to the SAME measured
-    // deriveSeed/pickVersusArena table versus-config.test.ts's own "distributes" case
-    // pins: deriveSeed is a no-op for inputs under 512 (`wallMs ^ (wallMs >>> 9)` clears
-    // no bits), so wallMs 1/4 here resolve through pickVersusArena exactly like seeds 1/4
-    // do there.
+    // players:3, all 5 campaign arenas plus vs-tri-01 and (since issue #1035) vs-quad-01
+    // offerable (versus-config.test.ts) -- pinned wallMs values, not swept at runtime,
+    // matched to the SAME measured deriveSeed/pickVersusArena table versus-config.test.ts's
+    // own "distributes" case pins: deriveSeed is a no-op for inputs under 512
+    // (`wallMs ^ (wallMs >>> 9)` clears no bits), so wallMs 1/2 here resolve through
+    // pickVersusArena exactly like seeds 1/2 do there.
     const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
     it("random resolves to a member of versusMapChoices(players), and levels.bounds matches THAT arena exactly -- the defect's direct oracle", () => {
-      // wallMs 4 -> vs-tri-01 (27x17, the SMALLEST shipped board) -- deliberately NOT
-      // wallMs 1 (-> arena-04, the 45x33 "largest candidate" class the pre-#278 bounds()
+      // wallMs 2 -> vs-tri-01 (27x17, the SMALLEST shipped board) -- deliberately NOT
+      // wallMs 1 (-> arena-05, the 45x33 "largest candidate" class the pre-#278 bounds()
       // always returned for 'random' regardless of what was actually rolled): a seed that
       // happens to land on the largest class would pass this assertion under the UNFIXED
       // code too, and prove nothing.
       //
       // RE-MEASURED, and the seed is rechosen rather than its expectation renumbered.
-      // This pin has moved with the N=3 offer three times: wallMs 4 originally landed on
-      // vs-tri-01, moved to arena-03 via wallMs 6 when #424 withdrew that board, and is
-      // now BACK on wallMs 4 -> vs-tri-01 because the rebuilt board rejoined the offer.
-      // Measured over seeds 1..20 at N=3 on the shipped tree: arena-04 x6
-      // (1,6,10,11,13,16), arena-05 x5 (2,3,5,17,20), arena-01 x3 (7,8,19), arena-02 x3
-      // (9,12,15), arena-03 x2 (14,18), vs-tri-01 x1 (4).
+      // This pin has moved with the N=3 offer four times: wallMs 4 originally landed on
+      // vs-tri-01, moved to arena-03 via wallMs 6 when #424 withdrew that board, came BACK
+      // on wallMs 4 -> vs-tri-01 when the rebuilt board rejoined the offer, and is now
+      // wallMs 2 -> vs-tri-01, because issue #1035's seven-board offer sends seed 4 to
+      // vs-quad-01. Measured over seeds 1..20 at N=3 on the shipped tree: arena-04 x5
+      // (6,10,11,13,14), arena-05 x4 (1,5,16,17), vs-tri-01 x3 (2,3,20), arena-02 x3
+      // (8,9,15), arena-01 x2 (7,19), arena-03 x2 (12,18), vs-quad-01 x1 (4).
       //
-      // vs-tri-01 is a SINGLETON bucket, which would be a knife edge for a distribution
-      // control and is the right choice here for the opposite reason: this test wants the
-      // widest possible gap from the largest candidate, and 27 columns against 45 is the
-      // widest the catalog offers. A 33-column board would also pass; it would discriminate
-      // less.
-      const deps = { ...baseDeps(), wallMs: () => 4 };
+      // This test wants the widest possible gap from the largest candidate, and 27 columns
+      // against 45 is the widest the catalog offers, so the seed is one that lands on
+      // vs-tri-01. A 33-column board would also pass; it would discriminate less.
+      const deps = { ...baseDeps(), wallMs: () => 2 };
       const result = applyVersusToDeps(deps, { config: random3 }, noop);
       const resolvedId = result.levels.start.arenaId;
       expect(resolvedId).toBe('vs-tri-01');
@@ -8383,14 +8388,14 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     });
 
     it('a rematch through Start (a fresh applyVersusToDeps call) CAN land on a different arena', () => {
-      // Two independent Start-boundary resolutions, wallMs 1 and 4 -- measured to differ
+      // Two independent Start-boundary resolutions, wallMs 1 and 2 -- measured to differ
       // (versus-config.test.ts's own "distributes" case). Proves the fix does NOT collapse
-      // 'random' into a single fixed pick across sessions. With vs-tri-01 back in the N=3
-      // offer (#424) the pair is 1 -> arena-04 (45 columns) and 4 -> vs-tri-01 (27), which
+      // 'random' into a single fixed pick across sessions. On the seven-board N=3 offer
+      // (#1035) the pair is 1 -> arena-05 (45 columns) and 2 -> vs-tri-01 (27), which
       // differ in BOTH id and bounds by the widest margin the catalog allows.
       const first = applyVersusToDeps({ ...baseDeps(), wallMs: () => 1 }, { config: random3 }, noop);
-      const second = applyVersusToDeps({ ...baseDeps(), wallMs: () => 4 }, { config: random3 }, noop);
-      expect(first.levels.start.arenaId).toBe('arena-04');
+      const second = applyVersusToDeps({ ...baseDeps(), wallMs: () => 2 }, { config: random3 }, noop);
+      expect(first.levels.start.arenaId).toBe('arena-05');
       expect(second.levels.start.arenaId).toBe('vs-tri-01');
       expect(first.levels.bounds(first.levels.start)).not.toEqual(second.levels.bounds(second.levels.start));
     });
@@ -8407,18 +8412,17 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       // directly: ONE resolved session's `levels.world()` must return the SAME arena
       // no matter what seed a later rebuild call passes it, which is exactly what
       // makes a Quit-triggered `nextSeed()` harmless.
-      const result = applyVersusToDeps({ ...baseDeps(), wallMs: () => 4 }, { config: random3 }, noop);
-      const initial = result.levels.world(result.levels.start, 4, undefined, 3);
-      // Seed 1 is `pickVersusArena`'s own 'arena-04' pick (versus-config.test.ts) --
+      const result = applyVersusToDeps({ ...baseDeps(), wallMs: () => 2 }, { config: random3 }, noop);
+      const initial = result.levels.world(result.levels.start, 2, undefined, 3);
+      // Seed 1 is `pickVersusArena`'s own 'arena-05' pick (versus-config.test.ts) --
       // under the pre-#278 code, world() re-resolved 'random' from THIS seed on every
       // call, so a quit rebuild landing on seed 1 would have silently swapped the
-      // arena from vs-tri-01 to arena-04. Fails (build throws or returns arena-04) if
+      // arena from vs-tri-01 to arena-05. Fails (build throws or returns arena-05) if
       // world() ever goes back to reading `config.arenaId === 'random'` per call. 27 vs 45
-      // columns is the gap, back to its widest now that #424's rebuild returned vs-tri-01
-      // to the N=3 offer.
+      // columns is the gap, the widest the N=3 offer allows.
       const quitRebuilt = result.levels.world(result.levels.start, 1, undefined, 3);
       expect(initial.rules.arenaGeometry?.cols).toBe(27); // vs-tri-01
-      expect(quitRebuilt.rules.arenaGeometry?.cols).toBe(27); // still vs-tri-01, not arena-04
+      expect(quitRebuilt.rules.arenaGeometry?.cols).toBe(27); // still vs-tri-01, not arena-05
     });
   });
 });
@@ -8820,7 +8824,12 @@ describe('startGameWith: the input recorder', () => {
     // `stock` and `teams` are deliberately absent: both are versus-only and neither is a
     // ReplayMeta field. They used to be two `undefined`s carried in the positional list to
     // reach `aiTargetPerception` past them.
-    const rebuilt = createWorldFor(arenaById(t.meta.arenaId), t.meta.seed, {
+    // The board: the fake level system builds level 0 on the standard test board (issue
+    // #1009), whatever nominal arenaId the level carries -- arena-01's, which the stamping
+    // test above pins. So the faithful rebuild uses that board rather than looking the id
+    // up, which would tie this test to campaign level 1's roster.
+    expect(t.meta.arenaId).toBe(ARENA_DEFS[0].id);
+    const rebuilt = createWorldFor(STANDARD_ARENA, t.meta.seed, {
       lives: t.meta.lives,
       pp1Roles: t.meta.pp1Roles,
       rules: {

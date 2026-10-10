@@ -876,13 +876,18 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 // only splittable if nothing on an ordinary path imports it for VALUE, so this counts those
 // imports and pins the count. The number must only ever go DOWN.
 //
-// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds eight of them today, one edge
+// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds seven of them today, one edge
 // per module, and they are the developer surfaces it still renders inline -- the developer
 // menu (`devtools-menu`, `dev-config-menu`, `dev-config`), its actions, its diagnostics and
-// its exports, plus the controller self-test and the arena schematic. The route out is #556's
-// per-surface pane extraction, which `customize-pane.ts` and `controllers-pane.ts` have
-// already taken; they are not an oversight for this guard to ban. An inventory fails on a NEW
-// edge while recording what the remaining ones wait on, which `toBe(0)` could not do.
+// its exports, plus the controller self-test. #946's route out is to load each pane's
+// body-building module on demand, as the gallery workbench's already is, while `hud.ts` keeps
+// the pane's container, its layer entry, its markup and its open/close order; the slices
+// under #946 take them one pane at a time. An inventory fails on a NEW edge while recording
+// what the remaining ones wait on, which `toBe(0)` could not do.
+//
+// `arena-schematic` is NOT on the list, though it once was (issue #1012): `hud.ts` draws the
+// Versus Setup map cards with it at construction on every page (issue #274), so it is
+// player-facing code that can never leave the ordinary bundle without removing the previews.
 //
 // EXACT equality, not `<=`, AND THAT IS THIS GUARD'S NON-VACUITY CHECK. The scan below is a
 // text match like the layer scan above, so it can stop matching; unlike the layer scan it
@@ -906,12 +911,18 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 // `loop.ts` and `route-host.ts` reaching into `dev-diagnostics.ts` for `readBuildIdentity`
 // alone, which moved to `build-identity.ts` because ordinary paths call it. That left
 // `route-host.ts` with no developer value edge at all.
+//
+// Issue #1012 took it from 11 to 7. `loop.ts`'s three went: the gallery workbench's scene
+// modules load when its pane opens, `surfaceName` moved to `app-state.ts`, and
+// `developerExitSearch` to the leaf `dev-params.ts`. `hud.ts`'s edge into `arena-schematic` went
+// off the count with the module's removal from the list (see above), not by a change to
+// `hud.ts`.
 // ---------------------------------------------------------------------------
 
 /** The developer-only modules #946 names, by basename: the developer surface, then gallery. */
 const DEV_ONLY_MODULES: readonly string[] = [
   'devtools-menu', 'dev-config', 'dev-config-menu', 'dev-actions', 'dev-exports',
-  'dev-diagnostics', 'controller-selftest', 'arena-schematic',
+  'dev-diagnostics', 'controller-selftest',
   'gallery-workbench', 'gallery-selection', 'gallery-command', 'moments', 'moment-scene',
   'subjects', 'workbench-scene',
 ];
@@ -923,10 +934,7 @@ const DEV_ONLY_MODULES: readonly string[] = [
  */
 const DEV_VALUE_EDGES: Readonly<Record<string, number>> = {
   // The developer surfaces hud.ts still renders inline; see the note above.
-  './game/hud.ts': 8,
-  // `developerExitSearch` from dev-config, `surfaceName` from dev-exports, and the gallery
-  // workbench catalog and factory.
-  './game/loop.ts': 3,
+  './game/hud.ts': 7,
 };
 
 describe('developer modules stay off ordinary paths (issue #946)', () => {

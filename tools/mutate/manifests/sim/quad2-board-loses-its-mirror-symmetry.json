@@ -1,0 +1,14 @@
+{
+  "id": "quad2-board-loses-its-mirror-symmetry",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "\"......###....P..........###......\"",
+  "replace": "\"......###....P..........###.....#\"",
+  "expect": "killed",
+  "tests": [
+    "src/sim/versus-catalog-rules.test.ts"
+  ],
+  "why": "One cell of vs-quad-02's top-right corner, column 32 of its P row, turned from open floor to solid, breaking the column mirror the board's notes claim (column 0 of the same row stays open). Modelled on `quad-board-loses-its-mirror-symmetry` for issue #1036, and for its reason: the board still loads, connects and passes every count-based check, so only the symmetry block notices. Anchored on the P row, which is unique in arenas.json, so it cannot match another board or another row of this one.",
+  "killedBy": [
+    "vs-quad-02: four corners, one orbit, and not Quarters again every cell has the same wall kind as its partner under BOTH mirrors"
+  ]
+}

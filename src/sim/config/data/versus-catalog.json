@@ -125,6 +125,7 @@
       "intent": "A three-player arch: two mirrored bases and a keystone spawn equally far from both.",
       "preview": "vs-tri-01",
       "players": [
+        2,
         3
       ],
       "modes": [
@@ -142,6 +143,26 @@
       "displayName": "Quarters",
       "intent": "A four-player rotunda: a centre every corner sees into, four avenues, an island.",
       "preview": "vs-quad-01",
+      "players": [
+        2,
+        3,
+        4
+      ],
+      "modes": [
+        "ffa",
+        "teams"
+      ],
+      "spawnPolicy": "maximin",
+      "variants": [
+        "seeded-destructible"
+      ]
+    },
+    {
+      "id": "vs-quad-02",
+      "arenaId": "vs-quad-02",
+      "displayName": "Citadel",
+      "intent": "A four-player keep: a walled court with four breakable gates, held from four corners.",
+      "preview": "vs-quad-02",
       "players": [
         4
       ],

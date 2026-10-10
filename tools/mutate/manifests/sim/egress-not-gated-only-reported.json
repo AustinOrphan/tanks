@@ -11,6 +11,6 @@
   "killedBy": [
     "spawn egress: a tank, not a cell (issue #423) a ONE-cell passage is impassable and a TWO-cell passage is not -- the minimum width, measured",
     "spawn egress: a tank, not a cell (issue #423) folds into `suitable`, which is what makes it a gate rather than a report",
-    "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
+    "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 9 arenas x {2,3,4}"
   ]
 }

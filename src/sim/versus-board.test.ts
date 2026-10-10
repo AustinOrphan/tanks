@@ -16,35 +16,35 @@ import { VERSUS_CATALOG } from './config/versus-catalog';
 // header used to give a single figure that was none of them. Every claim below belongs to
 // exactly one of these:
 //
-//   8 shipped arenas x 3 versus player counts (2, 3, 4)  = 24 (arena, N) verdicts EXIST
-//   minus vs-duel-01's three, which the loop excludes    = 21 verdicts are CHECKED
+//   9 shipped arenas x 3 versus player counts (2, 3, 4)  = 27 (arena, N) verdicts EXIST
+//   minus vs-duel-01's three, which the loop excludes    = 24 verdicts are CHECKED
 //   10 spawn pairs per arena across the three counts
-//     (C(2,2) + C(3,2) + C(4,2) = 1 + 3 + 6)             = 70 pairs across those 21
-//                                                          (80 across all 24)
-//   plus vs-duel-01 @ N=2, asserted on its own below     = 71 pairs asserted in this block
+//     (C(2,2) + C(3,2) + C(4,2) = 1 + 3 + 6)             = 80 pairs across those 24
+//                                                          (90 across all 27)
+//   plus vs-duel-01 @ N=2, asserted on its own below     = 81 pairs asserted in this block
 //
 // Re-derived against the tree rather than carried forward: `versusBoardCatalog()` produces
-// 24 rows, the loop's own `expect(checked).toBe(21)` pins the second figure, and the pair
+// 27 rows, the loop's own `expect(checked).toBe(24)` pins the second figure, and the pair
 // totals are the sum of `totalPairs` over each set.
 //
-// `ARENA_DEFS.length` is pinned as its own assertion immediately below, so a 9th arena moves
+// `ARENA_DEFS.length` is pinned as its own assertion immediately below, so a 10th arena moves
 // this test rather than silently shrinking the sweep -- versus-spawns.test.ts's own
 // `ARENAS.length` pin is the precedent.
 // ---------------------------------------------------------------------------
 
 describe('evaluateVersusBoard: the shipped-arena sweep', () => {
-  it('ARENA_DEFS holds exactly 8 shipped arenas -- the population every sweep below claims', () => {
-    expect(ARENA_DEFS.length).toBe(8);
+  it('ARENA_DEFS holds exactly 9 shipped arenas -- the population every sweep below claims', () => {
+    expect(ARENA_DEFS.length).toBe(9);
   });
 
   // Every board is MEASURED at every N here; what a board is OFFERED at is a separate,
   // curated question the catalog answers (vs-duel-01 declares [2] only). Suitability is
   // the floor, not the offer.
-  it('every arena still offered is suitable at every N in {2, 3, 4}: 21 of 24 (arena, N) combinations', () => {
+  it('every arena still offered is suitable at every N in {2, 3, 4}: 24 of 27 (arena, N) combinations', () => {
     // Re-derived live, not snapshotted: this recomputes open-floor counts and
     // reruns the real loadArena placement/LOS checks on every shipped grid.
     //
-    // 21 of 24, not 24 of 24, and the exclusion has moved twice -- 15 -> 18 -> 21 as boards
+    // 24 of 27, not 27 of 27. The exclusion moved twice -- 15 -> 18 -> 21 as boards
     // were fixed and rejoined. (This line read "18 of 24" until issue #869; the narrative
     // below already described the move to 21, and the `it()` title says 21, so the opening
     // figure was the only thing left behind.)
@@ -69,6 +69,9 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     // small to mine out of -- and it is offered at neither, so this is the gate reporting
     // something true about counts the board never promised. The offered-combination sweep
     // further down is the one that covers what actually ships.
+    //
+    // vs-quad-02 (issue #1036) joined at all three counts although it is offered at 4 only:
+    // 21 -> 24. It is not in WITHDRAWN, and #1036 required that rather than allowed it.
     const WITHDRAWN = new Set(['vs-duel-01']);
     let checked = 0;
     for (const arena of ARENA_DEFS) {
@@ -84,7 +87,7 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         expect(verdict.roomOk, `${arena.id} @ N=${n} roomOk`).toBe(true);
       }
     }
-    expect(checked).toBe(21);
+    expect(checked).toBe(24);
 
     // ...and vs-duel-01 passes at the ONE count it is offered at.
     const duel = ARENA_DEFS.find((a) => a.id === 'vs-duel-01') as Arena;
@@ -136,15 +139,18 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     return { tightest, tightestLabel, checked };
   }
 
-  /** The (arena, N) pairs the catalogue actually offers -- 18 of the 24 that exist. */
+  /** The (arena, N) pairs the catalogue actually offers -- 22 of the 27 that exist. */
   const isOffered = (arenaId: string, n: number) =>
     VERSUS_CATALOG.some((e) => e.arenaId === arenaId && (e.players as readonly number[]).includes(n));
 
   it('the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin at every count a board is OFFERED at -- the tightest is vs-tri-01 at N=3', () => {
     const { tightest, tightestLabel, checked } = tightestRatio(isOffered);
-    // 18 = five campaign boards x 3 counts, plus vs-duel-01, vs-tri-01 and vs-quad-01 at their
-    // single curated counts. The same population the egress sweep below covers.
-    expect(checked, 'the offered (arena, N) population this sweep covers').toBe(18);
+    // 22 = five campaign boards x 3 counts (15), plus vs-duel-01 at 2, vs-tri-01 at 2 and 3,
+    // vs-quad-01 at 2, 3 and 4, and vs-quad-02 at 4 (7). The same population the egress sweep
+    // below covers. vs-quad-02 @ N=4 is 163.75, and the three pairs issue #1035 offered are
+    // 144.50 (vs-tri-01 @ N=2), 305.00 and 203.33 (vs-quad-01 @ N=2 and 3), all looser than
+    // this tightest, so the figure stays.
+    expect(checked, 'the offered (arena, N) population this sweep covers').toBe(22);
     expect(tightestLabel).toBe('vs-tri-01 @ N=3');
     expect(tightest).toBeCloseTo(96.33333, 4);
     // THE BOUND, over the population the game can actually put a player in. 96.33 is 5.35x
@@ -153,11 +159,12 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     // WHY THAT NUMBER IS NOT THE 0.25 THIS COMMENT USED TO REPORT, which is the correction
     // issue #722 asked for. The previous revision swept all 24 shipped combinations, found
     // vs-tri-01 @ N=4 at 72.25, and concluded the bound was "one furnished board away from
-    // failing". vs-tri-01 is offered at N=3 ALONE (versus-catalog.json gives it `[3]`), so that
-    // reading came from a combination the game never sets up. Over the offered population the
-    // headroom is two orders of magnitude larger, and the second-tightest offered combination
-    // is vs-quad-01 @ N=4 at 152.5 -- not the 74.0 recorded when it was a 27x17 board, because
-    // #425 rebuilt it at 33x27.
+    // failing". vs-tri-01 is not offered at N=4 (versus-catalog.json gives it `[2, 3]` since
+    // issue #1035, which widened it downward only), so that reading came from a combination the
+    // game never sets up. Over the offered population the headroom is two orders of magnitude
+    // larger, and the second-tightest offered combination is vs-tri-01 @ N=2 at 144.5 (offered
+    // by #1035), ahead of vs-quad-01 @ N=4 at 152.5 -- not the 74.0 recorded when Quarters was
+    // a 27x17 board, because #425 rebuilt it at 33x27.
     //
     // REVISION POLICY, replacing the "check this figure before authoring the next board" note
     // that #418 was filed against. This assertion is a description of the offered catalogue and
@@ -169,25 +176,25 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     expect(tightest).toBeGreaterThan(MIN_OPEN_FLOOR_PER_PLAYER * 4);
   });
 
-  it('records the tightest ratio across all 24 shipped combinations, including the 6 no one is offered', () => {
+  it('records the tightest ratio across all 27 shipped combinations, including the 5 no one is offered', () => {
     // REPORTED, NOT GATED, and that separation is the point. vs-tri-01 at N=4 scores 72.25 --
     // 0.25 cells of open floor above the bound -- but nothing offers a three-player board to
     // four players, so letting it gate CI made a required check turn on a hypothetical. It is
     // still worth knowing: it is what a 27x17 board WOULD score if a future catalogue offered
     // one at N=4, and it is the reason #418's re-derivation is worth doing before that happens.
     const all = tightestRatio(() => true);
-    expect(all.checked, 'every (arena, N) verdict that exists').toBe(24);
+    expect(all.checked, 'every (arena, N) verdict that exists').toBe(27);
     expect(all.tightestLabel).toBe('vs-tri-01 @ N=4');
     expect(all.tightest).toBeCloseTo(72.25, 5);
     // The control that keeps the two blocks honest about each other: the shipped population
     // CONTAINS the offered one, so its tightest can never be the looser of the two. If these
-    // ever coincide, the six non-offered combinations stopped mattering and the block above is
+    // ever coincide, the five non-offered combinations stopped mattering and the block above is
     // the only one needed.
     const offered = tightestRatio(isOffered);
     expect(all.tightest).toBeLessThan(offered.tightest);
   });
 
-  it('0 of 80 spawn pairs share mutual line of sight, across the full sweep', () => {
+  it('0 of 90 spawn pairs share mutual line of sight, across the full sweep', () => {
     let totalPairs = 0;
     let concealedPairs = 0;
     for (const arena of ARENA_DEFS) {
@@ -197,8 +204,8 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         concealedPairs += verdict.concealedPairs;
       }
     }
-    expect(totalPairs).toBe(80);
-    expect(concealedPairs).toBe(80);
+    expect(totalPairs).toBe(90);
+    expect(concealedPairs).toBe(90);
   });
 });
 
@@ -339,23 +346,24 @@ describe('evaluateVersusBoard: room can fail, isolated from the other two', () =
 });
 
 describe('versusBoardCatalog', () => {
-  it('produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}', () => {
+  it('produces one row per (arena, N), labelled with the arena id, over the default 9 arenas x {2,3,4}', () => {
     const rows = versusBoardCatalog();
-    expect(rows.length).toBe(24);
+    expect(rows.length).toBe(27);
     const labels = rows.map((r) => `${r.arenaId}@${r.playerCount}`);
-    expect(new Set(labels).size).toBe(24); // every row is a distinct (arena, N) pair
-    // 22 of 24 suitable, not all: this function sweeps ARENA_DEFS at every N rather than
+    expect(new Set(labels).size).toBe(27); // every row is a distinct (arena, N) pair
+    // 25 of 27 suitable, not all: this function sweeps ARENA_DEFS at every N rather than
     // the offer, so it still REPORTS vs-duel-01 at the two counts it is not offered at.
     // Naming them here is what keeps "report, don't gatekeep" honest.
     //
-    // The derivation, since this number has now moved twice: 24 rows = 8 arenas x 3
+    // The derivation, since this number has now moved three times: 27 rows = 9 arenas x 3
     // counts. It was 16 while vs-tri-01 failed all three counts and vs-quad-01 failed all
-    // three; issue #424's rebuild moved vs-tri-01's three rows (16 -> 19) and issue #425's
-    // rebuild of Quarters moved vs-quad-01's three (19 -> 22). What remains unsuitable is
+    // three; issue #424's rebuild moved vs-tri-01's three rows (16 -> 19), issue #425's
+    // rebuild of Quarters moved vs-quad-01's three (19 -> 22), and issue #1036 appended
+    // vs-quad-02, suitable at all three (22 -> 25). What remains unsuitable is
     // vs-duel-01 at N=3 and N=4 ONLY, which is not a defect: a dedicated duel board's third
     // and fourth maximin spawns land in pockets too small to mine out of, and it is offered
     // at neither count. No shipped board now fails egress at a count it is offered at.
-    expect(rows.filter((r) => r.suitable).length).toBe(22);
+    expect(rows.filter((r) => r.suitable).length).toBe(25);
     const unsuitable = rows.filter((r) => !r.suitable).map((r) => `${r.arenaId}@${r.playerCount}`);
     expect(new Set(unsuitable)).toEqual(new Set([
       'vs-duel-01@3', 'vs-duel-01@4',
@@ -401,7 +409,7 @@ describe("versus-board: the 'ffa' hardcode rests on teams placing identically", 
   // tanks equal would fail for the one reason that is not a defect.
   const COUNTS = [2, 3, 4] as const;
 
-  it('places every player at identical positions in ffa and teams, on all 8 shipped arenas', () => {
+  it('places every player at identical positions in ffa and teams, on all 9 shipped arenas', () => {
     let compared = 0;
     for (const arena of ARENA_DEFS) {
       for (const n of COUNTS) {
@@ -418,8 +426,8 @@ describe("versus-board: the 'ffa' hardcode rests on teams placing identically", 
       }
     }
     // Denominator, so a change that stops loading players cannot read as a pass:
-    // 8 arenas x (2 + 3 + 4) players = 72 position comparisons.
-    expect(compared).toBe(72);
+    // 9 arenas x (2 + 3 + 4) players = 81 position comparisons.
+    expect(compared).toBe(81);
   });
 
   it('still stamps team ONLY in teams mode -- the one difference that is expected', () => {
@@ -529,8 +537,10 @@ describe('spawn egress: a tank, not a cell (issue #423)', () => {
     // at their single curated counts (3). Withdrawing vs-tri-01 and vs-quad-01 (#424/#425)
     // took this from 18 to 16; #424's rebuild returned vs-tri-01's one combination (17) and
     // #425's rebuild returns vs-quad-01's (18). Back to where it started, with both boards
-    // now holding the egress guarantee they were withdrawn for lacking.
-    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(18);
+    // now holding the egress guarantee they were withdrawn for lacking. Issue #1036 adds
+    // vs-quad-02 at its one curated count (19), and issue #1035 offers vs-tri-01 at 2 and
+    // vs-quad-01 at 2 and 3, the lower counts both already measured suitable at (22).
+    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(22);
   });
 
   it('a destructible seal is fine when the pocket is big enough to survive blowing it', () => {

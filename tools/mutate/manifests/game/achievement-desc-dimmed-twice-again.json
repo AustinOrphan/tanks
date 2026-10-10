@@ -1,0 +1,14 @@
+{
+  "id": "achievement-desc-dimmed-twice-again",
+  "file": "src/game/hud.css",
+  "find": ".hud-achievement-desc {\n  font-size: 0.85em;\n}",
+  "replace": ".hud-achievement-desc {\n  font-size: 0.85em;\n  opacity: 0.8;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The description's own `opacity: 0.8` comes back, so it multiplies with the locked row's 0.45 again: a locked description at 0.36, read from pixels at 2.75:1 before issue #971 -- under both contrast floors and below its own label. The ruling was to stop multiplying, and the guard holds the locked description's effective opacity EQUAL to its label's.",
+  "killedBy": [
+    "hud.css: a locked achievement description is dimmed once, not twice (issue #971) renders a locked description at exactly its label s opacity, the row s 0.45"
+  ]
+}

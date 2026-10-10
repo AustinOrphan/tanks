@@ -1,0 +1,14 @@
+{
+  "id": "spread-gate-applies-at-every-count",
+  "file": "tools/mapgen/spread-gate.mjs",
+  "find": "  if (playerCount !== 3) return true;\n",
+  "replace": "  void playerCount;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/spread-gate.test.ts"
+  ],
+  "why": "The count dispatch removed, so the 3-player ceiling is applied at 2 and 4 players too. At four the shipped boards span 0.45-1.20 and no ruling gates them; at two `spawnPairs` is 1, so every 2-player board would be refused for not having three pairs. The ruling is N=3 only.",
+  "killedBy": [
+    "the 3-player spread gate (issue #820) passes any other player count without reading pathSpread"
+  ]
+}

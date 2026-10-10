@@ -1,0 +1,15 @@
+{
+  "id": "achievement-label-takes-its-own-opacity",
+  "file": "src/game/hud.css",
+  "find": ".hud-achievement-label {\n  font-weight: var(--hud-weight-normal);\n}",
+  "replace": ".hud-achievement-label {\n  font-weight: var(--hud-weight-normal);\n  opacity: 0.8;\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The label gains its own opacity, so the same compound moves to the label: label and description no longer render at one opacity, and an earned label dims too. The guard asserts equality between the two rather than a floor, which is what makes a change in either direction fail.",
+  "killedBy": [
+    "hud.css: a locked achievement description is dimmed once, not twice (issue #971) renders a locked description at exactly its label s opacity, the row s 0.45",
+    "hud.css: a locked achievement description is dimmed once, not twice (issue #971) THE CONTROL: leaves an earned row exactly as it rendered, label at 1 and description at 0.8"
+  ]
+}

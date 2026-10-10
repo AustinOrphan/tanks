@@ -198,12 +198,15 @@
    * Steps are numbered rather than named, like `--hud-space-*`, and exist only for values
    * used more than once. The six one-offs stay literal at their call site -- 1rem, 1.0625rem,
    * 1.1875rem, the 3.5rem title, the 4.5rem splash title and `.hud-count`'s clamp -- because
-   * a token used once names a step that is not a step.
+   * a token used once names a step that is not a step. Each is multiplied by
+   * `--hud-ui-scale` where it is used, as the tokens are (issue #1031), except the two that
+   * only a developer sees: `.hud-devbadge` and the `versusActions=header` arm.
    *
    * There is deliberately NO `:root { font-size }`. Pinning it is the classic way to break
    * exactly the preference this scale exists to honour: rem would then resolve against our
    * number instead of the reader's. The 25 `em` declarations elsewhere in this file need no
-   * change -- they inherit from these anchors and scale with them.
+   * change -- they inherit from these anchors, or from `.hud`'s scaled base, and scale with
+   * them.
    *
    * `* var(--hud-ui-scale)` is the player's own UI-scale setting, which is 1 by default and
    * so moves nothing until they ask for it (issue #290). It multiplies WITH the reader's
@@ -877,6 +880,14 @@
    * the player asking for something bigger. */
   --hud-ui-scale: 1;
 
+  /* THE BASE TEXT, scaled with everything else (issue #1031). Without this, the HUD inherited
+   * the page's 1rem unmultiplied, so everything sized from it -- pane titles at the UA's 2em,
+   * the disabled-reason `.ui-hint` at 0.85em, the Records tables, every other `em` -- stayed
+   * put while the controls around it grew: measured at 150%, 3 of 40 text elements on Records
+   * moved. `1rem` keeps honouring the reader's own font size; the multiplier adds the
+   * player's. At the default scale this resolves to exactly the 16px it inherited before. */
+  font-size: calc(1rem * var(--hud-ui-scale));
+
   /* Spacing scale, from the gaps this file already uses. */
   --hud-space-1: calc(6px * var(--hud-ui-scale));
   --hud-space-2: calc(8px * var(--hud-ui-scale));
@@ -1111,6 +1122,14 @@
   outline: var(--hud-focus-width) solid var(--hud-focus-color);
   outline-offset: var(--hud-focus-offset);
 }
+
+/* MOBILE-FIRST, BY CHOICE, for Public Prototype 1.0 (issue #971): this file has no `min-width`
+ * media query at all, against the `max-width` ones below. The base rules are the phone layout;
+ * larger screens get the same composition with more room, which the ruling on #985's
+ * criterion 1 accepted for Public Prototype 1.0 (rows wrap, panes scroll), and root-relative
+ * type already follows the reader. A composition of their own for large displays is #1033, after
+ * the cutover. A `min-width` query added before then is a scoped exception that its pull request
+ * records beside this note and in docs/superpowers/specs/2026-09-26-viewport-composition.md. */
 
 /* On a phone the topbar did not fit: measured at 393px wide, the volume slider ran 35px
  * PAST the viewport edge and the row wrapped to 72px tall, eating the top of the board.
@@ -1444,7 +1463,7 @@
 
 .hud-splash-title {
   margin: 0;
-  font-size: 4.5rem;
+  font-size: calc(4.5rem * var(--hud-ui-scale));
   font-weight: var(--hud-weight-strong);
   letter-spacing: 2px;
   color: var(--hud-text-bright);
@@ -1457,7 +1476,7 @@
  * setting as well as the OS one, which this line used to promise and not deliver. */
 .hud-splash-hint {
   margin: 0;
-  font-size: 1.0625rem;
+  font-size: calc(1.0625rem * var(--hud-ui-scale));
   color: #aeb6c2;
   animation: hud-splash-pulse 2s ease-in-out infinite;
 }
@@ -1474,7 +1493,7 @@
 
 .hud-title {
   margin: 0;
-  font-size: 3.5rem;
+  font-size: calc(3.5rem * var(--hud-ui-scale));
   /* 700, not 900: Plex's axis ends at 700 and a heavier request would be synthesised. */
   font-weight: 700;
   letter-spacing: 2px;
@@ -3012,7 +3031,15 @@
  * tank and never crops it. framing.ts records the aspect below which that bracket fails as
  * 0.249; 2.00 is nowhere near it. The width, which does not shrink, is what keeps the tank
  * from being clipped: measured, the pane overflows horizontally only below a 260px
- * viewport, so a 320px phone clears it by 30px each side (issue #971). */
+ * viewport, so a 320px phone clears it by 30px each side (issue #971).
+ *
+ * THE ELASTICITY IS AN ACCIDENT WORTH KEEPING, and nothing else pins it (issue #971): it holds
+ * only because `.hud-customize` is a flex column and this canvas keeps the default
+ * `flex-shrink: 1`. Measured, 0 of 27 runs clip it (9 viewports x a root font of 16, 20 and
+ * 24px), and its drawing buffer tracks its CSS box (aspect 1.0000 at 260x130 and at 260x190).
+ * Changing either fact needs that 27-run measurement repeated. Its size is in px, so it is one
+ * of the few things here that does not follow the reader's font size -- a recorded choice, not
+ * an oversight. */
 .hud-preview {
   width: 260px;
   height: 190px;
@@ -3375,13 +3402,21 @@
   border-left-color: var(--hud-gold);
 }
 
+/* The earned description keeps the 0.8 it always rendered at. It is declared HERE rather than on
+ * `.hud-achievement-desc` because there it multiplied with the locked row's 0.45: a locked
+ * description rendered at 0.36, read from pixels at 2.75:1 -- under both contrast floors and below
+ * its own label (issue #971). A locked description now takes only the row's 0.45, the same as its
+ * label. */
+.hud-achievement--earned .hud-achievement-desc {
+  opacity: 0.8;
+}
+
 .hud-achievement-label {
   font-weight: var(--hud-weight-normal);
 }
 
 .hud-achievement-desc {
   font-size: 0.85em;
-  opacity: 0.8;
 }
 
 /*
@@ -3673,7 +3708,7 @@
   display: flex;
   align-items: center;
   gap: var(--hud-space-3);
-  font-size: 1rem;
+  font-size: calc(1rem * var(--hud-ui-scale));
   font-weight: var(--hud-weight-normal);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
@@ -3722,19 +3757,25 @@
  * background, so forced colours repaints it instead.
  *
  * The leading identity marker is suppressed by hud.ts while this arm runs, so `em` sizing
- * here is measured against an entry that has one fewer glyph than the `pips` arm does. */
+ * here is measured against an entry that has one fewer glyph than the `pips` arm does.
+ *
+ * `--hud-mark` and `--hud-mark-gap` default to the full size and are overridden per row on a
+ * narrow viewport (issue #1021), where four players at four stocks overflowed a 390px phone.
+ * The sizes come from the measured table in `presentation/stock-cue.ts`; where no row of 8px
+ * marks fits, the builder draws one mark and the count instead, because CSS cannot swap the
+ * content. */
 .hud-stock-marks {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--hud-mark-gap, 2px);
   vertical-align: middle;
 }
 
 .hud-stock-mark {
   display: block;
   flex: none;
-  width: 0.62em;
-  height: 0.62em;
+  width: var(--hud-mark, 0.62em);
+  height: var(--hud-mark, 0.62em);
 }
 
 /* The mark that just emptied swells and settles. Scale only -- it must not move off its own
@@ -3862,9 +3903,10 @@
   border-width: 2px;
 }
 
-/* The count beside a single pip, where a full row will not fit (issue #835). The pip keeps the
- * shape channel and the cue's target; this states the number exactly. */
-.hud-stock-pip-count {
+/* The count beside a single pip or mark, where a full row will not fit (issues #835, #1021).
+ * The glyph keeps the shape channel and the cue's target; this states the number exactly. */
+.hud-stock-pip-count,
+.hud-stock-mark-count {
   margin-left: 4px;
 }
 
@@ -3956,7 +3998,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: clamp(4.5rem, 20vmin, 15rem);
+  font-size: calc(clamp(4.5rem, 20vmin, 15rem) * var(--hud-ui-scale));
   font-weight: var(--hud-weight-strong);
   font-variant-numeric: tabular-nums;
   color: var(--hud-text-bright);
@@ -4448,6 +4490,33 @@
   opacity: 0.85;
 }
 
+/* THE HEADING BESIDE ITS BUTTONS, not above them (issue #1032), for the rows that are a short
+ * heading and one line of controls: Mode, Players, Stock, Teams' friendly fire, the Standard
+ * rules line, and Who's playing's heading beside its one-line note (its slot cards still take
+ * a line of their own: `.hud-versus-slot-rows` is a definite 92vw, wider than whatever is left
+ * of a line beside the heading). Each saves a line, and together with the map measure and the slot
+ * cards below they are what fits the pane in 1920x1080 in every configuration, Teams with a
+ * refused Start included. `flex-wrap` keeps a narrow window honest: where the line does not
+ * fit, the controls wrap under the heading as they always did.
+ *
+ * `:has()` rather than a modifier class, so the markup is untouched; where it is unsupported
+ * the row stays stacked, which is the old layout. The Mode row's hint ("Teams needs three or
+ * more players") keeps a line of its own below the buttons. */
+.hud-versus-row:has(> .hud-versus-mode-row),
+.hud-versus-row:has(> .hud-versus-players-row),
+.hud-versus-row:has(> .hud-versus-stock-row),
+.hud-versus-row:has(> .hud-versus-limits),
+.hud-versus-row:has(> .hud-versus-slot-rows),
+.hud-versus-friendlyfire-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hud-versus-mode-note {
+  flex-basis: 100%;
+}
+
 .hud-versus-mode-row,
 .hud-versus-players-row,
 .hud-versus-map-row,
@@ -4477,14 +4546,19 @@
    `max-width` rather than shrink-to-fit, and it is load-bearing rather than cosmetic: this
    pane centres its children, so without a definite width the grid sizes to content and
    `auto-fill` resolves against whatever that happened to be. The measure also bounds how far
-   Start can be pushed down the pane -- see the card rule below. */
+   Start can be pushed down the pane -- see the card rule below.
+
+   78rem, up from 46rem (issue #1032): room for five 15rem columns and their gaps, so where the
+   pane has the width -- 1280px and up -- the seven cards take two rows instead of three, and
+   so would the nine #229 plans to offer. That row is what let the pane fit 1920x1080; the
+   cards themselves, and the narrowest column a card can get, are unchanged. */
 .hud-versus-map-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   justify-content: center;
   gap: var(--hud-space-2);
   width: 100%;
-  max-width: 46rem;
+  max-width: 78rem;
 }
 
 /* The card itself is still a `.ui-btn`, so it is themed, selectable and focusable exactly
@@ -4742,7 +4816,11 @@
 .hud-versus-actions {
   position: sticky;
   bottom: 0;
-  z-index: 1;
+  /* 3, above the selected-state check badge (`.ui-selectable--on::after` is z-index 2, its ring
+   * 1): the badges share this pane's stacking context, so at 1 a selected Stock or role button
+   * scrolling under the bar painted its check over Start (issue #1032 measured it at 1280x800,
+   * where the narrower pane puts the slot cards under the bar at rest). */
+  z-index: 3;
   /* The pane centres its children; without this the bar shrinks to its buttons and the
      backdrop stops short of the edges, leaving scrolled content visible either side. */
   align-self: stretch;
@@ -4838,16 +4916,34 @@
 }
 
 /* One slot's card: label, the three role buttons, its derived device line, and the
- * refusal that may or may not be showing. A column, the same shape .hud-controller-row
- * uses, and the border-left is what makes each card legible as one unit in the wrapped
- * row above. */
+ * refusal that may or may not be showing. The border-left is what makes each card legible
+ * as one unit in the wrapped row above.
+ *
+ * EACH GROUP OF BUTTONS ON ONE LINE (issue #1032), not one button per line: the three role
+ * buttons, then Teams' team buttons, then a bot's three difficulties, each group starting a
+ * row of its own and every non-button (label, device line, refusal) spanning the card. It was
+ * a column, the shape .hud-controller-row uses, and at four rows of single buttons it made
+ * Who's playing the tallest block in the pane. Source order is the visual order -- grid
+ * auto-placement never reorders -- so Tab still walks the card exactly as it reads.
+ * Phones keep the column: see the 760px block below. */
 .hud-versus-slot-row {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: center;
   align-items: center;
   gap: var(--hud-space-1);
   border-left: 3px solid rgba(216, 221, 230, 0.25);
   padding: 6px 12px;
+}
+
+.hud-versus-slot-row > :not(button) {
+  grid-column: 1 / -1;
+}
+
+.hud-versus-role-btn + .hud-versus-team-btn,
+.hud-versus-role-btn + .hud-versus-difficulty-btn,
+.hud-versus-team-btn + .hud-versus-difficulty-btn {
+  grid-column-start: 1;
 }
 
 /* .hud-versus-slot-row is already narrow at its default size (a label, a
@@ -4886,6 +4982,10 @@
     flex: 0 1 40vw;
     min-width: 0;
     box-sizing: border-box;
+    /* The column again (issue #1032): a 40vw card has no room for three buttons abreast. */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   /* Two lines, not the base rule's four -- see .hud-versus-map-intent. The map row is a

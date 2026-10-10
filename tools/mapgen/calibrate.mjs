@@ -17,7 +17,9 @@ import { measureBoard } from './measure';
  * WHAT THIS CANNOT TELL US, stated plainly: the shipped boards are 8 boards, not a sample
  * of good boards drawn from some population of them. A band derived from 8 authored maps
  * describes those maps. It cannot prove a board outside the band is bad, only that it is
- * unlike everything shipped -- which is a reason to look at it, not to reject it.
+ * unlike everything shipped -- which is a reason to look at it, not to reject it. The one
+ * exception is ruled: a generated 3-player board whose `pathSpread` is over the maximum of the
+ * boards offered at three players is refused (`spread-gate.mjs`, issue #820).
  *
  *   npx vite-node tools/mapgen/calibrate.mjs            # table
  *   npx vite-node tools/mapgen/calibrate.mjs --json     # machine-readable

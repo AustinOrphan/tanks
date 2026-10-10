@@ -1,8 +1,8 @@
 {
   "id": "dev-module-ratchet-list-drops-a-module",
   "file": "src/dependency-direction.test.ts",
-  "find": "  'dev-diagnostics', 'controller-selftest', 'arena-schematic',",
-  "replace": "  'dev-diagnostics', 'controller-selftest',",
+  "find": "  'dev-diagnostics', 'controller-selftest',",
+  "replace": "  'dev-diagnostics',",
   "tests": [
     "src/dependency-direction.test.ts"
   ],
@@ -10,5 +10,5 @@
   "killedBy": [
     "developer modules stay off ordinary paths (issue #946) the inventory of developer value edges matches the pin exactly"
   ],
-  "why": "One developer module falls off the list the #946 ratchet scans, which is how this guard would go quiet in practice: a module renamed, or a name dropped in a merge, leaving a scan that still reports a tidy number for a smaller set. `arena-schematic` is the one hud.ts imports for `arenaSchematic` and `drawArenaSchematic`, so the edge is real and simply stops being counted -- hud.ts reports seven where the tree has eight. The pin catches it only because it is an EXACT comparison on a non-zero count; a `<=` ceiling would have passed. `every developer module named in the list still exists` passes, as it must, and that is the point: it asserts that every module STILL LISTED exists and structurally cannot see one that was removed, so the exactness of the pin is what covers this direction."
+  "why": "One developer module falls off the list the #946 ratchet scans, which is how this guard would go quiet in practice: a module renamed, or a name dropped in a merge, leaving a scan that still reports a tidy number for a smaller set. `controller-selftest` is one hud.ts imports for value and that stays listed, so the edge is real and simply stops being counted -- hud.ts reports six where the tree has seven. The pin catches it only because it is an EXACT comparison on a non-zero count; a `<=` ceiling would have passed. `every developer module named in the list still exists` passes, as it must, and that is the point: it asserts that every module STILL LISTED exists and structurally cannot see one that was removed, so the exactness of the pin is what covers this direction. RETARGETED for issue #1012: this entry used to drop `arena-schematic`, which #1012 removed from the list as player-facing code (hud.ts draws the Versus Setup map cards with it on every page), so it now drops a module that is still on the list and still has an edge."
 }

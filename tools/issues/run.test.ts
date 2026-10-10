@@ -955,7 +955,9 @@ describe('frontier report', () => {
       const { code, reports } = await runFrontier(['frontier', '--repo', 'owner/name'], file);
       expect(code).toBe(0);
       const text = reports.join('\n');
-      expect(text).toContain('**1 ready / 1 blocked / 0 unknown**, of 2 open issues in scope');
+      // #2 carries `human-required` AND a standing blocker: the graph outranks the label, so it
+      // stays blocked rather than waiting (issue #1025).
+      expect(text).toContain('**1 ready / 0 waiting / 1 blocked / 0 unknown**, of 2 open issues in scope');
       expect(text).toContain('- #1 [now/s] ready');
     } finally {
       rmSync(dir, { recursive: true, force: true });

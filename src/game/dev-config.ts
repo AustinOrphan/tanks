@@ -22,6 +22,7 @@ import {
   type DevFlags,
   type FlagSpec,
 } from './devflags';
+import { DEPRECATED_DEV_PARAMS, developerExitSearch, knownDevParams, toParams } from './dev-params';
 
 /** The seven groups issue #244 names, in the order a menu should show them. */
 export const DEV_FLAG_GROUPS = [
@@ -264,16 +265,6 @@ export interface DevConfigState {
   readonly unknownParams: readonly string[];
 }
 
-/** Every query parameter this model knows how to read. */
-export function knownDevParams(): readonly string[] {
-  const fields = Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[];
-  return ['dev', PLAYTEST_BUNDLE.param, ...fields.map((f) => FLAG_REGISTRY[f].param ?? f)];
-}
-
-function toParams(search: string): URLSearchParams {
-  return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-}
-
 /**
  * Explain one query string.
  *
@@ -387,20 +378,6 @@ export function explainDevConfig(search: string): DevConfigState {
 // ---------------------------------------------------------------------------
 // CANONICAL URLs.
 // ---------------------------------------------------------------------------
-
-/**
- * Developer parameters that were once accepted and no longer are.
- *
- * EMPTY, and deliberately so rather than omitted: no developer parameter has been removed
- * yet, so a populated list would be invented history. The mechanism is real and injectable
- * (`canonicalDevSearch`'s `deprecated` option) and `dev-config.test.ts` proves it with an
- * injected list, so the first real removal is a one-line edit here rather than a new feature.
- *
- * Without such a list this model CANNOT tell a deprecated developer parameter from an
- * unrelated application one -- both are simply "not known" -- and `unknownParams` reports
- * them together. That is a stated limit, not an oversight.
- */
-export const DEPRECATED_DEV_PARAMS: readonly string[] = [];
 
 /**
  * A chosen set of developer parameters, as the values a UI holds (issue #623).
@@ -564,40 +541,6 @@ export const DEV_PRESETS: readonly DevPresetSpec[] = [
     selection: { aimRay: true, aiContact: true, shellCount: true },
   },
 ];
-
-/**
- * The query string to leave developer mode with (issue #243).
- *
- * The COMPLEMENT of `canonicalDevSearch` below, and deliberately not a mode of it. That
- * function KEEPS every developer parameter and only chooses whether to carry the gate,
- * because its job is to produce a shareable canonical developer URL; `keepGate: false`
- * therefore still returns `?aimRay=1&topbar=...`, which is a developer URL missing its
- * gate rather than an ordinary one. Exiting is the opposite operation: every known
- * developer parameter goes, the master gate included.
- *
- * Unrelated parameters survive with their order and their duplicates intact, because they
- * belong to something else -- a deep link, a campaign tag, a router -- and leaving
- * developer mode has no standing to normalise them.
- *
- * Retired parameters are dropped as well. They were developer parameters, so leaving one
- * behind would mean an Exit that produces a URL still carrying developer state.
- *
- * @param search a `location.search`, with or without the leading `?`.
- * @returns a search string with a leading `?`, or `''` when nothing is left.
- */
-export function developerExitSearch(
-  search: string,
-  deprecated: readonly string[] = DEPRECATED_DEV_PARAMS,
-): string {
-  const drop = new Set([...knownDevParams(), ...deprecated]);
-  const out = new URLSearchParams();
-  for (const [k, v] of toParams(search).entries()) {
-    if (drop.has(k)) continue;
-    out.append(k, v);
-  }
-  const s = out.toString();
-  return s === '' ? '' : `?${s}`;
-}
 
 export interface CanonicalDevUrlOptions {
   /** Keep the `dev=1` gate in the output. Default true; false strips developer mode. */

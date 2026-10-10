@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createArenaWorld } from '../arena';
+import { createArenaWorld } from '../config/arena-fixtures';
 import { step } from '../world';
 
 /**

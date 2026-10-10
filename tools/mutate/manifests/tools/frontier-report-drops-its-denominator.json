@@ -1,10 +1,10 @@
 {
   "id": "frontier-report-drops-its-denominator",
   "file": "tools/issues/frontier.mjs",
-  "find": "  lines.push(`**${f.ready.length} ready / ${f.blocked.length} blocked / ${f.unknown.length} unknown**, of ${f.considered} open issues in scope.`);",
-  "replace": "  lines.push(`**${f.ready.length} ready / ${f.blocked.length} blocked / ${f.unknown.length} unknown**.`);",
+  "find": "  lines.push(`**${f.ready.length} ready / ${f.waiting.length} waiting / ${f.blocked.length} blocked / ${f.unknown.length} unknown**, of ${f.considered} open issues in scope.`);",
+  "replace": "  lines.push(`**${f.ready.length} ready / ${f.waiting.length} waiting / ${f.blocked.length} blocked / ${f.unknown.length} unknown**.`);",
   "expect": "killed",
-  "why": "Strips the population from the report's headline. \"24 ready\" without \"of 28\" reads as a sweep of the whole backlog rather than of a filtered scope, and this report is filterable by milestone and by label -- so the same three numbers can describe 28 issues or 3. The scope line and this denominator are the only two things telling a reader which. This repository's rules require a population beside every count for exactly this reason.",
+  "why": "Strips the population from the report's headline. \"24 ready\" without \"of 28\" reads as a sweep of the whole backlog rather than of a filtered scope, and this report is filterable by milestone and by label -- so the same three numbers can describe 28 issues or 3. The scope line and this denominator are the only two things telling a reader which. This repository's rules require a population beside every count for exactly this reason. RE-ANCHORED for issue #1025: the headline carries a fourth count, waiting; the mutation still strips the denominator.",
   "tests": [
     "tools/issues/frontier.test.ts"
   ],

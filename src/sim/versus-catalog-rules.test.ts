@@ -23,9 +23,10 @@ import { TANK_RADIUS } from './constants';
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 8 shipped entries validate clean: 0 failures over 36 declared (entry, N, mode) combinations', () => {
-    // 36, not 48: five entries declare 3 player counts x 2 modes (30), and issue #271's
-    // vs-duel-01, issue #272's vs-tri-01 and issue #273's vs-quad-01 each declare 1 x 2.
+  it('all 9 shipped entries validate clean: 0 failures over 44 declared (entry, N, mode) combinations', () => {
+    // 44, not 54: five entries declare 3 player counts x 2 modes (30), vs-quad-01 3 x 2 (6)
+    // and vs-tri-01 2 x 2 (4) since issue #1035, and issue #271's vs-duel-01 and issue
+    // #1036's vs-quad-02 each declare 1 x 2 (4).
     // The sweep covers what each entry PROMISES, so a narrowed declaration shrinks this
     // denominator rather than leaving combinations silently unchecked.
     //
@@ -33,11 +34,15 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     // eight entries, then 32 when vs-tri-01 (then 1 x 1) and vs-quad-01 (1 x 2) were
     // WITHDRAWN pending #424/#425 because human playtesting found players could not leave
     // their spawns on either board; 33 when #424's rebuild returned vs-tri-01's one
-    // combination; 35 when #425's rebuild returned vs-quad-01's two; and 36 now that
-    // issue #627 gives vs-tri-01 `teams` alongside `ffa`.
+    // combination; 35 when #425's rebuild returned vs-quad-01's two; 36 when issue #627
+    // gave vs-tri-01 `teams` alongside `ffa`; 38 when issue #1036 appended vs-quad-02 at N=4
+    // in both modes; and 44 now that issue #1035 offers vs-tri-01 at N=2 and vs-quad-01 at
+    // N=2 and N=3, in both modes. Those six combinations had never run here, because this sweep
+    // reads only declared counts; they pass (connectivity from the `P` cell, spawn clearance and
+    // the five-seed variant concealment check), measured when #1035 landed.
     //
-    // That last step is the first that widens a DECLARATION rather than restoring a
-    // withdrawn board, and it adds a combination this sweep had never run: (vs-tri-01,
+    // #627's step was the first that widened a DECLARATION rather than restoring a
+    // withdrawn board, and it added a combination this sweep had never run: (vs-tri-01,
     // N=3, teams). It passes for a structural reason worth stating rather than
     // discovering -- `versusCatalogEntryFailures` evaluates geometry once per declared N
     // and reports it per declared mode (`playerPositions` loads every board through
@@ -45,11 +50,11 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     // second mode on an already-clean N cannot fail here. The corollary matters more
     // than the pass: this sweep is mode-BLIND, so it is not evidence that Keystone plays
     // well as 2v1. That question is #627's, and it is answered by play, not by geometry.
-    expect(VERSUS_CATALOG.length).toBe(8);
+    expect(VERSUS_CATALOG.length).toBe(9);
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(36);
+    ).toBe(44);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }
@@ -836,5 +841,131 @@ describe('vs-quad-01: four corners, one orbit', () => {
     // The catalog declares BOTH modes for this board, and every claim above was measured
     // on the ffa placement. This is what entitles them to cover the teams declaration too.
     expect(spawnCells('teams')).toEqual(spawnCells('ffa'));
+  });
+});
+
+describe('vs-quad-02: four corners, one orbit, and not Quarters again', () => {
+  // Issue #1036's board, held to the same claims as vs-quad-01 above, measured on its own grid
+  // through the real `loadArena`. The orbit claim is the one a symmetric grid does not give
+  // for free: the spawn picker settles on a local optimum, and two drafts of this board were
+  // exactly symmetric and still placed a spawn off the orbit (see the arena's notes).
+  const arena = arenaById('vs-quad-02');
+  const kindAt = (c: number, r: number): WallKind | undefined => arena.legend[arena.grid[r][c]];
+
+  /** Shortest walkable path in cells: `breached` false blocks solid AND destructible (the
+   * authored board), true blocks solid only (the board played into). The same rule as the
+   * vs-quad-01 block, written out again so this block stands alone. */
+  const pathLenWith = (breached: boolean) => (from: [number, number], to: [number, number]): number => {
+    const blocked = (c: number, r: number): boolean =>
+      c < 0 || r < 0 || c >= arena.cols || r >= arena.rows ||
+      (breached ? kindAt(c, r) === 'solid' : kindAt(c, r) !== undefined);
+    const key = (c: number, r: number): number => r * arena.cols + c;
+    const dist = new Map<number, number>([[key(from[0], from[1]), 0]]);
+    const queue: [number, number][] = [from];
+    for (let head = 0; head < queue.length; head++) {
+      const [c, r] = queue[head];
+      const d = dist.get(key(c, r)) as number;
+      if (c === to[0] && r === to[1]) return d;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr;
+        if (blocked(nc, nr) || dist.has(key(nc, nr))) continue;
+        dist.set(key(nc, nr), d + 1);
+        queue.push([nc, nr]);
+      }
+    }
+    return -1;
+  };
+
+  const spawnCells = (mode: 'ffa' | 'teams' = 'ffa'): [number, number][] =>
+    loadArena(arena, 4, mode).tanks
+      .filter((t) => t.kind === 'player')
+      .map((t) => [Math.round(t.pos.x / arena.cellSize - 0.5), Math.round(t.pos.y / arena.cellSize - 0.5)] as [number, number]);
+
+  it('every cell has the same wall kind as its partner under BOTH mirrors', () => {
+    const asymmetric: string[] = [];
+    let compared = 0;
+    for (let r = 0; r < arena.rows; r++) {
+      for (let c = 0; c < arena.cols; c++) {
+        compared += 2;
+        if (kindAt(c, r) !== kindAt(arena.cols - 1 - c, r)) asymmetric.push(`col-mirror (${c},${r})`);
+        if (kindAt(c, r) !== kindAt(c, arena.rows - 1 - r)) asymmetric.push(`row-mirror (${c},${r})`);
+      }
+    }
+    expect(compared, 'the whole board twice over, not a sample').toBe(2 * 33 * 27);
+    expect(asymmetric, 'vs-quad-02 is not invariant under both of its mirrors').toEqual([]);
+  });
+
+  it('the maximin policy lands on the four corners, and they are one orbit of the group', () => {
+    const sorted = [...spawnCells()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    expect(sorted).toEqual([[1, 1], [1, 25], [31, 1], [31, 25]]);
+    // Orbit, as closure: either mirror maps every spawn onto another spawn.
+    const key = (c: number, r: number): string => `${c},${r}`;
+    const set = new Set(sorted.map(([c, r]) => key(c, r)));
+    for (const [c, r] of sorted) {
+      expect(set.has(key(arena.cols - 1 - c, r)), `col-mirror of ${key(c, r)}`).toBe(true);
+      expect(set.has(key(c, arena.rows - 1 - r)), `row-mirror of ${key(c, r)}`).toBe(true);
+    }
+  });
+
+  it('every spawn holds the SAME multiset of path distances, authored AND breached', () => {
+    const cells = spawnCells();
+    const multisetsWith = (breached: boolean) =>
+      cells.map((from) =>
+        cells.filter((to) => to !== from).map((to) => pathLenWith(breached)(from, to)).sort((a, b) => a - b));
+    // {34, 34, 54}: the two edge neighbours at 34 each and the diagonal at 54. Unlike vs-quad-01's
+    // {34, 40, 54}, the horizontal and vertical neighbours are EQUALLY far: the bars at module
+    // columns 2 and 8 were added to lengthen the vertical route to the horizontal one, which is
+    // what makes the four corners the maximin set rather than a corner and three near-corners.
+    // The same set breached, because no gate lies on a corner-to-corner shortest path.
+    expect(multisetsWith(false)).toHaveLength(4);
+    for (const m of multisetsWith(false)) expect(m, 'authored per-spawn multiset').toEqual([34, 34, 54]);
+    for (const m of multisetsWith(true)) expect(m, 'breached per-spawn multiset').toEqual([34, 34, 54]);
+    // The `breached` control: a pair the gates DO stand between. North of the court to south
+    // of it is a drive round the court when the gates stand, and straight through when breached.
+    expect(pathLenWith(false)([16, 6], [16, 20]), 'authored: round the court').toBe(24);
+    expect(pathLenWith(true)([16, 6], [16, 20]), 'breached: through it').toBe(14);
+    // ...and the court itself is reachable only by breaching, which is its design.
+    expect(pathLenWith(false)([1, 1], [16, 13]), 'authored: the court is sealed').toBe(-1);
+    expect(pathLenWith(true)([1, 1], [16, 13])).toBe(27);
+  });
+
+  it('teams splits the orbit into its top and bottom halves, each the other\'s mirror', () => {
+    const tanks = loadArena(arena, 4, 'teams').tanks.filter((t) => t.kind === 'player');
+    const byTeam = new Map<number, [number, number][]>();
+    for (const t of tanks) {
+      const cell: [number, number] = [Math.round(t.pos.x / arena.cellSize - 0.5), Math.round(t.pos.y / arena.cellSize - 0.5)];
+      byTeam.set(t.team as number, [...(byTeam.get(t.team as number) ?? []), cell]);
+    }
+    const zero = (byTeam.get(0) as [number, number][]).sort((a, b) => a[0] - b[0]);
+    const one = (byTeam.get(1) as [number, number][]).sort((a, b) => a[0] - b[0]);
+    expect(zero).toEqual([[1, 1], [31, 1]]);
+    expect(one).toEqual([[1, 25], [31, 25]]);
+    expect(pathLenWith(false)(zero[0], zero[1])).toBe(pathLenWith(false)(one[0], one[1]));
+    expect(spawnCells('teams')).toEqual(spawnCells('ffa'));
+  });
+
+  it('is not vs-quad-01 again: its grid differs under identity, both flips and the half turn', () => {
+    // Read as wall kinds, so the authored P and B letters (which are not geometry) cannot make
+    // two identical boards look different. Whether the board PLAYS differently is #1037's
+    // sign-off; this pins only that it is not the same grid in another orientation.
+    const quad = arenaById('vs-quad-01');
+    expect([quad.cols, quad.rows], 'the comparison needs one footprint').toEqual([arena.cols, arena.rows]);
+    const kinds = (a: Arena, c: number, r: number): string => a.legend[a.grid[r][c]] ?? 'floor';
+    const transforms: Record<string, (c: number, r: number) => [number, number]> = {
+      identity: (c, r) => [c, r],
+      'column flip': (c, r) => [arena.cols - 1 - c, r],
+      'row flip': (c, r) => [c, arena.rows - 1 - r],
+      'half turn': (c, r) => [arena.cols - 1 - c, arena.rows - 1 - r],
+    };
+    for (const [name, map] of Object.entries(transforms)) {
+      let differing = 0;
+      for (let r = 0; r < arena.rows; r++) {
+        for (let c = 0; c < arena.cols; c++) {
+          const [qc, qr] = map(c, r);
+          if (kinds(arena, c, r) !== kinds(quad, qc, qr)) differing++;
+        }
+      }
+      expect(differing, `${name}: cells whose wall kind differs from vs-quad-01`).toBeGreaterThan(0);
+    }
   });
 });

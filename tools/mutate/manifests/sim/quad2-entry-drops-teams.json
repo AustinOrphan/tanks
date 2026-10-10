@@ -1,0 +1,15 @@
+{
+  "id": "quad2-entry-drops-teams",
+  "file": "src/sim/config/data/versus-catalog.json",
+  "find": "\"preview\": \"vs-quad-02\",\n      \"players\": [\n        4\n      ],\n      \"modes\": [\n        \"ffa\",\n        \"teams\"\n      ],",
+  "replace": "\"preview\": \"vs-quad-02\",\n      \"players\": [\n        4\n      ],\n      \"modes\": [\n        \"ffa\"\n      ],",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "why": "Narrows vs-quad-02 to FFA, so 4-player Teams is back to one board that is not a campaign arena and falls under the floor the ruling on #355 sets, while 4-player FFA still meets it. Issue #1036 asks for this entry specifically: it shows the 4-Teams option fails the board-floor test. The parity pin in the same file catches it too, since it expects vs-quad-02 at N=4 in both modes. Anchored on the entry's own preview token, which is unique in versus-catalog.json.",
+  "killedBy": [
+    "the versus board floor (issue #355): boards that are not campaign arenas, per option offers each covered option at least two boards that are not campaign arenas",
+    "versusMapChoices parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its declared counts"
+  ]
+}
