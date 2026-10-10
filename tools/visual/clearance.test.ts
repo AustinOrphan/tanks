@@ -13,8 +13,16 @@ import { clearanceFailures, insetLabel } from './clearance.mjs';
  * - `landscape()` is shaped on 844x390 with a 59px left and a 21px right inset: the flash at
  *   the right-hand end of the bar's own row, and the board's top edge at y 48, above the
  *   bar's 52px bottom. That overlap is why the flash cannot sit under the bar there.
+ *
+ * A chip carries the selector `verify.mjs` measured it through (issue #1068): its place among
+ * all of the bar's children, so the first shown chip is the second child, after the hidden
+ * Practice chip.
  */
 const rect = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom });
+const chip = (child: number, left: number, top: number, right: number, bottom: number) => ({
+  selector: `.hud-topbar > :nth-child(${child})`,
+  ...rect(left, top, right, bottom),
+});
 const box = (r: ReturnType<typeof rect>, extra: Record<string, string> = {}) => ({
   ...r,
   display: 'block',
@@ -25,7 +33,7 @@ const box = (r: ReturnType<typeof rect>, extra: Record<string, string> = {}) => 
 });
 
 function portrait() {
-  const chips = [rect(10, 52, 87, 72), rect(95, 52, 140, 72), rect(148, 52, 193, 72)];
+  const chips = [chip(2, 10, 52, 87, 72), chip(3, 95, 52, 140, 72), chip(4, 148, 52, 193, 72)];
   return {
     viewport: '390x844',
     inset: { top: 47, left: 0, right: 0 },
@@ -44,7 +52,7 @@ function portrait() {
 }
 
 function landscape() {
-  const chips = [rect(59, 13, 168, 39), rect(184, 13, 249, 39), rect(265, 13, 332, 39)];
+  const chips = [chip(2, 59, 13, 168, 39), chip(3, 184, 13, 249, 39), chip(4, 265, 13, 332, 39)];
   return {
     viewport: '844x390',
     inset: { top: 0, left: 59, right: 21 },
@@ -61,6 +69,65 @@ function landscape() {
     board: rect(208, 48, 635, 390),
   };
 }
+
+type Measurement = ReturnType<typeof portrait>;
+const broken = (base: () => Measurement, change: (m: Measurement) => void) => () => {
+  const m = base();
+  change(m);
+  return m;
+};
+
+/**
+ * Every failing shape in this file, each a passing fixture with one thing broken. The tests
+ * below take their shapes from here rather than building them inline, so the sweep at the end
+ * of the file walks every one of them without a second copy.
+ */
+const FAILING = {
+  matchTopbarHidden: broken(portrait, (m) => {
+    m.match.topbar = box(rect(0, 0, 0, 0), { display: 'none' });
+    m.match.toasts = box(rect(374, 12, 374, 12));
+  }),
+  topInsetNeverApplied: broken(portrait, (m) => {
+    m.match.topbar = box(rect(0, 0, 390, 38), { display: 'flex', paddingTop: '8px' });
+  }),
+  sideInsetNeverApplied: broken(landscape, (m) => {
+    m.match.topbar = box(rect(0, 0, 844, 52), { display: 'flex', paddingTop: '12px', paddingLeft: '18px', paddingRight: '21px' });
+  }),
+  toastRailInBar: broken(portrait, (m) => {
+    m.match.toasts = box(rect(374, 64, 374, 64));
+  }),
+  flashWithNoBox: broken(landscape, (m) => {
+    m.match.capacity = box(rect(823, 26, 823, 26));
+  }),
+  flashOnChips: broken(portrait, (m) => {
+    m.match.capacity = box(rect(60, 56, 138, 82));
+  }),
+  boardNotFound: broken(landscape, (m) => {
+    m.board = null;
+  }),
+  flashOnBoard: broken(landscape, (m) => {
+    m.match.capacity = box(rect(384, 56, 460, 83));
+  }),
+  flashUnderSideInset: broken(landscape, (m) => {
+    m.match.capacity = box(rect(763, 13, 840, 39));
+  }),
+  flashUnderTopInset: broken(portrait, (m) => {
+    m.match.topbar = box(rect(0, 0, 390, 77), { display: 'flex', paddingTop: '47px' });
+    m.match.capacity = box(rect(200, 30, 278, 56));
+  }),
+  chipsMoved: broken(landscape, (m) => {
+    m.match.chipsStaged[2] = chip(4, 265, 13, 255, 39);
+  }),
+  chipAppeared: broken(landscape, (m) => {
+    m.match.chipsStaged.push(chip(5, 348, 13, 425, 39));
+  }),
+  menuTopbarShown: broken(portrait, (m) => {
+    m.menu.topbar = box(rect(0, 0, 390, 77), { display: 'flex', paddingTop: '47px' });
+  }),
+  menuToastsInInset: broken(portrait, (m) => {
+    m.menu.toasts = box(rect(374, 14, 374, 14));
+  }),
+};
 
 describe('topbar clearance verdict (issue #687)', () => {
   it('passes both placements: under the bar in portrait, in the bar row in landscape', () => {
@@ -84,81 +151,60 @@ describe('topbar clearance verdict (issue #687)', () => {
   });
 
   it('fails the toast rail starting inside the bar -- the shipped 64px under a 77px bar', () => {
-    const m = portrait();
-    m.match.toasts = box(rect(374, 64, 374, 64));
-    expect(clearanceFailures(m)).toEqual([
-      '390x844 inset=top 47: toast rail top 64 overlaps the topbar, whose bottom is 77',
+    expect(clearanceFailures(FAILING.toastRailInBar())).toEqual([
+      '390x844 inset=top 47 state=match: toast rail .hud-toasts top 64 overlaps topbar .hud-topbar, whose bottom is 77',
     ]);
   });
 
   it('fails the capacity flash drawn on the board -- 844x390 just under the bar, issue #702', () => {
-    const m = landscape();
-    m.match.capacity = box(rect(384, 56, 460, 83));
-    expect(clearanceFailures(m)).toEqual([
-      '844x390 inset=left 59, right 21: capacity flash 384,56 to 460,83 overlaps the drawn board at 208,48 to 635,390',
+    expect(clearanceFailures(FAILING.flashOnBoard())).toEqual([
+      '844x390 inset=left 59, right 21 state=match: capacity flash .hud-capacity 384,56 to 460,83 overlaps the drawn board at 208,48 to 635,390',
     ]);
   });
 
   it('fails the capacity flash inside the bar on top of a chip -- the shipped 56px under a 77px bar', () => {
-    const m = portrait();
-    m.match.capacity = box(rect(60, 56, 138, 82));
-    expect(clearanceFailures(m)).toEqual([
-      '390x844 inset=top 47: capacity flash 60,56 to 138,82 overlaps a topbar chip at 10,52 to 87,72',
-      '390x844 inset=top 47: capacity flash 60,56 to 138,82 overlaps a topbar chip at 95,52 to 140,72',
+    expect(clearanceFailures(FAILING.flashOnChips())).toEqual([
+      '390x844 inset=top 47 state=match: capacity flash .hud-capacity 60,56 to 138,82 overlaps topbar chip .hud-topbar > :nth-child(2) at 10,52 to 87,72',
+      '390x844 inset=top 47 state=match: capacity flash .hud-capacity 60,56 to 138,82 overlaps topbar chip .hud-topbar > :nth-child(3) at 95,52 to 140,72',
     ]);
   });
 
   it('fails a flash that moves the chips when it shows, which is a chip claiming room in the bar', () => {
-    const m = landscape();
-    m.match.chipsStaged[2] = rect(265, 13, 255, 39);
-    expect(clearanceFailures(m)).toEqual([
-      "844x390 inset=left 59, right 21: showing the capacity flash moved the topbar's chips, so it claims room in the bar",
+    expect(clearanceFailures(FAILING.chipsMoved())).toEqual([
+      '844x390 inset=left 59, right 21 state=match: showing capacity flash .hud-capacity moved the chips of topbar .hud-topbar, so it claims room in the bar',
     ]);
-    const extra = landscape();
-    extra.match.chipsStaged.push(rect(348, 13, 425, 39));
-    expect(clearanceFailures(extra), 'a chip that appears is a moved row too').toEqual([
-      "844x390 inset=left 59, right 21: showing the capacity flash moved the topbar's chips, so it claims room in the bar",
+    expect(clearanceFailures(FAILING.chipAppeared()), 'a chip that appears is a moved row too').toEqual([
+      '844x390 inset=left 59, right 21 state=match: showing capacity flash .hud-capacity moved the chips of topbar .hud-topbar, so it claims room in the bar',
     ]);
   });
 
   it('fails a flash with no box, instead of judging text that was never staged', () => {
-    const m = landscape();
-    m.match.capacity = box(rect(823, 26, 823, 26));
-    expect(clearanceFailures(m)).toEqual([
-      '844x390 inset=left 59, right 21: the capacity flash has no box, so its text was never staged and nothing was judged',
+    expect(clearanceFailures(FAILING.flashWithNoBox())).toEqual([
+      '844x390 inset=left 59, right 21 state=match: capacity flash .hud-capacity has no box, so its text was never staged and nothing was judged',
     ]);
   });
 
   it('fails a board the screenshot did not find, instead of clearing nothing', () => {
-    const m = landscape();
-    m.board = null;
-    expect(clearanceFailures(m)).toEqual([
-      '844x390 inset=left 59, right 21: the board was not found in the screenshot, so the flash was not judged against it',
+    expect(clearanceFailures(FAILING.boardNotFound())).toEqual([
+      '844x390 inset=left 59, right 21 state=match: the board was not found in the screenshot, so the flash was not judged against it',
     ]);
   });
 
   it('fails a flash under a side inset, where the camera housing is', () => {
-    const right = landscape();
-    right.match.capacity = box(rect(763, 13, 840, 39));
-    expect(clearanceFailures(right)).toEqual([
-      '844x390 inset=left 59, right 21: capacity flash 763,13 to 840,39 is outside the safe area of a 844px viewport',
+    expect(clearanceFailures(FAILING.flashUnderSideInset())).toEqual([
+      '844x390 inset=left 59, right 21 state=match: capacity flash .hud-capacity 763,13 to 840,39 is outside the safe area of a 844px viewport',
     ]);
-    const top = portrait();
-    top.match.topbar = box(rect(0, 0, 390, 77), { display: 'flex', paddingTop: '47px' });
-    top.match.capacity = box(rect(200, 30, 278, 56));
-    expect(clearanceFailures(top)).toEqual([
-      '390x844 inset=top 47: capacity flash 200,30 to 278,56 is outside the safe area of a 390px viewport',
+    expect(clearanceFailures(FAILING.flashUnderTopInset())).toEqual([
+      '390x844 inset=top 47 state=match: capacity flash .hud-capacity 200,30 to 278,56 is outside the safe area of a 390px viewport',
     ]);
   });
 
   it('fails an inset the page never applied, rather than passing a 0px inset as a real one', () => {
-    const m = portrait();
-    m.match.topbar = box(rect(0, 0, 390, 38), { display: 'flex', paddingTop: '8px' });
-    expect(clearanceFailures(m)).toEqual(['390x844 inset=top 47: topbar padding-top 8px ignores the 47px top inset']);
-    const side = landscape();
-    side.match.topbar = box(rect(0, 0, 844, 52), { display: 'flex', paddingTop: '12px', paddingLeft: '18px', paddingRight: '21px' });
-    expect(clearanceFailures(side)).toEqual([
-      '844x390 inset=left 59, right 21: topbar padding-left 18px ignores the 59px left inset',
+    expect(clearanceFailures(FAILING.topInsetNeverApplied())).toEqual([
+      '390x844 inset=top 47 state=match: topbar .hud-topbar padding-top 8px ignores the 47px top inset',
+    ]);
+    expect(clearanceFailures(FAILING.sideInsetNeverApplied())).toEqual([
+      '844x390 inset=left 59, right 21 state=match: topbar .hud-topbar padding-left 18px ignores the 59px left inset',
     ]);
     const noInset = portrait();
     noInset.inset = { top: 0, left: 0, right: 0 };
@@ -168,23 +214,20 @@ describe('topbar clearance verdict (issue #687)', () => {
   });
 
   it('fails a match whose topbar never showed, instead of clearing nothing', () => {
-    const m = portrait();
-    m.match.topbar = box(rect(0, 0, 0, 0), { display: 'none' });
-    m.match.toasts = box(rect(374, 12, 374, 12));
-    expect(clearanceFailures(m)).toEqual(['390x844 inset=top 47: the match topbar is not shown, so nothing was cleared']);
+    expect(clearanceFailures(FAILING.matchTopbarHidden())).toEqual([
+      '390x844 inset=top 47 state=match: the match topbar .hud-topbar is not shown, so nothing was cleared',
+    ]);
   });
 
   it('fails a menu toast rail inside the inset once no topbar is there to clear it', () => {
-    const m = portrait();
-    m.menu.toasts = box(rect(374, 14, 374, 14));
-    expect(clearanceFailures(m)).toEqual(['390x844 inset=top 47: menu toast rail top 14 is inside the 47px top inset']);
+    expect(clearanceFailures(FAILING.menuToastsInInset())).toEqual([
+      '390x844 inset=top 47 state=menu: menu toast rail .hud-toasts top 14 is inside the 47px top inset',
+    ]);
   });
 
   it('fails a menu measured with the topbar shown, which is not the no-topbar case', () => {
-    const m = portrait();
-    m.menu.topbar = box(rect(0, 0, 390, 77), { display: 'flex', paddingTop: '47px' });
-    expect(clearanceFailures(m)).toEqual([
-      '390x844 inset=top 47: the menu topbar is shown, so the no-topbar case was not measured',
+    expect(clearanceFailures(FAILING.menuTopbarShown())).toEqual([
+      '390x844 inset=top 47 state=menu: the menu topbar .hud-topbar is shown, so the no-topbar case was not measured',
     ]);
   });
 });

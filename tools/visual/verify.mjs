@@ -21,7 +21,7 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
-import { clearanceFailures, insetLabel } from './clearance.mjs';
+import { CLEARANCE_SELECTORS, clearanceFailures, insetLabel } from './clearance.mjs';
 import { hitTargetFailures } from './hit-targets.mjs';
 import { HIT_VIEWPORTS, hitSweepStates, measureHitTargets } from './hit-sweep.mjs';
 import { audioContextOverrideSource } from '../shared/audio-context.mjs';
@@ -100,14 +100,24 @@ const clearanceInsets = (vp) =>
  * is first given the text it shows at the roster cap and held at its visible keyframe: between
  * refusals its box is empty and transparent, so there is nothing to judge. The chips are read
  * on both sides of that, so a flash that takes room in the bar shows as chips that moved.
+ *
+ * `selectors` is `CLEARANCE_SELECTORS`, passed in because this runs in the page and cannot
+ * close over it (issue #1068); the verdict prints the same strings. Every selector a failure
+ * line can print must match exactly one element, so one that matches none or several throws
+ * here, and the run fails naming it, rather than measuring the first match or nothing.
  */
-const MEASURE_CLEARANCE = (stage) => {
+export const MEASURE_CLEARANCE = ({ stage, selectors }) => {
+  const only = (sel) => {
+    const found = document.querySelectorAll(sel);
+    if (found.length !== 1) throw new Error(`clearance: ${sel} matches ${found.length} elements, not 1`);
+    return found[0];
+  };
   const edges = (el) => {
     const r = el.getBoundingClientRect();
     return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
   };
   const box = (sel) => {
-    const el = document.querySelector(sel);
+    const el = only(sel);
     const cs = getComputedStyle(el);
     return {
       ...edges(el),
@@ -117,21 +127,29 @@ const MEASURE_CLEARANCE = (stage) => {
       paddingRight: cs.paddingRight,
     };
   };
+  // A chip has no class of its own to be named by -- several share `.hud-stat` -- so it is
+  // named by its place among ALL of the bar's children, counted before the hidden ones are
+  // dropped, because that is what `:nth-child` counts. A missing bar measures no chips here
+  // and throws in `box` below.
   const chips = () =>
-    [...document.querySelector('.hud-topbar').children]
-      .filter((el) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0)
-      .map(edges);
+    [...(document.querySelector(selectors.topbar)?.children ?? [])]
+      .map((el, i) => ({ el, selector: `${selectors.topbar} > :nth-child(${i + 1})` }))
+      .filter(({ el }) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0)
+      .map(({ el, selector }) => {
+        if (only(selector) !== el) throw new Error(`clearance: ${selector} is not the chip it names`);
+        return { selector, ...edges(el) };
+      });
   const before = chips();
   if (stage) {
-    const flash = document.querySelector('.hud-capacity');
+    const flash = only(selectors.capacity);
     flash.textContent = 'shells 5/5';
     flash.style.animation = 'none';
     flash.style.opacity = '1';
   }
   return {
-    topbar: box('.hud-topbar'),
-    toasts: box('.hud-toasts'),
-    capacity: box('.hud-capacity'),
+    topbar: box(selectors.topbar),
+    toasts: box(selectors.toasts),
+    capacity: box(selectors.capacity),
     chips: before,
     chipsStaged: chips(),
   };
@@ -171,17 +189,17 @@ async function measureClearance(browser, base, vp, inset) {
       });
       await page.goto(base, { waitUntil: 'load' });
       await dismissSplash(page);
-      const menu = await page.evaluate(MEASURE_CLEARANCE, false);
+      const menu = await page.evaluate(MEASURE_CLEARANCE, { stage: false, selectors: CLEARANCE_SELECTORS });
       await startMatch(page);
       await page
         .waitForFunction(
-          () => getComputedStyle(document.querySelector('.hud-topbar')).display !== 'none',
-          undefined,
+          (topbar) => getComputedStyle(document.querySelector(topbar)).display !== 'none',
+          CLEARANCE_SELECTORS.topbar,
           { timeout: 20000 },
         )
         .catch(() => {});
       await settle(page);
-      const match = await page.evaluate(MEASURE_CLEARANCE, true);
+      const match = await page.evaluate(MEASURE_CLEARANCE, { stage: true, selectors: CLEARANCE_SELECTORS });
       // The board, exactly as the board checks isolate it: everything in the root but the
       // canvas hidden. The screenshot is in device pixels and the rects above are CSS pixels.
       await page.evaluate(() => {
