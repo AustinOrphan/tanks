@@ -198,12 +198,15 @@
    * Steps are numbered rather than named, like `--hud-space-*`, and exist only for values
    * used more than once. The six one-offs stay literal at their call site -- 1rem, 1.0625rem,
    * 1.1875rem, the 3.5rem title, the 4.5rem splash title and `.hud-count`'s clamp -- because
-   * a token used once names a step that is not a step.
+   * a token used once names a step that is not a step. Each is multiplied by
+   * `--hud-ui-scale` where it is used, as the tokens are (issue #1031), except the two that
+   * only a developer sees: `.hud-devbadge` and the `versusActions=header` arm.
    *
    * There is deliberately NO `:root { font-size }`. Pinning it is the classic way to break
    * exactly the preference this scale exists to honour: rem would then resolve against our
    * number instead of the reader's. The 25 `em` declarations elsewhere in this file need no
-   * change -- they inherit from these anchors and scale with them.
+   * change -- they inherit from these anchors, or from `.hud`'s scaled base, and scale with
+   * them.
    *
    * `* var(--hud-ui-scale)` is the player's own UI-scale setting, which is 1 by default and
    * so moves nothing until they ask for it (issue #290). It multiplies WITH the reader's
@@ -877,6 +880,14 @@
    * the player asking for something bigger. */
   --hud-ui-scale: 1;
 
+  /* THE BASE TEXT, scaled with everything else (issue #1031). Without this, the HUD inherited
+   * the page's 1rem unmultiplied, so everything sized from it -- pane titles at the UA's 2em,
+   * the disabled-reason `.ui-hint` at 0.85em, the Records tables, every other `em` -- stayed
+   * put while the controls around it grew: measured at 150%, 3 of 40 text elements on Records
+   * moved. `1rem` keeps honouring the reader's own font size; the multiplier adds the
+   * player's. At the default scale this resolves to exactly the 16px it inherited before. */
+  font-size: calc(1rem * var(--hud-ui-scale));
+
   /* Spacing scale, from the gaps this file already uses. */
   --hud-space-1: calc(6px * var(--hud-ui-scale));
   --hud-space-2: calc(8px * var(--hud-ui-scale));
@@ -1444,7 +1455,7 @@
 
 .hud-splash-title {
   margin: 0;
-  font-size: 4.5rem;
+  font-size: calc(4.5rem * var(--hud-ui-scale));
   font-weight: var(--hud-weight-strong);
   letter-spacing: 2px;
   color: var(--hud-text-bright);
@@ -1457,7 +1468,7 @@
  * setting as well as the OS one, which this line used to promise and not deliver. */
 .hud-splash-hint {
   margin: 0;
-  font-size: 1.0625rem;
+  font-size: calc(1.0625rem * var(--hud-ui-scale));
   color: #aeb6c2;
   animation: hud-splash-pulse 2s ease-in-out infinite;
 }
@@ -1474,7 +1485,7 @@
 
 .hud-title {
   margin: 0;
-  font-size: 3.5rem;
+  font-size: calc(3.5rem * var(--hud-ui-scale));
   /* 700, not 900: Plex's axis ends at 700 and a heavier request would be synthesised. */
   font-weight: 700;
   letter-spacing: 2px;
@@ -3673,7 +3684,7 @@
   display: flex;
   align-items: center;
   gap: var(--hud-space-3);
-  font-size: 1rem;
+  font-size: calc(1rem * var(--hud-ui-scale));
   font-weight: var(--hud-weight-normal);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
@@ -3963,7 +3974,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: clamp(4.5rem, 20vmin, 15rem);
+  font-size: calc(clamp(4.5rem, 20vmin, 15rem) * var(--hud-ui-scale));
   font-weight: var(--hud-weight-strong);
   font-variant-numeric: tabular-nums;
   color: var(--hud-text-bright);

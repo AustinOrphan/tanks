@@ -1,0 +1,14 @@
+{
+  "id": "ui-scale-baseline-title-unscaled",
+  "file": "tools/screens/baseline/screen.settings.ui-scale.json",
+  "find": "\"font-size\": \"48px\"",
+  "replace": "\"font-size\": \"32px\"",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "why": "The scaled Settings capture's title reads the default 32px again -- exactly what the committed pair said before issue #1031, when the title (the UA's 2em of the unscaled base) did not move and a 'differs from screen.settings' check still passed on its y alone. The ratio test holds every selector the scaled state measures to 1.5x the default state's font-size, so it names this one.",
+  "killedBy": [
+    "the UI-scale capture shows the scale on every selector (issue #1031) holds on the committed pair, over the scaled state's own selector list"
+  ]
+}
