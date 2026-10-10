@@ -11,5 +11,5 @@
     "the campaign board unlock (issue #983) leaves a fresh save at least two non-campaign boards at each startable option, and every one starts",
     "the campaign board unlock (issue #983) Random draws only from the boards a save has unlocked"
   ],
-  "why": "The Random place (issue #983): `pickVersusArena` draws from the declared offer rather than the unlocked one, so Random can land on a campaign board the player has never cleared -- one the Map row hides and its own 'N eligible boards' line does not count. The launch gate behind it then throws, so the visible failure is a Start that does nothing for some seeds and works for others. Proved before its tests existed: SURVIVES at 0 of 20 in scope on the gate's own commit, then KILLED by 2 of 29, measured."
+  "why": "The Random place (issue #983): `pickVersusArena` draws from the declared offer rather than the unlocked one, so Random can land on a campaign board the player has never cleared -- one the Map row hides and its own 'N eligible boards' line does not count. The launch gate behind it then throws, so the visible failure is a 'match failed' overlay for some seeds and a match for others. Proved before its tests existed: SURVIVES at 0 of 20 in scope on the gate's own commit, then KILLED by 2 of 29, measured."
 }

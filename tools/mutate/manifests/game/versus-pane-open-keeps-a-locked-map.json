@@ -10,5 +10,5 @@
   "killedBy": [
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) drops a selected board that a progress reset locked, on the next open, seeded or not (issue #983)"
   ],
-  "why": "Deletes the re-check on pane open (issue #983). The pane's own selection and the retained `initial` both outlive a progress reset, so after one the pane reopens with a locked board selected and no card for it, and Start throws out of the click handler. The Map row alone looks right, which is why the killer asserts what Start emits. Proved before its tests existed: SURVIVES at 0 of 134 in scope on the gate's own commit, then KILLED by 1 of 137, measured."
+  "why": "Deletes the re-check on pane open (issue #983). The pane's own selection and the retained `initial` both outlive a progress reset, so after one the pane reopens with a locked board selected and no card for it, and Start reaches the launch gate, which throws, and the player gets the 'match failed' overlay instead of a match. The Map row alone looks right, which is why the killer asserts what Start emits. Proved before its tests existed: SURVIVES at 0 of 134 in scope on the gate's own commit, then KILLED by 1 of 137, measured."
 }

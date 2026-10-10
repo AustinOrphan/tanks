@@ -3081,9 +3081,11 @@ export function startGameWith(
          *
          * THE RETAINED MAP IS RE-CHECKED against this save's progress first (issue #983).
          * Settings is reachable from pause, so progress can be reset mid-match; a retained
-         * board that reset locked would otherwise reach the launch gate, whose throw nothing
-         * on this path catches. It falls back to Random through the pane's own
-         * `retainArenaChoice`, and the next session reopens the pane showing Random too.
+         * board that reset locked would otherwise reach the launch gate, which throws. The
+         * session host reports that as a failed match (`onStartFailure`, issue #685), and its
+         * Retry reruns the same locked descriptor and fails again. Instead the board falls back
+         * to Random through the pane's own `retainArenaChoice`, and the next session reopens
+         * the pane showing Random too.
          */
         const retained = deps.initialVersusConfig;
         const { arenaId } = retainArenaChoice(

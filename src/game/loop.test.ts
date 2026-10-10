@@ -7914,8 +7914,9 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
     it('rematches a board a mid-match progress reset locked as Random (issue #983)', () => {
       // Settings, and Reset progress in it, is reachable from pause, so the save can lose level
       // 2 while a match on arena-02 runs. The rematch must not hand that board to the launch
-      // gate, which throws with nothing on this path to catch it. The win case above is the
-      // negative control: the same config, level 2 still cleared, rematches unchanged.
+      // gate, which throws, and the host shows a failed-match overlay whose Retry fails the
+      // same way. The win case above is the negative control: the same config, level 2 still
+      // cleared, rematches unchanged.
       const calls: VersusConfig[] = [];
       const base = makeDeps({ progressHighest: 2 });
       const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
