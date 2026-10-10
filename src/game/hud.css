@@ -4466,6 +4466,33 @@
   opacity: 0.85;
 }
 
+/* THE HEADING BESIDE ITS BUTTONS, not above them (issue #1032), for the rows that are a short
+ * heading and one line of controls: Mode, Players, Stock, Teams' friendly fire, the Standard
+ * rules line, and Who's playing's heading beside its one-line note (its slot cards still take
+ * a line of their own: `.hud-versus-slot-rows` is a definite 92vw, wider than whatever is left
+ * of a line beside the heading). Each saves a line, and together with the map measure and the slot
+ * cards below they are what fits the pane in 1920x1080 in every configuration, Teams with a
+ * refused Start included. `flex-wrap` keeps a narrow window honest: where the line does not
+ * fit, the controls wrap under the heading as they always did.
+ *
+ * `:has()` rather than a modifier class, so the markup is untouched; where it is unsupported
+ * the row stays stacked, which is the old layout. The Mode row's hint ("Teams needs three or
+ * more players") keeps a line of its own below the buttons. */
+.hud-versus-row:has(> .hud-versus-mode-row),
+.hud-versus-row:has(> .hud-versus-players-row),
+.hud-versus-row:has(> .hud-versus-stock-row),
+.hud-versus-row:has(> .hud-versus-limits),
+.hud-versus-row:has(> .hud-versus-slot-rows),
+.hud-versus-friendlyfire-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hud-versus-mode-note {
+  flex-basis: 100%;
+}
+
 .hud-versus-mode-row,
 .hud-versus-players-row,
 .hud-versus-map-row,
@@ -4495,14 +4522,19 @@
    `max-width` rather than shrink-to-fit, and it is load-bearing rather than cosmetic: this
    pane centres its children, so without a definite width the grid sizes to content and
    `auto-fill` resolves against whatever that happened to be. The measure also bounds how far
-   Start can be pushed down the pane -- see the card rule below. */
+   Start can be pushed down the pane -- see the card rule below.
+
+   78rem, up from 46rem (issue #1032): room for five 15rem columns and their gaps, so where the
+   pane has the width -- 1280px and up -- the seven cards take two rows instead of three, and
+   so would the nine #229 plans to offer. That row is what let the pane fit 1920x1080; the
+   cards themselves, and the narrowest column a card can get, are unchanged. */
 .hud-versus-map-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   justify-content: center;
   gap: var(--hud-space-2);
   width: 100%;
-  max-width: 46rem;
+  max-width: 78rem;
 }
 
 /* The card itself is still a `.ui-btn`, so it is themed, selectable and focusable exactly
@@ -4760,7 +4792,11 @@
 .hud-versus-actions {
   position: sticky;
   bottom: 0;
-  z-index: 1;
+  /* 3, above the selected-state check badge (`.ui-selectable--on::after` is z-index 2, its ring
+   * 1): the badges share this pane's stacking context, so at 1 a selected Stock or role button
+   * scrolling under the bar painted its check over Start (issue #1032 measured it at 1280x800,
+   * where the narrower pane puts the slot cards under the bar at rest). */
+  z-index: 3;
   /* The pane centres its children; without this the bar shrinks to its buttons and the
      backdrop stops short of the edges, leaving scrolled content visible either side. */
   align-self: stretch;
@@ -4856,16 +4892,34 @@
 }
 
 /* One slot's card: label, the three role buttons, its derived device line, and the
- * refusal that may or may not be showing. A column, the same shape .hud-controller-row
- * uses, and the border-left is what makes each card legible as one unit in the wrapped
- * row above. */
+ * refusal that may or may not be showing. The border-left is what makes each card legible
+ * as one unit in the wrapped row above.
+ *
+ * EACH GROUP OF BUTTONS ON ONE LINE (issue #1032), not one button per line: the three role
+ * buttons, then Teams' team buttons, then a bot's three difficulties, each group starting a
+ * row of its own and every non-button (label, device line, refusal) spanning the card. It was
+ * a column, the shape .hud-controller-row uses, and at four rows of single buttons it made
+ * Who's playing the tallest block in the pane. Source order is the visual order -- grid
+ * auto-placement never reorders -- so Tab still walks the card exactly as it reads.
+ * Phones keep the column: see the 760px block below. */
 .hud-versus-slot-row {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: center;
   align-items: center;
   gap: var(--hud-space-1);
   border-left: 3px solid rgba(216, 221, 230, 0.25);
   padding: 6px 12px;
+}
+
+.hud-versus-slot-row > :not(button) {
+  grid-column: 1 / -1;
+}
+
+.hud-versus-role-btn + .hud-versus-team-btn,
+.hud-versus-role-btn + .hud-versus-difficulty-btn,
+.hud-versus-team-btn + .hud-versus-difficulty-btn {
+  grid-column-start: 1;
 }
 
 /* .hud-versus-slot-row is already narrow at its default size (a label, a
@@ -4904,6 +4958,10 @@
     flex: 0 1 40vw;
     min-width: 0;
     box-sizing: border-box;
+    /* The column again (issue #1032): a 40vw card has no room for three buttons abreast. */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   /* Two lines, not the base rule's four -- see .hud-versus-map-intent. The map row is a

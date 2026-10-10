@@ -27,10 +27,10 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 272,
-        "y": 340,
-        "w": 736,
-        "h": 387
+        "x": 16,
+        "y": 284,
+        "w": 1248,
+        "h": 251
       },
       "text": "Arena 12/3/4 players · FFA and TeamsSparse destructibles on a mid-size board; cover is mostly permanent, lanes stay stable.Arena 22/3/4 players · FFA and TeamsDestructible-heavy centre; opens up as a ",
       "style": {
@@ -48,9 +48,9 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 272,
-        "y": 340,
-        "w": 240,
+        "x": 16,
+        "y": 284,
+        "w": 243,
         "h": 128
       },
       "text": "Arena 12/3/4 players · FFA and TeamsSparse destructibles on a mid-size board; cover is mostly permanent, lanes stay stable.",
@@ -69,8 +69,8 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 548,
-        "y": 1030,
+        "x": 416,
+        "y": 778,
         "w": 75,
         "h": 44
       },
@@ -91,9 +91,9 @@
       "visible": true,
       "box": {
         "x": 434,
-        "y": 737,
+        "y": 739,
         "w": 836,
-        "h": 51
+        "h": 49
       },
       "text": "Start",
       "style": {

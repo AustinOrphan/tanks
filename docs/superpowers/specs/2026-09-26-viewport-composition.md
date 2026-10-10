@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-09-26
-last-reviewed: 2026-09-26
+last-reviewed: 2026-10-09
 scope: What the HUD's composition actually is at each viewport in issue #290's emulated matrix
 implementation-issues: [985]
 implementation-prs: []
@@ -130,22 +130,37 @@ whose Back control sits furthest below the fold, measured separately at 632 px d
 
 ## Versus Setup
 
+Re-measured 2026-10-09 for issue #1032, on a production build of that change, default
+configuration (FFA, two players, Random) opened from the main menu, the method above:
+
 | viewport | scrolls | content h | visible h | wrapped rows | controls |
 | --- | --- | --- | --- | --- | --- |
-| 320×568 | **YES** | 1848 | 568 | 1 | 28 |
-| 390×844 | **YES** | 1708 | 844 | 1 | 28 |
-| 844×390 | **YES** | 1455 | 390 | 1 | 28 |
-| 768×1024 | **YES** | 1455 | 1024 | 1 | 28 |
-| 1280×720 | **YES** | 1455 | 720 | 1 | 28 |
-| 1280×800 | **YES** | 1455 | 800 | 1 | 28 |
-| 1920×1080 | **YES** | 1455 | 1080 | 1 | 28 |
-| 2560×1440 | **YES** | 1455 | 1440 | 1 | 28 |
-| 1280×800 @200% | **YES** | 1430 | 400 | 1 | 28 |
+| 320×568 | **YES** | 1762 | 568 | **3** | 28 |
+| 390×844 | **YES** | 1622 | 844 | **3** | 28 |
+| 844×390 | **YES** | 1085 | 390 | **2** | 28 |
+| 768×1024 | **YES** | 1113 | 1024 | **2** | 28 |
+| 1280×720 | **YES** | 976 | 720 | **2** | 28 |
+| 1280×800 | **YES** | 976 | 800 | **2** | 28 |
+| 1920×1080 | no | 1080 | 1080 | **2** | 28 |
+| 2560×1440 | no | 1440 | 1440 | **2** | 28 |
+| 1280×800 @200% | **YES** | 1288 | 400 | **2** | 28 |
 
-**Versus Setup scrolls at every viewport in the matrix, including the largest.** At 2560×1440 it
-needs 1,455 px against 1,440 available — it misses fitting by 15 px. It carries 28 controls, more
-than any other surface, and its content height is flat at 1,455 from 844×390 upward, so the
-overflow above 1,440 is structural rather than a wrapping effect.
+**Versus Setup fits at 1920×1080 and 2560×1440**, and in every configuration, not only this one:
+issue #1032 measured FFA at two, three and four players and Teams at three and four, at rest, with
+Start refused, and with the dropped-map notice, with Teams and a refused Start the tallest at
+1,043 px; and with nine map cards, the count #229 plans, at 1,057. It carries 28 controls, more
+than any other surface. Below 1920×1080 it still scrolls, as the ruling on #985 allows, but it is
+shorter at every one of the other seven viewports than it was (1,453 px from 844×390 upward and
+1,846 at 320×568 when this document was first written). Four changes did it, all in the pane's own
+rules: the map grid's measure widened to five columns where the pane has the width, the short rows
+put their heading beside their controls, a slot card lays each group of buttons on one line, and
+Who's playing puts its heading beside its note.
+
+"Wrapped rows" here counts LINES, children whose vertical extents overlap sharing one, rather than
+distinct top offsets: those rows now centre a heading beside taller buttons, which a top-offset
+count reads as a break on a single line. Two of the rows are wrapped at every size by design --
+the Mode row's hint on a line of its own, and the slot cards under their heading. Counted the
+first way, the table before #1032 read 1 at every viewport, and counted this way, 0.
 
 ## What this says about criterion 1
 
@@ -161,5 +176,6 @@ that can be re-measured.
 Two things fall out of it that look like findings rather than description, and both are recorded on
 issue #985 rather than resolved here:
 
-- **Versus Setup never fits**, at any supported size.
+- **Versus Setup never fit**, at any supported size, when this was written; issue #1032 made it fit
+  at 1920×1080 and 2560×1440 (see its section above). Smaller viewports still scroll it.
 - **About scrolls on a normal desktop**, and its Back control is the one furthest below the fold.
