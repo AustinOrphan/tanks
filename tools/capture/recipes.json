@@ -944,8 +944,8 @@
       "allowUnexpectedEvents": true
     },
     "title": "Versus Setup, a board chosen",
-    "description": "The Versus Setup pane with Arena 3 picked, showing the selection ring on a map card.",
-    "altText": "Screenshot of the Tanks! versus setup screen, a grid of map cards each showing a board schematic, with Arena 3 ringed as the current choice.",
+    "description": "The Versus Setup pane with Arena 2 picked, showing the selection ring on a map card.",
+    "altText": "Screenshot of the Tanks! versus setup screen, a grid of map cards each showing a board schematic, with Arena 2 ringed as the current choice.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
   },

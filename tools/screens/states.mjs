@@ -772,15 +772,18 @@ export const SCREEN_STATES = Object.freeze([
     id: 'screen.versus-setup.selected',
     title: 'Versus Setup, a board chosen',
     description:
-      'Arena 3 picked (issue #274). The pane default is Random, so this is the only state ' +
+      'Arena 2 picked (issue #274). The pane default is Random, so this is the only state ' +
       'showing the selection ring on a card with a board schematic in it -- the state ' +
       "#274's \"selected state remains obvious without relying on color\" criterion is about.",
     storage: MID_CAMPAIGN,
+    // Arena 2, not Arena 3 as before issue #983: a campaign board is offered in versus only
+    // once its level is cleared, and MID_CAMPAIGN has cleared levels 1 and 2, so Arena 3 has
+    // no card here to click. Arena 2 keeps the one save and still rings a board schematic.
     steps: [
       ...PAST_SPLASH,
       { click: '.hud-versus-open' },
       { waitVisible: '.hud-versus-setup' },
-      { click: '.hud-versus-map-row [data-map="arena-03"]' },
+      { click: '.hud-versus-map-row [data-map="arena-02"]' },
       // Waiting on the ROW rather than on the clicked card: the row is replaced wholesale on
       // every selection, so the node clicked above is gone by the time this resolves.
       { waitVisible: '.hud-versus-map-row' },
@@ -800,8 +803,9 @@ export const SCREEN_STATES = Object.freeze([
     //
     // Issue #627 is what made the map row worth a picture. Keystone (`vs-tri-01`) declared
     // `ffa` alone until #584 established that asymmetric Teams are intentionally supported,
-    // so this row offered five boards and Random here and now offers six and Random. That
-    // button is reachable in exactly this state and no other.
+    // so before that this row did not offer it at all. That button is reachable in exactly
+    // this state and no other. Since issue #983 the row offers only what the save has
+    // unlocked: on MID_CAMPAIGN, Arena 1, Arena 2, Keystone, Quarters and Random.
     //
     // Waiting on the friendly-fire toggle rather than on the Keystone button is deliberate:
     // it confirms the pane really entered Teams, which is the precondition. Waiting on the
