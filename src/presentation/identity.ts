@@ -120,7 +120,8 @@ function identityColor(slot: number): number {
  *
  * Better on every axis, which is why it is here rather than a compromise. Cyan scored
  * higher against the hull and looked more vivid, and was rejected: it collapses to 8.6
- * against team C under tritanopia, because cyan and green converge there.
+ * against team C under tritanopia, because cyan and green converge there (#579's figure; its
+ * cyan's hex and simulation were not recorded, so it is not re-measured here).
  */
 export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0xfcc0fc, 0x4eff3b];
 

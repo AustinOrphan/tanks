@@ -126,8 +126,9 @@ describe('colour-vision simulation (Machado 2009, severity 1)', () => {
 
   it('collapses a red and a green that normal vision separates by far more than 20, under deutan', () => {
     // The paint shop's own Red and Green swatches: 67.61 apart in normal vision and 6.75 under
-    // deutan. Protan (24.47) and tritan (65.14) keep them apart, so a simulation that returned
-    // its input, or ran another type's matrix for deutan, fails the second check.
+    // deutan. Protan (24.47) and tritan (65.14) keep them apart (measured 2026-10-10 on
+    // origin/main c200cf62), so a simulation that returned its input, or ran another type's
+    // matrix for deutan, fails the second check.
     const red = 0xd64545;
     const green = 0x4fae52;
     expect(distance(red, green), 'normal vision separates them').toBeGreaterThan(20);

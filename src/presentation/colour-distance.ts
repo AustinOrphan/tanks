@@ -22,8 +22,10 @@
  * four rings to the same gold on screen.
  *
  * Issue #1056 added `contrastRatio` and `simulateColourVision` for the owner palettes'
- * floors, and moved the two floors below here from `render/entities.test.ts` so the
- * presentation tests and the render tests hold both palettes to one definition.
+ * floors, and moved the two floors below here from `render/entities.test.ts`. OWNER_FLOOR is
+ * read by both the presentation and the render tests, so both hold the palettes to one
+ * definition; TEAM_FLOOR is read only by the render tests and sits beside it so the two
+ * floors live in one place.
  */
 
 /** The arena ground, `0x2f6d4f` -- the surface owner rings are drawn onto. */
@@ -163,9 +165,10 @@ export function distance(a: number, b: number): number {
  * WCAG 2.x contrast ratio, `(L1 + 0.05) / (L2 + 0.05)` over relative luminance, lighter
  * colour on top: 1 for a colour against itself, 21 for black against white, and the same
  * either way round. A distance in CIEDE2000 can be large between two colours of equal
- * lightness; this measures the lightness step alone, which is the channel a player with any
- * colour-vision type still has. Issue #1056 holds the High contrast palette to 3:1 against
- * the felt, the WCAG floor for non-text graphics.
+ * lightness; this measures the lightness step alone, which colour-vision deficiencies change
+ * far less than hue -- less, not never: a simulated deficiency can still lower it. Issue
+ * #1056 holds the High contrast palette to 3:1 against the felt in normal vision, the WCAG
+ * floor for non-text graphics.
  *
  * WCAG's own text gives the linearisation threshold as 0.03928, not IEC's 0.04045. On 8-bit
  * input the two agree everywhere -- 10/255 sits below both and 11/255 above both -- so this
