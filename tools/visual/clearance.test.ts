@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
-import { clearanceFailures, insetLabel } from './clearance.mjs';
+import { CLEARANCE_SELECTORS, clearanceFailures, insetLabel } from './clearance.mjs';
 
 /**
  * The verdict `verify.mjs` applies to what it measures around the topbar (issue #687). The
@@ -229,5 +231,89 @@ describe('topbar clearance verdict (issue #687)', () => {
     expect(clearanceFailures(FAILING.menuTopbarShown())).toEqual([
       '390x844 inset=top 47 state=menu: the menu topbar .hud-topbar is shown, so the no-topbar case was not measured',
     ]);
+  });
+});
+
+/**
+ * Issue #1068's table, one row per `failures.push` site in `clearanceFailures`: the state it
+ * measured, the elements its line must name by selector (keys of CLEARANCE_SELECTORS, plus
+ * `chip` for the chip's own selector), and the failing shapes above that reach it. Row 6, the
+ * board not found, names no element: the board is found in a screenshot and has no selector.
+ */
+type Names = keyof typeof CLEARANCE_SELECTORS | 'chip';
+type Site = { row: number; state: 'match' | 'menu'; names: Names[]; shapes: (keyof typeof FAILING)[] };
+const SITES: Site[] = [
+  { row: 1, state: 'match', names: ['topbar'], shapes: ['matchTopbarHidden'] },
+  { row: 2, state: 'match', names: ['topbar'], shapes: ['topInsetNeverApplied', 'sideInsetNeverApplied'] },
+  { row: 3, state: 'match', names: ['toasts', 'topbar'], shapes: ['toastRailInBar'] },
+  { row: 4, state: 'match', names: ['capacity'], shapes: ['flashWithNoBox'] },
+  { row: 5, state: 'match', names: ['capacity', 'chip'], shapes: ['flashOnChips'] },
+  { row: 6, state: 'match', names: [], shapes: ['boardNotFound'] },
+  { row: 7, state: 'match', names: ['capacity'], shapes: ['flashOnBoard'] },
+  { row: 8, state: 'match', names: ['capacity'], shapes: ['flashUnderSideInset', 'flashUnderTopInset'] },
+  { row: 9, state: 'match', names: ['capacity', 'topbar'], shapes: ['chipsMoved', 'chipAppeared'] },
+  { row: 10, state: 'menu', names: ['topbar'], shapes: ['menuTopbarShown'] },
+  { row: 11, state: 'menu', names: ['toasts'], shapes: ['menuToastsInInset'] },
+];
+
+const selectorOf = (name: Names) =>
+  name === 'chip' ? `${CLEARANCE_SELECTORS.topbar} > :nth-child(` : CLEARANCE_SELECTORS[name];
+
+/** What one failure line lacks for its row: its state, a selector it owes, or one it must not carry. */
+function lineProblems(line: string, site: Site): string[] {
+  const problems: string[] = [];
+  if (!line.includes(` state=${site.state}: `)) problems.push(`no state=${site.state}`);
+  if (site.names.length === 0) {
+    for (const sel of Object.values(CLEARANCE_SELECTORS)) {
+      if (line.includes(sel)) problems.push(`names ${sel}, but row ${site.row} is about no element`);
+    }
+  }
+  for (const name of site.names) {
+    if (!line.includes(selectorOf(name))) problems.push(`no ${selectorOf(name)}`);
+  }
+  return problems;
+}
+
+describe('clearance failure lines name their element and state (issue #1068)', () => {
+  it('walks every failing shape and finds each line naming its selectors and its state', () => {
+    // Population: 14 failing shapes, giving 15 lines (the chip shape overlaps 2 chips), reach
+    // all 11 push sites. 10 sites name an element: 13 shapes, 14 lines. 1 site names none,
+    // the board not found: 1 shape, 1 line, which must carry no selector.
+    const source = readFileSync(new URL('./clearance.mjs', import.meta.url), 'utf8');
+    expect(SITES.length, 'a push site in clearance.mjs with no row in the sweep').toBe(source.match(/failures\.push\(/g)?.length);
+    expect(SITES.map((s) => s.row)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(SITES.flatMap((s) => s.shapes).sort(), 'a failing shape the sweep skips').toEqual(Object.keys(FAILING).sort());
+    const swept = SITES.flatMap((site) =>
+      site.shapes.flatMap((shape) => clearanceFailures(FAILING[shape]()).map((line) => ({ site, shape, line }))),
+    );
+    expect(swept.map(({ site, shape, line }) => [shape, lineProblems(line, site)])).toEqual(
+      swept.map(({ shape }) => [shape, []]),
+    );
+    expect(swept.length, 'lines swept').toBe(15);
+    expect(swept.filter(({ site }) => site.names.length > 0).length, 'lines that name an element').toBe(14);
+    expect(new Set(swept.map(({ shape }) => shape)).size, 'shapes that failed').toBe(14);
+  });
+
+  it('fails a line with its selector or state taken out, or a board line naming one', () => {
+    // Known-bad lines, spelled out rather than taken from the verdict: the first is the
+    // row-3 line as it read before issue #1068, with neither selector nor state.
+    const row = (n: number) => SITES[n - 1];
+    expect(lineProblems('390x844 inset=top 47: toast rail top 64 overlaps the topbar, whose bottom is 77', row(3))).toEqual([
+      'no state=match',
+      'no .hud-toasts',
+      'no .hud-topbar',
+    ]);
+    expect(
+      lineProblems('390x844 inset=top 47 state=match: toast rail .hud-toasts top 64 overlaps the topbar, whose bottom is 77', row(3)),
+    ).toEqual(['no .hud-topbar']);
+    expect(
+      lineProblems('390x844 inset=top 47 state=match: capacity flash .hud-capacity 60,56 to 138,82 overlaps a topbar chip at 10,52 to 87,72', row(5)),
+    ).toEqual(['no .hud-topbar > :nth-child(']);
+    expect(lineProblems('390x844 inset=top 47 state=match: menu toast rail .hud-toasts top 14 is inside the 47px top inset', row(11))).toEqual([
+      'no state=menu',
+    ]);
+    expect(
+      lineProblems('844x390 inset=left 59, right 21 state=match: the board .hud-capacity was not found in the screenshot', row(6)),
+    ).toEqual(['names .hud-capacity, but row 6 is about no element']);
   });
 });

@@ -76,7 +76,19 @@ with the sliver, **(30,33,38)** without, consistent across all four viewports.
 
 A second pass, after the board checks, asks a layout question rather than a pixel one. The
 verdict is `clearance.mjs`, which has its own unit tests and mutation entries. `verify.mjs`
-only supplies the rects.
+supplies the rects and each chip's selector, measuring through `CLEARANCE_SELECTORS`, the one
+copy of the three selectors, which `clearance.mjs` exports and hands to the in-page
+measurement as its argument (issue #1068). Every selector the measurement uses must match
+exactly one element of the page, or the run throws naming it.
+
+Each failure line names the viewport, the inset, the state measured (`match` or `menu`) and
+the element by a selector that can be pasted into `document.querySelector`, for example
+`390x844 inset=top 47 state=match: toast rail .hud-toasts top 64 overlaps topbar .hud-topbar,
+whose bottom is 77`. A chip has no class of its own, so it is named by its place among all of
+the bar's children, as `.hud-topbar > :nth-child(2)`; that is exact for the build it was
+measured on and moves if the bar's markup is reordered. The board has no selector: it is found
+in a screenshot, so its lines name it by its rectangle. `clearance-measure.test.ts` runs the
+in-page measurement under jsdom, against the HUD's real markup and a page of its own.
 
 - **Toast rail:** it must start at or below the topbar's rendered bottom edge.
 - **Shell-capacity flash:** its text is staged at the roster cap, `shells 5/5`, and held
