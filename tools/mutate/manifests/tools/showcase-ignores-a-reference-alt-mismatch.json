@@ -1,0 +1,15 @@
+{
+  "id": "showcase-ignores-a-reference-alt-mismatch",
+  "file": "tools/showcase/validate.mjs",
+  "find": "      if (!alts.includes(reference.alt)) {",
+  "replace": "      if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: a reference whose alt text differs from the manifest",
+    "showcase validator (issue #1062) negative controls rule 15: an img tag with no alt text"
+  ],
+  "why": "Rule 15: each reference's alt text equals the manifest alt, so the alt reviewed with the clip is the one a screen reader announces."
+}

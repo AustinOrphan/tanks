@@ -1,0 +1,16 @@
+{
+  "id": "showcase-accepts-any-gif-output-path",
+  "file": "tools/showcase/validate.mjs",
+  "find": "const OUTPUT_FORM = /^docs\\/media\\/showcase\\/[a-z0-9]+(?:-[a-z0-9]+)*\\.gif$/;",
+  "replace": "const OUTPUT_FORM = /\\.gif$/;",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 4: an output outside docs/media/showcase/",
+    "showcase validator (issue #1062) negative controls rule 4: an output with a .. segment",
+    "showcase validator (issue #1062) negative controls rule 4: an absolute URL output ending in the showcase path"
+  ],
+  "why": "Rule 4: an output is docs/media/showcase/<name>.gif, the one directory .gitignore re-admits. Loosened to any .gif, a clip could live in another directory, climb out with '..', or be a URL."
+}

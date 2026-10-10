@@ -1,0 +1,14 @@
+{
+  "id": "showcase-allows-a-gif-faster-than-15-fps",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  framesPerSecond: 15,",
+  "replace": "  framesPerSecond: 16,",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 10: a GIF one centisecond faster than 15 fps allows"
+  ],
+  "why": "Rule 10: at most 15 displayed frames per second, with one centisecond of slack because a GIF delay is a whole number of centiseconds. The control sits one centisecond past the slack."
+}

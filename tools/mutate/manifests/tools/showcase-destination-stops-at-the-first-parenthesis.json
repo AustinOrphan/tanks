@@ -1,0 +1,14 @@
+{
+  "id": "showcase-destination-stops-at-the-first-parenthesis",
+  "file": "tools/showcase/validate.mjs",
+  "find": "const DESTINATION = String.raw`(?:<([^>]*)>|((?:\\\\.|[^\\s()\\\\]|\\((?:\\\\.|[^\\s()\\\\])*\\))+))`;",
+  "replace": "const DESTINATION = String.raw`(?:<([^>]*)>|([^\\s)]+))`;",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: an inline image whose destination holds parentheses"
+  ],
+  "why": "Rule 15: an inline image destination may hold balanced parentheses. Cut at the first ), a URL such as clip(1).gif no longer ends in .gif and passes unchecked."
+}

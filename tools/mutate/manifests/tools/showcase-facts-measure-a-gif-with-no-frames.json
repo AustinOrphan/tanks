@@ -1,0 +1,14 @@
+{
+  "id": "showcase-facts-measure-a-gif-with-no-frames",
+  "file": "tools/showcase/facts.mjs",
+  "find": "  if (inspected.frameCount === 0) throw new Error('GIF has no image frames');",
+  "replace": "  if (inspected.frameCount < 0) throw new Error('GIF has no image frames');",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase gifFacts (issue #1062) throws on a well-formed GIF with no frames rather than reporting zeros"
+  ],
+  "why": "The block parser accepts a well-formed GIF with no image blocks and reports 0 frames in 0 cs, which passes the frame-rate, duration and loop rules. Measuring it would publish an empty clip; gifFacts must refuse it as it refuses a truncated file."
+}

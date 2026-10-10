@@ -1,0 +1,14 @@
+{
+  "id": "showcase-definitions-need-their-destination-on-the-line",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  String.raw`^(?:[ \\t>]|[-+*][ \\t]|\\d{1,9}[.)][ \\t])*\\[(${LABEL_CHARACTER}+)\\]:\\s*(?:<([^>]*)>|(\\S+))`,",
+  "replace": "  String.raw`^(?:[ \\t>]|[-+*][ \\t]|\\d{1,9}[.)][ \\t])*\\[(${LABEL_CHARACTER}+)\\]:[ \\t]*(?:<([^>]*)>|(\\S+))`,",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: a link definition with its destination on the next line"
+  ],
+  "why": "Rule 15: a link definition may put its destination on the next line. A reference image resolved through such a definition would otherwise be no GIF reference at all."
+}
