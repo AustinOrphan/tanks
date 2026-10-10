@@ -1,0 +1,14 @@
+{
+  "id": "selftest-copy-before-load-throws",
+  "file": "src/game/hud.ts",
+  "find": "    if (selfTest === null) return;\n    const text = selfTest.report();\n",
+  "replace": "    const text = (selfTest as ControllerSelfTestView).report();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) Copy pressed before the body loaded throws nothing and writes nothing"
+  ],
+  "why": "Issue #1013. Copy pressed before the self-test's body has loaded calls `report()` on a view that does not exist and throws from the click listener. jsdom reports that as a window `error` event rather than a throw from `click()`, which is what the test listens for."
+}

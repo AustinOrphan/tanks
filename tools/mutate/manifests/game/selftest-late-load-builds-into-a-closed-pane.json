@@ -1,0 +1,16 @@
+{
+  "id": "selftest-late-load-builds-into-a-closed-pane",
+  "file": "src/game/hud.ts",
+  "find": "        if (generation !== selfTestGeneration) return;\n        selfTest = renderControllerSelfTest(selfTestListEl);\n",
+  "replace": "        selfTest = renderControllerSelfTest(selfTestListEl);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) a close and reopen during the load builds the body once, for the reopen",
+    "the self-test body loads when its pane first opens (issue #1013) a close during the load builds no body into the closed pane",
+    "the self-test body loads when its pane first opens (issue #1013) a teardown during the load builds nothing into the discarded tree"
+  ],
+  "why": "Issue #1013. The self-test's body loads when its pane first opens, and the resolved load stops checking whether its generation is still current. A close during the load then builds the body into the closed pane, a close and reopen builds two bodies side by side, and a teardown builds into the tree it discarded -- the generation guard the issue asks for, modelled on the gallery mount in `route-ui.ts`, gone."
+}

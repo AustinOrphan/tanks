@@ -1,0 +1,14 @@
+{
+  "id": "selftest-body-rebuilt-on-every-open",
+  "file": "src/game/hud.ts",
+  "find": "      if (selfTest === null) loadSelfTestBody();\n",
+  "replace": "      loadSelfTestBody();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) builds the body once: a second visit keeps the same rows"
+  ],
+  "why": "Issue #1013. Every open loads and builds the body again instead of only the first. Before the issue the view was built once and kept; a rebuild per open throws away the rows and repaints the empty state over a connected pad. The criterion is that the view is not rebuilt on every open."
+}

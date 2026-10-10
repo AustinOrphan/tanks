@@ -93,6 +93,23 @@ describe('the screen-state catalogue', () => {
     expect(state.measure).toContain('.hud-alert-retry');
   });
 
+  it('waits for the self-test body to be built before checking its empty state is gone (issue #1013)', () => {
+    // The body is loaded when the pane first opens, and `waitHidden` passes for an element
+    // that does not exist, so the empty-state wait alone can pass before the body is there
+    // and the capture then measures selectors that are not. Negative control: dropping the
+    // built-body wait.
+    const state = findScreenState('screen.devtools.controller-selftest')!;
+    const waits = state.steps.flatMap((s: any) => {
+      if ('waitVisible' in s) return [`visible ${s.waitVisible}`];
+      return 'waitHidden' in s ? [`hidden ${s.waitHidden}`] : [];
+    });
+    const body = waits.indexOf('visible .hud-selftest-pad');
+    expect(body, 'no wait for a built pad row').toBeGreaterThanOrEqual(0);
+    expect(body, 'the pad-row wait must come before the empty-state wait').toBeLessThan(
+      waits.indexOf('hidden .hud-selftest-empty'),
+    );
+  });
+
   it('measures something on every state, and never an empty selector', () => {
     // A capture with nothing measured is a picture with no caption: it proves the page did
     // not crash and nothing else. The measurement half is the part that has actually
