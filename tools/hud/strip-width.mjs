@@ -1,231 +1,180 @@
-import { chromium } from 'playwright';
-import { readFileSync } from 'node:fs';
-
 /**
  * Measure the versus stock strip at a 390px viewport, for every player count and stock setting
  * the game allows, and say whether each fits -- for the `pips` arm (issue #835), the `marks` arm
- * (issue #1021), and a teams entry under either arm (issue #1055).
+ * (issue #1021), and a teams entry, which draws its A/B/C letter before its pips (issue #1055).
  *
  * WHY A TOOL AND NOT A UNIT TEST. The unit suite runs in jsdom, which reads declared values but
  * lays nothing out, so it can pin the sizing TABLE and cannot prove a width. This drives real
- * Chromium against the real stylesheet. `stock-cue.test.ts` pins the table; this proves the
- * widths the table was chosen from.
+ * Chromium against the real HUD. `stock-cue.test.ts` pins the table; this proves the widths the
+ * table was chosen from.
  *
- * MOUNTED WHERE THE PAGE PUTS IT, not calibrated (issue #1055). The strip is drawn inside
- * `.hud > .hud-topbar`, after the versus mode chip, with the bundled faces inlined. Until #1055
- * this tool mounted the strip alone and subtracted an 83.9px "surrounding context" fitted to
- * #835's page reading, and that drifted three ways with no number looking wrong: #987 moved
- * `--hud-space-*` onto `.hud`, so the strip's gap fell to 0; the face the strip inherits from
- * `.hud` never loaded, so it measured Times; and the constant was fitted to FFA entries that
- * carry #922's identity marker, which teams and `marks` entries do not draw. Its own alarm row,
- * four FFA players at three stocks at 10/3, read 227.6px where it said 261.1px.
+ * THE REAL HUD, NOT A COPY OF ITS MARKUP (issue #1055). This tool used to paste hand-built entry
+ * markup and the bare stylesheet into an empty page and compare the width with 254.1px, a budget
+ * calibrated once against #835's page measurement. Every part of that drifted without a sound:
+ * #987 moved the spacing tokens onto `.hud`, so the bare strip lost the 10px between entries; the
+ * bundled face never loaded on that page, which fell back to the browser's serif; and the
+ * hand-built FFA entry had no identity mark, which the page has drawn ahead of each FFA entry,
+ * under every arm but `marks`, since #922. At four players and three stocks the bare strip read
+ * 207.6px where the page's strip is 247.7px wide without the mark (both in a 390px viewport).
+ * So `strip-width-page.ts` now mounts `createHud` itself, in a page Vite serves with the
+ * stylesheet and face the game ships, pushes a versus status, and measures the strip where the
+ * page draws it: after the topbar's session chip, inside the topbar's padding. Nothing here
+ * mirrors a layout rule; the HUD applies `narrowPipLayout` and `narrowMarkLayout` itself, under
+ * the real `NARROW_STRIP_QUERY`. Checked against the game page itself, booted at 390x844 as a
+ * four-player teams session under `?dev=1&stockCue=pips`: its strip's right edge read 355.16px,
+ * and this tool reads 355.2px.
  *
- * The first two are checked before anything is measured -- the face has loaded and the strip's
- * gap is the stylesheet's 10px -- and the run exits non-zero if either fails.
+ * Every row also checks that the shipped face really loaded (a run with the font files blocked
+ * flags all 40 rows), and every teams row that `marks` and `pips` drew the same markup.
  *
- * THE BUDGET is the topbar's content edge: its right edge less its right padding, 380px at a
- * 390px viewport. That is 10px stricter than #835's budget, which counted to the viewport edge
- * (397px there was 7px over): a strip that runs into the padding has already overflowed its row,
- * even before anything is clipped. Both distances are printed.
+ * FITS means the strip's right edge is inside the topbar's content box -- 380px at 390px, where
+ * the topbar's narrow padding is 10px -- so the strip keeps the margin the bar gives every other
+ * reading, rather than merely escaping the clip at the viewport edge.
  *
- * CHECKED AGAINST THE PAGE. On 2026-10-10 the built page (c200cf62) at 390x844 put the strip's
- * right edge at 355.2px for four teams at three stocks, 291.4px for three teams, and 370.2px for
- * four FFA players, under `?dev=1&stockCue=pips`. This tool reads all three to within 0.1px. Text
- * metrics are not portable across rasterisers, so another platform may differ by a pixel or two.
+ * Measured at the default UI scale (100%), which is the scale this page runs at: the strip is
+ * under the player's UI scale since #1048, so a larger scale needs its own measurement.
  *
- * At the default UI scale only: `.hud` declares `--hud-ui-scale: 1`, and since #1048 the strip is
- * sized from it, so 125% and 150% would each need their own run.
+ * THE CONTROL. Before the sweep, the four-player three-stock teams strip is measured once at
+ * 320px, where it cannot fit; a run that reports it fitting there exits 1, because a yardstick
+ * that cannot fail measures nothing.
  *
  *   node tools/hud/strip-width.mjs
+ *
+ * `STRIP_WIDTH_PORT` moves the Vite server off 5183.
  */
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-const HERE = dirname(fileURLToPath(import.meta.url));
-const GAME = join(HERE, '../../src/game');
+import { spawn } from 'node:child_process';
+import { setTimeout as sleep } from 'node:timers/promises';
 
-function fail(message) {
-  console.error(`strip-width: ${message}`);
+import { loadChromium } from '../shared/playwright.mjs';
+
+const PORT = Number(process.env.STRIP_WIDTH_PORT ?? 5183);
+const BASE = `http://localhost:${PORT}/`;
+
+async function respondsOn(url, ms = 1000) {
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(ms) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+if (await respondsOn(BASE)) {
+  console.error(
+    `Something is already listening on ${BASE}.\n` +
+      'Refusing to run: it would be measured instead of this checkout.\n' +
+      'Stop it or set STRIP_WIDTH_PORT to a free port.',
+  );
   process.exit(2);
 }
 
-// The bundled faces, inlined: `setContent` has no base URL for `url('./fonts/...')` to resolve
-// against, and an unresolved face silently measures the fallback serif instead.
-let inlined = 0;
-const css = readFileSync(join(GAME, 'hud.css'), 'utf8').replace(/url\('\.\/fonts\/([^']+\.woff2)'\)/g, (_, file) => {
-  inlined += 1;
-  return `url('data:font/woff2;base64,${readFileSync(join(GAME, 'fonts', file)).toString('base64')}')`;
-});
-if (inlined === 0) fail("found no url('./fonts/...') in hud.css to inline");
-
-// The chip that sits ahead of the strip in a versus topbar, read from its one definition.
-const VS = /MODE_CHIP_LABELS = \{[^}]*\bversus: '([^']+)'/.exec(
-  readFileSync(join(GAME, 'topbar-treatment.ts'), 'utf8'),
-)?.[1];
-if (VS === undefined) fail('could not read the versus label from MODE_CHIP_LABELS in topbar-treatment.ts');
-
-// Mirrors narrowPipLayout() in src/presentation/stock-cue.ts, which `stock-cue.test.ts` pins.
-const layoutFor = (slots, total) => {
-  if (slots <= 2) return { kind: 'row', pip: 10, gap: 3 };
-  if (slots === 3) return total <= 4 ? { kind: 'row', pip: 10, gap: 3 } : { kind: 'row', pip: 9, gap: 2 };
-  if (total <= 3) return { kind: 'row', pip: 9, gap: 2 };
-  return { kind: 'one', pip: 10 };
-};
-
-// Mirrors narrowMarkLayout() in the same file, pinned in the same test.
-const markLayoutFor = (slots, total) => {
-  if (slots <= 3 || total <= 3) return { kind: 'full' };
-  if (total === 4) return { kind: 'row', mark: 8, gap: 2 };
-  return { kind: 'one' };
-};
-
-const browser = await chromium.launch();
-// NO AudioContext override here, deliberately (issue #877): this page is built with
-// `setContent` from raw CSS and markup and never navigates to the app, so there is no
-// boot path to remove a constructor from.
-const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-await page.setContent(`<style>${css}</style><div class="hud"><div class="hud-topbar">`
-  + `<div class="hud-stat hud-practice">${VS}</div><div class="hud-versus-stocks"></div></div></div>`);
-
-const env = await page.evaluate(async () => {
-  // A face that cannot load rejects here; the check below reports it rather than a stack trace.
-  await document.fonts.load('500 16px "IBM Plex Sans"').catch(() => {});
-  await document.fonts.ready;
-  const strip = document.querySelector('.hud-versus-stocks');
-  return {
-    face: [...document.fonts].some((f) => f.family.replaceAll('"', '') === 'IBM Plex Sans' && f.status === 'loaded'),
-    family: getComputedStyle(strip).fontFamily,
-    gap: getComputedStyle(strip).columnGap,
-  };
-});
-if (!env.face || !env.family.startsWith('"IBM Plex Sans"')) {
-  fail(`the strip is not measuring the bundled face (loaded: ${env.face}; font-family: ${env.family})`);
-}
-if (env.gap !== '10px') fail(`the strip's gap computed to ${env.gap}, not the stylesheet's 10px`);
-
-/** The leading identity marker an FFA entry carries (#922's shipped `shape`); its box is the same
- *  whatever the outline, so a circle stands in for every slot. */
-const MARKER = '<svg class="hud-stock-marker" viewBox="-1.1 -1.1 2.2 2.2" aria-hidden="true">'
-  + '<circle r="0.8" fill="none" stroke="currentColor"/></svg>';
-
-/** One `pips` entry, as hud.ts builds it, after `lead` (the marker, or nothing) and `label`. */
-function pipsEntry(lead, label, layout, total) {
-  if (layout.kind === 'one') {
-    // One full-size pip, then the count as a digit.
-    return `<span class="hud-versus-stock-entry">${lead}${label}`
-      + `<span class="hud-stock-pips"><span class="hud-stock-pip"></span></span>`
-      + `<span class="hud-stock-pip-count">${total - 1}</span></span>`;
-  }
-  const vars = layout.pip === 10 ? '' : ` style="--hud-pip:${layout.pip}px;--hud-pip-gap:${layout.gap}px"`;
-  return `<span class="hud-versus-stock-entry">${lead}${label}<span class="hud-stock-pips"${vars}>`
-    + Array.from({ length: total }, (_, j) =>
-        `<span class="hud-stock-pip${j >= total - 1 ? ' hud-stock-pip--lost' : ''}"></span>`).join('')
-    + `</span></span>`;
-}
-
-const pipArm = (layout) => (layout.kind === 'one' ? 'pip+n' : `${layout.pip}/${layout.gap}`);
-
-/** The pips arm in FFA: every entry led by its identity marker. */
-function pipsStrip(players, total) {
-  const layout = layoutFor(players, total);
-  const html = Array.from({ length: players }, (_, i) => pipsEntry(MARKER, `P${i + 1} `, layout, total)).join('');
-  return [{ html, arm: pipArm(layout) }];
-}
-
+/** Every slot on its own, as an FFA match has them. */
+const ffa = (players, total) => Array.from({ length: players }, (_, slot) => ({ slot, stock: total }));
 /**
- * The marks arm's markup, as hud.ts builds it: the leading identity marker is suppressed, and
- * every mark is the same box whatever its outline, so a circle stands in for each slot's shape.
+ * Lettered A, B, A, B: the parity a `?dev=1&mode=teams` session assigns. It is also the widest
+ * strip any legal split draws, because A and B measure the same and C is narrower (four A
+ * entries read 305.0px at four players and three stocks, four B 304.9px, four C 303.4px).
  */
-function marksStrip(players, total) {
-  const layout = markLayoutFor(players, total);
-  const mark = (lost) => `<svg class="hud-stock-mark${lost ? ' hud-stock-mark--lost' : ''}" `
-    + `viewBox="-1.1 -1.1 2.2 2.2" aria-hidden="true"><circle r="0.8" fill="currentColor"/></svg>`;
-  const entry = (i) => {
-    if (layout.kind === 'one') {
-      // One full-size mark, then the count as a digit.
-      return `<span class="hud-versus-stock-entry">P${i + 1} <span class="hud-stock-marks">${mark(false)}</span>`
-        + `<span class="hud-stock-mark-count">${total - 1}</span></span>`;
-    }
-    const vars = layout.kind === 'row' ? ` style="--hud-mark:${layout.mark}px;--hud-mark-gap:${layout.gap}px"` : '';
-    return `<span class="hud-versus-stock-entry">P${i + 1} <span class="hud-stock-marks"${vars}>`
-      + Array.from({ length: total }, (_, j) => mark(j >= total - 1)).join('') + `</span></span>`;
-  };
-  const html = Array.from({ length: players }, (_, i) => entry(i)).join('');
-  const arm = layout.kind === 'one' ? 'mark+n' : layout.kind === 'row' ? `${layout.mark}/${layout.gap}` : 'full';
-  return [{ html, arm }];
-}
+const teams = (players, total) =>
+  Array.from({ length: players }, (_, slot) => ({ slot, stock: total, team: slot % 2 }));
 
-/** Every way `players` slots can be split into teams A/B/C with at least two sides. */
-function teamSplits(players) {
-  let splits = [''];
-  for (let i = 0; i < players; i++) splits = splits.flatMap((s) => ['A', 'B', 'C'].map((t) => s + t));
-  return splits.filter((s) => new Set(s).size >= 2);
-}
+const REPORTS = [
+  {
+    name: 'pips', note: 'FFA, with the identity mark the page draws ahead of each entry',
+    cue: 'pips', players: [2, 3, 4], stocks: ffa,
+  },
+  {
+    name: 'marks', note: 'FFA; the arm suppresses the leading mark',
+    cue: 'marks', players: [2, 3, 4], stocks: ffa,
+  },
+  {
+    // Teams is offered at three and four players only. Measured under `marks`, which hands a
+    // teams entry to `pips` (issue #1022 ships it), and required to draw exactly what `pips`
+    // draws.
+    name: 'teams', note: '`P1 A ` and its pips, under `marks` and `pips` alike',
+    cue: 'marks', same: 'pips', players: [3, 4], stocks: teams,
+  },
+];
 
-/**
- * A teams entry, as hud.ts builds it under EITHER arm: `pips` beside the A/B/C letter and no
- * marker, because `marks` hands a teams entry to `pips` (a teammate shares a side, not a slot's
- * outline). One candidate per legal split, since the letters are not the same width.
- */
-function teamsStrip(players, total) {
-  const layout = layoutFor(players, total);
-  return teamSplits(players).map((split) => ({
-    html: [...split].map((team, i) => pipsEntry('', `P${i + 1} ${team} `, layout, total)).join(''),
-    arm: pipArm(layout),
-    split,
-  }));
-}
+const VITE_BIN = new URL('../../node_modules/.bin/vite', import.meta.url).pathname;
+const vite = spawn(VITE_BIN, ['--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
+let viteExited = false;
+vite.on('exit', () => {
+  viteExited = true;
+});
 
-/** Where the strip ends, and where it may end, for one strip's markup. */
-const place = (html) => page.evaluate((markup) => {
-  const strip = document.querySelector('.hud-versus-stocks');
-  strip.innerHTML = markup;
-  const bar = strip.parentElement;
-  const r = strip.getBoundingClientRect();
-  return {
-    left: r.left,
-    right: r.left + Math.max(r.width, strip.scrollWidth),
-    limit: bar.getBoundingClientRect().right - parseFloat(getComputedStyle(bar).paddingRight),
-  };
-}, html);
-
-/** The widest of a configuration's candidates, reported against the budget. */
-async function measure(build, players, total) {
-  let worst = null;
-  for (const candidate of build(players, total)) {
-    const at = await place(candidate.html);
-    if (worst === null || at.right > worst.right) worst = { ...candidate, ...at };
+let browser;
+try {
+  for (let i = 0; ; i++) {
+    if (viteExited) throw new Error('vite exited before serving; is the port taken?');
+    if (await respondsOn(BASE)) break;
+    if (i > 120) throw new Error(`vite did not start on ${BASE} within 60s`);
+    await sleep(500);
   }
-  const inside = worst.limit - worst.right;
+
+  const chromium = await loadChromium();
+  browser = await chromium.launch();
+  const pageErrors = [];
+  // NO AudioContext override here, deliberately (issue #877): the page is
+  // `tools/hud/strip-width.html`, not the app. It mounts the HUD alone, and `createHud` never
+  // constructs an AudioContext -- the audio stack is wired in by the page's boot, which this
+  // page does not run -- so there is no constructor for an override to remove.
+  async function open(width) {
+    const page = await browser.newPage({ viewport: { width, height: 844 } });
+    page.on('pageerror', (e) => pageErrors.push(String(e)));
+    await page.goto(`${BASE}tools/hud/strip-width.html`, { waitUntil: 'load', timeout: 60000 });
+    await page.waitForFunction(() => window.stripReady === true, undefined, { timeout: 60000 });
+    return page;
+  }
+  const read = (page, cue, stocks) =>
+    page.evaluate(([c, s]) => window.measureStrip(c, s), [cue, stocks]);
+
+  let ok = true;
+  const control = await read(await open(320), 'marks', teams(4, 3));
+  const controlFits = control.right <= control.edge;
   console.log(
-    `${players}p x ${total}   ${worst.arm.padStart(6)}   right ${worst.right.toFixed(1).padStart(6)}px   `
-    + `${inside >= 0 ? `fits, ${inside.toFixed(1)}px inside the padding` : `OVER the padding by ${(-inside).toFixed(1)}px`}, `
-    + `${(390 - worst.right).toFixed(1)}px to the viewport${worst.split ? `   (widest split ${worst.split})` : ''}`,
+    'control: four-player three-stock teams strip at 320px, '
+    + `right edge ${control.right}px against ${control.edge}px: `
+    + `${controlFits ? 'FITS -- the yardstick cannot fail' : 'overflows, as it must'}`,
   );
-  return inside >= 0;
-}
+  if (controlFits) ok = false;
 
-const origin = await place('');
-console.log(`budget: the topbar's content edge, ${origin.limit.toFixed(1)}px at a 390px viewport; `
-  + `the strip starts at ${origin.left.toFixed(1)}px, after the "${VS}" chip. UI scale 100%.`);
-let allFit = true;
-for (const [name, build, counts] of [
-  ['pips (FFA, each entry led by its identity marker)', pipsStrip, [2, 3, 4]],
-  ['marks (FFA, no leading marker)', marksStrip, [2, 3, 4]],
-  // Teams is offered at three and four players only.
-  ['teams (pips beside the A/B/C letter, under either arm)', teamsStrip, [3, 4]],
-]) {
-  console.log(`\n${name}`);
-  let fit = 0;
-  let of = 0;
-  for (const players of counts) {
-    for (const total of [1, 2, 3, 4, 5]) {
-      of += 1;
-      if (await measure(build, players, total)) fit += 1;
+  const page = await open(390);
+  for (const report of REPORTS) {
+    console.log(`\n${report.name} (${report.note})`);
+    let fit = 0;
+    let total = 0;
+    for (const players of report.players) {
+      for (let stocks = 1; stocks <= 5; stocks++) {
+        const r = await read(page, report.cue, report.stocks(players, stocks));
+        total += 1;
+        const fits = r.right <= r.edge;
+        if (fits) fit += 1;
+        if (!r.face) ok = false;
+        let same = '';
+        if (report.same !== undefined) {
+          const other = await read(page, report.same, report.stocks(players, stocks));
+          if (other.html !== r.html) {
+            ok = false;
+            same = `   DIFFERS under ${report.same}`;
+          }
+        }
+        console.log(
+          `${players}p x ${stocks}   ${r.layout.padStart(7)}   strip ${String(r.width).padStart(6)}px   `
+          + `right ${String(r.right).padStart(6)}px   `
+          + (fits ? `fits, ${(r.edge - r.right).toFixed(1)}px spare` : `OVER by ${(r.right - r.edge).toFixed(1)}px`)
+          + `${r.face ? '' : '   FACE NOT LOADED'}${same}`,
+        );
+      }
     }
+    console.log(`${report.name}: ${fit} of ${total} configurations fit`);
+    if (fit !== total) ok = false;
   }
-  console.log(`${name.split(' ')[0]}: ${fit} of ${of} configurations fit`);
-  allFit = allFit && fit === of;
+  for (const e of pageErrors) console.error(`page error: ${e}`);
+  if (pageErrors.length > 0) ok = false;
+  console.log(`\n${ok ? 'every configuration fits' : 'SOME CONFIGURATION OVERFLOWS, OR A CHECK FAILED'}`);
+  if (!ok) process.exitCode = 1;
+} finally {
+  if (browser) await browser.close();
+  vite.kill('SIGTERM');
 }
-console.log(`\n${allFit ? 'every configuration fits' : 'SOME CONFIGURATION STILL OVERFLOWS'}`);
-await browser.close();
-process.exit(allFit ? 0 : 1);
