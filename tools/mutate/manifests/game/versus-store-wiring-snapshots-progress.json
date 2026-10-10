@@ -7,5 +7,8 @@
   "tests": [
     "src/game/storage.test.ts"
   ],
-  "why": "`createStores` hands the setup store a getter that returns the unlock computed at construction rather than reading progress on each call (issue #983). The store itself is live, but the page's one `createStores` call then freezes it at boot progress, so a level cleared later is refused by `set` and the chosen board is gone after a reload. versus-store-built-without-progress drops the progress read entirely; this keeps it and moves it to the wrong time, which no case built on a fixed save can see."
+  "killedBy": [
+    "createStores binds that progress read live, so a level cleared after the page booted keeps its board across a reload (issue #983)"
+  ],
+  "why": "`createStores` hands the setup store a getter that returns the unlock computed at construction rather than reading progress on each call (issue #983). The store itself is live, but the page's one `createStores` call then freezes it at boot progress, so a level cleared later is refused by `set` and the chosen board is gone after a reload. versus-store-built-without-progress drops the progress read entirely; this keeps it and moves it to the wrong time, which no case built on a fixed save can see. Proved before its tests existed: SURVIVES at 0 of 50 in storage.test.ts, then KILLED by 1 of 51, measured."
 }
