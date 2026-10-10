@@ -1,0 +1,14 @@
+{
+  "id": "classic-palette-copies-the-shipped-teams",
+  "file": "src/presentation/identity.ts",
+  "find": "classic: { rings: IDENTITY_RING_COLORS, teams: TEAM_COLORS },",
+  "replace": "classic: { rings: IDENTITY_RING_COLORS, teams: [0xff3b3b, 0xfcc0fc, 0x4eff3b] },",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts"
+  ],
+  "why": "Classic in the catalogue holds a copy of the shipped team colours instead of TEAM_COLORS itself (issue #1056); the team half of classic-palette-copies-the-shipped-rings. The copy is exact, so every literal and every figure still passes: only the identity half of the test (toBe, not toEqual) fails, which is the point -- an equal copy today is a copy someone can edit apart from what the game draws tomorrow.",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) Classic is the shipped seven hexes, written out, and the very arrays every consumer reads"
+  ]
+}

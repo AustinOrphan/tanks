@@ -174,8 +174,12 @@ export const OWNER_PALETTE_LABELS: Readonly<Record<OwnerPaletteId, string>> = {
  * then passed through `simulateColourVision` (Machado, Oliveira and Fernandes 2009, severity
  * 1); then measured with CIEDE2000 (`distance`). A minimum is over a set's pairs: 6 for the 4
  * rings, 3 for the 3 teams. Ground contrast is `contrastRatio` (WCAG 2.x) of the composited
- * colour against the felt. `identity.test.ts` holds each palette to its floors and pins every
- * tightest pair below by name, so these tables cannot drift without a test failing.
+ * colour against the felt. `identity.test.ts` pins both palettes' hexes as literals, so no
+ * colour can move without a test failing -- the cue to re-measure these tables. It also holds
+ * each palette to its floors and pins every tightest pair below by name, with a ceiling of the
+ * recorded value + 0.5. Those catch a figure that crosses a floor, renames a pair or rises by
+ * 0.5, not one that falls short of a floor: a helper change that `colour-distance.test.ts`'s
+ * reference values miss could still leave a figure here stale.
  */
 export const OWNER_PALETTES: Readonly<Record<OwnerPaletteId, OwnerPalette>> = {
   /**
@@ -213,7 +217,8 @@ export const OWNER_PALETTES: Readonly<Record<OwnerPaletteId, OwnerPalette>> = {
    * THREE THINGS TO KNOW BEFORE MOVING A COLOUR. Ring 0 and team A, the same cyan, reach 3:1
    * by 0.0021 (3.0021): one level down in any channel fails it (G gives 2.9761). Two tightest
    * pairs are near ties -- rings protan is 0.56 ahead of ring0-ring2 (16.10) and rings deutan
-   * 0.31 ahead of ring2-ring3 (15.10) -- so a small move can change their names. And the gain
+   * 0.31 ahead of ring2-ring3 (15.10) -- so a small move can change their names: ring 2 two
+   * levels up in green (#fdbdc6) makes ring2-ring3 the deutan pair, at 14.59. And the gain
    * over Classic is narrower than #586 first read: the worst ring colour-vision pair is 11.26
    * against Classic's 8.08 (1.4x), and the worst team pair (17.72) is slightly BELOW Classic's
    * (18.90); the teams' gain is team A's ground contrast, 1.47 to 3.00.

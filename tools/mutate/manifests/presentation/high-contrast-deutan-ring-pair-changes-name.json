@@ -1,0 +1,16 @@
+{
+  "id": "high-contrast-deutan-ring-pair-changes-name",
+  "file": "src/presentation/identity.ts",
+  "find": "0xfdbbc6",
+  "replace": "0xfdbdc6",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "TIGHTEST-PAIR NAME (issue #1056). Moves High contrast ring 2 two levels up in green, #fdbbc6 to #fdbdc6. Under deuteranopia ring2 vs ring3 falls from 15.10 to 14.59, below ring1 vs ring3 at 14.79, so the recorded deutan pair changes name while every floor holds: ring 2's ground contrast 3.23, felt 38.83, paints 17.87, roster 17.33, placeholder 30.97, ring pairs 18.74 / 15.54 / 14.59 / 11.26, teams untouched. Two levels in one channel is the largest adjustment #1056 allows, and it already renames a recorded pair: the near tie identity.ts warns of. The literal pin of the hexes fails too, as it does for every High contrast move. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out",
+    "owner palettes: the recorded figures (issue #1056) high-contrast rings, deutan: the tightest pair is ring1 vs ring3"
+  ]
+}

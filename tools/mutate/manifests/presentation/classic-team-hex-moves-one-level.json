@@ -1,0 +1,14 @@
+{
+  "id": "classic-team-hex-moves-one-level",
+  "file": "src/presentation/identity.ts",
+  "find": "0xfcc0fc",
+  "replace": "0xfcc0fd",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts"
+  ],
+  "why": "Classic must stay byte-identical (issue #1056): moves Classic team B, and so TEAM_COLORS itself, by ONE level in blue. The team half of classic-ring-hex-moves-one-level. No floor and no tightest-pair row notices it -- team A vs team B rises from 35.98 to 36.13 under the same name, inside its 0.5 ceiling -- so the literal pin of TEAM_COLORS is the only guard in identity.test.ts that a shipped team colour moved. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) Classic is the shipped seven hexes, written out, and the very arrays every consumer reads"
+  ]
+}

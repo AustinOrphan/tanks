@@ -1,0 +1,16 @@
+{
+  "id": "high-contrast-tritan-team-pair-passes-its-ceiling",
+  "file": "src/presentation/identity.ts",
+  "find": "0xc6fd00",
+  "replace": "0xc8fd00",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "TIGHTEST-PAIR CEILING (issue #1056). Moves High contrast team B two levels up in red, #c6fd00 to #c8fd00. Under tritanopia team A vs team B rises from 17.72 to 18.32, past the row's ceiling of the recorded value + 0.5 (18.22), under the same name. Every floor holds: team B's ground contrast 4.18, team pairs 31.52 / 23.75 / 22.05 (normal / protan / deutan, same names), paints 17.87, player hull 25.29, placeholder 37.67, rings untouched. The ceiling is what notices a figure that improved past the table, which would otherwise leave identity.ts understating the palette. The literal pin of the hexes fails too, as it does for every High contrast move. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out",
+    "owner palettes: the recorded figures (issue #1056) high-contrast teams, tritan: the tightest pair is teamA vs teamB"
+  ]
+}
