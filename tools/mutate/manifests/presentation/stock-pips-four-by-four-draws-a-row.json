@@ -12,6 +12,7 @@
   "killedBy": [
     "stock cue: pip sizing on a narrow viewport (issue #835) keeps ONE pip and states the count, rather than dropping the shape entirely",
     "stock cue: a teams entry on a narrow viewport (issue #1055) takes the rung measured to hold the letter in every one of the 10 teams configurations",
+    "stock cue: a teams entry on a narrow viewport (issue #1055) THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there",
     "hud: stock-loss cue arms (issue #230) pips: a narrow viewport shrinks the pip, and hands back the digit when none fits (#835)",
     "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) pips: four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
     "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) marks: four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target"
