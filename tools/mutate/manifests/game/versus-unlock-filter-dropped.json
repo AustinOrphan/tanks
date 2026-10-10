@@ -1,0 +1,12 @@
+{
+  "id": "versus-unlock-filter-dropped",
+  "file": "src/game/versus-config.ts",
+  "find": "    .filter(unlocked)",
+  "replace": "    .filter(EVERY_BOARD_UNLOCKED)",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-config.test.ts",
+    "src/game/versus-setup-store.test.ts"
+  ],
+  "why": "Deletes the gate itself (issue #983): `versusMapChoices` stops applying the unlock, so every place that reads the offer through it -- the Map row, the retained-selection check, the stored-setup check and Random's draw -- offers a campaign board whose level was never cleared. The declaration filter above it is untouched, so every ungated test (the parity pin, the cross-check, the floor) reads identically; only an assertion made at a fresh or partial save can see it."
+}

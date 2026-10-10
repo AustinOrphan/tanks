@@ -1,0 +1,11 @@
+{
+  "id": "versus-start-ignores-progress",
+  "file": "src/game/loop.ts",
+  "find": "    campaignBoardUnlock(deps.progress.highestCleared()),",
+  "replace": "    () => true,",
+  "expect": "survives",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The Start boundary hands the launch gate no unlock, so a session starts on a locked concrete board and Random draws from every declared board, on a fresh save as readily as a finished one."
+}

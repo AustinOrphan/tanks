@@ -1,0 +1,11 @@
+{
+  "id": "versus-unlock-frontier-level-unlocked",
+  "file": "src/game/versus-config.ts",
+  "find": "    levels.filter((_, i) => i < highestCleared).map((level) => level.arenaId),",
+  "replace": "    levels.filter((_, i) => i <= highestCleared).map((level) => level.arenaId),",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "why": "Off by one: `highestCleared` is a 1-based count, so `<=` also unlocks the level AFTER the last one cleared -- the board of the level the player is stuck on, and Arena 1 on a save that has cleared nothing. A plausible slip, because the ordinal and the index differ by one."
+}

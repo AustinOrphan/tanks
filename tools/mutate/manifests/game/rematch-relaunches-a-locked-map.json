@@ -1,0 +1,11 @@
+{
+  "id": "rematch-relaunches-a-locked-map",
+  "file": "src/game/loop.ts",
+  "find": "          VERSUS_CATALOG, campaignBoardUnlock(deps.progress.highestCleared()),",
+  "replace": "          VERSUS_CATALOG, () => true,",
+  "expect": "survives",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Rematch stops re-checking its retained map (issue #983). Settings is reachable from pause, so a player can reset progress mid-match; Rematch then requests the board that reset locked, and the launch gate throws out of the click with nothing to catch it."
+}

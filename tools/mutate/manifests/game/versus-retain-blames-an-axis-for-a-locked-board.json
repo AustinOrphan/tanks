@@ -1,0 +1,12 @@
+{
+  "id": "versus-retain-blames-an-axis-for-a-locked-board",
+  "file": "src/game/versus-config.ts",
+  "find": "  if (entry !== undefined && !unlocked(entry)) {",
+  "replace": "  if (false) {",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-config.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Drops the `'locked'` reason, so a locked board falls through to the axis ternary and is blamed on the mode (it declares the count) -- 'not available in FFA' about a board offered in no mode at all, which sends the player to a control that cannot bring it back. Still clamps to Random, so it is visible only to assertions on the reason or the notice text."
+}

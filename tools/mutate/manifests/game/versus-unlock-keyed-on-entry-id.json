@@ -1,0 +1,11 @@
+{
+  "id": "versus-unlock-keyed-on-entry-id",
+  "file": "src/game/versus-config.ts",
+  "find": "  return (entry) => !campaignArenas.has(entry.arenaId) || clearedArenas.has(entry.arenaId);",
+  "replace": "  return (entry) => !campaignArenas.has(entry.id) || clearedArenas.has(entry.id);",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "why": "Keys the unlock on the catalog entry's id instead of the arena it plays. Every shipped campaign entry has id === arenaId, so the whole shipped offer reads identically; the first entry whose id differs from its campaign arena would slip past the lock. Issue #983 requires the pairing to come from each campaign level's `arenaId`, not from board ids, which only a synthetic entry can tell apart."
+}

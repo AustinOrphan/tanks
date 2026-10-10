@@ -1,0 +1,11 @@
+{
+  "id": "versus-pane-open-keeps-a-locked-map",
+  "file": "src/game/hud.ts",
+  "find": "    if (retained.dropped !== null) setVersusConfig({ ...versusConfigState, arenaId: retained.arenaId });",
+  "replace": "    if (false) setVersusConfig({ ...versusConfigState, arenaId: retained.arenaId });",
+  "expect": "survives",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Deletes the re-check on pane open (issue #983). The pane's own selection and the retained `initial` both outlive a progress reset, so after one the pane reopens with a locked board selected and no card for it, and Start throws out of the click handler. The Map row alone looks right, which is why the killer asserts what Start emits."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "versus-launch-gate-launches-a-locked-board",
+  "file": "src/game/versus-config.ts",
+  "find": "  if (!unlocked(entry)) {",
+  "replace": "  if (false) {",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "why": "The launch-gate place (issue #983): `resolveVersusConfig` stops refusing a concrete board the player has not unlocked. It is the backstop, unreachable while the four places in front of it hold, so only a direct call can see it -- which is why the unit case calls it with a locked concrete board and expects the exact message."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "versus-axis-change-ignores-the-unlock",
+  "file": "src/game/hud.ts",
+  "find": "      next.arenaId, next.players, next.mode, VERSUS_CATALOG, versusUnlock(),",
+  "replace": "      next.arenaId, next.players, next.mode, VERSUS_CATALOG,",
+  "expect": "survives",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The Players and Mode controls re-check the retained map against the DECLARED offer while the row they rebuild reads the unlocked one, so the two disagree about one board: a locked board the pane is holding survives a count change, with no card, and Start throws. Reachable in the shipped page only if progress changes while the pane is open, which nothing does today; pinned so the row and its clamp cannot diverge."
+}

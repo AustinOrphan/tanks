@@ -1,0 +1,11 @@
+{
+  "id": "versus-map-row-shows-locked-boards",
+  "file": "src/game/hud.ts",
+  "find": "        versusConfigState.players, versusConfigState.mode, VERSUS_CATALOG, versusUnlock(),",
+  "replace": "        versusConfigState.players, versusConfigState.mode, VERSUS_CATALOG,",
+  "expect": "survives",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The Map-row place (issue #983): the pane draws a card for every declared board, locked or not, and Random's 'N eligible boards' line counts them. The ruling is that a locked board is absent, so this is the defect the issue exists to remove."
+}

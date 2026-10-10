@@ -1,0 +1,12 @@
+{
+  "id": "versus-retain-ignores-the-unlock",
+  "file": "src/game/versus-config.ts",
+  "find": "  if (versusMapChoices(players, mode, entries, unlocked).includes(arenaId)) {",
+  "replace": "  if (versusMapChoices(players, mode, entries).includes(arenaId)) {",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-config.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The retained-selection place (issue #983): `retainArenaChoice` checks the retained map against the DECLARED offer only, so a board that a progress reset has locked is kept, with no card in the Map row to show it, and Start then hands it to the launch gate, which throws out of the click handler."
+}
