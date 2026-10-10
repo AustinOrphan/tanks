@@ -24,7 +24,8 @@ what it is given.
 **Presentation contracts sit between the application and its projections (issue #473).**
 `src/presentation/` owns the renderer-independent vocabulary that more than one layer
 reads: `identity.ts` (player-slot and team colours, team letters, `resolveOwnerColor`,
-`identityApplies`), `customization.ts` (the hull/accent/skin/spawn-animation catalog and
+`identityApplies`, and the owner palette ids, labels and palettes, which nothing reads yet),
+`customization.ts` (the hull/accent/skin/spawn-animation catalog and
 `skinScroll`), `blocked-fire.ts` (the blocked-fire cue set) and `quality.ts` (the
 render-quality preset ids and the shipped default). It carries no DOM, no Three.js, no
 package, no persistence and no session orchestration, and it may name

@@ -10,28 +10,8 @@ import {
 } from './entities';
 import { hullGeometry, tankParts, HULL_CORNER, HULL_NOSE } from './tank-model';
 import { weaponShapeFor, type EnemyRoleCue } from '../presentation/enemy-role';
-import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
-import { distance, overFelt } from '../presentation/colour-distance';
-
-/**
- * Floors, in CIEDE2000, measured as drawn rather than asserted from a standard.
- *
- * OWNER_FLOOR 15: what an owner colour must clear against a tank it is drawn beside. The
- * shipped identity palette clears 17.09 against the roster, and team colours clear 29.3
- * against the player hull since issue #579 re-picked team B -- so this sits below both with
- * room, and would have caught the 2.09 collision that motivated it.
- *
- * TEAM_FLOOR 25: teammates share a colour, so telling two SIDES apart matters more than
- * telling two slots apart, and the trio has more room to spend. The shipped worst pair is
- * 38.8.
- *
- * Neither is a published threshold. A just-noticeable difference is about 1-2 and these are
- * moving objects at play distance, so the numbers are chosen from what the shipped palettes
- * actually achieve, with enough headroom that a real regression trips them and normal
- * palette work does not.
- */
-const OWNER_FLOOR = 15;
-const TEAM_FLOOR = 25;
+import { IDENTITY_RING_COLORS, OWNER_PALETTES, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
+import { distance, overFelt, OWNER_FLOOR, TEAM_FLOOR } from '../presentation/colour-distance';
 import { protectedOpacity, SPAWN_ANIMATORS } from './spawn-anim';
 import type { SpawnAnimId } from '../presentation/customization';
 import { createWorld, type World } from '../sim/world';
@@ -2143,38 +2123,52 @@ describe('player identity: ring and shell tint', () => {
     views.dispose();
   });
 
-  it('both identity ring colours are distinct from every roster colour and the placeholder', () => {
-    // Makes entities.ts's own distinctness claim TRUE rather than asserted: the ring
-    // says WHO, the hull says WHAT STYLE, so an identity hex colliding with a hull a
-    // player could be wearing (or the unstyled-slot placeholder) would blur exactly
-    // the channel the ring exists to carry. Reads the REAL rendered placeholder off
-    // the scene, same as the placeholder-distinctness sweep above. Breaks if any
-    // IDENTITY_RING_COLORS entry is changed onto a roster/placeholder hue. Iterates
-    // `IDENTITY_RING_COLORS` directly (not a hardcoded count), so this already covers
-    // all 4 entries now that the array carries 4, with no edit needed to this test.
-    const scene = new THREE.Scene();
-    const views = createEntityViews(scene);
-    const w = twoPlayerWorld();
-    views.sync(w, w, 0); // slot 1 unstyled: renders the placeholder hull
-    // Local copy of the co-op styling block's hullColor reader (scoped there).
-    let placeholder = -1;
-    scene.traverse((o) => {
-      if (o.name !== 'hull') return;
-      let g: THREE.Object3D | null = o;
-      while (g.parent && g.parent.type !== 'Scene') g = g.parent;
-      if (g && (g as THREE.Group).position.x === 9) {
-        placeholder = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+  it.each(['classic', 'high-contrast'] as const)(
+    'the %s ring set sits at least OWNER_FLOOR from every roster kind and the rendered placeholder',
+    (palette) => {
+      // The ring says WHO, the hull says WHAT STYLE, so a ring colour a player cannot tell
+      // from a hull they could be wearing (or from the unstyled-slot placeholder) blurs the
+      // channel the ring exists to carry. MEASURED since issue #1056, for both owner palettes:
+      // this used to compare hexes with `.not.toBe`, which passes two colours one level apart
+      // -- the class of check #579 replaced for teams. The ring is composited over the felt
+      // the way `makeIdentityRing` draws it; the hull is opaque.
+      //
+      // Measured minimums (colour-distance.ts, 2026-10-10, origin/main c200cf62 plus #1056):
+      // Classic 17.09 vs the roster (ring0 vs teal) and 19.41 vs the placeholder (ring3); High
+      // contrast 17.33 (ring0 vs teal) and 30.23 (ring2).
+      //
+      // Reads the REAL rendered placeholder off the scene, same as the placeholder sweep in
+      // the co-op styling block above, so a change to `UNSTYLED_SLOT_HEX` is measured too.
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene);
+      const w = twoPlayerWorld();
+      views.sync(w, w, 0); // slot 1 unstyled: renders the placeholder hull
+      // Local copy of the co-op styling block's hullColor reader (scoped there).
+      let placeholder = -1;
+      scene.traverse((o) => {
+        if (o.name !== 'hull') return;
+        let g: THREE.Object3D | null = o;
+        while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+        if (g && (g as THREE.Group).position.x === 9) {
+          placeholder = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+        }
+      });
+      expect(placeholder, 'placeholder hull was found in the scene').not.toBe(-1);
+      let pairs = 0;
+      for (const [slot, ring] of OWNER_PALETTES[palette].rings.entries()) {
+        const drawn = overFelt(ring);
+        for (const kind of TANK_KINDS) {
+          const hull = parseInt(configFor(kind).color.slice(1), 16);
+          expect(distance(drawn, hull), `ring${slot} vs ${kind}`).toBeGreaterThan(OWNER_FLOOR);
+          pairs += 1;
+        }
+        expect(distance(drawn, placeholder), `ring${slot} vs the unstyled placeholder`).toBeGreaterThan(OWNER_FLOOR);
+        pairs += 1;
       }
-    });
-    expect(placeholder, 'placeholder hull was found in the scene').not.toBe(-1);
-    for (const ring of IDENTITY_RING_COLORS) {
-      for (const kind of TANK_KINDS) {
-        expect(ring, `ring vs ${kind}`).not.toBe(parseInt(configFor(kind).color.slice(1), 16));
-      }
-      expect(ring, 'ring vs unstyled placeholder').not.toBe(placeholder);
-    }
-    views.dispose();
-  });
+      expect(pairs, '4 rings x (7 roster kinds + the placeholder)').toBe(32);
+      views.dispose();
+    },
+  );
 
   // n-player arc PR 4: teams mode colours rings/shell tints by TEAM (2 hues) rather
   // than per-slot identity -- dispatched at the same lookup site the per-slot palette
@@ -2195,7 +2189,7 @@ describe('player identity: ring and shell tint', () => {
     return createWorld({ walls: [], tanks: [p0, p1, p2, p3], spawns, lives: 3, mode: 'teams' });
   }
 
-  it('TEAM_COLORS: exactly 3 hues, measurably clear of each other, the player hull and the placeholder', () => {
+  it('team colours, both owner palettes: exactly 3 hues, measurably clear of each other, the player hull and the placeholder', () => {
     // THREE since issue #281: four-player Teams may use two or three teams (2v2 or
     // 2v1v1). Two entries left `teamColor(2)` falling through to the white fallback,
     // which is also the unstyled-slot placeholder -- so a 2v1v1 rendered one whole side
@@ -2208,14 +2202,20 @@ describe('player identity: ring and shell tint', () => {
     // the ring the way the renderer does, because the authored constant is not what anyone
     // sees -- measuring those is how #580 stayed invisible.
     //
-    // Pairwise over all three, generated rather than written out, so a fourth entry is
-    // covered without anyone remembering to add another line.
-    for (let i = 0; i < TEAM_COLORS.length; i++) {
-      for (let j = i + 1; j < TEAM_COLORS.length; j++) {
-        expect(
-          distance(overFelt(TEAM_COLORS[i]), overFelt(TEAM_COLORS[j])),
-          `team ${i} vs team ${j}`,
-        ).toBeGreaterThan(TEAM_FLOOR);
+    // Both owner palettes' team sets (issue #1056); Classic's is TEAM_COLORS itself. Worst
+    // pairs (colour-distance.ts, 2026-10-10, origin/main c200cf62 plus #1056): Classic 35.98
+    // (A vs B), High contrast 31.52 (A vs C). The colour-vision floors are identity.test.ts's.
+    // Pairwise, generated rather than written out, so a fourth entry is covered without
+    // anyone remembering to add another line.
+    const teamSets = (['classic', 'high-contrast'] as const).map((id) => [id, OWNER_PALETTES[id].teams] as const);
+    for (const [id, teams] of teamSets) {
+      for (let i = 0; i < teams.length; i++) {
+        for (let j = i + 1; j < teams.length; j++) {
+          expect(
+            distance(overFelt(teams[i]), overFelt(teams[j])),
+            `${id}: team ${i} vs team ${j}`,
+          ).toBeGreaterThan(TEAM_FLOOR);
+        }
       }
     }
     // ...and a label per hue, since the letter is the non-colour channel and a missing one
@@ -2239,11 +2239,15 @@ describe('player identity: ring and shell tint', () => {
     // The tanks a team ring can actually sit beside. NOT every roster kind: team colours
     // render only in `teams` mode, which is versus-only, and `loadArena` strips every
     // non-player spawn there -- so brown, teal and the rest never share a screen with these.
-    // Asserting against them would be over-constraint dressed up as rigour.
+    // Asserting against them would be over-constraint dressed up as rigour. Measured
+    // minimums: Classic 33.36 vs the hull (team B) and 25.54 vs the placeholder (team A);
+    // High contrast 25.29 (team A) and 37.67 (team C).
     const player = parseInt(configFor('player').color.slice(1), 16);
-    for (const team of TEAM_COLORS) {
-      expect(distance(overFelt(team), player), 'team vs the player hull').toBeGreaterThan(OWNER_FLOOR);
-      expect(distance(overFelt(team), placeholder), 'team vs unstyled placeholder').toBeGreaterThan(OWNER_FLOOR);
+    for (const [id, teams] of teamSets) {
+      for (const team of teams) {
+        expect(distance(overFelt(team), player), `${id}: team vs the player hull`).toBeGreaterThan(OWNER_FLOOR);
+        expect(distance(overFelt(team), placeholder), `${id}: team vs unstyled placeholder`).toBeGreaterThan(OWNER_FLOOR);
+      }
     }
 
     // THE TEAM-VS-IDENTITY ASSERTION IS GONE, deliberately rather than by oversight.

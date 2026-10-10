@@ -1,0 +1,14 @@
+{
+  "id": "classic-palette-copies-the-shipped-rings",
+  "file": "src/presentation/identity.ts",
+  "find": "classic: { rings: IDENTITY_RING_COLORS, teams: TEAM_COLORS },",
+  "replace": "classic: { rings: [0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bfe], teams: TEAM_COLORS },",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts"
+  ],
+  "why": "Classic in the catalogue drifts from the arrays the game draws (issue #1056). The palette holds IDENTITY_RING_COLORS by reference so that a player who picks \"Classic\" is given the shipped look by construction; a copy can be edited apart from it, as here, where ring 3 is one level off. The literal pin of IDENTITY_RING_COLORS still passes because the shipped array did not move, so only the identity half of the test (toBe, not toEqual) catches it.",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) Classic is the shipped seven hexes, written out, and the very arrays every consumer reads"
+  ]
+}

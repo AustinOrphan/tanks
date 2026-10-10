@@ -1,0 +1,15 @@
+{
+  "id": "unstyled-placeholder-moves-onto-an-owner-colour",
+  "file": "src/render/entities.ts",
+  "find": "const UNSTYLED_SLOT_HEX = '#c23b8f';",
+  "replace": "const UNSTYLED_SLOT_HEX = '#d5b9ab';",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "THE PLACEHOLDER ARMS (issue #1056). Moves the unstyled-slot placeholder onto #d5b9ab, which is High contrast team C (#f2c6bb) as drawn over the felt: 0.00 from team C and 10.94 from High contrast ring 2 as drawn, both under OWNER_FLOOR 15. It equals none of the 7 roster hexes, so the co-op block's placeholder-vs-roster sweep still passes, and Classic stays clear of it (rings 22.18, ring 1; teams 21.76, team B). No High contrast colour can fail these arms alone (see high-contrast-ring-nears-a-roster-tank), so the control moves the placeholder, which both tests read off the rendered scene rather than the constant. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "player identity: ring and shell tint the high-contrast ring set sits at least OWNER_FLOOR from every roster kind and the rendered placeholder",
+    "player identity: ring and shell tint team colours, both owner palettes: exactly 3 hues, measurably clear of each other, the player hull and the placeholder"
+  ]
+}

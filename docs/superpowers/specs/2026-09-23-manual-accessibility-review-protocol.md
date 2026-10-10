@@ -45,7 +45,7 @@ pages.
 
 | Not proven | Why not | Measured stand-in, if any |
 | --- | --- | --- |
-| Text contrast | Nothing in the repository computes a luminance ratio; `colour-distance.ts` is a perceptual distance for camouflage | 30 of 735 visible text runs below their WCAG floor, in 3 class signatures ([#633](https://github.com/AustinOrphan/tanks/issues/633)) |
+| Text contrast | `colour-distance.ts` computes a WCAG luminance ratio (`contrastRatio`, since #1056), but only the owner-palette tests use it; nothing applies it to rendered HUD text | 30 of 735 visible text runs below their WCAG floor, in 3 class signatures ([#633](https://github.com/AustinOrphan/tanks/issues/633)) |
 | Response to a browser font-size preference | No gate changes the root font size | 502 of 735 runs (68.3%) do not move when the root doubles ([#633](https://github.com/AustinOrphan/tanks/issues/633)) |
 | The 56 px driving-control floor | No catalogue state shows the driving controls; the menu sweep skips `.hud-touch` by rule | measured at 56x56 / 66.2x56 / 69.5x56 at three viewports ([#957](https://github.com/AustinOrphan/tanks/issues/957)) |
 | Type size and control size at TV distance | Nothing measures either. A required check does drive a `1920x1080-tv` layout at DPR 2, but only for topbar clearance, and `tools/screens/sweep-plan.mjs` has a 2560x1440 layout that is explicitly **not a gate** and commits no baseline | none |

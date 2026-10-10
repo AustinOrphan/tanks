@@ -1,0 +1,16 @@
+{
+  "id": "high-contrast-ring-sinks-into-the-felt",
+  "file": "src/presentation/identity.ts",
+  "find": "0xfdbbc6",
+  "replace": "0x000500",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "FELT DISTANCE family (issue #1056). Moves High contrast ring 2 to the near-black #000500, which composites to 29.46 from the felt (floor 30) while still reaching 3:1 on the DARK side (3.0503). That is the case the felt floor exists for: contrast is a luminance ratio and is satisfied by a ring darker than the ground, so the two floors are not redundant. Ring-pair, paint, roster and placeholder figures move away from their floors or not at all, and every tightest-pair name holds. The literal pin of High contrast's seven hexes fails too, as it does for every High contrast move; it compares hexes, not figures, so this entry is what shows the floor test can fail. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: floors, composited over the felt (issue #1056) high-contrast: every ring and team colour sits at least 30 from the felt",
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out"
+  ]
+}
