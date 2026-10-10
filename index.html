@@ -34,24 +34,27 @@
       content="A top-down arena tank game: ricochet shells, mines, a campaign against a roster of enemy tanks, and local versus."
     />
     <!-- The link-card image is public/share-image.png, which vite copies into dist/ and the
-         same deploy serves (issue #973): a 1200x630 PNG cropped from one frame of
-         `npm run gallery -- --scene game`, the real game shot through its real camera with no
-         developer query. Absolute for the reason canonical and og:url are. Replacing the
-         picture is a swap of that one file; tools/webmanifest.test.ts holds these tags to the
-         file's real size, and tools/portability/check.mjs checks the BUILT output carries it. -->
+         same deploy serves (issue #973): a 1200x630 PNG with a brand panel (the splash title in
+         the bundled IBM Plex Sans) beside one frame of `npm run gallery -- --scene game`, the
+         real game shot through its real camera with no developer query, cropped and scaled
+         only. Its layout keeps the whole title in the centred square that some apps crop to.
+         The one-off script that composed it is quoted in the pull request, as #973's amended
+         rules ask. Absolute for the reason canonical and og:url are. Replacing the picture is a
+         swap of that one file; tools/webmanifest.test.ts holds these tags to the file's real
+         size, and tools/portability/check.mjs checks the BUILT output carries it. -->
     <meta property="og:image" content="https://austinorphan.com/tanks/share-image.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="A tilted top-down view of a green arena walled in grey: a blue tank near the bottom faces brown, grey and teal tanks near the top, among grey blocks and two wooden crates, as a shell from the teal tank streaks across the floor."
+      content="The title TANKS! in large white capitals on a dark panel, above the lines Top-down arena tank battles and Play in your browser. A slanted green edge divides it from a top-down view of a round in progress on a green floor among grey blocks: a brown, a grey and a teal tank stand in a column beside a large block, and the teal tank fires a line of shells down toward the blue player tank below."
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://austinorphan.com/tanks/share-image.png" />
     <meta
       name="twitter:image:alt"
-      content="A tilted top-down view of a green arena walled in grey: a blue tank near the bottom faces brown, grey and teal tanks near the top, among grey blocks and two wooden crates, as a shell from the teal tank streaks across the floor."
+      content="The title TANKS! in large white capitals on a dark panel, above the lines Top-down arena tank battles and Play in your browser. A slanted green edge divides it from a top-down view of a round in progress on a green floor among grey blocks: a brown, a grey and a teal tank stand in a column beside a large block, and the teal tank fires a line of shells down toward the blue player tank below."
     />
     <!-- Relative href, deliberately: on a GitHub Pages PROJECT page the browser
          resolves a bare /favicon.ico against the ORIGIN root, not the project
