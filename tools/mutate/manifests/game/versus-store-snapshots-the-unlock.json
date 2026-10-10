@@ -1,0 +1,12 @@
+{
+  "id": "versus-store-snapshots-the-unlock",
+  "file": "src/game/versus-setup-store.ts",
+  "find": "  const arenaAllowed = (id: string, players: number, mode: 'ffa' | 'teams'): boolean =>\n    versusMapChoices(players, mode, VERSUS_CATALOG, unlocked()).includes(id);",
+  "replace": "  const unlockedAtBuild = unlocked();\n  const arenaAllowed = (id: string, players: number, mode: 'ffa' | 'teams'): boolean =>\n    versusMapChoices(players, mode, VERSUS_CATALOG, unlockedAtBuild).includes(id);",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-setup-store.test.ts",
+    "src/game/storage.test.ts"
+  ],
+  "why": "The setup store reads its unlock once, when it is built, instead of at every check (issue #983). The store lives as long as the page, so a level cleared after boot does not reach it: the player picks the newly unlocked board, the pane's own live check offers it and the match runs on it, but `set` quietly stores Random, so the next page load has forgotten the choice. The same tidy-looking hoist of a getter as versus-unlock-snapshotted-when-the-hud-is-built, on the store's side."
+}
