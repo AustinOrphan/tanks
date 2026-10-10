@@ -1,0 +1,14 @@
+{
+  "id": "verify-clearance-passes-its-own-selectors",
+  "file": "tools/visual/verify.mjs",
+  "find": "page.evaluate(MEASURE_CLEARANCE, { stage: true, selectors: CLEARANCE_SELECTORS })",
+  "replace": "page.evaluate(MEASURE_CLEARANCE, { stage: true, selectors: { topbar: '.hud-topbar', toasts: '.hud-toasts', capacity: '.hud-capacity' } })",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/verify.test.ts"
+  ],
+  "killedBy": [
+    "verify.mjs: the seams no vitest run can execute measures the clearance through the selectors its verdict prints, spelling none of its own"
+  ],
+  "why": "Hands the match measurement a literal copy of the selectors instead of CLEARANCE_SELECTORS. The call is inside the browser run, so no unit test can execute it; the source check on the two `page.evaluate` calls is what keeps both of them passing the one constant the verdict prints from."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "verify-clearance-counts-chips-after-the-hidden-ones",
+  "file": "tools/visual/verify.mjs",
+  "find": "      .map((el, i) => ({ el, selector: `${selectors.topbar} > :nth-child(${i + 1})` }))\n      .filter(({ el }) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0)\n",
+  "replace": "      .filter((el) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0)\n      .map((el, i) => ({ el, selector: `${selectors.topbar} > :nth-child(${i + 1})` }))\n",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance-measure.test.ts"
+  ],
+  "killedBy": [
+    "clearance measurement in the page (issue #1068) measures the HUD's own markup through CLEARANCE_SELECTORS, every selector naming one element",
+    "clearance measurement in the page (issue #1068) names each shown chip by its place among all of the bar's children, through the selectors it is handed",
+    "clearance measurement in the page (issue #1068) throws, naming the selector, rather than measure one that matches several elements or none"
+  ],
+  "why": "Counts a chip's place among the SHOWN chips instead of among all of the bar's children. `:nth-child` counts hidden children too, and the bar always has some (Practice outside Level Select, Level and the stock readout outside their modes), so this names a plausible chip that is the wrong one: the most likely way to get the selector wrong, and one no unique-count check alone would see."
+}
