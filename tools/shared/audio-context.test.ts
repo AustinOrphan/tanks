@@ -127,6 +127,7 @@ const GUARDED: Record<string, string[]> = {
 const EXCLUDED = [
   'baseline/beacon-check.mjs',
   'baseline/run.mjs',
+  'gl/identity-cue-overlap.mjs',
   'gl/idle-cost.mjs',
   'gl/phase-cost.mjs',
   'gl/role-cue-overlap.mjs',
