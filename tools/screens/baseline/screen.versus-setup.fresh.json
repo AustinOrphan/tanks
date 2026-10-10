@@ -1,0 +1,68 @@
+{
+  "state": "screen.versus-setup.fresh",
+  "measurements": [
+    {
+      "selector": ".hud-versus-setup",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Versus Setup\n      \n        Mode\n        FFATeams\n        \n        \n      \n      \n        Players\n        234\n      \n      \n        Map\n        Keystone2/3 players · FFA and TeamsA three-player arch: ",
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(11, 14, 20, 0.86)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-versus-map-row",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 16,
+        "y": 231,
+        "w": 1248,
+        "h": 114
+      },
+      "text": "Keystone2/3 players · FFA and TeamsA three-player arch: two mirrored bases and a keystone spawn equally far from both.Quarters2/3/4 players · FFA and TeamsA four-player rotunda: a centre every corner ",
+      "style": {
+        "display": "grid",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-versus-map-card",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 16,
+        "y": 231,
+        "w": 411,
+        "h": 114
+      },
+      "text": "Keystone2/3 players · FFA and TeamsA three-player arch: two mirrored bases and a keystone spawn equally far from both.",
+      "style": {
+        "display": "grid",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}
