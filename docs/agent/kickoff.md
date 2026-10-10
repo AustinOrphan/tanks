@@ -145,8 +145,9 @@ npm run issues:frontier                    # dependency graph: what is unblocked
 The audit names every metadata error, such as an issue with two horizons, which the queue
 plan alone can leave out. Both commands need a GitHub token in `GH_TOKEN` (`gh auth token`
 supplies one). Without it they can hit the anonymous rate limit, and the audit cannot see
-which pull requests implement which issues. Frontier's "ready" means only "no open blocker";
-it does not check eligibility.
+which pull requests implement which issues. Frontier's "ready" means no open blocker and none
+of the person labels above; an unblocked issue carrying one is listed as "waiting", with the
+labels named. It still does not check eligibility (`needs-split`, size, `agent-ready`).
 
 An issue is claimed by an open or draft pull request whose closing references name it
 (`Closes #N`); there is no assignee convention. Before starting an issue, also check whether

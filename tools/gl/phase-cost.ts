@@ -37,14 +37,15 @@
  */
 import * as THREE from 'three';
 
-import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
+import { arenaBounds } from '../../src/sim/arena';
+import { STANDARD_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createWorld } from '../../src/sim/world';
 import { createRenderer } from '../../src/render/renderer';
 import { createEnvironmentMap, createScene } from '../../src/render/scene';
 import type { Spawn, Tank } from '../../src/sim/types';
 
-const { width: W, height: H } = arenaBounds(CURRENT_ARENA);
-const BOUNDARY = CURRENT_ARENA.cellSize;
+const { width: W, height: H } = arenaBounds(STANDARD_ARENA);
+const BOUNDARY = STANDARD_ARENA.cellSize;
 const ROUNDS = Number(new URLSearchParams(location.search).get('rounds') ?? 6);
 
 /** One round's phases, in milliseconds, keyed by phase name. */

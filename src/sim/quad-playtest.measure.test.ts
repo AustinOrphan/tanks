@@ -9,8 +9,11 @@ const HZ = 60;
 const SECONDS = 90;
 const PLAYERS = 4;
 
-function playMatch(mode: GameMode, seed: number) {
-  const arena = arenaById('vs-quad-01');
+/** The four-player boards this harness drives: Quarters (#273, rebuilt by #425) and Citadel (#1036). */
+const BOARDS = ['vs-quad-01', 'vs-quad-02'] as const;
+
+function playMatch(arenaId: (typeof BOARDS)[number], mode: GameMode, seed: number) {
+  const arena = arenaById(arenaId);
   const world = createWorldFor(arena, seed, { lives: 3, playerCount: PLAYERS, rules: { mode: mode } });
   let w = world;
   const players = w.tanks.filter((t) => t.kind === 'player').map((t) => t.id);
@@ -80,14 +83,18 @@ function playMatch(mode: GameMode, seed: number) {
 // so the match is driven here instead, at the sim layer, through the REAL scripted-player
 // AI all four sides use, at the real 60 Hz fixed timestep for 90 seconds. It is not a
 // video, and it is not a human's read of how the board feels.
+//
+// Issue #1036 added a second four-player board and asked for its observations beside
+// vs-quad-01's, so the board is now a parameter rather than a second copy of this file: the
+// same seeds, modes and assertions drive both, which is what makes the two rows comparable.
 const measure = import.meta.env.VITE_RUN_MEASURE ? describe : describe.skip;
 
-measure('vs-quad-01 bot-vs-bot playtest (set VITE_RUN_MEASURE=1 to run)', () => {
-  it('records observations for every declared mode', () => {
+measure('four-player bot-vs-bot playtests (set VITE_RUN_MEASURE=1 to run)', () => {
+  it.each(BOARDS)('%s: records observations for every declared mode', (arenaId) => {
     for (const mode of ['ffa', 'teams'] as GameMode[]) {
       for (const seed of [7, 11, 23]) {
-        const o = playMatch(mode, seed);
-        console.log(`PLAYTEST ${mode} seed=${seed} players=${o.players} shots=${o.shots} mines=${o.mines} kills=${o.kills} breaches=${o.breaches} firstContact=${o.firstContactSec}s firstKill=${o.firstKillSec}s sep(min/mean/max)=${o.minSeparation.toFixed(2)}/${o.meanSeparation.toFixed(2)}/${o.maxSeparation.toFixed(2)} teams=${o.teamSizes.join('v')}`);
+        const o = playMatch(arenaId, mode, seed);
+        console.log(`PLAYTEST ${arenaId} ${mode} seed=${seed} players=${o.players} shots=${o.shots} mines=${o.mines} kills=${o.kills} breaches=${o.breaches} firstContact=${o.firstContactSec}s firstKill=${o.firstKillSec}s sep(min/mean/max)=${o.minSeparation.toFixed(2)}/${o.meanSeparation.toFixed(2)}/${o.maxSeparation.toFixed(2)} teams=${o.teamSizes.join('v')}`);
         // NOT `expect(true).toBe(true)`. Each of these fails on a specific, previously-made
         // mistake rather than decorating the run:
         //   - players: the board really seated FOUR tanks, so this is an N=4 observation

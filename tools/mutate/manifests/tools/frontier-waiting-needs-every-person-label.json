@@ -1,0 +1,22 @@
+{
+  "id": "frontier-waiting-needs-every-person-label",
+  "file": "tools/issues/frontier.mjs",
+  "find": "    else if (verdict.readiness === 'ready' && personLabels.length > 0) waiting.push(row);",
+  "replace": "    else if (verdict.readiness === 'ready' && personLabels.length === PERSON_LABELS.length) waiting.push(row);",
+  "expect": "killed",
+  "tests": [
+    "tools/issues/frontier.test.ts"
+  ],
+  "why": "`some` becomes `every`: an issue would wait only if it carried all four person labels, so every real issue -- each carries one or two -- falls back into ready, and the frontier misdirects exactly as it did before issue #1025. Any one label must be enough.",
+  "killedBy": [
+    "frontier: bucketing and filters buckets by readiness and reports the population it considered",
+    "frontier: bucketing and filters filters by milestone and by label, conjunctively",
+    "frontier: waiting on a person (issue #1025) human-required alone moves an otherwise-ready issue to waiting, and its unlabelled twin stays ready",
+    "frontier: waiting on a person (issue #1025) playtest-required alone moves an otherwise-ready issue to waiting, and its unlabelled twin stays ready",
+    "frontier: waiting on a person (issue #1025) hardware-required alone moves an otherwise-ready issue to waiting, and its unlabelled twin stays ready",
+    "frontier: waiting on a person (issue #1025) needs-review alone moves an otherwise-ready issue to waiting, and its unlabelled twin stays ready",
+    "frontier: waiting on a person (issue #1025) names on each waiting row the labels that put it there, in issue order",
+    "frontier: waiting on a person (issue #1025) counts every in-scope issue in exactly one of the four buckets, and a closed one in none",
+    "frontier: waiting on a person (issue #1025) renders four counts, the waiting rows with their labels, and still warns that ready is not startable"
+  ]
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { loadArena, CURRENT_ARENA } from './arena';
+import { loadArena } from './arena';
+import { STANDARD_ARENA } from './config/arena-fixtures';
 import { reflectSweep } from './collision';
 import { NORMAL_BOUNCES, RICOCHET_BOUNCES } from './constants';
 
@@ -20,8 +21,8 @@ import { NORMAL_BOUNCES, RICOCHET_BOUNCES } from './constants';
  * corners -- is the default aim of anyone who has not moved the mouse since page load.
  */
 describe('shells cannot escape through an arena corner', () => {
-  const walls = loadArena(CURRENT_ARENA).walls.map((w) => w.aabb);
-  const { cols, rows, cellSize } = CURRENT_ARENA;
+  const walls = loadArena(STANDARD_ARENA).walls.map((w) => w.aabb);
+  const { cols, rows, cellSize } = STANDARD_ARENA;
   const corners = [
     { x: 0, y: 0 },
     { x: cols * cellSize, y: 0 },

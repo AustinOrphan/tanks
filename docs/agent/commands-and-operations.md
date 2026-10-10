@@ -347,6 +347,34 @@ exhausted the token's 1,000-request hourly budget and failed most of a day's aud
 sustained trickle of events spaced wider than a job still costs a full audit each, and the
 per-event cost is higher than before by the reconcile job's reads.
 
+`npm run issues:snapshot [--out path] [--ref sha]` exports the native issue graph -- every open
+issue's labels, milestone, parent, sub-issues and blocked-by edges, and the counts of what it
+could not read -- as a versioned JSON file (`tmp/issue-graph.json` unless `--out` says
+otherwise; `--ref` records the commit it describes, defaulting to `GITHUB_SHA`). It carries no
+issue body, comment or login: `snapshotIssue` in `tools/issues/snapshot.mjs` publishes only the
+fields its typedef names, and `snapshot.test.ts` holds it to that. A complete read needs
+`GH_TOKEN`/`GITHUB_TOKEN`: `run.mjs` records that an anonymous run against this repository on
+2026-09-20, at 73 open issues, exhausted the 60-per-hour unauthenticated budget and stopped with
+a 403 partway through enrichment, and the repository has more open issues now, not fewer.
+
+`npm run issues:frontier [--in snapshot.json] [--milestone title] [--exclude-labels a,b]`
+reports the executable frontier: every open issue in scope in one of four buckets, with the
+denominator on the headline. `ready` has no standing blocker and none of the person labels
+(`human-required`, `playtest-required`, `hardware-required`, `needs-review`); `waiting` has no
+standing blocker but carries at least one of them, and its row names which; `blocked` has an
+open native blocker; `unknown` has blockers GitHub counts that the snapshot did not read, and
+is never shown as ready. Graph facts outrank labels, so a labelled blocked issue is `blocked`.
+`ready` is still not eligibility: a decision no label records is invisible to it, and
+`needs-split`, size and `agent-ready` are not checked. `--milestone` and `--exclude-labels`
+filter before bucketing. With `--in` it reads a snapshot file and makes no network call;
+without it, it builds a snapshot live and needs a token for the same reason as above.
+
+The `Issue graph snapshot` workflow (`.github/workflows/issue-graph-snapshot.yml`) runs
+`issues:snapshot` daily at 05:41 UTC with read-only `contents` and `issues` permissions and
+uploads the file as the `issue-graph` artifact, kept 30 days; it commits nothing. Its counts are
+in the run summary. `workflow_dispatch` is the manual refresh: one click in the Actions tab, no
+local checkout and no token.
+
 `npm run issues:relationships` is the reviewed, additive migration from issue-body hierarchy
 and hard-prerequisite statements to GitHub's native parent/sub-issue and blocked-by fields. It is
 operator-only: both plan and apply modes require `GH_TOKEN` or `GITHUB_TOKEN`, the ledger is

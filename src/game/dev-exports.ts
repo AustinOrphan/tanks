@@ -1,4 +1,3 @@
-import type { AppLocation } from './app-state';
 import { FLAG_REGISTRY } from './devflags';
 import {
   diagnosticsReport,
@@ -40,18 +39,6 @@ export interface RoundDiagnostics {
   readonly roundStartTick: number;
   /** Which surface is up, from `surfaceName`: `gameplay/playing`, `route/main-menu`, ... */
   readonly surface: string;
-}
-
-/**
- * The state machine's location as one string: `route/<route>` or `gameplay/<phase>`.
- *
- * Both halves, because a phase alone cannot say that a session is sitting at its own title
- * screen, and a route alone cannot tell a paused round from a running one.
- */
-export function surfaceName(location: AppLocation): string {
-  return location.kind === 'route'
-    ? `route/${location.route.kind}`
-    : `gameplay/${location.phase.kind}`;
 }
 
 /**

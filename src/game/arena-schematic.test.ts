@@ -19,9 +19,9 @@ const PAINT = { floor: '#000', solid: '#fff', destructible: '#888' };
 
 describe('arenaSchematic', () => {
   it('covers every board the versus catalog offers', () => {
-    // The population is the catalog, not a list here: a ninth entry must not arrive with a
-    // card that throws on `arenaById`. Eight today.
-    expect(VERSUS_CATALOG.length).toBe(8);
+    // The population is the catalog, not a list here: a new entry must not arrive with a
+    // card that throws on `arenaById`. Nine today, the ninth being issue #1036's vs-quad-02.
+    expect(VERSUS_CATALOG.length).toBe(9);
     for (const entry of VERSUS_CATALOG) {
       expect(() => arenaSchematic(entry.arenaId), entry.id).not.toThrow();
     }

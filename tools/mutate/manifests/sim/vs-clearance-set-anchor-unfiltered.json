@@ -9,8 +9,8 @@
     "src/sim/versus-spawns.test.ts"
   ],
   "killedBy": [
-    "clearance-filtered candidate pools (issue #225) shipped sweep: every spawn on all 24 (arena, N) combinations is hull-clear -- 0 violations measured",
-    "clearance-filtered candidate pools (issue #225) variant sweep: the gated match-start draw measures 0 violations over 25 (arena, seed) draws at N=4",
+    "clearance-filtered candidate pools (issue #225) shipped sweep: every spawn on all 27 (arena, N) combinations is hull-clear -- 0 violations measured",
+    "clearance-filtered candidate pools (issue #225) variant sweep: the gated match-start draw measures 0 violations over 45 (arena, seed) draws at N=4",
     "pickVersusSpawnCell wired through loadArena: before/after on every shipped arena AFTER: minimum pairwise Euclidean spawn distance clears 5 world units everywhere in the sweep -- comfortably above the pre-fix constant of 1.3333, with the actual floor pinned below",
     "pickVersusSpawnSet: the relaxation pass runs to convergence, not one round arena-04 at 3 players lands on the set only multi-round coordinate ascent reaches"
   ]

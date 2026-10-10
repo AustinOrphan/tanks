@@ -3448,18 +3448,17 @@ describe('the versus map cards (issue #274)', () => {
   });
 
   it('tells Random how many boards it will draw from, counting the row and not the catalog', () => {
-    // WHAT THIS CAN AND CANNOT DISCRIMINATE, stated because the population makes the obvious
-    // assertion vacuous. Every shipped (players, mode) combination yields exactly SIX
-    // eligible boards -- the five campaign arenas plus the one dedicated board for that
-    // count -- so no fixture distinguishes this line from a hardcoded `6`. The sweep below
-    // pins that population, so the day a catalog edit breaks the tie this case starts
-    // failing and asks for a better fixture rather than quietly staying vacuous.
+    // WHAT THIS DISCRIMINATES. Two and three players yield SIX eligible boards -- the five
+    // campaign arenas plus that count's one dedicated board -- and four players yields SEVEN
+    // since issue #1036 added vs-quad-02 beside vs-quad-01. That broke the tie this case was
+    // waiting for: while every combination yielded six, no fixture told this line from a
+    // hardcoded `6`, and now the four-player combinations do.
     //
-    // What IS discriminated is the mistake actually available here: counting the CATALOG,
-    // which has eight entries, instead of the filtered row. That is the number a reader of
-    // `VERSUS_CATALOG.length` would reach for, and Random drawing from eight boards when
-    // six are offered is the criterion "Random never selects outside the displayed eligible
-    // set" restated as a claim on the card.
+    // It also discriminates the other mistake available here: counting the CATALOG, which
+    // has nine entries, instead of the filtered row. That is the number a reader of
+    // `VERSUS_CATALOG.length` would reach for, and Random drawing from nine boards when six
+    // or seven are offered is the criterion "Random never selects outside the displayed
+    // eligible set" restated as a claim on the card.
     const { hud: h, root } = mount();
     open(root, h);
     const randomLine = (): string =>
@@ -3478,9 +3477,9 @@ describe('the versus map cards (issue #274)', () => {
         expect(eligible(), `${players}p ${mode}`).toBeLessThan(VERSUS_CATALOG.length);
       }
     }
-    // The population, recorded rather than assumed: one value across all five combinations.
-    expect([...counts]).toEqual([6]);
-    expect(VERSUS_CATALOG.length).toBe(8);
+    // The population, recorded rather than assumed: six at two and three players, seven at four.
+    expect([...counts]).toEqual([6, 7]);
+    expect(VERSUS_CATALOG.length).toBe(9);
   });
 
   it('keeps the picture and the sentence out of the card\'s name, and the sentence in its description', () => {

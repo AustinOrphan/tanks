@@ -6,13 +6,14 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { framedBounds, fitCameraToArea, framedAreaFits, FRAME_MARGIN, VIEW_DIR } from './framing';
-import { CURRENT_ARENA, ARENAS, arenaBounds, loadArena } from '../sim/arena';
+import { ARENAS, arenaBounds, loadArena } from '../sim/arena';
+import { STANDARD_ARENA } from '../sim/config/arena-fixtures';
 // The SHIPPED field of view, not a copy: a test that hardcoded 30 would keep passing
 // after someone widened the real camera back out, which is the regression this guards.
 import { BASE_FOV } from './scene';
 
-const { width: W, height: H } = arenaBounds(CURRENT_ARENA);
-const BOUNDARY = CURRENT_ARENA.cellSize;
+const { width: W, height: H } = arenaBounds(STANDARD_ARENA);
+const BOUNDARY = STANDARD_ARENA.cellSize;
 const TARGET = new THREE.Vector3(W / 2, 0, H / 2);
 
 // Portrait phone through to ultrawide. A fixed camera cannot scroll, so anything
@@ -30,7 +31,8 @@ const ASPECTS = [0.42, 0.46, 0.75, 1.0, 1.33, 1.6, 1.78, 2.33, 2.39, 3.0];
 /**
  * Every (arena, aspect) pair -- population: 5 shipped arenas x 10 aspects = 50.
  *
- * The sweep used to run against `CURRENT_ARENA` alone, which is one BOARD SHAPE: three
+ * The sweep used to run against one board alone (campaign level 1's, which the camera helpers
+ * below still use as the standard test board `STANDARD_ARENA`), which is one BOARD SHAPE: three
  * of the five shipped arenas are 33x27, and arena-04 and arena-05 (both 45x33) are the
  * only ones that differ. A per-arena refit is exactly what the fit exists to do, so
  * testing it at one shape tested half the function.
@@ -56,7 +58,7 @@ function fitted(
 }
 
 function cameraAt(aspect: number): THREE.PerspectiveCamera {
-  return fitted(CURRENT_ARENA, aspect).cam;
+  return fitted(STANDARD_ARENA, aspect).cam;
 }
 
 describe('framedBounds', () => {
@@ -64,7 +66,7 @@ describe('framedBounds', () => {
     // The ring is one cell thick and sits OUTSIDE play, so the framed area is two
     // rings wider and taller than the board. Larger than this and a strip of ground
     // shows beyond the walls; smaller and the walls hang over the clear colour.
-    // BOUNDARY (= CURRENT_ARENA.cellSize) is now 2/3, was 2, so the ring adds
+    // BOUNDARY (= STANDARD_ARENA.cellSize) is now 2/3, was 2, so the ring adds
     // 2 * 2/3 = 4/3 per axis rather than the old flat 4. Written as the literal
     // fraction `4/3`, not `BOUNDARY * 2`, so this still fails if framedBounds'
     // multiplier or sign drifts -- referencing BOUNDARY here would just restate
@@ -77,7 +79,7 @@ describe('framedBounds', () => {
     // builds. Restating `W + BOUNDARY * 2` here -- as this test used to -- only
     // re-derives framedBounds' own body, so it could not fail; it left the ring
     // thickness free to drift away from what the camera frames.
-    const { walls } = loadArena(CURRENT_ARENA);
+    const { walls } = loadArena(STANDARD_ARENA);
     const minX = Math.min(...walls.map((w) => w.aabb.minX));
     const maxX = Math.max(...walls.map((w) => w.aabb.maxX));
     const minY = Math.min(...walls.map((w) => w.aabb.minY));
@@ -237,11 +239,13 @@ describe('the board actually fills the screen', () => {
   ];
 
   it('covers at least 48% of the frame, on every shipped arena at every common aspect', () => {
-    // Population: all 8 shipped arenas x 4 aspects = 32, every one checked -- not a
+    // Population: all 9 shipped arenas x 4 aspects = 36, every one checked -- not a
     // sample. The floor sits just under the measured worst case (49.1%, arena-01 on a
     // phone) and comfortably above what the old camera managed anywhere (39.9% there).
     // Issue #271's 27x21 vs-duel-01 is the first board of a different shape to join
-    // this sweep and clears the floor with nothing retuned for it.
+    // this sweep and clears the floor with nothing retuned for it. Issue #1036's vs-quad-02
+    // is 33x27, arena-01's shape, so its coverage is arena-01's at every aspect and the
+    // floor needed no re-measure beyond confirming that.
     const thin: string[] = [];
     let checked = 0;
     for (const [i, arena] of ARENAS.entries()) {
@@ -259,7 +263,7 @@ describe('the board actually fills the screen', () => {
     // re-measuring. Scoped to the raw catalog on purpose (issue #154: ARENAS is
     // catalog order, not campaign/level order) -- this floor is a property of the
     // BOARDS that ship, independent of which level plays which.
-    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(8);
+    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(9);
     expect(checked).toBe(ARENAS.length * ASPECTS.length);
     expect(thin).toEqual([]);
   });
@@ -289,10 +293,10 @@ describe('the board actually fills the screen', () => {
     // `framing-frame-margin-doubled`. The bands are wide enough to survive a retune and
     // narrow enough to catch a different camera.
     const at = (aspect: number): number[] => ARENAS.map((arena) => coverage(arena, aspect));
-    // Population: all 8 shipped arenas, at each of the two aspects issue #108 names.
+    // Population: all 9 shipped arenas, at each of the two aspects issue #108 names.
     const portrait = at(0.42); // 20:9 upright
     const ultrawide = at(2.39); // 21:9 sideways
-    expect(portrait).toHaveLength(8);
+    expect(portrait).toHaveLength(9);
     for (const f of portrait) {
       expect(f, 'portrait now fills a quarter of the frame -- re-read the orientation decision').toBeLessThan(0.25);
       expect(f).toBeGreaterThan(0.15);

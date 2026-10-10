@@ -10,6 +10,6 @@
   ],
   "killedBy": [
     "evaluateVersusBoard: the shipped-arena sweep the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin at every count a board is OFFERED at -- the tightest is vs-tri-01 at N=3",
-    "evaluateVersusBoard: the shipped-arena sweep records the tightest ratio across all 24 shipped combinations, including the 6 no one is offered"
+    "evaluateVersusBoard: the shipped-arena sweep records the tightest ratio across all 27 shipped combinations, including the 8 no one is offered"
   ]
 }

@@ -145,10 +145,12 @@ describe('memory through the pipeline', () => {
     // the two new fields on the way into the next tick.
     const { step } = await import('../world');
     const { createWorldFor } = await import('../arena');
-    const { ARENA_DEFS, arenaById } = await import('../config/arenas');
+    const { STANDARD_ARENA } = await import('../config/arena-fixtures');
     const { COUNTDOWN_TICKS } = await import('../constants');
 
-    let w = createWorldFor(arenaById(ARENA_DEFS[0].id), 1) as World;
+    // The standard test board (issue #1009), not campaign level 1: this needs enemy AIs with
+    // a target to remember, and nothing about the first level's roster.
+    let w = createWorldFor(STANDARD_ARENA, 1) as World;
     const player = w.tanks.find((t) => t.kind === 'player') as Tank;
     const idle = { move: { x: 0, y: 0 }, aim: { x: player.pos.x + 10, y: player.pos.y }, fire: false, mine: false };
     for (let i = 0; i <= COUNTDOWN_TICKS + 60; i++) w = step(w, idle).world;

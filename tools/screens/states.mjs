@@ -560,14 +560,19 @@ export const SCREEN_STATES = Object.freeze([
     // child, and the centred-overflow clip is a property of the TOP of a scroll container
     // -- the bottom controls already measured here stay on screen either way. A negative y
     // is content above the scroll origin, which no scrollbar reaches.
-    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
+    //
+    // `.hud-settings .ui-hint` is the pane's first disabled-reason hint (issue #1031), so the
+    // UI-scale state below has a piece of the pane's smallest, `em`-sized text to compare.
+    // Scoped to the pane: `measure` takes the FIRST DOM match, visible or not, and most of the
+    // page's `.ui-hint`s are in closed panes.
+    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint'],
   }),
   state({
     id: 'screen.settings.ui-scale',
     title: 'Settings at 150% UI scale',
     description:
-      'The same pane for a player who raised the in-game UI scale, which multiplies the '
-      + 'type and spacing scales.',
+      'The same pane for a player who raised the in-game UI scale, which multiplies all of '
+      + 'its text, the base text included, and its spacing.',
     // Issue #843 filed this capture and issue #290 is why it is only now worth taking. The
     // catalogue could already seed `uiScale`, but NOTHING multiplied by `uiScaleFactor`, so
     // this state photographed a page byte-identical to `screen.settings` -- measured at the
@@ -581,13 +586,13 @@ export const SCREEN_STATES = Object.freeze([
       'tanks.settings.v1': JSON.stringify({ version: 1, presentation: { uiScale: 150 } }),
     },
     steps: [...PAST_SPLASH, { click: '.hud-settings-open' }, { waitVisible: '.hud-settings' }],
-    // THE SAME FOUR SELECTORS `screen.settings` measures, deliberately, so the two baselines
-    // are a direct before/after of the scale rather than two unrelated pictures. Baselines
-    // record `font-size` and the box, which is exactly where a 1.5x multiplier shows up: if
-    // the consumer is ever removed, these measurements collapse back onto `screen.settings`'s
-    // and this state stops differing from it -- which is the failure this state exists to
-    // catch, and the one it could not catch before the consumer existed.
-    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress'],
+    // THE SAME SELECTORS `screen.settings` measures, deliberately, so the two baselines are a
+    // direct before/after of the scale. `tools/screens/baseline.test.ts` holds every one of
+    // them to a font-size exactly 1.5x the other state's: the pane's base text, its title (the
+    // UA's 2em of that base), the two Data buttons (`--hud-type-*` tokens) and the first
+    // disabled-reason hint (0.85em). Until issue #1031 only the two buttons scaled, and a
+    // "differs from screen.settings" check still passed on the title's y alone.
+    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint'],
   }),
   state({
     id: 'screen.settings.touch',

@@ -14,6 +14,6 @@
     "spawn egress: a tank, not a cell (issue #423) a destructible seal is FATAL when the pocket is smaller than the mine blast",
     "spawn egress: a tank, not a cell (issue #423) folds into `suitable`, which is what makes it a gate rather than a report",
     "spawn egress: a tank, not a cell (issue #423) names the blocked slots and the region sizes, so a failure is actionable",
-    "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 8 arenas x {2,3,4}"
+    "versusBoardCatalog produces one row per (arena, N), labelled with the arena id, over the default 9 arenas x {2,3,4}"
   ]
 }

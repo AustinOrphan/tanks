@@ -11,7 +11,9 @@ import {
   type VersusConfig,
 } from './versus-config';
 import { versusBoardCatalog } from '../sim/versus-board';
-import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
+import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalog-types';
+import { VERSUS_CATALOG } from '../sim/config/versus-catalog';
+import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 
 /** Synthetic catalog entries for the filter/translation negative controls below --
  * plain literals, same idiom as versus-catalog-rules.test.ts's fixtures (the schema
@@ -32,6 +34,8 @@ describe('versusMapChoices', () => {
    *  and given `teams` alongside `ffa` by issue #627). */
   const TRI = 'vs-tri-01';
   const QUAD = 'vs-quad-01';
+  /** N=4's second dedicated board (issue #1036), offered at 4 in both modes like Quarters. */
+  const QUAD2 = 'vs-quad-02';
 
   it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its own count', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
@@ -65,8 +69,9 @@ describe('versusMapChoices', () => {
         // three-player split produces is a supported match rather than the unfairness
         // the old `ffa`-only declaration was justified by. vs-quad-01 (issue #425)
         // splits its four corner spawns into a top pair and a bottom pair holding
-        // mirrored territory. All three arms are now unconditional on mode.
-        const extra = n === 2 ? [DUEL] : n === 3 ? [TRI] : n === 4 ? [QUAD] : [];
+        // mirrored territory. All three arms are now unconditional on mode. vs-quad-02
+        // (issue #1036) joins N=4 beside it, in both modes, so N=4 offers two boards.
+        const extra = n === 2 ? [DUEL] : n === 3 ? [TRI] : n === 4 ? [QUAD, QUAD2] : [];
         expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }
@@ -103,9 +108,12 @@ describe('versusMapChoices', () => {
     // nobody wrote down still fails here.
     // Both dedicated multi-player boards are now measured suitable everywhere and curated
     // to one count each, so each is withheld at the two counts it was not authored for.
+    // vs-quad-02 (issue #1036) is measured suitable at N=2 and N=3 too, which #1036
+    // required of it, and curated to N=4 alone, so it is withheld at both the way
+    // vs-quad-01 is. Offering it at those counts later is a curation edit.
     const WITHHELD: Record<number, string[]> = {
-      2: ['vs-tri-01', 'vs-quad-01'],
-      3: ['vs-quad-01'],
+      2: ['vs-tri-01', 'vs-quad-01', 'vs-quad-02'],
+      3: ['vs-quad-01', 'vs-quad-02'],
       4: ['vs-tri-01'],
     };
     const rows = versusBoardCatalog();
@@ -128,6 +136,36 @@ describe('versusMapChoices', () => {
     expect(versusMapChoices(2, 'teams', entries)).toEqual(['vs-both']); // mode predicate
     expect(versusMapChoices(3, 'ffa', entries)).toEqual(['vs-both']); // players predicate
     expect(versusMapChoices(4, 'ffa', entries)).toEqual([]); // both predicates
+  });
+});
+
+describe('the versus board floor (issue #355): boards that are not campaign arenas, per option', () => {
+  // The ruling on #355 sets a floor: each startable versus option offers at least two boards
+  // that are not campaign arenas. Campaign membership is read from campaign.json's levels, not
+  // from board ids, so a board is "not a campaign arena" because no level plays it, whatever
+  // it is called.
+  const campaignArenas = new Set(CAMPAIGN_LEVELS.map((level) => level.arenaId));
+  const arenaOf = (entryId: string): string =>
+    (VERSUS_CATALOG.find((e) => e.id === entryId) as VersusCatalogEntry).arenaId;
+  const nonCampaignBoards = (players: 2 | 3 | 4, mode: VersusMode): string[] =>
+    versusMapChoices(players, mode).filter((id) => !campaignArenas.has(arenaOf(id)));
+
+  /**
+   * The options this floor is asserted for. Issue #1036 adds the two four-player options;
+   * #1035 adds 2-FFA, 3-FFA and 3-Teams, and whichever of the two lands second extends the
+   * list it finds rather than writing a second test.
+   */
+  const FLOOR_OPTIONS: readonly { players: 2 | 3 | 4; mode: VersusMode }[] = [
+    { players: 4, mode: 'ffa' },
+    { players: 4, mode: 'teams' },
+  ];
+
+  it('offers each covered option at least two boards that are not campaign arenas', () => {
+    expect(campaignArenas.size, 'the campaign plays some arenas').toBeGreaterThan(0);
+    for (const { players, mode } of FLOOR_OPTIONS) {
+      const boards = nonCampaignBoards(players, mode);
+      expect(boards.length, `${players}-${mode} offers ${boards.join(', ') || 'none'}`).toBeGreaterThanOrEqual(2);
+    }
   });
 });
 

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { claimFailures, renderBoard, structuralFailures, cellOf } from './arena-claims';
-import { SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
+import { SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, STANDARD_ARENA } from './config/arena-fixtures';
 import { arenaById } from './config/arenas';
-import { ARENA_01, loadArena, type Arena } from './arena';
+import { loadArena, type Arena } from './arena';
 import type { ArenaClaim } from './config/arena-types';
 
 // A guard is worth what its own tests prove: the purity guard passed four of five
@@ -144,9 +144,11 @@ describe('spawnBlockRobust tags both wall phases, each tag independently provabl
     expect(failures.some((f) => f.includes('spawnBlockRobust (intact)'))).toBe(false);
   });
 
-  it('intact defect unaffected by breach: fails via BOTH tags -- ARENA_01 minus its row-5 chord-maker', () => {
-    // ARENA_01's old row-5 chord-maker (col 5) is also solid, and nothing
-    // destructible sits anywhere near it (ARENA_01's only destructibles are the
+  it('intact defect unaffected by breach: fails via BOTH tags -- the standard board minus its row-5 chord-maker', () => {
+    // Built from the standard test board (issue #1009), which is arena-01's grid and roster
+    // kept apart from campaign level 1, so re-authoring level 1 cannot delete this known-bad.
+    // Its old row-5 chord-maker (col 5) is also solid, and nothing
+    // destructible sits anywhere near it (its only destructibles are the
     // far flank shields at col 2 / col 8), so breaching changes nothing at this
     // cell: intact and breached geometry are IDENTICAL here. A defect at this spot
     // must appear under BOTH phases, tagged separately -- proving the intact loop
@@ -159,8 +161,8 @@ describe('spawnBlockRobust tags both wall phases, each tag independently provabl
     // the sole occupied region in that band, matching the old "row 5's only
     // occupied cell" geometry one level up.
     const fixture: Arena = {
-      ...ARENA_01,
-      grid: ARENA_01.grid.map((row, r) =>
+      ...STANDARD_ARENA,
+      grid: STANDARD_ARENA.grid.map((row, r) =>
         (r >= 15 && r <= 17) ? row.slice(0, 15) + '...' + row.slice(18) : row),
     };
     const failures = claimFailures(fixture, [
