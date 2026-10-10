@@ -1,0 +1,15 @@
+{
+  "id": "showcase-misses-img-tags",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  for (const [tag] of text.matchAll(/<img\\b[^>]*>/gi)) {",
+  "replace": "  for (const [tag] of text.matchAll(/(?!)/g)) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: an img tag pointing at a pr-media URL",
+    "showcase validator (issue #1062) negative controls rule 15: an img tag with no alt text"
+  ],
+  "why": "Rule 15 counts <img> tags as GIF references, not only Markdown image syntax. GitHub renders both, so an <img> pointing at a pr-media URL would otherwise embed an unchecked GIF."
+}

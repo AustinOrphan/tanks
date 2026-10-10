@@ -1,0 +1,14 @@
+{
+  "id": "showcase-allows-a-gif-wider-than-640",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  widthPixels: 640,",
+  "replace": "  widthPixels: 641,",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 9: a GIF 641 px wide"
+  ],
+  "why": "Rule 9: #258's publication policy caps a GIF at 640 px wide."
+}

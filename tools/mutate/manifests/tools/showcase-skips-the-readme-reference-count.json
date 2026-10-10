@@ -1,0 +1,14 @@
+{
+  "id": "showcase-skips-the-readme-reference-count",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  if (readmeClips <= SHOWCASE_LIMITS.readmeClips && readmeReferences > SHOWCASE_LIMITS.readmeClips) {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: a second GIF reference in README.md"
+  ],
+  "why": "Rule 15: README.md holds at most 1 GIF reference, whatever the manifest says. The control references a docs clip from the README as well, which no manifest count can see."
+}

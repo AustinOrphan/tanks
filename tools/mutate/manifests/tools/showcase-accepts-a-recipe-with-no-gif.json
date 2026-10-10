@@ -1,0 +1,14 @@
+{
+  "id": "showcase-accepts-a-recipe-with-no-gif",
+  "file": "tools/showcase/validate.mjs",
+  "find": "      } else if (!formats.includes('gif')) {",
+  "replace": "      } else if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 3: a recipe with no gif artifact"
+  ],
+  "why": "Rule 3: a clip names a capture recipe that declares a gif artifact, so the published GIF is one the capture pipeline produces and validates. A still or MP4-only recipe cannot have made it."
+}

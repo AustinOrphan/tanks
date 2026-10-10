@@ -1,0 +1,15 @@
+{
+  "id": "showcase-lets-a-clip-go-unreferenced",
+  "file": "tools/showcase/validate.mjs",
+  "find": "    if (!resolved[document].some((reference) => reference.path === target)) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: a clip not referenced from its placement document",
+    "showcase validator (issue #1062) negative controls rule 15: the README clip referenced only from docs/showcase.md"
+  ],
+  "why": "Rule 15: each clip is referenced from the document its placement names, so a manifest entry's placement is what the documentation actually shows."
+}

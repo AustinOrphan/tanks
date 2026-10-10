@@ -1,0 +1,16 @@
+{
+  "id": "showcase-allows-a-shared-id-output-or-order",
+  "file": "tools/showcase/validate.mjs",
+  "find": "      if (count > 1) messages.push(`${key} ${JSON.stringify(value)} is shared by ${count} clips`);",
+  "replace": "      if (count > clips.length) messages.push(`${key} ${JSON.stringify(value)} is shared by ${count} clips`);",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 2: two clips sharing an id",
+    "showcase validator (issue #1062) negative controls rule 2: two clips sharing an output",
+    "showcase validator (issue #1062) negative controls rule 2: two clips sharing an order"
+  ],
+  "why": "Rule 2: id, output and order are each unique. A shared output would let two manifest entries, with two captions and two alts, claim one file."
+}
