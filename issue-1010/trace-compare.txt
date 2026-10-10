@@ -1,0 +1,19 @@
+ok   markers: old 54, new 54, expected 54 (9 arenas x 6 seeds)
+ok   markers run arena-major, seeds 1..6 within each arena, in both dumps
+ok   markers that differ outside arena 0: 0
+     markers that differ inside arena 0: 6 of 6
+       |0:1:lose:1545| -> |0:1:win:988|
+       |0:2:lose:1178| -> |0:2:win:988|
+       |0:3:lose:1427| -> |0:3:win:988|
+       |0:4:lose:1255| -> |0:4:win:988|
+       |0:5:lose:1252| -> |0:5:win:988|
+       |0:6:lose:1240| -> |0:6:win:988|
+     outcome (status) changed in 6 of 6 differing runs
+ok   text before arena 0's first run byte-identical: 0 characters
+ok   text after arena 0's last marker byte-identical: old 126111, new 126111 characters; sha256 542035fd74074dd4 / 542035fd74074dd4
+ok   first differing character at 42 (inside run 0:1 of the old dump)
+     arena 0 section: old 13917, new 5147 characters
+     total length: old 140028, new 131258 (-8770)
+     old sha256 b46dec3cfda633989bf6962a0ade4b3d9b81c91447a7ce2781b97949845170ce
+     new sha256 1c3adc76125651c6b1cb52e56595cc436ff724ad661be94e22a552b29f1dc85c
+     newText.startsWith(oldText): false (expected false: arena 0 is not last)

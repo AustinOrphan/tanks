@@ -1,0 +1,7 @@
+
+> tanks@0.0.0 gallery
+> node tools/gallery/run.mjs --scene game --w 1200 --h 630 --dpr 2 --slowmo 0.3 --burst 12 --settle 12000 --out gallery-out/level1-after
+
+pageerrors: none
+wrote /Users/austinorphan/src/tanks/.claude/worktrees/imperative-waddling-willow/gallery-out/level1-after/gallery.gif
+exit 0

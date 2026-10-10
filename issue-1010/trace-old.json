@@ -1,0 +1,15 @@
+{
+ "root": "/Users/austinorphan/src/tanks/.claude/worktrees/imperative-waddling-willow",
+ "baseRef": "c200cf62",
+ "patch": "base",
+ "arena01GridChangedByPatch": true,
+ "arenas": 9,
+ "seeds": 6,
+ "markers": 54,
+ "length": 140028,
+ "hash": "b46dec3cfda633989bf6962a0ade4b3d9b81c91447a7ce2781b97949845170ce",
+ "BASELINE_HASH": "1c3adc76125651c6b1cb52e56595cc436ff724ad661be94e22a552b29f1dc85c",
+ "matchesBaselineHash": false,
+ "seconds": 4.502,
+ "out": "/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/media-1010-scripts/trace/trace-old.txt"
+}
