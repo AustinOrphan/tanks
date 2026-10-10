@@ -17,6 +17,8 @@ import { join } from 'node:path';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free (it is also the CLI that
 // writes these files); `render.test.ts` is its own guard.
 import { decodePng } from './icons/render.mjs';
+// @ts-expect-error -- plain .mjs, deliberately dependency-free so the workflows can run it
+import { metaTags } from './portability/check.mjs';
 
 const repo = (p: string): string => fileURLToPath(new URL(`../${p}`, import.meta.url));
 
@@ -183,5 +185,180 @@ describe('the web app manifest', () => {
     // comment explaining why there is none.
     const offenders = files.filter((f) => /serviceWorker|workbox/.test(readFileSync(f, 'utf8')));
     expect(offenders.map((f) => f.replace(repo(''), ''))).toEqual([]);
+  });
+});
+
+/**
+ * THE LINK-CARD IMAGE (issue #973), checked at SOURCE: the tags agree with each other and
+ * with the file they name. `tools/portability/check.mjs` checks the BUILT output carries it.
+ *
+ * A pure helper over the page's text and the PNG's facts, so the negative controls below are
+ * one-field edits of the REAL index.html and the REAL file's facts. They are the named
+ * controls this guard has, because the mutation harness cannot reach index.html: it relates a
+ * test to a file only through import edges, and a readFileSync is not one.
+ */
+const SHARE_IMAGE_MAX_BYTES = 2_097_152;
+const SHARE_IMAGE_SIZE = { width: 1200, height: 630 };
+
+interface PngFacts {
+  png: boolean;
+  bytes: number;
+  width: number;
+  height: number;
+}
+
+/** What is wrong with the share-image tags and file, one message per rule broken. */
+function shareImageFailures(page: string, factsFor: (publicPath: string) => PngFacts | null): string[] {
+  const tags = metaTags(page) as Record<string, string>[];
+  const og = (p: string): string | undefined => tags.find((t) => t.property === p)?.content;
+  const tw = (n: string): string | undefined => tags.find((t) => t.name === n)?.content;
+  const url = og('og:image');
+  if (url === undefined) return ['index.html has no og:image'];
+  const failures: string[] = [];
+  const canonical = page.match(/<link[^>]*rel="canonical"[^>]*href="([^"]+)"/)?.[1] ?? '';
+  const underCanonical = canonical !== '' && url.startsWith(canonical);
+  const facts = underCanonical ? factsFor(url.slice(canonical.length)) : null;
+  if (!underCanonical) {
+    failures.push(`og:image ${url} does not start with the canonical href ${canonical || '(none)'}`);
+  } else if (facts === null) {
+    failures.push(`og:image names ${url.slice(canonical.length)}, which is not a file under public/`);
+  }
+  if (facts !== null) {
+    if (!facts.png) failures.push('the share image is not a PNG');
+    if (facts.bytes > SHARE_IMAGE_MAX_BYTES) {
+      failures.push(`the share image is ${facts.bytes} bytes, over the ${SHARE_IMAGE_MAX_BYTES} ceiling`);
+    }
+    if (String(facts.width) !== og('og:image:width') || String(facts.height) !== og('og:image:height')) {
+      failures.push(
+        `the share image is ${facts.width}x${facts.height}, but og:image:width/height say ` +
+          `${og('og:image:width')}x${og('og:image:height')}`,
+      );
+    }
+    if (facts.width !== SHARE_IMAGE_SIZE.width || facts.height !== SHARE_IMAGE_SIZE.height) {
+      failures.push(
+        `the share image is ${facts.width}x${facts.height}, not ${SHARE_IMAGE_SIZE.width}x${SHARE_IMAGE_SIZE.height}`,
+      );
+    }
+  }
+  if (og('og:image:type') !== 'image/png') failures.push(`og:image:type is ${og('og:image:type')}, not image/png`);
+  if (tw('twitter:card') !== 'summary_large_image') {
+    failures.push(`twitter:card is ${tw('twitter:card')}, not summary_large_image`);
+  }
+  if (tw('twitter:image') !== url) failures.push('twitter:image differs from og:image');
+  const alt = og('og:image:alt') ?? '';
+  if (alt.trim() === '') failures.push('og:image:alt is empty');
+  if (alt.length > 500) failures.push(`og:image:alt is ${alt.length} characters, over 500`);
+  if (alt !== '' && alt === og('og:title')) failures.push('og:image:alt repeats og:title');
+  if (alt !== '' && alt === og('og:description')) failures.push('og:image:alt repeats og:description');
+  if (tw('twitter:image:alt') !== alt) failures.push('twitter:image:alt differs from og:image:alt');
+  return failures;
+}
+
+/**
+ * The real file's facts, read off its bytes and its IHDR chunk -- the header alone, not
+ * `decodePng`, which decodes only the 8-bit RGBA icons this file's other cases read and refuses
+ * any other colour type, the share image's palette PNG included.
+ */
+function realFacts(publicPath: string): PngFacts | null {
+  const file = repo(join('public', publicPath));
+  try {
+    if (!statSync(file).isFile()) return null;
+  } catch {
+    return null;
+  }
+  const bytes = readFileSync(file);
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const png = bytes.length >= 24 && bytes.subarray(0, 8).equals(signature)
+    && bytes.subarray(12, 16).toString('latin1') === 'IHDR';
+  return {
+    png,
+    bytes: bytes.length,
+    width: png ? bytes.readUInt32BE(16) : 0,
+    height: png ? bytes.readUInt32BE(20) : 0,
+  };
+}
+
+describe('the link-card image (issue #973)', () => {
+  const real = realFacts('share-image.png');
+  const facts = (over: Partial<PngFacts>) => (): PngFacts => ({ ...(real as PngFacts), ...over });
+  /** The real page with one tag's content replaced; every tag here is `<meta attr="key" content="...">`. */
+  const withTag = (page: string, attr: 'property' | 'name', key: string, value: string): string => {
+    const re = new RegExp(`(<meta\\s+${attr}="${key}"\\s+content=")[^"]*(")`);
+    expect(re.test(page), `${key} is not in index.html in the expected shape`).toBe(true);
+    return page.replace(re, `$1${value}$2`);
+  };
+  /** Both alt texts at once, so a rule on the alt is tested without tripping the "they agree" rule. */
+  const withAlt = (value: string): string =>
+    withTag(withTag(html, 'property', 'og:image:alt', value), 'name', 'twitter:image:alt', value);
+  /** og:image and twitter:image together, for the same reason. */
+  const withImage = (value: string): string =>
+    withTag(withTag(html, 'property', 'og:image', value), 'name', 'twitter:image', value);
+  const content = (key: string): string =>
+    html.match(new RegExp(`<meta\\s+property="${key}"\\s+content="([^"]*)"`))?.[1] ?? '';
+
+  it('holds on the real page and the real file', () => {
+    expect(real, 'public/share-image.png is missing').not.toBeNull();
+    expect(shareImageFailures(html, realFacts)).toEqual([]);
+  });
+
+  // The negative controls: each changes ONE field of the real page or of the real file's facts
+  // (a field written in two tags changes in both), and each must fail with exactly the one
+  // message that names it.
+  it.each([
+    ['og:image is missing',
+      () => shareImageFailures(html.replace(/<meta\s+property="og:image"\s+content="[^"]*"\s*\/>/, ''), realFacts),
+      /has no og:image/],
+    ['og:image is not under the canonical href',
+      () => shareImageFailures(withImage('https://example.com/tanks/share-image.png'), realFacts),
+      /does not start with the canonical href/],
+    ['og:image names no file under public/',
+      () => shareImageFailures(withImage('https://austinorphan.com/tanks/missing.png'), realFacts),
+      /not a file under public/],
+    ['the file is not a PNG',
+      () => shareImageFailures(html, facts({ png: false })),
+      /not a PNG/],
+    ['the file is over the byte ceiling',
+      () => shareImageFailures(html, facts({ bytes: SHARE_IMAGE_MAX_BYTES + 1 })),
+      /over the 2097152 ceiling/],
+    ['og:image:width disagrees with the header',
+      () => shareImageFailures(withTag(html, 'property', 'og:image:width', '1201'), realFacts),
+      /og:image:width\/height say 1201x630/],
+    ['og:image:height disagrees with the header',
+      () => shareImageFailures(withTag(html, 'property', 'og:image:height', '631'), realFacts),
+      /og:image:width\/height say 1200x631/],
+    ['the header is not 1200x630, though the tags agree with it',
+      () => shareImageFailures(
+        withTag(withTag(html, 'property', 'og:image:width', '1000'), 'property', 'og:image:height', '525'),
+        facts({ width: 1000, height: 525 }),
+      ),
+      /is 1000x525, not 1200x630/],
+    ['og:image:type is not image/png',
+      () => shareImageFailures(withTag(html, 'property', 'og:image:type', 'image/jpeg'), realFacts),
+      /og:image:type is image\/jpeg/],
+    ['twitter:card is not summary_large_image',
+      () => shareImageFailures(withTag(html, 'name', 'twitter:card', 'summary'), realFacts),
+      /twitter:card is summary,/],
+    ['twitter:image differs from og:image',
+      () => shareImageFailures(withTag(html, 'name', 'twitter:image', 'https://austinorphan.com/tanks/other.png'), realFacts),
+      /twitter:image differs/],
+    ['og:image:alt is empty',
+      () => shareImageFailures(withAlt(''), realFacts),
+      /og:image:alt is empty/],
+    ['og:image:alt is over 500 characters',
+      () => shareImageFailures(withAlt('a'.repeat(501)), realFacts),
+      /501 characters, over 500/],
+    ['og:image:alt repeats og:title',
+      () => shareImageFailures(withAlt(content('og:title')), realFacts),
+      /repeats og:title/],
+    ['og:image:alt repeats og:description',
+      () => shareImageFailures(withAlt(content('og:description')), realFacts),
+      /repeats og:description/],
+    ['twitter:image:alt differs from og:image:alt',
+      () => shareImageFailures(withTag(html, 'name', 'twitter:image:alt', 'Something else.'), realFacts),
+      /twitter:image:alt differs/],
+  ] as const)('fails when %s', (_label, run, message) => {
+    const failures = run();
+    expect(failures, JSON.stringify(failures)).toHaveLength(1);
+    expect(failures[0]).toMatch(message);
   });
 });

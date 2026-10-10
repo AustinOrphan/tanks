@@ -234,6 +234,62 @@ export function manifestFailures(indexHtml, dist) {
   return failures;
 }
 
+/**
+ * Every `<meta>` tag's attributes, in document order. Attribute order and line breaks do not
+ * matter, which is the shape index.html's multi-line metas take. Shared with
+ * `tools/webmanifest.test.ts`, which reads the same tags from the SOURCE.
+ *
+ * @param {string} html
+ * @returns {Record<string, string>[]}
+ */
+export function metaTags(html) {
+  return [...html.matchAll(/<meta\b([^>]*)>/g)].map((m) =>
+    Object.fromEntries([...m[1].matchAll(/([\w:-]+)\s*=\s*"([^"]*)"/g)].map((a) => [a[1], a[2]])));
+}
+
+/**
+ * The link-card image, one layer out again (issue #973): what only the BUILT output can show.
+ *
+ * `og:image` is absolute -- crawlers read it off-origin -- so `base: './'` does nothing for it,
+ * and a file that is in `public/` but not copied, or a URL that points at another origin or the
+ * wrong subpath, gives every shared link a blank card with the game itself unaffected. The tag,
+ * size and alt-text rules are the source guard's (`tools/webmanifest.test.ts`); this checks three
+ * things against the deploy: the tag survived the build, its URL is absolute and under the page's
+ * canonical href, and the path under that href is a file the build emitted.
+ *
+ * @param {string} indexHtml
+ * @param {{files: string[]}} dist
+ * @returns {string[]}
+ */
+export function shareImageFailures(indexHtml, dist) {
+  const tags = metaTags(indexHtml);
+  const url = tags.find((t) => t.property === 'og:image')?.content;
+  if (url === undefined) {
+    return ['index.html carries no og:image -- a shared link shows a blank card. If that is deliberate, delete this check with it.'];
+  }
+  const failures = [];
+  if (!/^https?:\/\//.test(url)) {
+    failures.push(`og:image is ${JSON.stringify(url)}, which is not absolute: a link unfurler reads it off-origin, with no page to resolve it against.`);
+    return failures;
+  }
+  const canonical =
+    indexHtml.match(/<link[^>]*rel="canonical"[^>]*href="([^"]+)"/)?.[1] ??
+    indexHtml.match(/<link[^>]*href="([^"]+)"[^>]*rel="canonical"/)?.[1];
+  if (canonical === undefined) {
+    failures.push('index.html links no canonical href, so og:image cannot be checked against the deploy location.');
+    return failures;
+  }
+  if (!url.startsWith(canonical)) {
+    failures.push(`og:image ${JSON.stringify(url)} is not under the canonical href ${JSON.stringify(canonical)}, so it is not served by this deploy.`);
+    return failures;
+  }
+  const path = url.slice(canonical.length);
+  if (!dist.files.includes(path)) {
+    failures.push(`og:image names ${path}, which is not in the built output -- the card would fetch a 404.`);
+  }
+  return failures;
+}
+
 /** Every file under `dir`, as posix-relative paths. */
 function walk(dir, prefix = '') {
   let entries = [];
@@ -274,12 +330,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const failures = [
     ...portabilityFailures(indexHtml, bundles),
     ...manifestFailures(indexHtml, dist),
+    ...shareImageFailures(indexHtml, dist),
   ];
   if (failures.length) {
     console.error(failures.join('\n'));
     process.exit(1);
   }
   console.log(
-    `subpath-portable: ${dir}/index.html + ${bundles.length} bundle(s) + the PWA shell checked`,
+    `subpath-portable: ${dir}/index.html + ${bundles.length} bundle(s) + the PWA shell checked`
+      + ', and the share image is in the build',
   );
 }
