@@ -1,7 +1,7 @@
 {
   "id": "versus-clamp-keeps-a-stranded-map",
   "file": "src/game/versus-config.ts",
-  "find": "  if (versusMapChoices(players, mode, entries).includes(arenaId)) {",
+  "find": "  if (versusMapChoices(players, mode, entries, unlocked).includes(arenaId)) {",
   "replace": "  if (true) {",
   "expect": "killed",
   "expectFailures": 6,

@@ -1,13 +1,6 @@
 import { sanitizeSetup, defaultSlots, RANDOM_ARENA, type VersusSetup } from './versus-setup';
-import { versusMapChoices } from './versus-config';
-
-/**
- * The catalog-backed arena check the model is handed. Kept here, at the boundary, so
- * versus-setup.ts needs no catalog import -- and so this is the only place that has to
- * change if the offerable set ever stops being a pure function of (players, mode).
- */
-const arenaAllowed = (id: string, players: number, mode: 'ffa' | 'teams'): boolean =>
-  versusMapChoices(players, mode).includes(id);
+import { EVERY_BOARD_UNLOCKED, versusMapChoices, type BoardUnlock } from './versus-config';
+import { VERSUS_CATALOG } from '../sim/config/versus-catalog';
 
 /**
  * The retained VS setup (issue #260).
@@ -48,8 +41,30 @@ export interface VersusSetupStore {
   clear(): void;
 }
 
-export function createVersusSetupStore(storage: Storage): VersusSetupStore {
+/**
+ * @param unlocked which boards this player has unlocked (issue #983), read at every check
+ * rather than once, because progress changes while the page lives. `createStores` binds it to
+ * the progress store; absent, every board the catalog declares is allowed.
+ */
+export function createVersusSetupStore(
+  storage: Storage,
+  unlocked: () => BoardUnlock = () => EVERY_BOARD_UNLOCKED,
+): VersusSetupStore {
   const fallback = defaultVersusSetup();
+
+  /**
+   * The catalog-backed arena check the model is handed. Kept here, at the boundary, so
+   * versus-setup.ts needs no catalog import. The offerable set stopped being a pure function
+   * of (players, mode) with issue #983, and this is where that lands: a stored board this
+   * player has not unlocked falls back to Random through `sanitizeSetup`'s existing path.
+   *
+   * The shadow is checked when it is read (construction) and on every `set`, so a progress
+   * reset reaches it on the next page load or the next write. Within one page the pane
+   * re-checks its own copy on every open (hud.ts's `seedAndRenderVersus`) and writes the
+   * fallback back through `set`.
+   */
+  const arenaAllowed = (id: string, players: number, mode: 'ffa' | 'teams'): boolean =>
+    versusMapChoices(players, mode, VERSUS_CATALOG, unlocked()).includes(id);
 
   function read(): VersusSetup {
     let raw: string | null = null;

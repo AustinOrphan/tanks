@@ -10,7 +10,13 @@ import {
 } from '../sim/ai/player-profile';
 import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, createVersusLevelSystem, type LevelSystem } from './levels';
-import { resolveVersusConfig, type VersusConfig } from './versus-config';
+import {
+  campaignBoardUnlock,
+  resolveVersusConfig,
+  retainArenaChoice,
+  type VersusConfig,
+} from './versus-config';
+import { VERSUS_CATALOG } from '../sim/config/versus-catalog';
 import { botSlotsOf, botSlotsFor, resolveSources, type VersusSlotSetup } from './versus-setup';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
@@ -1300,6 +1306,10 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
     createHud: (root) =>
       createHud(root, {
         versusSetup: stores.versusSetup,
+        // Issue #983: a campaign board is offered only once its level is cleared. Bound here
+        // for the same reason as the store, and as a getter because progress changes while
+        // the page lives; absent from every injected HUD, which keeps the declared offer.
+        versusUnlock: () => campaignBoardUnlock(progress.highestCleared()),
         // The browser's Back consumes an open layer before it leaves the page (issue
         // #318). Bound here, the browser-only factory, for the same reason the store is:
         // `null` where `history.pushState` is missing, and absent from every injected
@@ -1478,7 +1488,14 @@ export function applyVersusToDeps(
     return { ...deps, requestVersusSession, initialVersusConfig: null };
   }
   const { config } = versus;
-  const resolvedConfig = resolveVersusConfig(config, deps.devFlags.seed ?? deriveSeed(deps.wallMs()));
+  // The launch gate reads this save's progress directly (issue #983) -- not
+  // `unlockedLevels()`, which a versus session's one-level system caps at 1.
+  const resolvedConfig = resolveVersusConfig(
+    config,
+    deps.devFlags.seed ?? deriveSeed(deps.wallMs()),
+    VERSUS_CATALOG,
+    campaignBoardUnlock(deps.progress.highestCleared()),
+  );
   return {
     ...deps,
     levels: createVersusLevelSystem(resolvedConfig, deps.run, deps.devFlags),
@@ -3061,8 +3078,19 @@ export function startGameWith(
          * request tears this session down and boots a new one exactly as the pane's own
          * Start does, so there is ONE path into a versus match rather than two that can
          * disagree.
+         *
+         * THE RETAINED MAP IS RE-CHECKED against this save's progress first (issue #983).
+         * Settings is reachable from pause, so progress can be reset mid-match; a retained
+         * board that reset locked would otherwise reach the launch gate, whose throw nothing
+         * on this path catches. It falls back to Random through the pane's own
+         * `retainArenaChoice`, and the next session reopens the pane showing Random too.
          */
-        deps.requestVersusSession(deps.initialVersusConfig);
+        const retained = deps.initialVersusConfig;
+        const { arenaId } = retainArenaChoice(
+          retained.arenaId, retained.players, retained.mode,
+          VERSUS_CATALOG, campaignBoardUnlock(deps.progress.highestCleared()),
+        );
+        deps.requestVersusSession(arenaId === retained.arenaId ? retained : { ...retained, arenaId });
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
