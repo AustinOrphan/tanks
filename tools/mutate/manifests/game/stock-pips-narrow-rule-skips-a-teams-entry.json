@@ -1,0 +1,17 @@
+{
+  "id": "stock-pips-narrow-rule-skips-a-teams-entry",
+  "file": "src/game/hud.ts",
+  "find": "      const layout: PipLayout = isNarrowViewport()\n        ? narrowPipLayout(slots, total)",
+  "replace": "      const layout: PipLayout = isNarrowViewport() && entry.team === undefined\n        ? narrowPipLayout(slots, total)",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Issue #1055, cut at the seam: a teams entry -- `P1 A ` and its pips, under `pips` and under `marks`, which hands a teams entry to pips -- never consults the narrow rule, so a phone draws every teams pip at full size. Measured on the real HUD at 390px, a teams strip at four players and four or five stocks then overflows (an 8px row is already 3.2px and 43.2px over; 10px pips are wider still), and four players at three stocks loses the 9px rung it was measured at. The FFA pips cases stay green because an FFA entry still takes the rule, and stock-cue.test.ts stays green because the rule itself is untouched; only the teams cases driven through the narrow-viewport seam can see it. Before those cases existed this mutation survived: 0 of 75 tests in hud.match.test.ts failed.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) pips: four players at three stocks keep the letter and take the 9px row",
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) marks: four players at three stocks keep the letter and take the 9px row",
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) pips: four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) marks: four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target"
+  ]
+}
