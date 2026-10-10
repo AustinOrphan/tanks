@@ -7,5 +7,8 @@
   "tests": [
     "tools/showcase/check.test.ts"
   ],
+  "killedBy": [
+    "showcase:check in a scratch repository refuses a tracked symbolic link instead of measuring the file it points to"
+  ],
   "why": "showcase:check reads only a regular file. Git commits a symbolic link as its target path, so following one would measure bytes the repository does not hold, from anywhere on disk."
 }

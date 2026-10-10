@@ -7,5 +7,10 @@
   "tests": [
     "tools/showcase/validate.test.ts"
   ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: a link definition in a block quote",
+    "showcase validator (issue #1062) negative controls rule 15: a link definition indented four spaces inside a list item",
+    "showcase validator (issue #1062) negative controls rule 15: a link definition on a list item marker"
+  ],
   "why": "Rule 15: a link definition may sit in a block quote or a list item, at any indent. A reference image resolved through one would otherwise pass unchecked."
 }

@@ -7,5 +7,8 @@
   "tests": [
     "tools/showcase/validate.test.ts"
   ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 4: an absolute URL output ending in the showcase path"
+  ],
   "why": "Rule 4: an output starts at docs/media/showcase/. Without the start anchor, an absolute URL or a deeper path that merely ends in the showcase directory would pass."
 }

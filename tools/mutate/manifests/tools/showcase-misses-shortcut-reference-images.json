@@ -7,5 +7,9 @@
   "tests": [
     "tools/showcase/validate.test.ts"
   ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 15: a collapsed reference image",
+    "showcase validator (issue #1062) negative controls rule 15: a shortcut reference image"
+  ],
   "why": "Rule 15: a shortcut ![clip] or collapsed ![clip][] reference image takes its label from its text. Without that, either form could embed a pr-media GIF unchecked."
 }

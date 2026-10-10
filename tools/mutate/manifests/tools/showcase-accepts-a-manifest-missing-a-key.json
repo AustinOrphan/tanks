@@ -7,5 +7,9 @@
   "tests": [
     "tools/showcase/validate.test.ts"
   ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 1: a manifest with no clips key",
+    "showcase validator (issue #1062) negative controls rule 1: a manifest with no version key"
+  ],
   "why": "Rule 1: the manifest has both its keys, version and clips. A manifest with either key missing would otherwise pass as long as the other was well formed."
 }

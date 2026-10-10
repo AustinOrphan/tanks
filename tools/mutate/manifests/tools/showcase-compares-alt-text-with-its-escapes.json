@@ -7,5 +7,8 @@
   "tests": [
     "tools/showcase/validate.test.ts"
   ],
+  "killedBy": [
+    "showcase validator (issue #1062) positive controls matches alt text holding backslash escapes to the manifest alt, as GitHub shows it"
+  ],
   "why": "Rule 15: alt text is compared as GitHub shows it, with Markdown backslash escapes removed. Compared raw, a correct reference that escapes an asterisk fails against its manifest alt."
 }
