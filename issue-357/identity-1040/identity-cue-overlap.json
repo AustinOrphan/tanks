@@ -1,0 +1,207 @@
+{
+  "installed": "0.186.1",
+  "visual": "software-gl",
+  "seconds": 7.1,
+  "rows": [
+    {
+      "marker": "shape",
+      "slot": 0,
+      "bodyAngle": 0,
+      "ownerNoCue": 812,
+      "ownerWithCue": 812,
+      "cue": 188,
+      "shared": 0,
+      "covered": 0,
+      "sharedWithCue": 0,
+      "sharedOtherSlots": 0
+    },
+    {
+      "marker": "shape",
+      "slot": 1,
+      "bodyAngle": 90,
+      "ownerNoCue": 736,
+      "ownerWithCue": 732,
+      "cue": 97,
+      "shared": 5,
+      "covered": 4,
+      "sharedWithCue": 1,
+      "sharedOtherSlots": 0
+    },
+    {
+      "marker": "shape",
+      "slot": 2,
+      "bodyAngle": 180,
+      "ownerNoCue": 763,
+      "ownerWithCue": 763,
+      "cue": 30,
+      "shared": 0,
+      "covered": 0,
+      "sharedWithCue": 0,
+      "sharedOtherSlots": 0
+    },
+    {
+      "marker": "shape",
+      "slot": 3,
+      "bodyAngle": 45,
+      "ownerNoCue": 741,
+      "ownerWithCue": 741,
+      "cue": 175,
+      "shared": 0,
+      "covered": 0,
+      "sharedWithCue": 0,
+      "sharedOtherSlots": 0
+    },
+    {
+      "marker": "ring",
+      "slot": 0,
+      "bodyAngle": 0,
+      "ownerNoCue": 873,
+      "ownerWithCue": 873,
+      "cue": 188,
+      "shared": 0,
+      "covered": 0,
+      "sharedWithCue": 0,
+      "sharedOtherSlots": 0
+    },
+    {
+      "marker": "ring",
+      "slot": 1,
+      "bodyAngle": 90,
+      "ownerNoCue": 988,
+      "ownerWithCue": 984,
+      "cue": 97,
+      "shared": 6,
+      "covered": 4,
+      "sharedWithCue": 2,
+      "sharedOtherSlots": 0
+    },
+    {
+      "marker": "ring",
+      "slot": 2,
+      "bodyAngle": 180,
+      "ownerNoCue": 928,
+      "ownerWithCue": 928,
+      "cue": 30,
+      "shared": 0,
+      "covered": 0,
+      "sharedWithCue": 0,
+      "sharedOtherSlots": 0
+    },
+    {
+      "marker": "ring",
+      "slot": 3,
+      "bodyAngle": 45,
+      "ownerNoCue": 766,
+      "ownerWithCue": 766,
+      "cue": 175,
+      "shared": 0,
+      "covered": 0,
+      "sharedWithCue": 0,
+      "sharedOtherSlots": 0
+    }
+  ],
+  "controls": [
+    {
+      "name": "slots, shape",
+      "pass": true,
+      "detail": "4 and 4 ringed tanks; want slots 0-3 by ring colour in x order, one mine-block each with the cue, none without"
+    },
+    {
+      "name": "repeat draw identical, shape",
+      "pass": true,
+      "detail": "0 pixels differ between the first and last full draw"
+    },
+    {
+      "name": "cue is the riser alone, shape",
+      "pass": true,
+      "detail": "0 pixels differ from no --enemyRole with all four mine-blocks hidden; 490 with them drawn"
+    },
+    {
+      "name": "cue attribution complete, shape",
+      "pass": true,
+      "detail": "490 pixels in the four slots' cue footprints, 490 between the arms"
+    },
+    {
+      "name": "staging guard, shape",
+      "pass": true,
+      "detail": "0 of 4 slots with an empty owner or cue footprint"
+    },
+    {
+      "name": "a footprint against itself is all shared, shape",
+      "pass": true,
+      "detail": "4 of 4 slots report their whole owner and cue footprint as shared with itself"
+    },
+    {
+      "name": "disjoint rings share nothing, shape",
+      "pass": true,
+      "detail": "0 pixels shared between different slots' rings"
+    },
+    {
+      "name": "per-slot shared accounts for every owner and cue pixel, shape",
+      "pass": true,
+      "detail": "5 pixels across the rows, 5 in all owner footprints and all cue footprints"
+    },
+    {
+      "name": "slots, ring",
+      "pass": true,
+      "detail": "4 and 4 ringed tanks; want slots 0-3 by ring colour in x order, one mine-block each with the cue, none without"
+    },
+    {
+      "name": "repeat draw identical, ring",
+      "pass": true,
+      "detail": "0 pixels differ between the first and last full draw"
+    },
+    {
+      "name": "cue is the riser alone, ring",
+      "pass": true,
+      "detail": "0 pixels differ from no --enemyRole with all four mine-blocks hidden; 490 with them drawn"
+    },
+    {
+      "name": "cue attribution complete, ring",
+      "pass": true,
+      "detail": "490 pixels in the four slots' cue footprints, 490 between the arms"
+    },
+    {
+      "name": "staging guard, ring",
+      "pass": true,
+      "detail": "0 of 4 slots with an empty owner or cue footprint"
+    },
+    {
+      "name": "a footprint against itself is all shared, ring",
+      "pass": true,
+      "detail": "4 of 4 slots report their whole owner and cue footprint as shared with itself"
+    },
+    {
+      "name": "disjoint rings share nothing, ring",
+      "pass": true,
+      "detail": "0 pixels shared between different slots' rings"
+    },
+    {
+      "name": "per-slot shared accounts for every owner and cue pixel, ring",
+      "pass": true,
+      "detail": "6 pixels across the rows, 6 in all owner footprints and all cue footprints"
+    },
+    {
+      "name": "page frame is the CLI frame, shape-cue",
+      "pass": true,
+      "detail": "0 pixels differ from the CLI's shape-cue frame; 4528 from its ring-cue frame"
+    },
+    {
+      "name": "page frame is the CLI frame, shape-nocue",
+      "pass": true,
+      "detail": "0 pixels differ from the CLI's shape-nocue frame; 490 from its shape-cue frame"
+    },
+    {
+      "name": "page frame is the CLI frame, ring-cue",
+      "pass": true,
+      "detail": "0 pixels differ from the CLI's ring-cue frame; 4528 from its shape-cue frame"
+    },
+    {
+      "name": "page frame is the CLI frame, ring-nocue",
+      "pass": true,
+      "detail": "0 pixels differ from the CLI's ring-nocue frame; 490 from its ring-cue frame"
+    }
+  ],
+  "width": 640,
+  "height": 480
+}
