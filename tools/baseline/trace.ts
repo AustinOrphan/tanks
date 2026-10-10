@@ -459,12 +459,32 @@ import { step } from '../../src/sim/world';
  * `|a:seed:status:tick|` markers, `|8:1:lose:1383|` through `|8:6:lose:1383|`, one per traced
  * seed. Markers 48 -> 54 (9 arenas x 6 seeds). Total length 132,839 -> 140,028.
  *
+ * ELEVENTH CHANGE (issue #1010): campaign level 1 became a lone brown. arena-01 is ARENAS[0],
+ * and its grey and teal spawn letters were deleted (walls and the player spawn untouched), so
+ * its six traced runs necessarily re-trace. Arena index 0 is FIRST, so `startsWith` cannot be
+ * the evidence, and the move is confined by direct comparison of the two dumps instead, as for
+ * #424:
+ *   * 54 markers before and 54 after (9 arenas x 6 seeds), and exactly SIX differ, all arena
+ *     index 0, one per traced seed: `|0:1:lose:1545|`, `|0:2:lose:1178|`, `|0:3:lose:1427|`,
+ *     `|0:4:lose:1255|`, `|0:5:lose:1252|` and `|0:6:lose:1240|` all become `|0:…:win:988|`.
+ *     The other 48 are byte-identical.
+ *   * The text after arena index 0's last marker is byte-identical, 126,111 characters on
+ *     both trees; the first difference is at character 42, inside arena 0's seed-1 run.
+ *   * Total length 140,028 -> 131,258. Arena 0's section goes 13,917 -> 5,147 characters,
+ *     every character of the 8,770 removed inside it, because every run now ENDS at tick 988
+ *     on a win: with one stationary enemy, the scripted input kills it on the same tick in
+ *     all six seeds (the seed moves the brown's aim, not the player's input), where the three
+ *     enemies used to beat it in every run.
+ *   * Attribution is exact: restoring only arena-01's pre-edit grid in-process, on this tree,
+ *     reproduces b46dec3c... byte for byte.
+ *
  * No existing arena's simulation moved on any of the first three occasions, on the fourth
  * exactly one did and it is named above, on the fifth every arena's turret track did, on
  * the sixth five runs' timing did, on the seventh five runs' timing moved back, on the
- * eighth nine runs' timing did, on the ninth only the rebuilt board's own six runs did, and on
- * the tenth, an append, none did.
+ * eighth nine runs' timing did, on the ninth only the rebuilt board's own six runs did, on
+ * the tenth, an append, none did, and on the eleventh only level 1's own six runs did.
  * Previous values, newest first:
+ * b46dec3cfda633989bf6962a0ade4b3d9b81c91447a7ce2781b97949845170ce
  * e2b9b204c6eadbae8a5c0ba65460e383d54475e23719cc12798cb2c33d9d6f76
  * 4db707174e770eb813f062138f418a476e17c4809fdc75282b7eca4dab484e29
  * 8584bf34ddca8347c7fe9f3c8bdbdd5b43c292c06c7af214398884d44edc50be
@@ -478,7 +498,7 @@ import { step } from '../../src/sim/world';
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = 'b46dec3cfda633989bf6962a0ade4b3d9b81c91447a7ce2781b97949845170ce';
+export const BASELINE_HASH = '1c3adc76125651c6b1cb52e56595cc436ff724ad661be94e22a552b29f1dc85c';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

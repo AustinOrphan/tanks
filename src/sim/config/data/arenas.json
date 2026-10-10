@@ -17,10 +17,10 @@
         "......###...............###......",
         "......###...............###......",
         "......###...............###......",
-        "......###....B.....G....###......",
+        "......###....B..........###......",
         "......###...............###......",
         ".................................",
-        "................T................",
+        ".................................",
         ".................................",
         "......xxx......###......xxx......",
         "......xxx......###......xxx......",
@@ -39,16 +39,16 @@
         "................................."
       ],
       "notes": [
-        "Hand-designed slice arena. Player at the bottom, Brown+Grey+Teal across the top.",
-        "The centre pillar sits on the Teal->player line, so Teal must bank a ricochet off a side wall.",
-        "The east pillar is the bank-shot reflector: a shell from Teal can clear the centre pillar by going around it, bank off the east pillar's west face, and reach the player beyond.",
-        "Cover depth: the centre pillar's lower tier. With the upper tier alone, Brown's and Grey's lines to the player spawn were exactly tangent to its corners -- a knife edge where a 0.1-unit nudge gave one of them a clear 10-unit lane. The lower tier turns that graze into a real chord."
+        "Campaign level 1: one Brown, the stationary sentry, in the top half and the player at the bottom. The single baseline threat, on the board that also teaches the bank shot (issue #1010).",
+        "The centre pillar sits on the line between the player spawn and Brown, so neither can shoot the other directly, with the destructible blocks standing or gone.",
+        "The bank-shot lesson: from the player spawn a one-bounce shot still reaches Brown. While the west destructible block stands, the shortest bounce is off its east face; with every destructible block gone, the bounce is off the west face of the east pillar, which is solid and survives any breach.",
+        "Cover depth: the centre pillar's lower tier. With the upper tier alone, the lines to the player spawn from Brown's cell and from the Grey that stood at the top right before issue #1010 were exactly tangent to its corners -- a knife edge where a 0.1-unit nudge gave one of them a clear 10-unit lane. The lower tier turns that graze into a real chord."
       ],
       "claims": [
         {
           "type": "spawnBlockRobust",
           "nudge": 0.1,
-          "why": "The centre pillar's lower tier exists for exactly this: with the upper tier alone, Brown's and Grey's lines to the player spawn were tangent to its corners, and a 0.1-unit nudge opened a clear lane. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the lower tier in place."
+          "why": "The centre pillar's lower tier exists for exactly this: with the upper tier alone, the lines to the player spawn from Brown's cell and from the Grey that stood at the top right before issue #1010 were tangent to its corners, and a 0.1-unit nudge opened a clear lane. spawnBlockRobust checks both intact and breached walls; measured to hold under both for the lone Brown with the lower tier in place."
         }
       ]
     },
@@ -92,7 +92,7 @@
       ],
       "notes": [
         "Reshaped in the 2026-07-31 balance pass: the bar is a FULL destructible barrier with three solid anchors, so the halves START sealed -- tanks cannot cross and shells cannot pass until someone blasts a hole. Breaching the bar IS the level.",
-        "Four enemies against level 1's three."
+        "Four enemies against level 1's one."
       ],
       "claims": [
         {
@@ -310,7 +310,7 @@
         "The two walls are deliberately different KINDS of problem. The bar is porous, solid only in alternating segments, and breachable at columns 13 and 31; the east wall is solid throughout except for one corridor gap, and must be FLANKED rather than blown. From the player's half that means the corridor above it or the open rows below its south end; it is open north of the bar too, but the bar cuts that section off from the player's half. Level 2 taught breaching; level 4 says not every wall answers to it.",
         "Blowing the bar at column 31 opens that column top-to-bottom, giving the brown at (31, 4) a line down to row 28 -- alongside the player spawn, never onto it: the spawn's own blockers are the bar's solid anchors, which no breach touches. That is why spawnBlockRobust holds here and all six sightlineAfterBreach claims read false, unlike level 2 where breaching is meant to open spawn lines.",
         "The destructible at (19, 19) is mid-field cover for the player's left-hand approach, not a spawn-line blocker: losing it hands the teal at (40, 13) a line onto (16, 22).",
-        "Measured against the shipped levels on the same probe -- open cells (destructibles EXCLUDED, they are walls until destroyed) seen by no enemy from its spawn, walls intact: arena-04 is 284 of 1359 = 20.9%, the tightest of the four levels that existed when this was written, against arena-01 288/774 = 37.2%, arena-02 369/747 = 49.4%, arena-03 248/792 = 31.3%. The intended step up in pressure for the last level -- 'last' meaning at the time; arena-05 (185/1359 = 13.6%) is tighter still, and its own notes explain why. These five numbers are recomputed by arena-validation.test.ts rather than left as unpinned prose."
+        "Measured against the shipped levels on the same probe -- open cells (destructibles EXCLUDED, they are walls until destroyed) seen by no enemy from its spawn, walls intact: arena-04 is 284 of 1359 = 20.9%, the tightest of the four levels that existed when this was written, against arena-01 418/774 = 54.0%, arena-02 369/747 = 49.4%, arena-03 248/792 = 31.3%. The intended step up in pressure for the last level -- 'last' meaning at the time; arena-05 (185/1359 = 13.6%) is tighter still, and its own notes explain why. These five numbers are recomputed by arena-validation.test.ts rather than left as unpinned prose."
       ],
       "claims": [
         {

@@ -31,8 +31,9 @@ describe('firstAppearanceFor (issue #777)', () => {
   it("matches a spawn-letter count of the shipped campaign's own arenas", () => {
     // Counted here from the raw JSON, level by level, rather than through the function under
     // test: the earliest position whose grid holds at least one cell SPAWN_LETTERS maps to the
-    // kind. Six enemy kinds; at `main` when this was written, three first appear at level 1
-    // and one appears in no level.
+    // kind. Six enemy kinds; since issue #1010 left level 1 a lone brown, they first appear
+    // at brown 1, grey 2, teal 2, olive 3, green 4, and yellow in no level (three first
+    // appeared at level 1 before it).
     const arenas = (arenasJson as { arenas: Array<{ id: string; grid: string[] }> }).arenas;
     const counted = Object.fromEntries(
       ENEMIES.map((kind) => {

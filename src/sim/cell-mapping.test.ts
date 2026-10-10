@@ -89,6 +89,8 @@ describe("loadArena's spawn placement is the formula cellCentre encodes", () => 
     // on the mirror axis, deliberately away from the four corners its versus spawns
     // are picked at. 41 with issue #1036's vs-quad-02, which authors the same minimum
     // pair, at (13,4) and (19,22), also on the lattice and also away from its corners.
-    expect(spawnsChecked).toBe(41);
+    // 39 again with issue #1010, which left level 1 a lone brown: arena-01's term goes
+    // from 4 to 2, so 2 + 5 + 6 + 7 + 8 campaign + 3 fixture + 8 versus = 39.
+    expect(spawnsChecked).toBe(39);
   });
 });

@@ -369,12 +369,15 @@ describe('tankDifficulty over the shipped roster (population: all 7 shipped Tank
 // campaign -- scoring it here would widen a claim about campaign pacing to a board the
 // campaign does not play. See CAMPAIGN_ARENA_DEFS's own comment.
 describe('levelDifficulty over the 5 campaign arenas (population: all 5, from CAMPAIGN_ARENA_DEFS)', () => {
+  // Re-measured for issue #1010: level 1 went from brown, grey and teal to one brown, and
+  // ENEMY_DENSITY_BOUNDS.min went 0.002 -> 0.001 so its density stays inside the bound. Only
+  // arena-01's roster moved; every total moved, because the bound rescales every density term.
   const EXPECTED: Record<string, { total: number; rosterSum: number; enemyCount: number; openCells: number }> = {
-    'arena-01': { total: 131.1750830564784, rosterSum: 121.79523809523809, enemyCount: 3, openCells: 774 },
-    'arena-02': { total: 164.99757123733025, rosterSum: 148.2238095238095, enemyCount: 4, openCells: 747 },
-    'arena-03': { total: 196.541847041847, rosterSum: 174.97619047619045, enemyCount: 5, openCells: 792 },
-    'arena-04': { total: 272.33219804478085, rosterSum: 260.25714285714287, enemyCount: 6, openCells: 1359 },
-    'arena-05': { total: 319.4399453379586, rosterSum: 303.6857142857143, enemyCount: 7, openCells: 1359 },
+    'arena-01': { total: 27.679955703211515, rosterSum: 26.428571428571427, enemyCount: 1, openCells: 774 },
+    'arena-02': { total: 166.88703384968443, rosterSum: 148.2238095238095, enemyCount: 4, openCells: 747 },
+    'arena-03': { total: 197.74675324675323, rosterSum: 174.97619047619045, enemyCount: 5, openCells: 792 },
+    'arena-04': { total: 274.8929044465468, rosterSum: 260.25714285714287, enemyCount: 6, openCells: 1359 },
+    'arena-05': { total: 321.475055187638, rosterSum: 303.6857142857143, enemyCount: 7, openCells: 1359 },
   };
 
   it('matches every shipped arena, not a sample', () => {
@@ -431,7 +434,7 @@ describe('enemy count is not double-counted against the geometry term', () => {
   // same value on each and the test passed for the wrong reason (a difference
   // that wasn't really there). A 20x20 interior (small, 400 open cells, density
   // 0.005) and a 40x20 interior (large, 800 open cells, density 0.0025) both sit
-  // inside [0.002, 0.008], so the difference this test asserts is the model
+  // inside [0.001, 0.008], so the difference this test asserts is the model
   // actually computing two different clamped fractions, not two saturated 1s.
   const border = (w: number) => `#${'#'.repeat(w)}#`;
   const row = (w: number, content = '') => `#${content}${'.'.repeat(w - content.length)}#`;

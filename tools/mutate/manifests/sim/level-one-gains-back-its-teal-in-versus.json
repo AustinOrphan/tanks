@@ -1,0 +1,14 @@
+{
+  "id": "level-one-gains-back-its-teal-in-versus",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "        \".................................\",\n        \".................................\",\n        \"......xxx......###......xxx......\",",
+  "replace": "        \"................T................\",\n        \".................................\",\n        \"......xxx......###......xxx......\",",
+  "expect": "killed",
+  "tests": [
+    "src/sim/versus-board.test.ts"
+  ],
+  "killedBy": [
+    "versus on arena-01 after level 1's re-roster (issue #1010) places the same spawns and gives the same verdicts as the pre-edit board at N = 2, 3 and 4, on 2 more open-floor cells"
+  ],
+  "why": "Issue #1010's criterion 6: arena-01 is also a versus board, and versus counts only '.' as open floor and as spawn candidates, so the edit that left level 1 a lone brown added the grey's and teal's cells to both. This puts the teal back at column 16, row 10 (anchored on the two floor rows above the destructible blocks, unique in arenas.json). Every versus spawn and verdict is unchanged, so only the open-floor pin sees it: 771 cells, not 772."
+}

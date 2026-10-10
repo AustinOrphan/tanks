@@ -7,9 +7,11 @@ import { STANDARD_ARENA, createArenaWorld } from './config/arena-fixtures';
 import arenaSource from './arena.ts?raw';
 import { raySegmentVsAABB } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
-import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS, TICK_HZ } from './constants';
+import { breach, cellCentre, cellOf } from './arena-claims';
+import { SPAWN_LETTERS } from './config/arena-types';
+import { NORMAL_BOUNCES, RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS, TICK_HZ } from './constants';
 import { step } from './world';
-import type { InputState } from './types';
+import type { InputState, Vec2, Wall } from './types';
 
 function countChar(grid: string[], ch: string): number {
   return grid.reduce((n, row) => n + [...row].filter((c) => c === ch).length, 0);
@@ -96,8 +98,13 @@ describe('loadArena', () => {
     expect(teal.alive).toBe(true);
   });
 
-  it('has geometry where Teal cannot hit the player directly (bank shot required)', () => {
-    const { tanks, walls } = loadArena(ARENA_01);
+  // The two Teal tests below were written for the vertical slice, when level 1 had a teal.
+  // Issue #1010 left level 1 a lone brown, so they moved to the standard board: the same
+  // walls and the same teal cell as level 1 had, so they keep their meaning as geometry facts
+  // about a teal at (11, 7). Level 1's own bank claim (the player's, onto its brown) is in
+  // the "level 1: a lone brown" block below.
+  it('on the standard board, a solid wall blocks the teal\'s direct line to the player (so the teal must bank)', () => {
+    const { tanks, walls } = loadArena(STANDARD_ARENA);
     const teal = tanks.find((t) => t.kind === 'teal')!;
     const player = tanks.find((t) => t.kind === 'player')!;
     // A direct line from Teal to the player must be blocked by some solid wall,
@@ -108,26 +115,23 @@ describe('loadArena', () => {
     expect(blocked).toBe(true);
   });
 
-  it('affords Teal a real single-bounce bank shot at the player (signature slice feature)', () => {
-    const { tanks, walls } = loadArena(ARENA_01);
+  it('on the standard board, the teal has a real single-bounce bank shot at the player', () => {
+    const { tanks, walls } = loadArena(STANDARD_ARENA);
     const teal = tanks.find((t) => t.kind === 'teal')!;
     const player = tanks.find((t) => t.kind === 'player')!;
     // The direct line is blocked (previous test), so ricochet-around-cover REQUIRES a
-    // valid bank path to exist — it is the whole reason Teal (and this slice) exists.
-    // If this assertion fails, the geometry does not afford one: TUNE ARENA_01 (widen
-    // the side lanes / reposition the flanking blocks) until a single-bounce path is
-    // found. Do NOT ship the slice with this red — a bank-less Teal just repositions
-    // forever and the signature behavior never appears.
+    // valid bank path to exist. If this fails, a teal on these walls has no bank onto the
+    // player and just repositions, which is the behaviour the teal exists to avoid.
     expect(bankShot(teal.pos, player.pos, walls, RICOCHET_BOUNCES)).not.toBeNull();
   });
 
-  it('gives the player spawn REAL cover: neither Brown nor Grey has line-of-sight, even ' +
+  it('gives the player spawn REAL cover: the brown has no line-of-sight, even ' +
     'perturbed by ±0.5 units in x and y (the original arena failed exactly this: the ' +
-    'center block put both lines exactly tangent to its corners, a knife edge where a ' +
-    '0.1-unit nudge gave one attacker a fully clear 10-unit lane)', () => {
+    'center block put the brown and grey lines exactly tangent to its corners, a knife ' +
+    'edge where a 0.1-unit nudge gave one attacker a fully clear 10-unit lane)', () => {
+    // Level 1's one enemy since issue #1010; the grey this test also checked is gone.
     const { tanks, walls } = loadArena(ARENA_01);
     const brown = tanks.find((t) => t.kind === 'brown')!;
-    const grey = tanks.find((t) => t.kind === 'grey')!;
     const player = tanks.find((t) => t.kind === 'player')!;
 
     const deltas = [-0.5, 0, 0.5];
@@ -135,7 +139,6 @@ describe('loadArena', () => {
       for (const dy of deltas) {
         const p = { x: player.pos.x + dx, y: player.pos.y + dy };
         expect(lineOfSight(brown.pos, p, walls), `brown LOS at dx=${dx}, dy=${dy}`).toBe(false);
-        expect(lineOfSight(grey.pos, p, walls), `grey LOS at dx=${dx}, dy=${dy}`).toBe(false);
       }
     }
   });
@@ -549,6 +552,141 @@ describe('loadArena', () => {
     } as never);
     const dest = a.walls.filter((w) => w.kind === 'destructible');
     expect(dest).toHaveLength(3);
+  });
+});
+
+// Issue #1010, the ruling on #355: level 1 carries both lessons on arena-01's walls -- a single
+// baseline threat (exactly one brown) and the bank shot. The standard board (STANDARD_ARENA) is
+// arena-01 as it stood before this edit, which makes it the "before" for every control here.
+//
+// The bank checks are necessary conditions and regression guards, not proof that banking is the
+// answer: the same check passes on the pre-edit board for brown's and teal's cells too (grey's
+// cell is the control that fails it), and "a bank shot is clearly the answer" is judged by the
+// playtest criterion on #355.
+describe('level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010)', () => {
+  type Board = Parameters<typeof loadArena>[0];
+  /** The spawn letters criterion 1 names, spelled out rather than read from SPAWN_LETTERS. */
+  const letterCounts = (grid: string[]) =>
+    Object.fromEntries(['P', 'B', 'G', 'T', 'O', 'N', 'Y'].map((ch) => [ch, countChar(grid, ch)]));
+  const LONE_BROWN = { P: 1, B: 1, G: 0, T: 0, O: 0, N: 0, Y: 0 };
+  /** Enemy spawns read as floor, the player spawn kept: what must not move. */
+  const wallsAndPlayer = (grid: string[]) => grid.map((row) => row.replace(/[BGTONY]/g, '.'));
+  const playerSpawn = (board: Board) => loadArena(board).spawns.find((s) => s.kind === 'player')!.pos;
+  const brownOf = (board: Board) => loadArena(board).spawns.find((s) => s.kind === 'brown')!.pos;
+  /** The wall whose box holds a cell's centre (a merged solid holds many cells). */
+  const wallAt = (board: Board, walls: Wall[], cell: [number, number]): Wall => {
+    const p = cellCentre(board, cell);
+    const w = walls.find((x) => p.x > x.aabb.minX && p.x < x.aabb.maxX && p.y > x.aabb.minY && p.y < x.aabb.maxY);
+    if (w === undefined) throw new Error(`no wall at [${cell}]`);
+    return w;
+  };
+  /**
+   * Criterion 4's check, one place for the shipped board and its controls: from the player
+   * spawn, no direct line to `target` and a one-bounce bank onto it, on the walls given and on
+   * the same walls breached. Budget 1 because the player's normal shell bounces once; bankShot
+   * finds single-bounce paths whatever budget it is given.
+   */
+  const bankOfferFailures = (board: Board, target: Vec2, walls: Wall[] = loadArena(board).walls): string[] => {
+    const from = playerSpawn(board);
+    const failures: string[] = [];
+    for (const [phase, ws] of [['intact', walls], ['breached', breach(walls)]] as const) {
+      if (lineOfSight(from, target, ws)) failures.push(`${phase}: a direct line from the player spawn`);
+      if (bankShot(from, target, ws, 1) === null) failures.push(`${phase}: no one-bounce bank from the player spawn`);
+    }
+    return failures;
+  };
+
+  it('has exactly one enemy spawn, a brown, and one player spawn, read from the raw grid', () => {
+    // The letter list above is complete only while these are all the spawn letters there are.
+    expect(Object.keys(SPAWN_LETTERS).sort()).toEqual(['B', 'G', 'N', 'O', 'P', 'T', 'Y']);
+    expect(letterCounts(ARENA_01.grid)).toEqual(LONE_BROWN);
+  });
+
+  it('the composition check fails on the pre-edit grid, the standard board -- the negative control', () => {
+    expect(letterCounts(STANDARD_ARENA.grid)).toEqual({ P: 1, B: 1, G: 1, T: 1, O: 0, N: 0, Y: 0 });
+    expect(letterCounts(STANDARD_ARENA.grid)).not.toEqual(LONE_BROWN);
+  });
+
+  it('keeps the brown at column 13 row 7, world (9, 5): its cell before the edit', () => {
+    // The first of the three cells #1010 named, in its order (brown's, teal's, grey's), and the
+    // smallest edit: only the grey and teal letters were deleted. Measured from the player
+    // spawn with the real bankShot: brown's cell and teal's pass the bank check below on both
+    // wall phases; grey's passes with walls intact and fails breached (the last control here).
+    expect(cellOf(ARENA_01, brownOf(ARENA_01))).toEqual([13, 7]);
+    expect(brownOf(ARENA_01)).toEqual({ x: 9, y: 5 });
+  });
+
+  it('keeps the pre-edit walls and player spawn: with enemy spawns read as floor, the grid is the standard board\'s', () => {
+    expect(wallsAndPlayer(ARENA_01.grid)).toEqual(wallsAndPlayer(STANDARD_ARENA.grid));
+    expect(cellOf(ARENA_01, playerSpawn(ARENA_01))).toEqual([16, 22]);
+  });
+
+  it('the walls-and-player check fails for a floored wall cell and for a moved player spawn -- the negative controls', () => {
+    const at = (grid: string[], [c, r]: [number, number], ch: string) =>
+      grid.map((row, i) => (i === r ? row.slice(0, c) + ch + row.slice(c + 1) : row));
+    const before = wallsAndPlayer(STANDARD_ARENA.grid);
+    // A cell of the east pillar, the solid reflector the bank below relies on.
+    expect(ARENA_01.grid[15][24]).toBe('#');
+    expect(wallsAndPlayer(at(ARENA_01.grid, [24, 15], '.'))).not.toEqual(before);
+    expect(wallsAndPlayer(at(at(ARENA_01.grid, [16, 22], '.'), [16, 23], 'P'))).not.toEqual(before);
+  });
+
+  it('places campaign co-op players where the pre-edit board did, at 1 to 4 players; only their ids moved', () => {
+    // findCoPlayerSpawnCell looks at most four rings out from P (rows 14 to 26 here); the
+    // deleted letters were at rows 7 and 10, out of its reach. Ids come from spawn order, so
+    // with two fewer enemies ahead of it P1 is id 2 rather than 4.
+    for (const n of [1, 2, 3, 4]) {
+      const players = (board: Board) => loadArena(board, n).tanks.filter((t) => t.kind === 'player');
+      const after = players(ARENA_01);
+      const before = players(STANDARD_ARENA);
+      expect(after.map((t) => t.pos), `N=${n}`).toEqual(before.map((t) => t.pos));
+      expect(after.map((t) => t.id), `N=${n}`).toEqual(before.map((t) => t.id - 2));
+    }
+  });
+
+  it('from the player spawn: no direct line to the brown, and a one-bounce bank onto it, on intact and breached walls', () => {
+    expect(NORMAL_BOUNCES).toBe(1);
+    expect(bankOfferFailures(ARENA_01, brownOf(ARENA_01))).toEqual([]);
+  });
+
+  it('banks off the walls its notes name: the west destructible block while it stands, then the solid east pillar', () => {
+    const { walls } = loadArena(ARENA_01);
+    const from = playerSpawn(ARENA_01);
+    const brown = brownOf(ARENA_01);
+    const westBlock = walls.filter((w) => {
+      const [c, r] = cellOf(ARENA_01, { x: (w.aabb.minX + w.aabb.maxX) / 2, y: (w.aabb.minY + w.aabb.maxY) / 2 });
+      return w.kind === 'destructible' && c >= 6 && c <= 8 && r >= 12 && r <= 14;
+    });
+    expect(westBlock).toHaveLength(9);
+    const intact = bankShot(from, brown, walls, 1);
+    expect(bankShot(from, brown, walls.filter((w) => !westBlock.includes(w)), 1)).not.toBe(intact);
+
+    const breached = breach(walls);
+    const eastPillar = wallAt(ARENA_01, breached, [24, 15]);
+    expect(eastPillar.kind).toBe('solid');
+    const afterBreach = bankShot(from, brown, breached, 1);
+    expect(afterBreach).not.toBeNull();
+    expect(bankShot(from, brown, breached.filter((w) => w !== eastPillar), 1)).not.toBe(afterBreach);
+  });
+
+  it('fails on the same walls with the two reflectors removed (west block cell [8, 13], east pillar) -- the negative control', () => {
+    // On the standard board, so the control cannot be deleted by an edit to level 1. With
+    // walls intact, bankShot's answer is off the destructible cell at column 8 row 13, and with
+    // that cell gone, off the east pillar; with both gone it has none. (With every
+    // destructible gone, removing the pillar is not enough: the east boundary carries a
+    // bounce instead, so the breached half is controlled by the grey cell below.)
+    const { walls } = loadArena(STANDARD_ARENA);
+    const reflectors = [wallAt(STANDARD_ARENA, walls, [8, 13]), wallAt(STANDARD_ARENA, walls, [24, 15])];
+    expect(reflectors.map((w) => w.kind)).toEqual(['destructible', 'solid']);
+    const stripped = walls.filter((w) => !reflectors.includes(w));
+    expect(bankOfferFailures(STANDARD_ARENA, brownOf(STANDARD_ARENA), stripped))
+      .toEqual(['intact: no one-bounce bank from the player spawn']);
+  });
+
+  it('fails breached, and only breached, for a cell whose only bank is off a destructible block: the standard board\'s grey -- the negative control', () => {
+    const grey = loadArena(STANDARD_ARENA).spawns.find((s) => s.kind === 'grey')!.pos;
+    expect(cellOf(STANDARD_ARENA, grey)).toEqual([19, 7]);
+    expect(bankOfferFailures(STANDARD_ARENA, grey)).toEqual(['breached: no one-bounce bank from the player spawn']);
   });
 });
 

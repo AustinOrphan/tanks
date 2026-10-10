@@ -21,7 +21,6 @@ counts through that test, never by hand.
 - [Follow-ups from "game data plumbing" (storage resolver, save export/import, replay recorder)](backlog/follow-ups-game-data-plumbing.md)
 - [Spike: should `src/sim/` be Rust compiled to WASM?](backlog/spike-sim-in-rust-wasm.md)
 - [Spike: `src/sim/` behind a real package boundary](backlog/spike-sim-package-boundary.md)
-- [Spike: the campaign's levels — the approved arc says "renumbered", the owner says "rewritten"](backlog/spike-campaign-levels-renumbered-vs-rewritten.md)
 - [Spike: should New Game confirm before abandoning an active run?](backlog/spike-new-game-confirm.md)
 - [Spike: the rest of versus mode -- setup UI and maps](backlog/spike-versus-mode-rest.md)
 - [Ledger: deferred work harvested from PR descriptions](backlog/ledger.md)

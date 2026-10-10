@@ -1769,11 +1769,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // the level-advance case where two fresh worlds collide on the same tick.
         const base = opts.world ?? createArenaWorld(seed);
         // Each level's player gets a DIFFERENT id, as loadArena's grid-scan numbering
-        // really does (16 in ARENA_01, 15 in ARENA_02) -- a fake where every level's
+        // really does (2 in ARENA_01, 5 in ARENA_02) -- a fake where every level's
         // player id matches let a stale-id bug pass the rebind test.
         let tanks = i === 0 ? base.tanks
           : base.tanks.map((t) => (t.kind === 'player' ? { ...t, id: t.id + 70 + i } : t));
-        // Real arenas differ in enemy count (ARENA_01 has 3, ARENA_03 more), and
+        // Real arenas differ in enemy count (ARENA_01 has 1, ARENA_03 more), and
         // anything computed from "how many did this round start with" is wrong if
         // the fake keeps every level the same size.
         const want = opts.enemiesByLevel?.[i];
@@ -5762,7 +5762,7 @@ describe('startGameWith: level progression', () => {
 
   it('rebinds the audio director to the NEW world\'s player, not the old id', () => {
     // loadArena numbers tanks in scan order, so the player id is arena-dependent
-    // (16 in ARENA_01, 15 in ARENA_02). The fake mirrors that: level 1's player id
+    // (2 in ARENA_01, 5 in ARENA_02). The fake mirrors that: level 1's player id
     // differs from level 0's by exactly 71, so a loop that forgets to re-read the id
     // from the new world rebinds the STALE one and fails here.
     const h = boot(makeDeps({ levelCount: 2 }));

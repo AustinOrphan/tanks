@@ -142,9 +142,10 @@ describe('createAudioDirector', () => {
 
 describe('createAudioDirector: rebinding the player across levels', () => {
   it('follows setPlayerId, because loadArena numbers the player differently per arena', () => {
-    // Measured: the player is id 16 in ARENA_01 and id 15 in ARENA_02 (ids come from
-    // grid scan order). A director still bound to the old id would score the player's
-    // own cannon as an enemy's from level 2 onward.
+    // Measured: the player is id 2 in ARENA_01 and id 5 in ARENA_02 (ids come from
+    // grid scan order); 16 and 15 below are stand-ins that differ the same way. A director
+    // still bound to the old id would score the player's own cannon as an enemy's from
+    // level 2 onward.
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine, 16);
     const fireBy = (ownerId: number): SimEvent =>
