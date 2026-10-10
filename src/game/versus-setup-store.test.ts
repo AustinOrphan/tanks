@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createVersusSetupStore, defaultVersusSetup, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { defaultSlots } from './versus-setup';
-import { versusMapChoices } from './versus-config';
+import { campaignBoardUnlock, versusMapChoices } from './versus-config';
 
 /** A Storage whose every method throws -- private mode, or storage disabled by policy. */
 function hostileStorage(): Storage {
@@ -139,5 +139,36 @@ describe('arena ids out of storage cannot crash the launch path', () => {
     const a = createVersusSetupStore(storage);
     a.set({ ...defaultVersusSetup(), arenaId: 'random' });
     expect(createVersusSetupStore(storage).get().arenaId).toBe('random');
+  });
+});
+
+describe('a stored board this save has not unlocked (issue #983)', () => {
+  // The store is handed the unlock as a getter, and `createStores` binds it to the progress
+  // store (storage.test.ts pins that wiring). Arena 3 is level 3's board. The UNGATED path --
+  // no unlock passed, every declared board allowed -- is the round-trip case above, which
+  // stores and keeps the same board.
+
+  it('falls back to Random through the existing fallback after a progress reset, on the next page load', () => {
+    // A page with level 3 cleared stores Arena 3 and keeps it (the negative control); progress
+    // is then reset, and the next page's store reads the same bytes.
+    const storage = createMemoryStorage();
+    let cleared = 3;
+    const unlock = () => campaignBoardUnlock(cleared);
+    const before = createVersusSetupStore(storage, unlock);
+    before.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(before.get().arenaId, 'kept while level 3 is cleared').toBe('arena-03');
+    cleared = 0;
+    expect(createVersusSetupStore(storage, unlock).get().arenaId, 'after the reset').toBe('random');
+  });
+
+  it('is refused on the way IN too, so get() and the stored bytes agree', () => {
+    // Level 2 cleared: Arena 3 is refused and Arena 2, the negative control, is kept.
+    const storage = createMemoryStorage();
+    const store = createVersusSetupStore(storage, () => campaignBoardUnlock(2));
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(store.get().arenaId).toBe('random');
+    expect(JSON.parse(storage.getItem(VERSUS_SETUP_KEY) as string).arenaId).toBe('random');
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-02' });
+    expect(store.get().arenaId).toBe('arena-02');
   });
 });

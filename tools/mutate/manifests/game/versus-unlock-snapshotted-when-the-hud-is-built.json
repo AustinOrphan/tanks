@@ -1,0 +1,11 @@
+{
+  "id": "versus-unlock-snapshotted-when-the-hud-is-built",
+  "file": "src/game/hud.ts",
+  "find": "  const versusUnlock = (): BoardUnlock => opts.versusUnlock?.() ?? EVERY_BOARD_UNLOCKED;",
+  "replace": "  const versusUnlockAtBuild = opts.versusUnlock?.() ?? EVERY_BOARD_UNLOCKED;\n  const versusUnlock = (): BoardUnlock => versusUnlockAtBuild;",
+  "expect": "survives",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Reads the unlock once, when the HUD is built, instead of on every row build. The page's HUD outlives every session, so a level cleared after boot would not reach the versus Map row until a reload, and a progress reset would leave its boards offered for the rest of the page. A tidy-looking hoist of a getter that is 'only progress', which is exactly why `HudOptions.versusUnlock` is a getter."
+}

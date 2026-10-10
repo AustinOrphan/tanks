@@ -1,0 +1,11 @@
+{
+  "id": "versus-unlock-last-cleared-level-held-back",
+  "file": "src/game/versus-config.ts",
+  "find": "    levels.filter((_, i) => i < highestCleared).map((level) => level.arenaId),",
+  "replace": "    levels.filter((_, i) => i < highestCleared - 1).map((level) => level.arenaId),",
+  "expect": "survives",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "why": "The opposite off-by-one to `versus-unlock-frontier-level-unlocked`: the board of the level just cleared stays locked until the NEXT clear, so a player who beats level 1 finds Arena 1 still missing from versus and a player who finishes the campaign never sees Arena 5. Both directions are pinned because the ordinal is 1-based and the index is not, and either slip reads as plausible."
+}

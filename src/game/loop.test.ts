@@ -7911,6 +7911,21 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       h.handle.dispose();
     });
 
+    it('rematches a board a mid-match progress reset locked as Random (issue #983)', () => {
+      // Settings, and Reset progress in it, is reachable from pause, so the save can lose level
+      // 2 while a match on arena-02 runs. The rematch must not hand that board to the launch
+      // gate, which throws with nothing on this path to catch it. The win case above is the
+      // negative control: the same config, level 2 still cleared, rematches unchanged.
+      const calls: VersusConfig[] = [];
+      const base = makeDeps({ progressHighest: 2 });
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
+      base.deps.progress.reset();
+      h.setState('outcome-win');
+      h.hud.startRestart();
+      expect(calls).toEqual([{ ...CONFIG, arenaId: 'random' }]);
+      h.handle.dispose();
+    });
+
     it('hands over the UNRESOLVED config, so each rematch rolls its own arena and seed', () => {
       // The crux of the criterion "resolve a fresh Random arena only when Rematch actually
       // creates the next match". Nothing in the rematch path resolves anything: it passes
@@ -8374,7 +8389,8 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     // matched to the SAME measured deriveSeed/pickVersusArena table versus-config.test.ts's
     // own "distributes" case pins: deriveSeed is a no-op for inputs under 512
     // (`wallMs ^ (wallMs >>> 9)` clears no bits), so wallMs 1/2 here resolve through
-    // pickVersusArena exactly like seeds 1/2 do there.
+    // pickVersusArena exactly like seeds 1/2 do there. On `baseDeps`'s default save, the whole
+    // campaign cleared, so all seven boards are unlocked (issue #983) and that table holds.
     const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
     it("random resolves to a member of versusMapChoices(players), and levels.bounds matches THAT arena exactly -- the defect's direct oracle", () => {
@@ -8451,6 +8467,29 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       const quitRebuilt = result.levels.world(result.levels.start, 1, undefined, 3);
       expect(initial.rules.arenaGeometry?.cols).toBe(27); // vs-tri-01
       expect(quitRebuilt.rules.arenaGeometry?.cols).toBe(27); // still vs-tri-01, not arena-05
+    });
+  });
+
+  describe("issue #983: the Start boundary reads this save's progress", () => {
+    const random3: VersusConfig = { ...CONFIG, arenaId: 'random' };
+
+    it('refuses a concrete campaign board the save has not cleared, and starts it once it has', () => {
+      // The launch gate is the backstop -- the pane never hands it a locked board -- so it is
+      // driven directly. CONFIG names arena-02, level 2's board.
+      expect(() => applyVersusToDeps(baseDeps({}, progressClearedThrough(1)), { config: CONFIG }, noop))
+        .toThrow("versus-config: map 'arena-02' is locked until its campaign level is cleared");
+      const cleared = applyVersusToDeps(baseDeps({}, progressClearedThrough(2)), { config: CONFIG }, noop);
+      expect(cleared.levels.start.arenaId, 'the negative control: level 2 cleared').toBe('arena-02');
+    });
+
+    it('draws Random from the boards the save has unlocked', () => {
+      // wallMs 1 is seed 1 (see the group above). At 3-FFA seed 1 draws arena-05 from the
+      // declared offer and vs-quad-01 from a fresh save's (versus-config.test.ts, measured).
+      const freshDeps = { ...baseDeps({}, progressClearedThrough(0)), wallMs: () => 1 };
+      const fresh = applyVersusToDeps(freshDeps, { config: random3 }, noop);
+      expect(fresh.levels.start.arenaId, 'a fresh save').toBe('vs-quad-01');
+      const full = applyVersusToDeps({ ...baseDeps(), wallMs: () => 1 }, { config: random3 }, noop);
+      expect(full.levels.start.arenaId, 'the negative control: the whole campaign cleared').toBe('arena-05');
     });
   });
 });
