@@ -8,8 +8,9 @@
     "src/presentation/identity.test.ts",
     "src/render/entities.test.ts"
   ],
-  "why": "TEAM PAIR, ONE COLOUR-VISION TYPE (issue #1056). Moves High contrast team B six levels in red (#c6fd00 to #c0fd00): team A vs team B under tritan falls from 17.72 to 16.88, under the floor of 17, so only the tritan row of the team colour-vision test fails. Normal vision (31.52), protan (23.75) and deutan (21.92) stay clear and keep their pair names. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "why": "TEAM PAIR, ONE COLOUR-VISION TYPE (issue #1056). Moves High contrast team B six levels in red (#c6fd00 to #c0fd00): team A vs team B under tritan falls from 17.72 to 16.88, under the floor of 17, so of the floor tests only the tritan row of the team colour-vision one fails. Normal vision (31.52), protan (23.75) and deutan (21.92) stay clear and keep their pair names. The literal pin of High contrast's seven hexes fails too, as it does for every High contrast move; it compares hexes, not figures, so this entry is what shows the floor test can fail. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
   "killedBy": [
-    "owner palettes: floors, composited over the felt (issue #1056) high contrast: every team pair clears 17 under tritan"
+    "owner palettes: floors, composited over the felt (issue #1056) high contrast: every team pair clears 17 under tritan",
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out"
   ]
 }

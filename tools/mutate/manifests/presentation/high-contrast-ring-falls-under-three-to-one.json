@@ -8,8 +8,9 @@
     "src/presentation/identity.test.ts",
     "src/render/entities.test.ts"
   ],
-  "why": "GROUND CONTRAST family (issue #1056). Moves High contrast ring 2 from #fdbbc6 to #ffafbe, a deeper pink whose composite reaches only 2.9682:1 against the felt, under the 3:1 floor. Every other High contrast figure is unchanged or stays clear of its floor (felt 38.83, ring pairs 18.74 / 15.54 / 14.79 / 11.26 with the same tightest pairs, paints 17.87, roster 17.33, placeholder 27.80), so only the 3:1 test fails. Ring 2 rather than ring 0 so the control does not rest on ring 0's own 0.0021 margin. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "why": "GROUND CONTRAST family (issue #1056). Moves High contrast ring 2 from #fdbbc6 to #ffafbe, a deeper pink whose composite reaches only 2.9682:1 against the felt, under the 3:1 floor. Every other High contrast figure is unchanged or stays clear of its floor (felt 38.83, ring pairs 18.74 / 15.54 / 14.79 / 11.26 with the same tightest pairs, paints 17.87, roster 17.33, placeholder 27.80), so of the floor tests only the 3:1 one fails. Ring 2 rather than ring 0 so the control does not rest on ring 0's own 0.0021 margin. The literal pin of High contrast's seven hexes fails too, as it does for every High contrast move; it compares hexes, not figures, so this entry is what shows the floor test can fail. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
   "killedBy": [
-    "owner palettes: floors, composited over the felt (issue #1056) high contrast: every ring and team colour reaches 3:1 against the felt"
+    "owner palettes: floors, composited over the felt (issue #1056) high contrast: every ring and team colour reaches 3:1 against the felt",
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out"
   ]
 }
