@@ -16,5 +16,5 @@
     "firstAppearanceFor (issue #777) answers 1 for the player, which every arena spawns, and null for an empty campaign",
     "README enemy roster is generated, not hand-edited contains exactly one current generated block"
   ],
-  "why": "The negative control #777 asks for by name: the numbers tank-defs.json used to author, returned for any campaign. They were wrong for four of six enemies against the shipped campaign (Grey 2, Teal 5, Green 12 and Yellow 8, where the campaign gives 1, 1, 4 and none), and a table cannot follow a reordered campaign. The README block rendered from it stops matching the committed one."
+  "why": "The negative control #777 asks for by name: the numbers tank-defs.json used to author, returned for any campaign. They are wrong for three of six enemies against the shipped campaign (Teal 5, Green 12 and Yellow 8, where the campaign gives 2, 4 and none; Grey 2 has matched since issue #1010 left level 1 a lone brown, and was wrong before it), and a table cannot follow a reordered campaign. The README block rendered from it stops matching the committed one."
 }

@@ -602,9 +602,9 @@ describe('replayTrace', () => {
     // 2024 and COUNTDOWN_TICKS + 240 ticks, the four enemies' committed targets come
     // out [null, 5, 5, null] under the bound and [5, 5, 5, 5] without it: two of them
     // are fighting nobody in the recorded run and all four are fighting the player in
-    // the rebuild the defect produced. arena-01 would prove nothing here -- its three
-    // enemies commit to the player under both rules (measured over the same seeds at
-    // COUNTDOWN_TICKS + 120, + 240 and + 480).
+    // the rebuild the defect produced. arena-01 proved nothing here when this was measured --
+    // its three enemies then (before issue #1010 left it a lone brown) committed to the player
+    // under both rules (measured over the same seeds at COUNTDOWN_TICKS + 120, + 240 and + 480).
     const recorded = createWorldFor(arenaById('arena-02'), 12345, {
       lives: 3,
       playerCount: 1,

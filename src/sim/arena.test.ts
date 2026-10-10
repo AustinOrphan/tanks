@@ -5,12 +5,13 @@ import { STANDARD_ARENA, createArenaWorld } from './config/arena-fixtures';
 // below: a parameter list is a property of the source, and `Function.length` cannot see a
 // positional appended after a defaulted one.
 import arenaSource from './arena.ts?raw';
-import { raySegmentVsAABB } from './collision';
+import { raySegmentVsAABB, reflectSweep } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
 import { breach, cellCentre, cellOf } from './arena-claims';
 import { SPAWN_LETTERS } from './config/arena-types';
 import { NORMAL_BOUNCES, RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS, TICK_HZ } from './constants';
 import { step } from './world';
+import { fromAngle } from './types';
 import type { InputState, Vec2, Wall } from './types';
 
 function countChar(grid: string[], ch: string): number {
@@ -576,9 +577,22 @@ describe('level 1: a lone brown on arena-01, with a bank shot from the player sp
   /** The wall whose box holds a cell's centre (a merged solid holds many cells). */
   const wallAt = (board: Board, walls: Wall[], cell: [number, number]): Wall => {
     const p = cellCentre(board, cell);
-    const w = walls.find((x) => p.x > x.aabb.minX && p.x < x.aabb.maxX && p.y > x.aabb.minY && p.y < x.aabb.maxY);
+    const w = walls.find((x) =>
+      p.x > x.aabb.minX && p.x < x.aabb.maxX && p.y > x.aabb.minY && p.y < x.aabb.maxY);
     if (w === undefined) throw new Error(`no wall at [${cell}]`);
     return w;
+  };
+  /**
+   * The wall a one-bounce shell fired at `angle` first strikes, and where: reflectSweep is the
+   * sweep a fired shell really takes, so this names the reflector without trusting bankShot's
+   * own geometry.
+   */
+  const firstBounce = (from: Vec2, angle: number, walls: Wall[]) => {
+    const live = walls.filter((w) => !w.destroyed);
+    const d = fromAngle(angle);
+    const far = { x: from.x + d.x * 80, y: from.y + d.y * 80 };
+    const { hits } = reflectSweep(from, far, live.map((w) => w.aabb), 1);
+    return { wall: live[hits[0].wallIndex], point: hits[0].point };
   };
   /**
    * Criterion 4's check, one place for the shipped board and its controls: from the player
@@ -609,9 +623,9 @@ describe('level 1: a lone brown on arena-01, with a bank shot from the player sp
 
   it('keeps the brown at column 13 row 7, world (9, 5): its cell before the edit', () => {
     // The first of the three cells #1010 named, in its order (brown's, teal's, grey's), and the
-    // smallest edit: only the grey and teal letters were deleted. Measured from the player
-    // spawn with the real bankShot: brown's cell and teal's pass the bank check below on both
-    // wall phases; grey's passes with walls intact and fails breached (the last control here).
+    // smallest edit: only the grey and teal letters were deleted. From the player spawn,
+    // brown's cell and teal's pass the bank check below on both wall phases, and grey's passes
+    // with walls intact and fails breached; the tests below recompute all three.
     expect(cellOf(ARENA_01, brownOf(ARENA_01))).toEqual([13, 7]);
     expect(brownOf(ARENA_01)).toEqual({ x: 9, y: 5 });
   });
@@ -649,24 +663,46 @@ describe('level 1: a lone brown on arena-01, with a bank shot from the player sp
     expect(bankOfferFailures(ARENA_01, brownOf(ARENA_01))).toEqual([]);
   });
 
-  it('banks off the walls its notes name: the west destructible block while it stands, then the solid east pillar', () => {
+  it('banks off the faces its notes name: the west destructible block\'s east face while it stands, then the solid east pillar\'s west face', () => {
     const { walls } = loadArena(ARENA_01);
     const from = playerSpawn(ARENA_01);
     const brown = brownOf(ARENA_01);
-    const westBlock = walls.filter((w) => {
-      const [c, r] = cellOf(ARENA_01, { x: (w.aabb.minX + w.aabb.maxX) / 2, y: (w.aabb.minY + w.aabb.maxY) / 2 });
-      return w.kind === 'destructible' && c >= 6 && c <= 8 && r >= 12 && r <= 14;
-    });
-    expect(westBlock).toHaveLength(9);
-    const intact = bankShot(from, brown, walls, 1);
-    expect(bankShot(from, brown, walls.filter((w) => !westBlock.includes(w)), 1)).not.toBe(intact);
+
+    const intactAngle = bankShot(from, brown, walls, 1);
+    expect(intactAngle).not.toBeNull();
+    const intact = firstBounce(from, intactAngle!, walls);
+    expect(intact.wall).toBe(wallAt(ARENA_01, walls, [8, 13]));
+    expect(intact.wall.kind).toBe('destructible');
+    expect(intact.point.x).toBeCloseTo(intact.wall.aabb.maxX, 9);
 
     const breached = breach(walls);
-    const eastPillar = wallAt(ARENA_01, breached, [24, 15]);
-    expect(eastPillar.kind).toBe('solid');
-    const afterBreach = bankShot(from, brown, breached, 1);
-    expect(afterBreach).not.toBeNull();
-    expect(bankShot(from, brown, breached.filter((w) => w !== eastPillar), 1)).not.toBe(afterBreach);
+    const breachedAngle = bankShot(from, brown, breached, 1);
+    expect(breachedAngle).not.toBeNull();
+    const after = firstBounce(from, breachedAngle!, breached);
+    expect(after.wall).toBe(wallAt(ARENA_01, breached, [24, 15]));
+    expect(after.wall.kind).toBe('solid');
+    expect(after.point.x).toBeCloseTo(after.wall.aabb.minX, 9);
+  });
+
+  it('the direct-line half fails with the centre pillar removed -- the negative control', () => {
+    // The centre pillar is the cover the notes name between the player spawn and the brown.
+    // On the standard board, like the controls below, so an edit to level 1 cannot delete it.
+    const { walls } = loadArena(STANDARD_ARENA);
+    const centre = wallAt(STANDARD_ARENA, walls, [16, 14]);
+    expect(centre.kind).toBe('solid');
+    const open = walls.filter((w) => w !== centre);
+    expect(bankOfferFailures(STANDARD_ARENA, brownOf(STANDARD_ARENA), open))
+      .toEqual(['intact: a direct line from the player spawn', 'breached: a direct line from the player spawn']);
+  });
+
+  it('is a regression guard, not proof that banking is the answer: on the standard board the brown\'s and the teal\'s cells pass it too', () => {
+    // The pre-edit board, every current enemy cell: brown's and teal's pass, and grey's is the
+    // control two tests below that fails it breached. So the check cannot tell this level from
+    // the one it replaced; "a bank shot is clearly the answer" is the playtest's call (#355).
+    const teal = loadArena(STANDARD_ARENA).spawns.find((s) => s.kind === 'teal')!.pos;
+    expect(cellOf(STANDARD_ARENA, teal)).toEqual([16, 10]);
+    expect(bankOfferFailures(STANDARD_ARENA, brownOf(STANDARD_ARENA))).toEqual([]);
+    expect(bankOfferFailures(STANDARD_ARENA, teal)).toEqual([]);
   });
 
   it('fails on the same walls with the two reflectors removed (west block cell [8, 13], east pillar) -- the negative control', () => {

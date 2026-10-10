@@ -644,10 +644,11 @@ describe('the scripted player cannot perturb what it measures', () => {
     // pass by never doing anything interesting.
     //
     // The FIRST slot is the standard test board (issue #1009), not campaign level 1. It is
-    // the board that reaches the mine branch: measured by re-authoring level 1 to a lone
-    // brown, as #1010 will, the sweep laid 0 mines. Today the two boards hold the same grid
-    // and roster, and the slot keeps level 1's seed, so the sweep is unchanged; it simply
-    // stops depending on the first level's roster to prove anything.
+    // the board that reaches the mine branch: with level 1 re-authored to a lone brown, as
+    // #1010 did, a sweep with arena-01 in this slot lays 0 mines on every board, where this
+    // slot alone lays all 30 (measured over the same 3,600 decisions). The standard board is
+    // the roster level 1 had before that edit, and the slot keeps level 1's seed, so the sweep
+    // did not move; it simply stopped depending on the first level's roster to prove anything.
     const boards = [STANDARD_ARENA, ...ARENAS.slice(1)];
     let fires = 0;
     let mines = 0;
