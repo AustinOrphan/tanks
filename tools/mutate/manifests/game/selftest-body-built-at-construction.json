@@ -9,8 +9,7 @@
   ],
   "killedBy": [
     "the self-test body loads when its pane first opens (issue #1013) a developer page builds no body until the pane opens",
-    "the self-test body loads when its pane first opens (issue #1013) a load that fails is reported in the pane, and the next open builds the body in its place",
     "the self-test body loads when its pane first opens (issue #1013) an ordinary page builds no body, even after every import has settled"
   ],
-  "why": "Issue #1013. The self-test's body is loaded at construction again, on every page, as it was built before the issue. An ordinary page then downloads the module and holds the empty state and the pad list in `.hud-selftest-list`. The load is asynchronous, so only a case that lets every import settle before asserting the absence catches it: the two absence cases. The failed-load case fails too, incidentally -- the body built at construction leaves its open nothing to load, so no failure is reported."
+  "why": "Issue #1013. The self-test's body is loaded at construction again, on every page, as it was built before the issue. An ordinary page then downloads the module and holds the empty state and the pad list in `.hud-selftest-list`. The load is asynchronous, so only a case that lets every import settle before asserting the absence catches it: the two absence cases. The failed-load case fails too but is deliberately not pinned: its open still starts a load, and it fails only because Vitest hands the mocked failure to the construction's import, already in flight, and the real module to the open's."
 }

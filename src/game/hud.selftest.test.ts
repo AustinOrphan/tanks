@@ -294,8 +294,9 @@ describe('the self-test body loads when its pane first opens (issue #1013)', () 
   it('Copy pressed before the body loaded throws nothing and writes nothing', async () => {
     // jsdom reports a throw from a click listener as a window `error` event, not as a throw
     // from `click()`, so the event is what is listened for: `expect(click).not.toThrow()`
-    // would pass with the throw in place. Negative control: Copy with no guard for a body
-    // that does not exist yet.
+    // would pass with the throw in place. Negative controls: Copy with no guard for a body
+    // that does not exist yet, and a Copy that reveals an empty report field instead. The
+    // field's text is not asserted: before the load there is no report to write into it.
     const { root } = mountDev();
     openSelfTest(root);
     const report = q<HTMLTextAreaElement>(root, '.hud-selftest-report');
@@ -312,7 +313,6 @@ describe('the self-test body loads when its pane first opens (issue #1013)', () 
     }
     expect(errors).toEqual([]);
     expect(shown(report)).toBe(false);
-    expect(report.value).toBe('');
     // The same press once the body is there does write, so the absence above is the load's.
     await settled();
     q<HTMLButtonElement>(root, '.hud-selftest-copy').click();
