@@ -1,0 +1,11 @@
+{
+  "id": "selftest-open-never-loads-the-body",
+  "file": "src/game/hud.ts",
+  "find": "      if (selfTest === null) loadSelfTestBody();\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "why": "Issue #1013. The open stops starting the load, so the self-test's body is never built and the pane is blank. This is the negative control for THE CONTROL case and for every adapted case that awaits the body: without it, the absence cases could pass because nothing is ever built at all."
+}

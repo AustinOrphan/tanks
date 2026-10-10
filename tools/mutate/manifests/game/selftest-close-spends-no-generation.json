@@ -1,0 +1,11 @@
+{
+  "id": "selftest-close-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "      selfTestGeneration += 1; // a load still in flight now builds nothing into a closed pane\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "why": "Issue #1013. The pane's close stops spending the load's generation, so a load still in flight when Back (or a surface change through `setState`) closes the pane is still current when it lands, and builds the body into a pane nobody is looking at."
+}

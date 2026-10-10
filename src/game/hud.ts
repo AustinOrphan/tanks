@@ -313,10 +313,7 @@ import {
   renderLegalLinks,
   setLegalExpanded,
 } from './legal';
-import {
-  renderControllerSelfTest,
-  type ControllerSelfTestView,
-} from './controller-selftest';
+import type { ControllerSelfTestView } from './controller-selftest';
 import {
   renderControllerLayout,
   type ControllerLayoutModel,
@@ -1096,7 +1093,9 @@ export interface Hud {
    * way to show live values is to read every frame.
    *
    * Pushing while the pane is closed is harmless and wasteful, not wrong -- the writes land
-   * on detached rows. The open/close pair below is what keeps it from happening.
+   * on hidden rows. The open/close pair below is what keeps it from happening. The rows are
+   * built when the pane first opens (issue #1013); a frame pushed before then is held, and the
+   * latest one is painted when they are.
    */
   setPadDiagnostics(pads: readonly PadDiagnostic[]): void;
   /**
@@ -2561,7 +2560,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
          The body is built by 'controller-selftest.ts' into the empty container below,
          because it is derived from live hardware on every frame and 'hud.ts' models none
-         of it. The report TEXTAREA is filled on demand rather than live: a field that
+         of it. That module is loaded when the pane first opens (issue #1013), so the
+         container stays empty on a page that never opens it. The report TEXTAREA is filled on demand rather than live: a field that
          rewrote itself sixty times a second could not be selected. -->
     <!-- THE CONFIGURATION MENU (issue #246). Renders the model issue #623 built -- the
          registry-derived control list, the six presets, the URL builder and the explainer --
@@ -3008,6 +3008,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * subscriber callbacks that must not run twice for one transition.
    */
   let selfTestOpen = false;
+  /**
+   * The self-test's body (issue #1013). `controller-selftest.ts` is loaded the first time the
+   * pane opens, not imported, so an ordinary page never downloads it; this is null until that
+   * load lands, and from then on the one view is kept, as it was when it was built at
+   * construction. A frame pushed before then is held, and only the latest one is painted.
+   */
+  let selfTest: ControllerSelfTestView | null = null;
+  let selfTestPendingPads: readonly PadDiagnostic[] | null = null;
+  /** Taken by every load and spent by every close and teardown; see `loadSelfTestBody`. */
+  let selfTestGeneration = 0;
   const layoutOpenCbs: Array<() => void> = [];
   const layoutCloseCbs: Array<() => void> = [];
   const layoutRequestCbs: Array<(request: LayoutRequest) => void> = [];
@@ -4292,19 +4302,61 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * The report field is emptied on close rather than retained: it is a snapshot of pad
    * state from whenever Copy was last pressed, and a stale one presented on the next visit
    * would be indistinguishable from a fresh one.
+   *
+   * The body is loaded on the first open (issue #1013), after the arrival focus and before the
+   * subscribers run, so a subscriber that closes the pane at once still spends that load.
    */
   function showControllerSelfTest(show: boolean): void {
     if (show === selfTestOpen) return;
     selfTestOpen = show;
     if (show) {
       swapSurface(openSurface(), SELFTEST_SURFACE, () => selfTestView.focus());
+      if (selfTest === null) loadSelfTestBody();
       for (const cb of selfTestOpenCbs) cb();
     } else {
+      selfTestGeneration += 1; // a load still in flight now builds nothing into a closed pane
       closeSurface(SELFTEST_SURFACE);
       selfTestReportEl.value = '';
       selfTestReportEl.classList.add('hud-selftest-report--hidden');
       for (const cb of selfTestCloseCbs) cb();
     }
+  }
+
+  /**
+   * Loads `controller-selftest.ts` and builds the self-test's body into its empty container
+   * (issue #1013), in the shape `route-ui.ts` uses for the gallery mount: a dynamic import,
+   * so the module is in no ordinary page's download, behind a generation counter.
+   *
+   * WHY THE GENERATION. The import spans at least one turn of the event loop, and the pane
+   * can be closed, closed and reopened, or torn down inside it. Every load takes a generation
+   * and every close and `dispose` spends one, so a load that is no longer current builds
+   * nothing -- no body in a closed pane, and no second body beside the reopen's.
+   *
+   * A FAILED LOAD (offline, or a chunk name a deploy made stale) is reported in the pane rather
+   * than left as an unhandled rejection, which `boot.ts` treats as the match failing whenever a
+   * session exists. The next open tries again, but a browser may keep the failure for the life
+   * of the page, so the line asks for a reload. Only the import is caught: a throw from the
+   * render itself is a bug, not a load failure.
+   */
+  function loadSelfTestBody(): void {
+    const generation = (selfTestGeneration += 1);
+    selfTestListEl.replaceChildren(); // a previous attempt's failure line
+    void import('./controller-selftest').then(
+      ({ renderControllerSelfTest }) => {
+        if (generation !== selfTestGeneration) return;
+        selfTest = renderControllerSelfTest(selfTestListEl);
+        if (selfTestPendingPads !== null) selfTest.update(selfTestPendingPads);
+        selfTestPendingPads = null;
+      },
+      () => {
+        if (generation !== selfTestGeneration) return;
+        const failed = document.createElement('p');
+        failed.className = 'hud-selftest-line hud-selftest-failed';
+        failed.setAttribute('role', 'status');
+        failed.textContent = 'The Controller Self-Test could not be loaded. Reload the page to try again.';
+        selfTestListEl.append(failed);
+      },
+    );
   }
 
   /**
@@ -5184,7 +5236,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     devMenuView({}, devCfgBase),
   );
 
-  const selfTest: ControllerSelfTestView = renderControllerSelfTest(selfTestListEl);
   const layoutBody: ControllerLayoutView = renderControllerLayout(layoutBodyEl);
   layoutBody.onRequest((request) => {
     for (const cb of layoutRequestCbs) cb(request);
@@ -5484,6 +5535,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
 
   const handleSelfTestCopy = (): void => {
+    // Before the body is loaded there is no readout to report on, and after a failed load the
+    // pane says why. Deferring the copy instead would focus and select long after the press.
+    if (selfTest === null) return;
     const text = selfTest.report();
     selfTestReportEl.value = text;
     selfTestReportEl.classList.remove('hud-selftest-report--hidden');
@@ -8184,7 +8238,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       controllers.onControllersClose(cb);
     },
     setPadDiagnostics(pads: readonly PadDiagnostic[]): void {
-      selfTest.update(pads);
+      if (selfTest === null) selfTestPendingPads = pads;
+      else selfTest.update(pads);
     },
 
     onControllerSelfTestOpen(cb: () => void): void {
@@ -8462,6 +8517,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       selfTestOpenBtn.removeEventListener('click', blurIfPointer);
       selfTestBackBtn.removeEventListener('click', handleSelfTestBack);
       selfTestBackBtn.removeEventListener('click', blurIfPointer);
+      // Teardown does not run the pane's close, so it spends the generation itself: a self-test
+      // load still in flight must not build into the tree this teardown discards.
+      selfTestGeneration += 1;
       settingsLayoutBtn.removeEventListener('click', handleSettingsLayoutOpen);
       settingsLayoutBtn.removeEventListener('click', blurIfPointer);
       layoutBackBtn.removeEventListener('click', handleLayoutBack);

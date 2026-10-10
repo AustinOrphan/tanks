@@ -876,11 +876,11 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 // only splittable if nothing on an ordinary path imports it for VALUE, so this counts those
 // imports and pins the count. The number must only ever go DOWN.
 //
-// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds seven of them today, one edge
+// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds six of them today, one edge
 // per module, and they are the developer surfaces it still renders inline -- the developer
 // menu (`devtools-menu`, `dev-config-menu`, `dev-config`), its actions, its diagnostics and
-// its exports, plus the controller self-test. #946's route out is to load each pane's
-// body-building module on demand, as the gallery workbench's already is, while `hud.ts` keeps
+// its exports. #946's route out is to load each pane's body-building module on demand, as the
+// gallery workbench's and the controller self-test's already are, while `hud.ts` keeps
 // the pane's container, its layer entry, its markup and its open/close order; the slices
 // under #946 take them one pane at a time. An inventory fails on a NEW edge while recording
 // what the remaining ones wait on, which `toBe(0)` could not do.
@@ -917,6 +917,9 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 // `developerExitSearch` to the leaf `dev-params.ts`. `hud.ts`'s edge into `arena-schematic` went
 // off the count with the module's removal from the list (see above), not by a change to
 // `hud.ts`.
+//
+// Issue #1013 took it from 7 to 6: the controller self-test's body loads when its pane first
+// opens, so `hud.ts` names `controller-selftest` only through a leading `import type`.
 // ---------------------------------------------------------------------------
 
 /** The developer-only modules #946 names, by basename: the developer surface, then gallery. */
@@ -934,7 +937,7 @@ const DEV_ONLY_MODULES: readonly string[] = [
  */
 const DEV_VALUE_EDGES: Readonly<Record<string, number>> = {
   // The developer surfaces hud.ts still renders inline; see the note above.
-  './game/hud.ts': 7,
+  './game/hud.ts': 6,
 };
 
 describe('developer modules stay off ordinary paths (issue #946)', () => {

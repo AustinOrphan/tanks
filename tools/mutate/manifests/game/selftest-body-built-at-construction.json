@@ -1,0 +1,11 @@
+{
+  "id": "selftest-body-built-at-construction",
+  "file": "src/game/hud.ts",
+  "find": "  const layoutBody: ControllerLayoutView = renderControllerLayout(layoutBodyEl);\n",
+  "replace": "  loadSelfTestBody();\n  const layoutBody: ControllerLayoutView = renderControllerLayout(layoutBodyEl);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "why": "Issue #1013. The self-test's body is loaded at construction again, on every page, as it was built before the issue. An ordinary page then downloads the module and holds the empty state and the pad list in `.hud-selftest-list`. The load is asynchronous, so only a case that lets every import settle before asserting the absence catches it."
+}

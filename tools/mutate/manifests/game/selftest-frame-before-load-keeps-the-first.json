@@ -1,0 +1,11 @@
+{
+  "id": "selftest-frame-before-load-keeps-the-first",
+  "file": "src/game/hud.ts",
+  "find": "      if (selfTest === null) selfTestPendingPads = pads;\n",
+  "replace": "      if (selfTest === null) selfTestPendingPads ??= pads;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "why": "Issue #1013. Frames pushed before the body loads are held, but the FIRST one is kept rather than the latest, so the first view painted shows pad state older than what the page last reported. The criterion is that the first view reflects the most recent `setPadDiagnostics` call."
+}
