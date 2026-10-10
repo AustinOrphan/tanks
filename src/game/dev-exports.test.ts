@@ -3,7 +3,6 @@ import { arenaById, createWorldFor } from '../sim/arena';
 import { cloneWorld, stepInputs, type World } from '../sim/world';
 import type { InputState } from '../sim/types';
 import { COUNTDOWN_TICKS } from '../sim/constants';
-import type { AppLocation } from './app-state';
 import {
   diagnosticsReport,
   formatDiagnostics,
@@ -16,7 +15,6 @@ import {
   diagnosticsExport,
   replayExport,
   screenshotExport,
-  surfaceName,
   type RoundDiagnostics,
 } from './dev-exports';
 import {
@@ -93,15 +91,6 @@ function recordedRun(ticks: number, limit?: number): { trace: ReplayTrace; live:
   }
   return { trace: rec.trace(), live, events };
 }
-
-describe('surfaceName names the route or the gameplay phase', () => {
-  it('prefixes each with where it came from', () => {
-    expect(surfaceName({ kind: 'route', route: { kind: 'main-menu' } })).toBe('route/main-menu');
-    expect(
-      surfaceName({ kind: 'gameplay', session: {}, phase: { kind: 'paused' } } as unknown as AppLocation),
-    ).toBe('gameplay/paused');
-  });
-});
 
 describe('diagnosticsExport', () => {
   it('saves Copy Diagnostics\' own record, stamped, plus the round', () => {

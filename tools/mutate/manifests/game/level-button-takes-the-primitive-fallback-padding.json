@@ -1,0 +1,14 @@
+{
+  "id": "level-button-takes-the-primitive-fallback-padding",
+  "file": "src/game/hud.css",
+  "find": "  padding: 0;\n  font-size: var(--hud-type-5);\n  font-weight: var(--hud-weight-strong);\n",
+  "replace": "  font-size: var(--hud-type-5);\n  font-weight: var(--hud-weight-strong);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The shipped defect, restored: `.hud-level-btn` sized by width and height alone takes `.ui-btn`'s fallback `8px 20px`, which under border-box leaves a 4px content box inside 44px, so every level number renders start-aligned, measured 3.41px right of centre in Chromium on the Levels pane. Nothing else in the suite noticed: the size sweep accepts the rule's own width and height, and the themed-button sweep deliberately leaves padding out.",
+  "killedBy": [
+    "hud.css is syntactically whole centres a level button's number by giving its fixed 44x44 box no padding"
+  ]
+}

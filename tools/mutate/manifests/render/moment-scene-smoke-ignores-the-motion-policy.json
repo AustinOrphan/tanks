@@ -1,0 +1,14 @@
+{
+  "id": "moment-scene-smoke-ignores-the-motion-policy",
+  "file": "src/render/gallery/moment-scene.ts",
+  "find": "  muzzleSmoke.setReducedMotion(calm);",
+  "replace": "  muzzleSmoke.setReducedMotion(false);",
+  "expect": "killed",
+  "tests": [
+    "src/render/gallery/moment-scene.test.ts"
+  ],
+  "why": "Leaves the moment scene's muzzle smoke on full motion whatever the policy, as it was before issue #1018: under reduced motion the cloud should be fully grown and still from its first tick (`travel` 0, `grow` 1), and a `--motion reduced` frame would instead show it drifting and spreading. Killed by the wiring case that records what each system is pushed under a reduced policy.",
+  "killedBy": [
+    "buildMomentScene wiring (issue #1018) pushes a reduced motion policy to the barrel recoil and the muzzle smoke"
+  ]
+}

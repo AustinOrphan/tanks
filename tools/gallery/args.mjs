@@ -178,6 +178,8 @@ export const MOMENT_IDS = [
   // Issues #356/#516: the shell cap refusing a shot, staged so the refusal repeats. The
   // only moment whose subject is a cue rather than a body -- see --blocked-fire.
   'blocked-fire',
+  // Issue #1018: brown, olive and teal firing, so the role cue can be seen under muzzle effects.
+  'ordnance-fire',
 ];
 
 /**

@@ -63,6 +63,13 @@ export interface MomentSceneOptions {
    */
   shellTrail?: import('../../presentation/shell-trail').ShellTrailStyle | null;
   /**
+   * Experimental non-colour role cue (issues #357, #773); null = the shipped board. Passed to
+   * `createEntityViews` exactly as renderer.ts passes it (issue #1018). A moment is where the
+   * cue can be photographed under the muzzle effects, because it is the only gallery surface
+   * that fires: the posed gallery builds no muzzle smoke and no barrel recoil at all.
+   */
+  enemyRole?: import('../../presentation/enemy-role').EnemyRoleCue | null;
+  /**
    * Dressing for the entrance the moment stages -- required here, unlike
    * `GalleryOptions.spawnAnim` (subjects.ts), which is optional and only reaches
    * `setPlayerStyle` behind a "something is being styled" guard. A moment scene always
@@ -185,8 +192,10 @@ export function buildMomentScene(
 
   // 4th argument is `identityMarker`, which a moment scene does not yet forward (that
   // flag reaches the POSED gallery only); passed explicitly as null so the 5th,
-  // `arrival`, is unmistakably the one being set here.
-  const views = createEntityViews(scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null);
+  // `arrival`, and the 6th, `enemyRole`, are unmistakably the ones being set here.
+  const views = createEntityViews(
+    scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null, opts.enemyRole ?? null,
+  );
   // Same call the game makes (renderer.ts's setPlayerStyle) -- unconditional here,
   // unlike buildGallery's guarded call, because opts.spawnAnim is always meaningful
   // for a moment (see the field doc above). Slot 0 carries the CLI's hull/skin/accent
@@ -214,8 +223,12 @@ export function buildMomentScene(
   }
   const particles = createParticleSystem(scene, mulberry32(PARTICLE_SEED));
   const deathPulse = createDeathPulseSystem(scene, opts.arrival === 'opposed');
-  // The three systems in this scene that own a reduced treatment, pushed the policy the
-  // same way `renderer.ts` pushes it to the game's own. Death pulse is included because it
+  // Three of the systems in this scene that own a reduced treatment, pushed the policy the
+  // same way `renderer.ts` pushes it to the game's own; the barrel recoil and the muzzle
+  // smoke are built further down and pushed there. The three cue-gated refusal systems
+  // (`blockedFireRing`, `blockedFireMuzzle`, `blockedFirePips`) own one too and are NOT
+  // pushed, so a `--blocked-fire` moment under `--motion reduced` still draws their full
+  // treatment. Death pulse is included because it
   // has had one since issue #289 and a moment clip is the first place it could be SEEN
   // under the preference rather than only asserted.
   const calm = opts.motion === 'reduced';
@@ -243,6 +256,13 @@ export function buildMomentScene(
   // comes out black.
   const barrelRecoil = createBarrelRecoilSystem(views);
   const muzzleSmoke = createMuzzleSmokeSystem(scene);
+  // Both own a reduced treatment, as renderer.ts's `setReducedMotion` knows (issue #1018):
+  // the recoil holds half its kick instead of springing, and the smoke is fully grown and
+  // still from its first tick. Built after `calm` is pushed above, so they are pushed here;
+  // without it a `--motion reduced` frame of a fire moment shows full-motion recoil and
+  // smoke, which is an inert capture of the reduced presentation.
+  barrelRecoil.setReducedMotion(calm);
+  muzzleSmoke.setReducedMotion(calm);
   const blockedFirePips = cue === 'pips' ? createBlockedFirePipsSystem(scene) : null;
   const renderer = opts.renderer ?? new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);

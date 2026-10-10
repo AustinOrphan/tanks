@@ -129,6 +129,7 @@ const EXCLUDED = [
   'baseline/run.mjs',
   'gl/idle-cost.mjs',
   'gl/phase-cost.mjs',
+  'gl/role-cue-overlap.mjs',
   'gl/run.mjs',
   'hud/strip-width.mjs',
 ];

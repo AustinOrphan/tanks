@@ -1031,15 +1031,45 @@ describe('hud.css is syntactically whole', () => {
     // made the box 44px: measured 158x44 in Chromium, ~6px of horizontal padding against 16
     // vertical. Every OTHER `.ui-btn` is padded or sized by a rule later in this file
     // (`--sm`, `--slab`, `--primary`, `.hud-skin`, `.hud-versus-option-btn`,
-    // `.hud-versus-map-card`, `.hud-controller-source-btn`, and `.hud-level-btn`'s fixed
-    // 44x44), so a base padding on the primitive is overridden by all of them and reaches
-    // only the state that had none.
+    // `.hud-versus-map-card`, `.hud-controller-source-btn`, and `.hud-level-btn`'s
+    // `padding: 0`), so a base padding on the primitive is overridden by all of them and
+    // reaches only the state that had none. A fixed width and height is NOT an override:
+    // the level button had only those until the case below, and this fallback padded it.
     const src = stripComments(css);
     const at = src.search(/(^|\n)\.ui-btn \{/);
     const btn = src.slice(at, src.indexOf('}', at));
     expect(btn, 'the primitive no longer pads a variant-less control').toMatch(
       /padding:\s*8px\s+20px;/,
     );
+  });
+
+  it('centres a level button\'s number by giving its fixed 44x44 box no padding', () => {
+    // `.hud-level-btn` set only width and height, so the primitive's fallback `8px 20px`
+    // above reached it: under `box-sizing: border-box` that left a 4px content box, and a
+    // digit wider than its line box is START-aligned rather than centred. Measured in
+    // Chromium on the built Levels pane: every number 3.41px right of centre, at 1280x800
+    // and at 390x844. jsdom lays nothing out, so what this pins is the padding the cascade
+    // gives a real level button, which is what that measurement depends on.
+    const { root, dispose } = mountEveryButton();
+    const levels = Array.from(root.querySelectorAll<HTMLElement>('.hud-level-btn'));
+    // `setLevelSelect(2, 4)` in the fixture draws the two levels unlocked so far.
+    expect(levels.length).toBe(2);
+    const paddingOf = (el: HTMLElement): string => {
+      const s = getComputedStyle(el);
+      return [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].join(' ');
+    };
+    for (const btn of levels) {
+      expect(paddingOf(btn), `${btn.getAttribute('aria-label')} is padded inside its fixed box`).toBe(
+        '0px 0px 0px 0px',
+      );
+    }
+    // The control on the control: a variant-less `.ui-btn` in the same document still reads
+    // the fallback, so the cascade is being read here and a missing `padding: 0` would show.
+    const bare = document.createElement('button');
+    bare.className = 'ui-btn';
+    root.appendChild(bare);
+    expect(paddingOf(bare)).toBe('8px 20px 8px 20px');
+    dispose();
   });
 
   it('never lets a button fall through to browser default styling', () => {
@@ -3239,6 +3269,17 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
 
   it('passes the resumed delay to the pip\'s burst ring, which does not inherit it by default', () => {
     expect(ruleBody('.hud-stock-pip.hud-stock-cue::after')).toMatch(/animation-delay:\s*inherit/);
+  });
+
+  it('sizes the marks from the row\'s custom properties, defaulting to the full size (issue #1021)', () => {
+    // hud.ts sets `--hud-mark` and `--hud-mark-gap` on a narrow viewport's row; a rule that read
+    // a literal would ignore them and the four-by-four strip would overflow a phone again, with
+    // every jsdom test still green, since jsdom lays nothing out. The defaults are the arm's
+    // full size, so the desktop strip draws exactly as it did.
+    const mark = ruleBody('.hud-stock-mark');
+    expect(mark).toMatch(/\bwidth:\s*var\(--hud-mark,\s*0\.62em\)/);
+    expect(mark).toMatch(/\bheight:\s*var\(--hud-mark,\s*0\.62em\)/);
+    expect(ruleBody('.hud-stock-marks')).toMatch(/\bgap:\s*var\(--hud-mark-gap,\s*2px\)/);
   });
 
   it('asks for the BUNDLED faces first, in both token stacks (issue #326)', () => {

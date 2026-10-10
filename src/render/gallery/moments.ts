@@ -1310,6 +1310,76 @@ export const MOMENTS: Record<string, MomentDef> = {
       input2: () => EAST,
     };
   })(),
+
+  /**
+   * Issue #1018's capture: the enemy role cue under its own muzzle effects, for each WEAPON
+   * CLASS the cue distinguishes. A standard-shell tank (brown), a rocket tank (olive) and a
+   * ricochet-rocket tank (teal) stand in a column, all three firing east at one player parked
+   * far down the board, so their barrels are seen in profile from the `game` camera and every
+   * frame after the first shot carries muzzle smoke and barrel recoil on a cue-bearing tank.
+   *
+   * WHY THESE THREE. `weaponShapeFor` gives a standard-shell kind the shipped flare size, so
+   * the flare lever has no footprint on brown and only its riser can differ; olive has a flare
+   * (0.7) and no riser (`mineCapacity` 0); teal has both (flare 1.55). Every other moment
+   * stages only player and brown tanks, so none of them can show the flare at all.
+   *
+   * THE FIRE TICKS ARE EMERGENT. Scripted input drives only player-kind tanks
+   * (`applyPlayerInputs`), so these three fire through their own AI, and the ticks below were
+   * MEASURED with `simulateMoment` and are pinned rather than chosen: teal at 36, olive at 39,
+   * brown and teal together at 50, teal at 64 and 78, brown at 90, teal at 92. Olive's second
+   * attempt at 77 is REFUSED (`fire-blocked`), which puts a refusal's near-solid smoke on a
+   * cue-bearing tank too. Olive and teal reposition between shots, within x 0-2.5 and the
+   * column's own y -2.5-2.5; the framing holds all three for the whole clip.
+   *
+   * 96 TICKS, not more: the player at (14, 0) is first destroyed on tick 101, and an explosion
+   * is not this moment's subject. 96 covers olive's whole 45-tick smoke life
+   * (`LIFETIME_SECONDS` 0.75 in muzzle-smoke.ts) from 39 and brown's from 50.
+   */
+  'ordnance-fire': (() => {
+    const TARGET = { x: 14, y: 0 };
+    const COLUMN: { kind: 'brown' | 'olive' | 'teal'; y: number }[] = [
+      { kind: 'brown', y: -2.5 }, { kind: 'olive', y: 0 }, { kind: 'teal', y: 2.5 },
+    ];
+    return {
+      ticks: 96,
+      expect: [
+        { type: 'fire', tick: 36 },
+        { type: 'fire', tick: 39 },
+        { type: 'fire', tick: 50 },
+        { type: 'fire', tick: 64 },
+        { type: 'fire-blocked', tick: 77 },
+        { type: 'fire', tick: 78 },
+        { type: 'fire', tick: 90 },
+        { type: 'fire', tick: 92 },
+      ],
+      focus: [1.2, 0.3, 0], span: 7,
+      build: () => {
+        const w = createWorld({
+          walls: [],
+          spawns: [
+            { kind: 'player', pos: { ...TARGET }, angle: Math.PI },
+            ...COLUMN.map(({ kind, y }) => ({ kind, pos: { x: 0, y }, angle: 0 })),
+          ],
+          lives: 3,
+          tanks: [
+            { id: 1, kind: 'player', pos: { ...TARGET }, bodyAngle: Math.PI, turretAngle: Math.PI, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            ...COLUMN.map(({ kind, y }, i) => ({
+              id: i + 2, kind, pos: { x: 0, y }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+              aiState: 'idle' as const, aiTimer: 0,
+            })),
+          ],
+          seed: 7,
+        });
+        // Same round-start landmine every other moment here documents.
+        w.roundStartTick = -600;
+        return w;
+      },
+      // The player never fires or moves; it is only the target, off the frame's east edge.
+      input: () => ({ move: { x: 0, y: 0 }, aim: { x: -1000, y: 0 }, fire: false, mine: false }),
+    };
+  })(),
 };
 
 /**

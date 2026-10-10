@@ -15,7 +15,8 @@ import type { SessionDiagnostics } from './dev-diagnostics';
 import type { DevActionPort } from './dev-actions';
 import type { DevExportPort } from './dev-exports';
 import { TANK_KINDS, configFor } from '../sim/config';
-import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
+import { arenaBounds } from '../sim/arena';
+import { STANDARD_ARENA, createArenaWorld } from '../sim/config/arena-fixtures';
 import { roundPhase } from '../sim/round';
 import {
   type TouchIndicator,
@@ -1726,7 +1727,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // means a `mode: 'ffa'` fixture can never quietly get a campaign-coop world.
         const wantsVersus = (opts.devFlags?.mode ?? 'campaign-coop') !== 'campaign-coop';
         if ((playerCount !== undefined && playerCount > 1) || wantsVersus) {
-          const real = createWorldFor(arenaById(fakeLevels[i].arenaId), seed, {
+          // Level 0 is the standard test board (issue #1009), the same board the
+          // single-player branch below builds through createArenaWorld, so a co-op or bot
+          // fixture on the first level does not move when campaign level 1's roster does.
+          // Its nominal arenaId stays arena-01's, which the replay stamping test pins.
+          const board = i === 0 ? STANDARD_ARENA : arenaById(fakeLevels[i].arenaId);
+          const real = createWorldFor(board, seed, {
             lives,
             // playerCount defaults to 1 when the branch was entered for versus alone.
             playerCount: playerCount ?? 1,
@@ -2290,11 +2296,11 @@ describe('isMuteHotkey', () => {
 describe('startGameWith: construction', () => {
   it('sizes the renderer to the arena and its boundary ring', () => {
     const h = boot();
-    const { width, height } = arenaBounds(CURRENT_ARENA);
+    const { width, height } = arenaBounds(STANDARD_ARENA);
     const [, w, ht, boundary] = h.rec.rendererArgs[0];
     expect(w).toBe(width);
     expect(ht).toBe(height);
-    // The FAKE's cellSize, which is not CURRENT_ARENA.cellSize -- see the bounds fake.
+    // The FAKE's cellSize, which is not STANDARD_ARENA.cellSize -- see the bounds fake.
     expect(boundary).toBe(1.5);
     h.handle.dispose();
   });
@@ -8818,7 +8824,12 @@ describe('startGameWith: the input recorder', () => {
     // `stock` and `teams` are deliberately absent: both are versus-only and neither is a
     // ReplayMeta field. They used to be two `undefined`s carried in the positional list to
     // reach `aiTargetPerception` past them.
-    const rebuilt = createWorldFor(arenaById(t.meta.arenaId), t.meta.seed, {
+    // The board: the fake level system builds level 0 on the standard test board (issue
+    // #1009), whatever nominal arenaId the level carries -- arena-01's, which the stamping
+    // test above pins. So the faithful rebuild uses that board rather than looking the id
+    // up, which would tie this test to campaign level 1's roster.
+    expect(t.meta.arenaId).toBe(ARENA_DEFS[0].id);
+    const rebuilt = createWorldFor(STANDARD_ARENA, t.meta.seed, {
       lives: t.meta.lives,
       pp1Roles: t.meta.pp1Roles,
       rules: {

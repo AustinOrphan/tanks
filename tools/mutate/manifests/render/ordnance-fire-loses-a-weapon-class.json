@@ -1,0 +1,17 @@
+{
+  "id": "ordnance-fire-loses-a-weapon-class",
+  "file": "src/render/gallery/moments.ts",
+  "find": "      { kind: 'brown', y: -2.5 }, { kind: 'olive', y: 0 }, { kind: 'teal', y: 2.5 },",
+  "replace": "      { kind: 'brown', y: -2.5 }, { kind: 'brown', y: 0 }, { kind: 'teal', y: 2.5 },",
+  "expect": "killed",
+  "tests": [
+    "src/render/gallery/moments.test.ts"
+  ],
+  "why": "Swaps the rocket tank in issue #1018's moment for a second standard-shell tank, so the moment no longer stages the rocket's 0.7 flare and its frames cannot show that state of the cue at all, while still looking like three tanks firing. Killed by the case that requires three distinct bullet types and by the ones that pin which kind fires on each tick.",
+  "killedBy": [
+    "every moment pins its events to exact ticks ordnance-fire: each expected event fires on its declared tick — and on no other",
+    "ordnance-fire: the three weapon classes firing (issue #1018) covers three distinct weapon classes, so every flare state is staged",
+    "ordnance-fire: the three weapon classes firing (issue #1018) each pinned fire is the kind the moment says, firing its own weapon class",
+    "ordnance-fire: the three weapon classes firing (issue #1018) the refusal at tick 77 is olive's, and nothing is destroyed in the clip"
+  ]
+}
