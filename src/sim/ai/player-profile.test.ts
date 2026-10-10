@@ -168,6 +168,22 @@ describe.skip('competent-player measurement (flip skip off to run locally)', () 
 // repositioning, and four games out of 200 now run the 5-minute cap out. The "arena-01
 // easier than arena-03/arena-04" ordinal claim still holds with real margin (52% vs 36%
 // vs 0%), and by a WIDER margin over arena-04 than before (56% vs 16% vs 4%).
+//
+// RE-MEASURED (2026-10-10, issue #1010: level 1 became a lone brown). The population is 225
+// games, 9 arenas x 25 seeds: `ARENAS.length` became 9 with vs-quad-02 (issue #1036), which
+// the paragraph above predates. Only arena-01's roster moved, so only its 25 games moved.
+// Measured on this tree, and on the same tree with arena-01's pre-edit data swapped in:
+//   wins/25 per arena  after: 25, 11, 10, 2, 0, 25, 21, 25, 25   before: 14, 11, 10, 2, 0, 25, 21, 25, 25
+//   total              after: 144/225 (64.0%)                    before: 133/225 (59.1%)
+//   self-mine deaths   after: 0/77 losses                        before: 0/88
+//   timeouts           after: 4/225                              before: 4/225
+//   fires/game (pooled)  after: 11.22   before: 12.55
+//   mines/game (pooled)  after: 2.16    before: 2.24
+// The ordinal claim holds by its widest margin yet (100% vs 40% vs 8%, was 56% vs 40% vs
+// 8%): against one stationary brown the scripted player wins every level-1 game, in a mean
+// of 647 ticks against 1607 before. That is a signal for #355's playtest, not a reason to
+// touch the assertion. The self-mine share is 0 on both trees, so that guard currently reads
+// 0 of N; that predates this edit.
 // ---------------------------------------------------------------------------
 describe('a competent scripted player against the shipped arenas', () => {
   const SEEDS = 25;
