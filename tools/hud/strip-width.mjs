@@ -13,15 +13,19 @@
  * calibrated once against #835's page measurement. Every part of that drifted without a sound:
  * #987 moved the spacing tokens onto `.hud`, so the bare strip lost the 10px between entries; the
  * bundled face never loaded on that page, which fell back to the browser's serif; and the
- * hand-built FFA entry had no identity mark, which the page has drawn ahead of every FFA entry
- * since #922. At four players and three stocks the bare strip read 207.6px where the page's
- * strip is 247.7px wide without the mark (both in a 390px viewport). So `strip-width-page.ts`
- * now mounts `createHud` itself, in a page Vite serves with the stylesheet and face the game
- * ships, pushes a versus status, and measures the strip where the page draws it: after the
- * topbar's session chip, inside the topbar's padding. Nothing here mirrors a layout rule; the HUD
- * applies `narrowPipLayout` and `narrowMarkLayout` itself, under the real `NARROW_STRIP_QUERY`.
- * Checked against the game page itself, booted at 390x844 as a four-player teams session under
- * `?dev=1&stockCue=pips`: its strip's right edge read 355.16px, and this tool reads 355.2px.
+ * hand-built FFA entry had no identity mark, which the page has drawn ahead of each FFA entry,
+ * under every arm but `marks`, since #922. At four players and three stocks the bare strip read
+ * 207.6px where the page's strip is 247.7px wide without the mark (both in a 390px viewport).
+ * So `strip-width-page.ts` now mounts `createHud` itself, in a page Vite serves with the
+ * stylesheet and face the game ships, pushes a versus status, and measures the strip where the
+ * page draws it: after the topbar's session chip, inside the topbar's padding. Nothing here
+ * mirrors a layout rule; the HUD applies `narrowPipLayout` and `narrowMarkLayout` itself, under
+ * the real `NARROW_STRIP_QUERY`. Checked against the game page itself, booted at 390x844 as a
+ * four-player teams session under `?dev=1&stockCue=pips`: its strip's right edge read 355.16px,
+ * and this tool reads 355.2px.
+ *
+ * Every row also checks that the shipped face really loaded (a run with the font files blocked
+ * flags all 40 rows), and every teams row that `marks` and `pips` drew the same markup.
  *
  * FITS means the strip's right edge is inside the topbar's content box -- 380px at 390px, where
  * the topbar's narrow padding is 10px -- so the strip keeps the margin the bar gives every other
@@ -75,12 +79,20 @@ const teams = (players, total) =>
   Array.from({ length: players }, (_, slot) => ({ slot, stock: total, team: slot % 2 }));
 
 const REPORTS = [
-  { name: 'pips', note: 'FFA, with the identity mark the page draws ahead of each entry', cue: 'pips', players: [2, 3, 4], stocks: ffa },
-  { name: 'marks', note: 'FFA; the arm suppresses the leading mark', cue: 'marks', players: [2, 3, 4], stocks: ffa },
+  {
+    name: 'pips', note: 'FFA, with the identity mark the page draws ahead of each entry',
+    cue: 'pips', players: [2, 3, 4], stocks: ffa,
+  },
+  {
+    name: 'marks', note: 'FFA; the arm suppresses the leading mark',
+    cue: 'marks', players: [2, 3, 4], stocks: ffa,
+  },
   {
     // Teams is offered at three and four players only. Measured under `marks`, which hands a
-    // teams entry to `pips` (issue #1022 ships it), and required to draw exactly what `pips` draws.
-    name: 'teams', note: '`P1 A ` and its pips, under `marks` and `pips` alike', cue: 'marks', same: 'pips', players: [3, 4], stocks: teams,
+    // teams entry to `pips` (issue #1022 ships it), and required to draw exactly what `pips`
+    // draws.
+    name: 'teams', note: '`P1 A ` and its pips, under `marks` and `pips` alike',
+    cue: 'marks', same: 'pips', players: [3, 4], stocks: teams,
   },
 ];
 
@@ -114,13 +126,15 @@ try {
     await page.waitForFunction(() => window.stripReady === true, undefined, { timeout: 60000 });
     return page;
   }
-  const read = (page, cue, stocks) => page.evaluate(([c, s]) => window.measureStrip(c, s), [cue, stocks]);
+  const read = (page, cue, stocks) =>
+    page.evaluate(([c, s]) => window.measureStrip(c, s), [cue, stocks]);
 
   let ok = true;
   const control = await read(await open(320), 'marks', teams(4, 3));
   const controlFits = control.right <= control.edge;
   console.log(
-    `control: four-player three-stock teams strip at 320px, right edge ${control.right}px against ${control.edge}px: `
+    'control: four-player three-stock teams strip at 320px, '
+    + `right edge ${control.right}px against ${control.edge}px: `
     + `${controlFits ? 'FITS -- the yardstick cannot fail' : 'overflows, as it must'}`,
   );
   if (controlFits) ok = false;
@@ -148,7 +162,7 @@ try {
         console.log(
           `${players}p x ${stocks}   ${r.layout.padStart(7)}   strip ${String(r.width).padStart(6)}px   `
           + `right ${String(r.right).padStart(6)}px   `
-          + `${fits ? `fits, ${(r.edge - r.right).toFixed(1)}px spare` : `OVER by ${(r.right - r.edge).toFixed(1)}px`}`
+          + (fits ? `fits, ${(r.edge - r.right).toFixed(1)}px spare` : `OVER by ${(r.right - r.edge).toFixed(1)}px`)
           + `${r.face ? '' : '   FACE NOT LOADED'}${same}`,
         );
       }

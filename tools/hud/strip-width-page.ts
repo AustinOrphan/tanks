@@ -57,7 +57,11 @@ async function measureStrip(stockCue: StockCue, stocks: VersusStock[]): Promise<
   // A face is fetched when laid-out text first asks for it, so lay out, then wait for the load.
   void strip.offsetWidth;
   await document.fonts.ready;
-  const face = document.fonts.check(`${getComputedStyle(strip).fontSize} "IBM Plex Sans"`);
+  // The strip asks for the shipped face first, and that face's file really loaded: a fallback
+  // face lays the labels out in other metrics, which is how the old bare-strip page went wrong.
+  const face = getComputedStyle(strip).fontFamily.startsWith('"IBM Plex Sans"')
+    && Array.from(document.fonts)
+      .some((f) => f.family.replace(/"/g, '') === 'IBM Plex Sans' && f.status === 'loaded');
   const topbar = root.querySelector('.hud-topbar') as HTMLElement;
   const bar = topbar.getBoundingClientRect();
   const rect = strip.getBoundingClientRect();
