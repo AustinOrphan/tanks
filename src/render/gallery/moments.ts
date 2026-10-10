@@ -1318,9 +1318,10 @@ export const MOMENTS: Record<string, MomentDef> = {
    * far down the board, so their barrels are seen in profile from the `game` camera and every
    * frame after the first shot carries muzzle smoke and barrel recoil on a cue-bearing tank.
    *
-   * WHY THESE THREE. `weaponShapeFor` gives a standard-shell kind the shipped flare size, so
-   * the flare lever has no footprint on brown and only its riser can differ; olive has a flare
-   * (0.7) and no riser (`mineCapacity` 0); teal has both (flare 1.55). Every other moment
+   * WHY THESE THREE. `weaponShapeFor` gives a standard-shell kind the shipped flare size, and
+   * `makeTank` draws the riser only on a kind holding MINE_LAYER, which brown does not (issue
+   * #1059), so brown draws neither lever under `both`: it is the no-cue control. Olive has a
+   * flare (0.7) and no riser (no MINE_LAYER); teal has both (flare 1.55). Every other moment
    * stages only player and brown tanks, so none of them can show the flare at all.
    *
    * THE FIRE TICKS ARE EMERGENT. Scripted input drives only player-kind tanks

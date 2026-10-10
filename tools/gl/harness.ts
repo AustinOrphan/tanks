@@ -28,7 +28,7 @@ import { createTankPreview, PREVIEW_RENDER_SETTINGS } from '../../src/render/pre
 import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subjects';
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
 import {
-  LEVER_PAIRS, ZERO_BY_CONSTRUCTION, cell, colours, createCueRig, differing, patched,
+  CUE_KINDS, LEVER_PAIRS, ZERO_BY_CONSTRUCTION, cell, colours, createCueRig, differing, patched,
   type CueKind, type CueLever,
 } from './role-cue-cells';
 import { MOMENTS } from '../../src/render/gallery/moments';
@@ -590,9 +590,10 @@ await checkAsync('the role cue overlap measurement: its two controls, its stagin
   // table itself is published, not asserted: what it says about the cue is for a person to read.
   // Here: (i) two unarmed renderers under smoke plus burst agree to the pixel, which is what
   // makes any armed-vs-unarmed difference mean the cue; (ii) an opaque patch over the footprint
-  // reads ~0 retained; the staging guard, a nonzero no-effect footprint for each (kind, lever)
-  // pair, and brown's flare at 0 by construction; and one cell, teal's flare under smoke plus
-  // burst six ticks after a shot on `high`, which must read a retained fraction inside (0, 1].
+  // reads ~0 retained; the staging guard, a nonzero no-effect footprint for each LEVER_PAIRS
+  // pair, and a zero one for each ZERO_BY_CONSTRUCTION pair (brown's flare and riser, grey's
+  // flare); and one cell, teal's flare under smoke plus burst six ticks after a shot on `high`,
+  // which must read a retained fraction inside (0, 1].
   //
   // Two groups of renderers, each fed one sequence list, because only renderers with the same
   // history are compared: the no-smoke group gives the footprints, the smoke group the rest.
@@ -605,11 +606,10 @@ await checkAsync('the role cue overlap measurement: its two controls, its stagin
   try {
     for (const r of all) await r.sequence('brown', 'fire-blocked', false, [0]);
     // The no-smoke group, with the burst moved off the board: the footprint of every pair.
-    const KINDS: CueKind[] = ['olive', 'teal', 'brown'];
     const still: Record<string, Record<CueKind, Uint8ClampedArray[]>> = {};
     for (const [key, r] of Object.entries(off)) {
       still[key] = {} as Record<CueKind, Uint8ClampedArray[]>;
-      for (const kind of KINDS) still[key][kind] = await r.sequence(kind, 'fire', false, [6, 15]);
+      for (const kind of CUE_KINDS) still[key][kind] = await r.sequence(kind, 'fire', false, [6, 15]);
     }
     // The smoke group: teal's shot with the burst where it lands.
     const lit: Record<string, Uint8ClampedArray[]> = {};
@@ -625,8 +625,12 @@ await checkAsync('the role cue overlap measurement: its two controls, its stagin
       const footprint = differing(still[lever][kind][1], still.none[kind][1]).length;
       if (footprint === 0) return `staging guard: ${kind}'s ${lever} has an empty footprint at rest -- the staging or the forwarding is broken`;
     }
-    const zero = differing(still[ZERO_BY_CONSTRUCTION.lever][ZERO_BY_CONSTRUCTION.kind][1], still.none.brown[1]).length;
-    if (zero !== 0) return `brown's flare footprint is ${zero}, want 0 by construction: a standard shell draws the shipped flare`;
+    for (const { kind, lever } of ZERO_BY_CONSTRUCTION) {
+      const zero = differing(still[lever][kind][1], still.none[kind][1]).length;
+      if (zero !== 0) {
+        return `${kind}'s ${lever} footprint is ${zero}, want 0 by construction: a standard shell draws the shipped flare, and a kind without MINE_LAYER draws no riser`;
+      }
+    }
 
     const sample = cell(still.flare.teal[0], still.none.teal[0], lit.flare[1], lit.none[1]);
     if (sample.retainedFraction === null || sample.retainedFraction <= 0 || sample.retainedFraction > 1) {

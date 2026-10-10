@@ -9,7 +9,7 @@ import {
   STRIPE_TURRET_MODE, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_OPACITY,
 } from './entities';
 import { hullGeometry, tankParts, HULL_CORNER, HULL_NOSE } from './tank-model';
-import { weaponShapeFor } from '../presentation/enemy-role';
+import { weaponShapeFor, type EnemyRoleCue } from '../presentation/enemy-role';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { distance, overFelt } from '../presentation/colour-distance';
 
@@ -43,8 +43,9 @@ import { FUSE_WARNING_SECONDS } from './mine-warning';
 import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD, SHELL_MUZZLE_FORWARD, SHELL_NOSE_REACH_RADII } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
-import { configFor } from '../sim/config';
+import { configFor, hasAbility, TankAbility } from '../sim/config';
 import { TANK_KINDS } from '../sim/config/validate';
+import { PP1_ROLE_MINE_CAPS } from '../sim/config/pp1-roles';
 import { createSkinTexture } from './skins';
 import { createDeathPulseSystem } from './death-pulse';
 import { createBarrelRecoilSystem } from './barrel-recoil';
@@ -2989,6 +2990,30 @@ describe('entity views — a stock respawn snaps to the selected spawn point (#2
   });
 });
 
+// Role-cue readers shared by the describes below, each reading ONE tank's view.
+
+/** The root group of tank `id`, found from its barrel. */
+function rootOf(views: ReturnType<typeof createEntityViews>, id: number): THREE.Object3D {
+  let root = views.barrelOf(id) as THREE.Object3D;
+  while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
+  return root;
+}
+
+/** The widest radius of the barrel's lathe profile: the muzzle flare, for every cue state. */
+function flareRadius(views: ReturnType<typeof createEntityViews>, id: number): number {
+  const barrel = views.barrelOf(id) as THREE.Mesh;
+  const pos = barrel.geometry.getAttribute('position');
+  let r = 0;
+  for (let i = 0; i < pos.count; i++) r = Math.max(r, Math.hypot(pos.getX(i), pos.getZ(i)));
+  return r * barrel.scale.x;
+}
+
+const blocksOf = (views: ReturnType<typeof createEntityViews>, id: number): number => {
+  let n = 0;
+  rootOf(views, id).traverse((o) => { if (o.name === 'mine-block') n++; });
+  return n;
+};
+
 describe('enemy role cues read the tank, not its kind (issues #357, #773)', () => {
   /** A world holding one tank of `kind`, with `mineCap` overridden when given. */
   function worldWith(kind: Tank['kind'], mineCap?: number): World {
@@ -3012,10 +3037,12 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
   };
 
   it('draws no mine block for a tank whose session took its mines away', () => {
-    // THE CASE THIS EXISTS FOR: `?dev=1&pp1Roles=1` stamps `mineCap: 0` on Brown, Teal and
-    // Green (issue #358) while their roster entries still read 2. A cue keyed on the kind
-    // would draw a mine block on a tank that cannot lay one -- the cue contradicting the one
-    // thing it exists to report. Keyed on the tank, the deck is clean.
+    // THE CASE THIS EXISTS FOR: `?dev=1&pp1Roles=1` stamps `mineCap: 0` on Teal (issue #358)
+    // while its roster entry still reads 2, and Teal holds MINE_LAYER, so only the budget can
+    // clear its deck. (The arm also zeroes Brown, Olive and Green, which the MINE_LAYER gate
+    // already gives no block.) A cue keyed on the roster capacity would draw a mine block on a
+    // tank that cannot lay one -- the cue contradicting the one thing it exists to report.
+    // Keyed on the tank's own budget, inside the gate, the deck is clean.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene, undefined, null, null, null, 'riser');
     const w = worldWith('teal', 0);
@@ -3038,15 +3065,34 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
   it('sizes the block by the tank\'s own budget, so a raised cap reads wider', () => {
     // Two tanks of the SAME kind, one carrying a larger budget than its roster: the block is
     // an area, so a bigger budget must be a visibly bigger block, not merely present.
-    const scenes = [2, 4].map((cap) => {
+    // Population: grey and teal, the two enemy mine layers whose roster budget is 2 -- the
+    // standard-shell one and the ricochet one.
+    for (const kind of ['grey', 'teal'] as const) {
+      const scenes = [2, 4].map((cap) => {
+        const scene = new THREE.Scene();
+        const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+        const w = worldWith(kind, cap);
+        views.sync(w, w, 0);
+        return { scene, views };
+      });
+      expect(widthOfBlock(scenes[1].scene), kind).toBeGreaterThan(widthOfBlock(scenes[0].scene));
+      for (const s of scenes) s.views.dispose();
+    }
+  });
+
+  it('cannot open the gate with a session budget: a kind without MINE_LAYER draws no block at mineCap 4', () => {
+    // Issue #1059. `Tank.mineCap` sizes the block INSIDE the ability gate and never grants the
+    // ability: the simulation refuses every mine from a kind without MINE_LAYER whatever its
+    // budget (world.ts, ai/index.ts), so a block here would report mines the tank cannot lay.
+    // Population: brown and green, the two kinds with a roster capacity (2) and no MINE_LAYER.
+    for (const kind of ['brown', 'green'] as const) {
       const scene = new THREE.Scene();
       const views = createEntityViews(scene, undefined, null, null, null, 'riser');
-      const w = worldWith('teal', cap);
+      const w = worldWith(kind, 4);
       views.sync(w, w, 0);
-      return { scene, views };
-    });
-    expect(widthOfBlock(scenes[1].scene)).toBeGreaterThan(widthOfBlock(scenes[0].scene));
-    for (const s of scenes) s.views.dispose();
+      expect(mineBlocks(scene), `${kind} with mineCap 4`).toHaveLength(0);
+      views.dispose();
+    }
   });
 
   it('draws nothing at all with no cue asked for, whatever the tank carries', () => {
@@ -3063,10 +3109,171 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
   });
 });
 
+describe('the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059)', () => {
+  const ENEMY_KINDS = TANK_KINDS.filter((k) => k !== 'player');
+
+  /**
+   * One tank of each of `kinds`, id i + 1, built under `cue` (none when null), with each tank's
+   * `mineCap` taken from `mineCaps` where it names the kind -- the way arena.ts stamps the
+   * pp1Roles arm over a finished tank list.
+   */
+  function roster(
+    cue: EnemyRoleCue | null,
+    kinds: readonly Tank['kind'][],
+    mineCaps: Partial<Record<Tank['kind'], number>> = {},
+  ): ReturnType<typeof createEntityViews> {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene, undefined, null, null, null, cue);
+    const tanks = kinds.map((kind, i) => {
+      const cap = mineCaps[kind];
+      return { ...makeTank(i + 1, kind, 2 + i * 2, 5), ...(cap === undefined ? {} : { mineCap: cap }) };
+    });
+    const spawns: Spawn[] = tanks.map((t) => ({ kind: t.kind, pos: { ...t.pos }, angle: 0 }));
+    const w = createWorld({ walls: [], tanks, spawns, lives: 3 });
+    views.sync(w, w, 0);
+    scene.updateMatrixWorld(true);
+    return views;
+  }
+
+  /** The width of tank `id`'s mine block, 0 when it draws none. */
+  function blockWidthOf(views: ReturnType<typeof createEntityViews>, id: number): number {
+    let width = 0;
+    rootOf(views, id).traverse((o) => {
+      if (o.name !== 'mine-block') return;
+      const geo = (o as THREE.Mesh).geometry;
+      geo.computeBoundingBox();
+      width = (geo.boundingBox as THREE.Box3).max.x - (geo.boundingBox as THREE.Box3).min.x;
+    });
+    return width;
+  }
+
+  /** The widest radius of tank `id`'s turret lathe: what `crown` spends. */
+  function turretRadius(views: ReturnType<typeof createEntityViews>, id: number): number {
+    let r = 0;
+    rootOf(views, id).traverse((o) => {
+      if (o.name !== 'turret') return;
+      const pos = (o as THREE.Mesh).geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        r = Math.max(r, Math.hypot(pos.getX(i), pos.getZ(i)) * o.scale.x);
+      }
+    });
+    return r;
+  }
+
+  /** What `both` draws on each of `kinds`, grouped: flare radius, block count, block width. */
+  function groupsUnder(mineCaps: Partial<Record<Tank['kind'], number>> = {}): string[][] {
+    const views = roster('both', ENEMY_KINDS, mineCaps);
+    const groups = new Map<string, string[]>();
+    ENEMY_KINDS.forEach((kind, i) => {
+      const id = i + 1;
+      const sig = [
+        flareRadius(views, id).toFixed(6), blocksOf(views, id), blockWidthOf(views, id).toFixed(6),
+      ].join('|');
+      groups.set(sig, [...(groups.get(sig) ?? []), kind]);
+    });
+    views.dispose();
+    return [...groups.values()].map((ks) => [...ks].sort());
+  }
+  const collidedIn = (groups: string[][]): string[][] => groups.filter((ks) => ks.length > 1).sort();
+
+  it('draws the block on exactly the kinds that hold MINE_LAYER -- population: all 7 kinds in TANK_KINDS, under deck, riser and both', () => {
+    // The cue reports what the simulation lets a tank lay, and the simulation gates every mine
+    // on the ability (world.ts, ai/index.ts), never on the capacity. Brown and green carry a
+    // capacity of 2 and no MINE_LAYER, so a block on either is "a mine block on a tank that
+    // cannot lay one", the failure PR #830 named. All three mine-load levers share the gate,
+    // and `deck` and `riser` both draw `mine-block`, so all three are read here (crown is the
+    // turret case below).
+    expect(TANK_KINDS, 'the population this case claims').toHaveLength(7);
+    const layers = TANK_KINDS.filter((k) => hasAbility(k, TankAbility.MINE_LAYER));
+    for (const cue of ['deck', 'riser', 'both'] as const) {
+      const views = roster(cue, TANK_KINDS);
+      const drawn = TANK_KINDS.filter((_, i) => blocksOf(views, i + 1) > 0);
+      // `extra`: a block on a tank that cannot lay a mine. `missing`: a mine layer with no block.
+      expect({
+        extra: drawn.filter((k) => !layers.includes(k)),
+        missing: layers.filter((k) => !drawn.includes(k)),
+      }, cue).toEqual({ extra: [], missing: [] });
+      views.dispose();
+    }
+  });
+
+  it('separates the six enemy kinds by what `both` draws, no pair colliding -- population: 6 enemy kinds (TANK_KINDS minus player)', () => {
+    // MEASURED, not derived: each kind is built through `createEntityViews` and read back as
+    // flare radius, block count and block width. Six groups: brown (shipped flare, no block),
+    // grey (shipped, 0.3), yellow (shipped, 0.62), teal (1.55, 0.3), green (1.55, none) and
+    // olive (0.7, none). The pairs collided there (brown/grey, green/teal) were the reason a
+    // four-group ceiling was ever claimed; with the gate they separate on the block.
+    // One assertion, so a failure prints the count AND the pairs that collided.
+    const groups = groupsUnder();
+    expect({ groups: groups.length, collided: collidedIn(groups) }, 'what `both` draws').toEqual({
+      groups: 6, collided: [],
+    });
+  });
+
+  it('reads five under the pp1Roles mine caps, where teal and green collide again -- population: 6 enemy kinds', () => {
+    // `?dev=1&pp1Roles=1` (issue #358) stamps `mineCap: 0` on teal, which keeps MINE_LAYER, so
+    // its block goes and it draws what green draws. Brown and green are capped at 0 too, which
+    // the gate already gave them; grey and yellow are not stamped. The gate composes with the
+    // arm and does not change it.
+    const groups = groupsUnder(PP1_ROLE_MINE_CAPS);
+    expect({ groups: groups.length, collided: collidedIn(groups) }, 'what `both` draws under pp1Roles').toEqual({
+      groups: 5, collided: [['green', 'teal']],
+    });
+  });
+
+  it('draws brown under `both` as the shipped tank, mesh for mesh and vertex for vertex', () => {
+    // A standard shell gets the shipped flare (1), and brown cannot lay mines, so neither lever
+    // moves it: brown is the no-cue baseline kind (issue #1059's ruling on #357). Every mesh of
+    // the tank is compared: its name, its vertices and where it sits in the world.
+    const snapshot = (views: ReturnType<typeof createEntityViews>, id: number): unknown[] => {
+      const out: unknown[] = [];
+      rootOf(views, id).traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return;
+        out.push({
+          name: o.name,
+          vertices: Array.from(o.geometry.getAttribute('position').array as Float32Array),
+          matrixWorld: [...o.matrixWorld.elements],
+        });
+      });
+      return out;
+    };
+    const kinds: Tank['kind'][] = ['brown', 'grey', 'olive'];
+    const shipped = roster(null, kinds);
+    const armed = roster('both', kinds);
+    const [brown, grey, olive] = kinds.map((_, i) => [snapshot(armed, i + 1), snapshot(shipped, i + 1)]);
+    expect(brown[0], 'brown under both').toEqual(brown[1]);
+    // The controls: the comparison can see each lever, grey gaining a block and olive's flare
+    // narrowing, so the equality above is not two empty snapshots or a cue that drew nothing.
+    expect(grey[0], 'grey under both').not.toEqual(grey[1]);
+    expect(olive[0], 'olive under both').not.toEqual(olive[1]);
+    shipped.dispose();
+    armed.dispose();
+  });
+
+  it('narrows the turret under `crown` on exactly the kinds that lay no mines -- population: all 7 kinds in TANK_KINDS', () => {
+    // `crown` is the third mine-load lever and shares the gate: no load is the narrow turret
+    // (0.82), a budget of 2 the shipped one, and 4 the wide one (1.22). So brown and green take
+    // the turret olive has, beside it.
+    const shippedViews = roster(null, ['player']);
+    const shipped = turretRadius(shippedViews, 1);
+    shippedViews.dispose();
+    const views = roster('crown', TANK_KINDS);
+    const r = TANK_KINDS.map((_, i) => turretRadius(views, i + 1));
+    views.dispose();
+    const by = (pick: (radius: number) => boolean) => TANK_KINDS.filter((_, i) => pick(r[i])).sort();
+    expect({
+      narrower: by((x) => x < shipped), shipped: by((x) => x === shipped), wider: by((x) => x > shipped),
+    }, 'turret radius against the shipped one').toEqual({
+      narrower: ['brown', 'green', 'olive'], shipped: ['grey', 'player', 'teal'], wider: ['yellow'],
+    });
+  });
+});
+
 describe('the role cue under reduced motion (issue #1018)', () => {
-  // The three weapon classes the cue distinguishes, each with `both` (the approved arm): brown
+  // The three weapon classes the cue distinguishes, each with `both` (the approved arm): grey
   // carries the shipped flare and a riser, olive a small flare and no riser, teal both levers.
-  const KINDS: Tank['kind'][] = ['brown', 'olive', 'teal'];
+  // Grey and not brown since issue #1059: brown holds no MINE_LAYER, so it draws no riser.
+  const KINDS: Tank['kind'][] = ['grey', 'olive', 'teal'];
   const PARTS = ['hull', 'turret', 'barrel', 'mine-block'] as const;
 
   function rig(reduced: boolean): { views: ReturnType<typeof createEntityViews>; w: World } {
@@ -3083,13 +3290,6 @@ describe('the role cue under reduced motion (issue #1018)', () => {
     return { views, w };
   }
 
-  /** The root group of tank `id`, found from its barrel. */
-  function rootOf(views: ReturnType<typeof createEntityViews>, id: number): THREE.Object3D {
-    let root = views.barrelOf(id) as THREE.Object3D;
-    while (root.parent && !(root.parent instanceof THREE.Scene)) root = root.parent;
-    return root;
-  }
-
   /** Every named cue part of tank `id`: its vertices and where it sits in the world. */
   function partsOf(views: ReturnType<typeof createEntityViews>, id: number): Record<string, unknown> {
     const out: Record<string, unknown> = {};
@@ -3104,30 +3304,16 @@ describe('the role cue under reduced motion (issue #1018)', () => {
     return out;
   }
 
-  /** The widest radius of the barrel's lathe profile: the muzzle flare, for every cue state. */
-  function flareRadius(views: ReturnType<typeof createEntityViews>, id: number): number {
-    const barrel = views.barrelOf(id) as THREE.Mesh;
-    const pos = barrel.geometry.getAttribute('position');
-    let r = 0;
-    for (let i = 0; i < pos.count; i++) r = Math.max(r, Math.hypot(pos.getX(i), pos.getZ(i)));
-    return r * barrel.scale.x;
-  }
-
-  const blocksOf = (views: ReturnType<typeof createEntityViews>, id: number): number => {
-    let n = 0;
-    rootOf(views, id).traverse((o) => { if (o.name === 'mine-block') n++; });
-    return n;
-  };
-
   it('builds the same hull, turret, barrel, flare and mine block either way, at rest -- population: 3 kinds', () => {
     const full = rig(false);
     const calm = rig(true);
     for (const [i, kind] of KINDS.entries()) {
       const a = partsOf(full.views, i + 1);
       // The cue is really there, or this compares two empty records: every kind has the three
-      // body parts, and the block is present exactly where the tank carries mines.
+      // body parts, and the block is present exactly where the tank can lay mines.
+      const laysMines = hasAbility(kind, TankAbility.MINE_LAYER) && configFor(kind).mineCapacity > 0;
       expect(Object.keys(a).sort(), kind).toEqual(
-        configFor(kind).mineCapacity > 0 ? ['barrel', 'hull', 'mine-block', 'turret'] : ['barrel', 'hull', 'turret'],
+        laysMines ? ['barrel', 'hull', 'mine-block', 'turret'] : ['barrel', 'hull', 'turret'],
       );
       expect(partsOf(calm.views, i + 1), kind).toEqual(a);
     }
@@ -3137,12 +3323,12 @@ describe('the role cue under reduced motion (issue #1018)', () => {
 
   it('the flare differs by weapon class, so the comparison above can see a flare change', () => {
     // The negative control's premise, measured: teal's ricochet-rocket flare is wider than
-    // brown's standard one and olive's rocket flare narrower. A reduced-motion preference that
+    // grey's standard one and olive's rocket flare narrower. A reduced-motion preference that
     // reshaped the flare would move one of these, and the case above would fail.
     const full = rig(false);
-    const [brown, olive, teal] = KINDS.map((_, i) => flareRadius(full.views, i + 1));
-    expect(teal).toBeGreaterThan(brown);
-    expect(olive).toBeLessThan(brown);
+    const [grey, olive, teal] = KINDS.map((_, i) => flareRadius(full.views, i + 1));
+    expect(teal).toBeGreaterThan(grey);
+    expect(olive).toBeLessThan(grey);
     full.views.dispose();
   });
 

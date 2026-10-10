@@ -4,13 +4,16 @@
  * cue and publishes what it measured, with the two controls and the staging guard beside it.
  * See `role-cue-cells.ts` for what each effect is and how it is removed.
  *
- * Axes, fixed before the first run: kind and lever (the four `LEVER_PAIRS`, plus brown's flare
- * as the zero-by-construction check), event (`fire`, `fire-blocked`), preset (`high`, `medium`;
- * `low` builds no smoke), motion (full, reduced), and the five `SAMPLE_TICKS`. Effects: smoke on
- * both events; the particle burst and smoke-plus-burst on `fire` only, since a refusal spawns no
- * burst. One axis was added after that run: `pose` (see `CuePose`).
+ * Axes, fixed before the first run: kind and lever (the four `LEVER_PAIRS`, plus the
+ * `ZERO_BY_CONSTRUCTION` pairs as checks), event (`fire`, `fire-blocked`), preset (`high`,
+ * `medium`; `low` builds no smoke), motion (full, reduced), and the five `SAMPLE_TICKS`. Effects:
+ * smoke on both events; the particle burst and smoke-plus-burst on `fire` only, since a refusal
+ * spawns no burst. One axis was added after that run: `pose` (see `CuePose`). The pairs moved
+ * after the published #1018 run: issue #1059 gated the riser on MINE_LAYER, so brown's riser
+ * became a zero-by-construction check and grey, which holds it, took brown's place as a carrier.
  */
 import {
+  CUE_KINDS,
   LEVER_PAIRS,
   SAMPLE_TICKS,
   ZERO_BY_CONSTRUCTION,
@@ -18,6 +21,7 @@ import {
   colours,
   createCueRig,
   differing,
+  isZeroByConstruction,
   patched,
   type CellResult,
   type CueEffect,
@@ -36,7 +40,7 @@ const POSES = (params.get('poses') ?? 'east,toward-camera').split(',') as CuePos
 const TICKS = params.has('ticks') ? params.get('ticks')!.split(',').map(Number) : [...SAMPLE_TICKS];
 const WIDTH = Number(params.get('w') ?? 320);
 const HEIGHT = Number(params.get('h') ?? 240);
-const KINDS: CueKind[] = ['brown', 'olive', 'teal'];
+const KINDS: readonly CueKind[] = CUE_KINDS;
 const EVENTS: CueEvent[] = ['fire', 'fire-blocked'];
 
 /**
@@ -108,19 +112,24 @@ async function measure(): Promise<void> {
   }
 
   // The staging guard: every pair's no-effect footprint is nonzero in every sampled cell, and
-  // brown's flare is 0 in every one.
+  // every zero-by-construction pair's is 0 in every one. Each also needs cells to exist: a pair
+  // whose kind the run never built has none, and a check over no cells passes by default.
   for (const { kind, lever } of LEVER_PAIRS) {
-    const empty = rows.filter((r) => r.kind === kind && r.lever === lever && r.footprint === 0);
+    const cells = rows.filter((r) => r.kind === kind && r.lever === lever);
+    const empty = cells.filter((r) => r.footprint === 0);
     controls.push({
       name: `staging guard: ${kind} ${lever} footprint nonzero`, preset: 'all', motion: 'all', pose: 'all',
-      pass: empty.length === 0, detail: `${empty.length} cells with an empty footprint`,
+      pass: cells.length > 0 && empty.length === 0, detail: `${empty.length} of ${cells.length} cells with an empty footprint`,
     });
   }
-  const nonzero = rows.filter((r) => r.kind === ZERO_BY_CONSTRUCTION.kind && r.lever === ZERO_BY_CONSTRUCTION.lever && r.footprint !== 0);
-  controls.push({
-    name: 'check: brown flare footprint is 0 by construction', preset: 'all', motion: 'all', pose: 'all',
-    pass: nonzero.length === 0, detail: `${nonzero.length} cells with a nonzero footprint`,
-  });
+  for (const { kind, lever } of ZERO_BY_CONSTRUCTION) {
+    const cells = rows.filter((r) => r.kind === kind && r.lever === lever);
+    const nonzero = cells.filter((r) => r.footprint !== 0);
+    controls.push({
+      name: `check: ${kind} ${lever} footprint is 0 by construction`, preset: 'all', motion: 'all', pose: 'all',
+      pass: cells.length > 0 && nonzero.length === 0, detail: `${nonzero.length} of ${cells.length} cells with a nonzero footprint`,
+    });
+  }
 }
 
 async function measureSequence(
@@ -172,7 +181,7 @@ async function measureSequence(
       pass: smokeAtMuzzle > 0, detail: `${smokeAtMuzzle} pixels differ with the smoke on`,
     });
   }
-  const pairs = [...LEVER_PAIRS, ZERO_BY_CONSTRUCTION].filter((p) => p.kind === kind);
+  const pairs = [...LEVER_PAIRS, ...ZERO_BY_CONSTRUCTION].filter((p) => p.kind === kind);
   for (const { lever } of pairs) {
     const off = lever === 'flare' ? got.flareOff : got.riserOff;
     const on = lever === 'flare' ? got.flareOn : got.riserOn;
@@ -189,7 +198,7 @@ async function measureSequence(
       });
     }
     // Control (ii): an opaque patch over the footprint, in both frames, reads ~0 retained.
-    if (lever !== ZERO_BY_CONSTRUCTION.lever || kind !== ZERO_BY_CONSTRUCTION.kind) {
+    if (!isZeroByConstruction(kind, lever)) {
       const footprint = differing(off.false[0], got.noneOff.false[0]);
       const res = cell(off.false[0], got.noneOff.false[0], patched(on.false[0], footprint), patched(got.noneOn.false[0], footprint));
       controls.push({

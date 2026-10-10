@@ -3,7 +3,7 @@ import type { World } from '../sim/world';
 import type { Wall, TankKind, Tank } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
-import { configFor, wallConfigFor } from '../sim/config';
+import { configFor, hasAbility, TankAbility, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
 import { identityApplies, resolveOwnerColor } from '../presentation/identity';
@@ -820,9 +820,13 @@ export function createEntityViews(
      * issue #358). Absent means the roster's, which is what `configFor(kind)` gives.
      *
      * PASSED RATHER THAN LOOKED UP, because the mine cue states a fact about THIS tank. Under
-     * `?dev=1&pp1Roles=1` Brown, Teal and Green carry `mineCap: 0` while their roster entries
-     * still say 2, so a cue keyed on the kind would draw a mine block on a tank that cannot lay
-     * one -- a cue contradicting the thing it exists to report.
+     * `?dev=1&pp1Roles=1` Teal carries `mineCap: 0` while its roster entry still says 2, so a
+     * cue keyed on the kind would draw a mine block on a tank that cannot lay one -- a cue
+     * contradicting the thing it exists to report. (The arm caps Brown and Green at 0 too, but
+     * neither holds MINE_LAYER, so the gate below already draws them bare.)
+     *
+     * It applies only inside that MINE_LAYER gate: a budget sizes the block of a kind that lays
+     * mines, and never gives one to a kind that does not.
      */
     mineCap?: number,
   ): { group: THREE.Group; turret: THREE.Object3D; barrel: THREE.Object3D; visual: THREE.Group } {
@@ -919,10 +923,19 @@ export function createEntityViews(
     // roster does. `configFor` is the same resolved config the sim fires from.
     const cfg = configFor(kind);
     // Weapon class has no per-tank override anywhere in `Tank`, so the roster's bullet type IS
-    // this tank's; the mine budget does (`Tank.mineCap`), and `?? cfg.mineCapacity` is the same
-    // resolution the simulation makes when it decides whether a mine may be laid.
+    // this tank's.
     const weapon = weaponShapeFor(weaponLever(enemyRole), cfg.weapon.bulletType);
-    const mines = mineShapeFor(mineLever(enemyRole), mineCap ?? cfg.mineCapacity);
+    // Mine load is what the simulation lets THIS tank lay, decided in the simulation's order:
+    // the kind must hold MINE_LAYER (world.ts and ai/index.ts gate every mine on it), and only
+    // then does a budget apply, `Tank.mineCap` before the roster's (mines.ts). So a kind with a
+    // capacity but no ability, brown or green, draws no block, and a session's `mineCap` sizes
+    // the block inside the gate but cannot open it (issue #1059). Keyed on the ability, never a
+    // kind name, so re-arming a kind in tank-defs.json moves its cue. The rule lives here rather
+    // than in `mineShapeFor` because presentation may name the simulation only as types.
+    // `Tank.disarmed` (the dev sandbox's scenery) is deliberately not read: like the flare,
+    // the cue reports what the tank is armed with, not whether this session lets it act.
+    const mineLoad = hasAbility(kind, TankAbility.MINE_LAYER) ? (mineCap ?? cfg.mineCapacity) : 0;
+    const mines = mineShapeFor(mineLever(enemyRole), mineLoad);
     const girth = weapon.barrelGirth ?? 1;
     const parts = tankParts({
       barrelGirth: girth,

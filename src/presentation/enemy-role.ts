@@ -9,20 +9,22 @@ import type { BulletType } from '../sim/types';
  * all six at the shipped camera in one pose, and the render is the problem statement: identical
  * geometry, separated by hue alone.
  *
- * THE CEILING, and it decides the shape of this whole vocabulary. Grouping the roster by what
- * a STILL FRAME could possibly encode does not separate into six:
+ * WHAT A STILL FRAME CAN SEPARATE, which decides the shape of this whole vocabulary. Grouping
+ * the six enemy kinds by the two facts these levers encode, weapon class (the resolved bullet
+ * type) and mine load (what the tank may lay: nothing without MINE_LAYER, otherwise its budget):
  *
- *   weapon class + bounce count -> 3 groups (brown/grey/yellow collide, teal/green collide)
- *   + mine load                 -> 4 groups (yellow separates; the other two pairs do not)
- *   + anything else static      -> still 4
+ *   weapon class alone -> 3 groups (brown/grey/yellow share one, teal/green another)
+ *   + mine load        -> 6 groups (brown none, grey two, yellow four; teal two, green none)
  *
- * Brown and grey carry the same projectile, the same bounce count, the same shell cap and the
- * same mine load. So do teal and green. They differ only in movement speed, rotation speed,
- * fire rate and AI behaviour -- every one of which is TEMPORAL. So no decal, badge, barrel
- * treatment or silhouette change can separate those two pairs, because there is nothing static
- * to separate. A markings grammar tops out at FOUR legible groups, and that is a ceiling rather
- * than a tuning problem. Closing the last two pairs needs a motion cue, which is a separate
- * experiment because it cannot be judged from a screenshot.
+ * Brown and green carry a mine capacity but not MINE_LAYER, and the simulation gates every mine
+ * on the ability, so they lay none (issue #1059). An earlier reading keyed mine load on the raw
+ * capacity, paired brown with grey and green with teal, and concluded that a static cue tops
+ * out at four groups and the last two pairs need a motion cue. That ceiling came from the
+ * misreading, not from the roster. Six is measured from the drawn tanks in entities.test.ts.
+ * Under `?dev=1&pp1Roles=1` teal's budget is 0, so it draws what green draws: five groups.
+ *
+ * What the count does NOT settle is whether no block against one block reads at play distance.
+ * That is a look, judged from rendered frames, not a count.
  *
  * WHICH CHANNELS ARE FREE, which is why these two arms and not others. The turret crown is the
  * best surface on the tank and nothing occludes it -- which is exactly why #630 wants it for
@@ -33,9 +35,9 @@ import type { BulletType } from '../sim/types';
  * THAT SENTENCE WAS ABOUT DECAL SURFACES, AND IT MISSED THE BIGGEST MASS ON THE TANK (issue
  * #831). Reading "the barrel and the hull side" as the whole remaining budget skipped the
  * hull's own PLAN OUTLINE, which is not a surface to print on but a silhouette to reshape. It
- * was never rendered and therefore never rejected: the ceiling argument above says no
- * silhouette change can separate brown from grey, which is true and is a statement about those
- * two kinds being temporally distinguished, not a finding that reshaping the hull reads poorly.
+ * was never rendered and therefore never rejected. A weapon-class silhouette cannot separate
+ * brown from grey, which share a bullet type, but that is a statement about what the hull
+ * would encode, not a finding that reshaping the hull reads poorly.
  * The hull is also the one part that never turns away from a camera looking down at 51
  * degrees, which is what killed the flank `band`.
  *
@@ -176,8 +178,9 @@ const HULL_PLAN_CORNER = 0.3;
  * covering a third of the hull top against two thirds is tens of pixels. The hull top is the
  * one large surface nothing else has claimed -- 1.0 by 1.0, foreshortening to about 89 by 69
  * px near the camera -- and unlike the hull SIDE (0.25 units effective, 10px far) it does not
- * vanish when the tank turns. Zero for a kind that lays no mines, so olive carries a clean
- * deck and reads as the outlier it is.
+ * vanish when the tank turns. Zero means a clean deck, and the caller passes zero for every
+ * tank that cannot lay mines: `makeTank` (entities.ts) gates the capacity on MINE_LAYER before
+ * it reaches here, because this layer may name the simulation only as types.
  */
 export function mineShapeFor(
   lever: 'deck' | 'riser' | 'crown' | null, mineCapacity: number,
