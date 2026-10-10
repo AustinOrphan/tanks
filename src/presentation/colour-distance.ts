@@ -20,10 +20,39 @@
  * the arena ground. Comparing authored constants is how issue #580 stayed invisible: the
  * identity palette measured fine as authored while additive blending pushed two of its
  * four rings to the same gold on screen.
+ *
+ * Issue #1056 added `contrastRatio` and `simulateColourVision` for the owner palettes'
+ * floors, and moved the two floors below here from `render/entities.test.ts` so the
+ * presentation tests and the render tests hold both palettes to one definition.
  */
 
 /** The arena ground, `0x2f6d4f` -- the surface owner rings are drawn onto. */
 export const ARENA_FELT = 0x2f6d4f;
+
+/**
+ * Floors, in CIEDE2000, measured as drawn rather than asserted from a standard. Figures are
+ * from these helpers on 2026-10-10 (origin/main c200cf62 plus issue #1056), every owner
+ * colour composited with `overFelt`, every hull opaque.
+ *
+ * OWNER_FLOOR 15: what an owner colour must clear against a tank it is drawn beside. Classic
+ * rings clear the 7 roster kinds at 17.09 (ring0 vs teal) and the unstyled placeholder at
+ * 19.41 (ring3); Classic teams clear the player hull at 33.36 (team B) and the placeholder at
+ * 25.54 (team A). The floor sits below all four with room, and would have caught the 2.09
+ * collision between the old blue team B and the player hull that motivated it (#579). The
+ * High contrast palette is also held to it against the 6 hull paints; Classic is not, since
+ * #586 tolerates its ring 1 sitting 1.17 from the orange paint.
+ *
+ * TEAM_FLOOR 25: teammates share a colour, so telling two SIDES apart matters more than
+ * telling two slots apart, and the trio has more room to spend. Worst pairs: Classic 35.98
+ * (A vs B), High contrast 31.52 (A vs C).
+ *
+ * Neither is a published threshold. A just-noticeable difference is about 1-2 and these are
+ * moving objects at play distance, so the numbers are chosen from what the shipped palettes
+ * actually achieve, with enough headroom that a real regression trips them and normal
+ * palette work does not.
+ */
+export const OWNER_FLOOR = 15;
+export const TEAM_FLOOR = 25;
 
 type Rgb = readonly [number, number, number];
 
@@ -42,13 +71,21 @@ export function overFelt(colour: number, alpha = 0.85): number {
   return (mix(r, fr) << 16) | (mix(g, fg) << 8) | mix(b, fb);
 }
 
+/** One 8-bit sRGB channel to linear light in [0, 1], per IEC 61966-2-1. */
+function toLinear(c8: number): number {
+  const v = c8 / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+}
+
+/** The inverse: linear light, clamped to [0, 1], back to the nearest 8-bit sRGB channel. */
+function toSrgb8(linear: number): number {
+  const v = Math.min(1, Math.max(0, linear));
+  return Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
+}
+
 /** sRGB (IEC 61966-2-1) -> linear -> XYZ D65 -> CIE Lab, white point D65. */
 function lab(colour: number): Rgb {
-  const lin = (c: number): number => {
-    const v = c / 255;
-    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  const [r, g, b] = rgbOf(colour).map(lin) as unknown as Rgb;
+  const [r, g, b] = rgbOf(colour).map((c) => toLinear(c)) as unknown as Rgb;
   const x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047;
   const y = 0.2126729 * r + 0.7151522 * g + 0.072175 * b;
   const z = (0.0193339 * r + 0.119192 * g + 0.9503041 * b) / 1.08883;
@@ -120,4 +157,65 @@ export function distance(a: number, b: number): number {
       (dHp / sH) ** 2 +
       rT * (dCp / sC) * (dHp / sH),
   );
+}
+
+/**
+ * WCAG 2.x contrast ratio, `(L1 + 0.05) / (L2 + 0.05)` over relative luminance, lighter
+ * colour on top: 1 for a colour against itself, 21 for black against white, and the same
+ * either way round. A distance in CIEDE2000 can be large between two colours of equal
+ * lightness; this measures the lightness step alone, which is the channel a player with any
+ * colour-vision type still has. Issue #1056 holds the High contrast palette to 3:1 against
+ * the felt, the WCAG floor for non-text graphics.
+ *
+ * WCAG's own text gives the linearisation threshold as 0.03928, not IEC's 0.04045. On 8-bit
+ * input the two agree everywhere -- 10/255 sits below both and 11/255 above both -- so this
+ * shares `lab`'s conversion rather than carrying a second one.
+ */
+export function contrastRatio(a: number, b: number): number {
+  const luminance = (colour: number): number => {
+    const [r, g, b2] = rgbOf(colour).map((c) => toLinear(c));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b2;
+  };
+  const [la, lb] = [luminance(a), luminance(b)];
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** The three dichromacies `simulateColourVision` models, each at full severity. */
+export const COLOUR_VISIONS = ['protan', 'deutan', 'tritan'] as const;
+export type ColourVision = (typeof COLOUR_VISIONS)[number];
+
+/**
+ * Machado, Oliveira and Fernandes (2009), "A Physiologically-based Model for Simulation of
+ * Color Vision Deficiency", severity 1.0: one 3x3 matrix per type, applied to LINEAR sRGB.
+ * Rows produce linear R, G and B. Every row sums to 1 (to six decimals), which is why a
+ * neutral grey comes back unchanged -- the property the known-value test leans on.
+ */
+const MACHADO_2009: Readonly<Record<ColourVision, readonly [Rgb, Rgb, Rgb]>> = {
+  protan: [
+    [0.152286, 1.052583, -0.204868],
+    [0.114503, 0.786281, 0.099216],
+    [-0.003882, -0.048116, 1.051998],
+  ],
+  deutan: [
+    [0.367322, 0.860646, -0.227968],
+    [0.280085, 0.672501, 0.047413],
+    [-0.01182, 0.04294, 0.968881],
+  ],
+  tritan: [
+    [1.255528, -0.076749, -0.178779],
+    [-0.078411, 0.930809, 0.147602],
+    [0.004733, 0.691367, 0.3039],
+  ],
+};
+
+/**
+ * A colour as a reader with `vision` sees it: sRGB to linear, the Machado matrix, clamp to
+ * [0, 1], back to sRGB, rounded to 8 bits. Compose it with the other helpers in the order a
+ * player meets them -- composite first (`overFelt`), then simulate, then measure -- because
+ * the eye receives the composited colour, not the authored one.
+ */
+export function simulateColourVision(colour: number, vision: ColourVision): number {
+  const [r, g, b] = rgbOf(colour).map((c) => toLinear(c));
+  const [r2, g2, b2] = MACHADO_2009[vision].map(([kr, kg, kb]) => toSrgb8(kr * r + kg * g + kb * b));
+  return (r2 << 16) | (g2 << 8) | b2;
 }
