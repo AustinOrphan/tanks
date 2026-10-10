@@ -288,7 +288,9 @@ import { hudFontClass, type HudFont } from '../presentation/hud-font';
 import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
-import { STOCK_CUE_MS, type StockCue, narrowPipLayout, NARROW_STRIP_QUERY, type PipLayout } from '../presentation/stock-cue';
+import {
+  STOCK_CUE_MS, type StockCue, narrowPipLayout, narrowMarkLayout, NARROW_STRIP_QUERY, type PipLayout, type MarkLayout,
+} from '../presentation/stock-cue';
 import {
   type IdentityMarkerStyle,
   MARKER_ARC_GAP,
@@ -3570,12 +3572,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // ones solid and lost ones hollow, so the denominator survives -- with the unit
       // replaced by this slot's identity outline. One channel carries both facts.
       const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
+      // ISSUE #1021, the `marks` half of #835: on a narrow viewport the row is sized from the
+      // measured table in `stock-cue.ts`, and where no row of legible marks fits -- four
+      // players at five stocks -- the entry keeps ONE mark and states the count as a digit.
+      const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };
       const row = document.createElement('span');
       row.className = 'hud-stock-marks';
+      if (layout.kind === 'row') {
+        row.style.setProperty('--hud-mark', `${layout.mark}px`);
+        row.style.setProperty('--hud-mark-gap', `${layout.gap}px`);
+      }
       // ONE name for the row, not one per mark: the marks are a single quantity, and naming
       // each of five would read the player's stock count out five times.
       row.setAttribute('role', 'img');
       row.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
+      if (layout.kind === 'one') {
+        // ONE full-size mark in the slot's outline, filled while the player has stock, then the
+        // count. The mark is what the cue swells, so a loss still has a target.
+        row.innerHTML = identityStockMark(entry.slot, entry.stock > 0);
+        const mark = row.firstElementChild;
+        if (running !== null && mark !== null) cueEl(mark as SVGElement);
+        span.appendChild(row);
+        const count = document.createElement('span');
+        count.className = 'hud-stock-mark-count';
+        count.textContent = `${entry.stock}`;
+        span.appendChild(count);
+        return;
+      }
       row.innerHTML = Array.from(
         { length: total }, (_, i) => identityStockMark(entry.slot, i < entry.stock),
       ).join('');

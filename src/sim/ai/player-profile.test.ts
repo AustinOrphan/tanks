@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ARENAS, createWorldFor } from '../arena';
+import { STANDARD_ARENA } from '../config/arena-fixtures';
 import { step, createWorld } from '../world';
 import type { Tank, Vec2 } from '../types';
 import { fromAngle, vnorm, vsub, vdist } from '../types';
@@ -609,7 +610,9 @@ describe('the scripted player cannot perturb what it measures', () => {
     // interference is structurally impossible -- but a true property defended by an
     // invalid witness is exactly what this repo's bar exists to catch. A future edit
     // that made this function mutate `world` would have passed every test in the suite.
-    const world = createWorldFor(ARENAS[0], 7);
+    // The standard test board (issue #1009): every branch below needs enemies of more than one
+    // kind to react to, and none of it is about campaign level 1.
+    const world = createWorldFor(STANDARD_ARENA, 7);
     const playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     expect(playerId, 'no player to drive').toBeDefined();
     const rnd = mulberry32(1234);
@@ -634,15 +637,23 @@ describe('the scripted player cannot perturb what it measures', () => {
     // `step` clones its input and never mutates what it is given, so a frozen world can
     // be stepped safely.
     //
-    // Population: all 4 shipped arenas x 400 ticks = 1600 decisions, every one made
+    // Population: one world per board in `boards` below (the standard test board, then every
+    // shipped arena after arena-01: 8 today), up to 400 ticks each, every decision made
     // against a fully frozen world. The counters below assert the sweep genuinely
     // reached the fire and mine branches rather than idling -- without them this could
     // pass by never doing anything interesting.
+    //
+    // The FIRST slot is the standard test board (issue #1009), not campaign level 1. It is
+    // the board that reaches the mine branch: measured by re-authoring level 1 to a lone
+    // brown, as #1010 will, the sweep laid 0 mines. Today the two boards hold the same grid
+    // and roster, and the slot keeps level 1's seed, so the sweep is unchanged; it simply
+    // stops depending on the first level's roster to prove anything.
+    const boards = [STANDARD_ARENA, ...ARENAS.slice(1)];
     let fires = 0;
     let mines = 0;
     let decisions = 0;
-    for (let a = 0; a < ARENAS.length; a++) {
-      let w = createWorldFor(ARENAS[a], 40 + a);
+    for (let a = 0; a < boards.length; a++) {
+      let w = createWorldFor(boards[a], 40 + a);
       const rnd = mulberry32(9000 + a);
       const state = createPlayerAiState(rnd);
       for (let tick = 0; tick < 400; tick++) {
@@ -666,7 +677,7 @@ describe('the scripted player cannot perturb what it measures', () => {
   it('is a pure function of its inputs: same seed, same decision', () => {
     // The other half of determinism. `state` is caller-owned and deliberately mutable,
     // so two runs need their own.
-    const world = createWorldFor(ARENAS[0], 11);
+    const world = createWorldFor(STANDARD_ARENA, 11);
     const playerId = world.tanks.find((t) => t.kind === 'player')?.id as number;
     const a = decidePlayerInput(world, playerId, mulberry32(99), createPlayerAiState(mulberry32(99)));
     const b = decidePlayerInput(world, playerId, mulberry32(99), createPlayerAiState(mulberry32(99)));

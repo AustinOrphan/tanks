@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { createHud, type GameplayStatus, type Hud, type VersusStock } from './hud';
 import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
 import { configFor } from '../sim/config';
@@ -1192,6 +1192,92 @@ describe('hud: identity-shaped stocks, the `marks` arm (issue #230)', () => {
     }
     const held = allMarks(root)[0];
     expect(held.innerHTML, 'a held stock is filled').toContain('fill="currentColor"');
+  });
+
+  describe('on a narrow viewport (issue #1021)', () => {
+    // Driven through the public boundary, as the pips case is: the layout is decided in the
+    // builder `renderVersusStocks` calls for every entry on every status that moves.
+    const atEach = (stock: number) => [0, 1, 2, 3].map((slot) => ({ slot, stock }));
+    let wide: typeof window.matchMedia;
+    beforeEach(() => {
+      wide = window.matchMedia;
+      // jsdom's matchMedia always reports false, so the narrow branch has to be asked for.
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (q: string) => ({ matches: q === '(max-width: 480px)', media: q, addEventListener() {}, removeEventListener() {} }),
+      });
+    });
+    afterEach(() => {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: wide });
+    });
+
+    it('four players at four stocks: a row of 8px marks with a 2px gap', () => {
+      const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+      h.setStatus(versusStatus(atEach(4)));
+      expect(allMarks(root), 'every stock still drawn').toHaveLength(16);
+      for (const row of Array.from(root.querySelectorAll<HTMLElement>('.hud-stock-marks'))) {
+        expect(row.style.getPropertyValue('--hud-mark')).toBe('8px');
+        expect(row.style.getPropertyValue('--hud-mark-gap')).toBe('2px');
+        expect(row.getAttribute('aria-label')).toBe('4 of 4 stocks');
+      }
+    });
+
+    it('three players at five stocks keeps the full size, which the measurement says fits', () => {
+      const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+      h.setStatus(versusStatus([0, 1, 2].map((slot) => ({ slot, stock: 5 }))));
+      expect(allMarks(root)).toHaveLength(15);
+      const row = root.querySelector('.hud-stock-marks') as HTMLElement;
+      expect(row.style.getPropertyValue('--hud-mark'), 'shrunk a strip that fits').toBe('');
+    });
+
+    it('four players at five stocks: ONE full-size mark and the count, and the cue still has a target', () => {
+      vi.useFakeTimers({ toFake: ['performance'] });
+      const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+      h.setStatus(versusStatus(atEach(5)));
+      expect(allMarks(root), 'one mark per entry').toHaveLength(4);
+      // The digit is the only text added; the row keeps its single name.
+      expect(entries(root).map((e) => e.textContent)).toEqual(['P1 5', 'P2 5', 'P3 5', 'P4 5']);
+      const row = root.querySelector('.hud-stock-marks') as HTMLElement;
+      expect(row.getAttribute('aria-label')).toBe('5 of 5 stocks');
+      expect(row.style.getPropertyValue('--hud-mark'), 'the fallback mark is full size').toBe('');
+      // Still the slot's own outline: slot 2's is not slot 1's.
+      expect(entries(root)[1].querySelector('polygon'), 'the shape channel went').not.toBeNull();
+
+      h.setStatus(versusStatus(atEach(5).map((e) => (e.slot === 0 ? { ...e, stock: 4 } : e))));
+      const [p1, p2] = entries(root);
+      const cued = p1.querySelector('.hud-stock-cue');
+      expect(cued, 'the loss has nothing to swell').not.toBeNull();
+      // The same element the reduced-motion rule reaches: a `.hud-stock-mark`, not a new kind.
+      expect(cued?.classList.contains('hud-stock-mark')).toBe(true);
+      expect(p2.querySelectorAll('.hud-stock-cue')).toHaveLength(0);
+      expect(p1.textContent).toBe('P1 4');
+    });
+
+    it('the fallback mark goes hollow once the player is out', () => {
+      const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+      h.setStatus(versusStatus(atEach(5)));
+      h.setStatus(versusStatus(atEach(5).map((e) => (e.slot === 0 ? { ...e, stock: 0 } : e))));
+      const [p1, p2] = entries(root);
+      expect(p1.querySelectorAll('.hud-stock-mark--lost')).toHaveLength(1);
+      expect(p2.querySelectorAll('.hud-stock-mark--lost')).toHaveLength(0);
+    });
+  });
+
+  it('THE CONTROL for the narrow cases: the desktop strip draws every mark at full size', () => {
+    // jsdom's own matchMedia, which reports false: the same four-by-five strip draws twenty
+    // marks with no size override and no digit. Without this, the narrow cases could pass on
+    // a builder that shrank or fell back at every width.
+    const { hud: h, root } = mountMarks({ stockCue: 'marks' });
+    h.setStatus(versusStatus([0, 1, 2, 3].map((slot) => ({ slot, stock: 5 }))));
+    expect(allMarks(root)).toHaveLength(20);
+    expect(root.querySelectorAll('.hud-stock-mark-count')).toHaveLength(0);
+    for (const row of Array.from(root.querySelectorAll<HTMLElement>('.hud-stock-marks'))) {
+      expect(row.style.getPropertyValue('--hud-mark')).toBe('');
+    }
+    h.dispose();
+    const fours = mountMarks({ stockCue: 'marks' });
+    fours.hud.setStatus(versusStatus([0, 1, 2, 3].map((slot) => ({ slot, stock: 4 }))));
+    expect((fours.root.querySelector('.hud-stock-marks') as HTMLElement).style.getPropertyValue('--hud-mark')).toBe('');
   });
 
   it('leaves teams and the shipped strip alone', () => {

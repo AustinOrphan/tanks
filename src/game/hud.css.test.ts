@@ -3265,6 +3265,17 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     expect(ruleBody('.hud-stock-pip.hud-stock-cue::after')).toMatch(/animation-delay:\s*inherit/);
   });
 
+  it('sizes the marks from the row\'s custom properties, defaulting to the full size (issue #1021)', () => {
+    // hud.ts sets `--hud-mark` and `--hud-mark-gap` on a narrow viewport's row; a rule that read
+    // a literal would ignore them and the four-by-four strip would overflow a phone again, with
+    // every jsdom test still green, since jsdom lays nothing out. The defaults are the arm's
+    // full size, so the desktop strip draws exactly as it did.
+    const mark = ruleBody('.hud-stock-mark');
+    expect(mark).toMatch(/\bwidth:\s*var\(--hud-mark,\s*0\.62em\)/);
+    expect(mark).toMatch(/\bheight:\s*var\(--hud-mark,\s*0\.62em\)/);
+    expect(ruleBody('.hud-stock-marks')).toMatch(/\bgap:\s*var\(--hud-mark-gap,\s*2px\)/);
+  });
+
   it('asks for the BUNDLED faces first, in both token stacks (issue #326)', () => {
     // The whole reason these are bundled: `system-ui` and `ui-monospace` resolve to a
     // different face per platform, and text METRICS move with the face. The screen gate's
@@ -3837,5 +3848,113 @@ describe('hud.css type scales with the reader (issue #971)', () => {
     expect(base![1], '.ui-btn declares no font-size; every control without a size variant '
       + 'falls back to the UA button default, which is absolute')
       .toMatch(/font-size\s*:/);
+  });
+});
+
+/**
+ * THE UI SCALE REACHES ALL TEXT (issue #1031), over every `font-size` declaration in hud.css.
+ *
+ * The ruling on #985's criterion 4: the player's UI scale must reach all text, not just what
+ * happens to be sized from the six `--hud-type-N` steps. Text scales here by one of three
+ * routes, and this guard makes the stylesheet use one of them for every declaration:
+ *
+ *   1. a `--hud-type-N` token, which carries the multiplier;
+ *   2. a `rem` or `px` literal wrapped as `calc(<value> * var(--hud-ui-scale))`;
+ *   3. `em`, which scales by construction once `.hud` itself declares the scaled base --
+ *      which is why that one declaration is checked here, and why the guard does not try to
+ *      prove (3) from the text.
+ *
+ * Measured when this landed, comments stripped: 58 declarations, 25 token, 25 `em`, 8 `rem`
+ * (the scaled `.hud` base, five wrapped display literals and the two developer-only
+ * exceptions below), 0 `px`, and no `font:` shorthand at all.
+ */
+describe('hud.css: the UI scale reaches all text (issue #1031)', () => {
+  /** Developer-only text, deliberately left at its own size. Nothing a player sees is here. */
+  const EXCEPTIONS: Record<string, string> = {
+    '.hud-devbadge': 'the DEV badge, shown only under ?dev=1',
+    '.hud-versus-setup--header .hud-versus-header h1': 'the versusActions=header developer arm',
+  };
+
+  /** Every font-size declaration, with the selector of the rule it sits in. */
+  function fontSizes(text: string): { selector: string; value: string }[] {
+    const out: { selector: string; value: string }[] = [];
+    for (const rule of stripComments(text).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = rule[1].split(/\s+/).join(' ').trim();
+      for (const d of rule[2].matchAll(/(?<![\w-])font-size\s*:\s*([^;]+)/g)) out.push({ selector, value: d[1].trim() });
+    }
+    return out;
+  }
+
+  /** What is wrong with a stylesheet's text sizing, one message per declaration or rule broken. */
+  function scaleFailures(text: string): string[] {
+    const failures: string[] = [];
+    for (const { selector, value } of fontSizes(text)) {
+      if (!/\d(\.\d+)?(rem|px)\b/.test(value)) continue; // a token or `em`
+      if (/^var\(--hud-type-\d+\)$/.test(value)) continue;
+      if (/^calc\(.*\*\s*var\(--hud-ui-scale\)\s*\)$/.test(value)) {
+        if (selector in EXCEPTIONS) failures.push(`${selector} is scaled now, so drop it from EXCEPTIONS`);
+        continue;
+      }
+      if (selector in EXCEPTIONS) continue;
+      failures.push(`${selector} sets font-size: ${value}, which the player's UI scale cannot reach`);
+    }
+    if (/(?<![\w-])font\s*:/.test(stripComments(text))) failures.push('a font: shorthand can carry a size this guard does not read');
+    const hud = /\n\.hud \{([^}]*)\}/.exec(stripComments(text));
+    if (!hud || !/(?<![\w-])font-size\s*:\s*calc\(1rem \* var\(--hud-ui-scale\)\);/.test(hud[1])) {
+      failures.push('.hud does not declare font-size: calc(1rem * var(--hud-ui-scale)), so the base text every `em` inherits stays at the page size');
+    }
+    return failures;
+  }
+
+  it('holds for the real stylesheet, over a stated population', () => {
+    const all = fontSizes(css);
+    // Non-vacuity: an empty match set would pass while measuring nothing.
+    expect(all.length, 'no font-size declarations found').toBeGreaterThan(50);
+    const token = all.filter((d) => /^var\(--hud-type-\d+\)$/.test(d.value)).length;
+    const em = all.filter((d) => /\dem\b/.test(d.value) && !/rem\b/.test(d.value)).length;
+    const literal = all.filter((d) => /\d(\.\d+)?(rem|px)\b/.test(d.value) && !/^var\(/.test(d.value)).length;
+    expect(token + em + literal, `${all.length} declarations, ${token} token, ${em} em, ${literal} rem/px`)
+      .toBe(all.length);
+    expect(scaleFailures(css)).toEqual([]);
+  });
+
+  it('names only exceptions that still exist, unscaled', () => {
+    // An exception for a rule that was renamed or deleted would sit here excusing nothing.
+    for (const selector of Object.keys(EXCEPTIONS)) {
+      const hit = fontSizes(css).find((d) => d.selector === selector);
+      expect(hit, `${selector} has no font-size rule any more`).toBeDefined();
+    }
+  });
+
+  // THE NEGATIVE CONTROLS: one known-bad edit of the real stylesheet each, and each must be
+  // reported by the one message that names it.
+  it.each([
+    ['a display literal loses its multiplier',
+      (t: string) => t.replace('font-size: calc(3.5rem * var(--hud-ui-scale));', 'font-size: 3.5rem;'),
+      /\.hud-title sets font-size: 3\.5rem/],
+    ['the round countdown scales only its rem bounds, not the vmin it usually resolves to',
+      (t: string) => t.replace('font-size: calc(clamp(4.5rem, 20vmin, 15rem) * var(--hud-ui-scale));', 'font-size: clamp(4.5rem, 20vmin, 15rem);'),
+      /\.hud-count sets font-size: clamp/],
+    ['a new rule sizes its text in px',
+      (t: string) => `${t}\n.hud-fixture { font-size: 13px; }\n`,
+      /\.hud-fixture sets font-size: 13px/],
+    ['a font: shorthand appears',
+      (t: string) => `${t}\n.hud-fixture { font: 600 14px/1.2 sans-serif; }\n`,
+      /font: shorthand/],
+    ['.hud stops scaling the base text',
+      (t: string) => t.replace('inherited before. */\n  font-size: calc(1rem * var(--hud-ui-scale));', 'inherited before. */'),
+      /\.hud does not declare font-size/],
+    ['an exception gets scaled and stays listed',
+      (t: string) => t.replace(/(\n\.hud-devbadge \{[^}]*?font-size: )0\.75rem;/, '$1calc(0.75rem * var(--hud-ui-scale));'),
+      /\.hud-devbadge is scaled now/],
+  ] as const)('reports it when %s', (_label, edit, message) => {
+    const bad = edit(css);
+    expect(bad, 'the fixture edit matched nothing').not.toBe(css);
+    // The failures the EDIT adds, so each control judges its own edit and not the state of
+    // the real stylesheet, which the first case above judges.
+    const before = new Set(scaleFailures(css));
+    const added = scaleFailures(bad).filter((f) => !before.has(f));
+    expect(added, JSON.stringify(added)).toHaveLength(1);
+    expect(added[0]).toMatch(message);
   });
 });

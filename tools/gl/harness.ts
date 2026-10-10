@@ -15,8 +15,8 @@ import { createScene } from '../../src/render/scene';
 import { createRenderer } from '../../src/render/renderer';
 import { createAimRay } from '../../src/render/aimray';
 import { createShellTrailSystem } from '../../src/render/shell-trail';
-import { createArenaWorld } from '../../src/sim/arena';
-import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
+import { arenaBounds } from '../../src/sim/arena';
+import { STANDARD_ARENA, WIDE_ARENA, createArenaWorld } from '../../src/sim/config/arena-fixtures';
 import { createWorld } from '../../src/sim/world';
 import { configFor } from '../../src/sim/config';
 import type { Tank, Spawn, Wall } from '../../src/sim/types';
@@ -24,7 +24,6 @@ import { framedBounds } from '../../src/render/framing';
 import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
 import { trackById } from '../../src/audio/music-data';
-import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createTankPreview, PREVIEW_RENDER_SETTINGS } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../../src/render/gallery/subjects';
 import { buildMomentScene } from '../../src/render/gallery/moment-scene';
@@ -76,8 +75,8 @@ function check(name: string, fn: () => string | null): void {
   }
 }
 
-const { width: W, height: H } = arenaBounds(CURRENT_ARENA);
-const BOUNDARY = CURRENT_ARENA.cellSize;
+const { width: W, height: H } = arenaBounds(STANDARD_ARENA);
+const BOUNDARY = STANDARD_ARENA.cellSize;
 const framed = framedBounds(W, H, BOUNDARY);
 
 function fresh(w = 1280, h = 800): ReturnType<typeof createScene> {
@@ -130,7 +129,7 @@ check('the ground sizes to a NON-shipped board (17x13) at construction', () => {
   // proven in a real browser. Without this, "variable dimensions work" rests on
   // geometry tests that never build a scene.
   //
-  // fresh() is not reused here: it hardcodes the shipped CURRENT_ARENA's W/H/BOUNDARY
+  // fresh() is not reused here: it hardcodes the standard board's W/H/BOUNDARY
   // into createScene, and createScene takes plain dimension numbers rather than a
   // World -- World itself carries no width/height field. Widening fresh() to accept
   // a World would give it nothing it could use, so this builds its own scene straight
@@ -701,7 +700,7 @@ check('screenToGround maps the canvas centre to the arena centre', () => {
   const dy = Math.abs(p.y - H / 2);
   // The camera is tilted, so the centre pixel is not exactly the arena centre;
   // it is within a cell. A constant return or a swapped axis is far outside.
-  if (dx > CURRENT_ARENA.cellSize || dy > CURRENT_ARENA.cellSize) {
+  if (dx > STANDARD_ARENA.cellSize || dy > STANDARD_ARENA.cellSize) {
     return `centre pixel mapped to (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), arena centre (${W / 2}, ${H / 2})`;
   }
   return null;
@@ -1088,7 +1087,7 @@ check('resize forwards to the scene camera', () => {
   const p = r.screenToGround(200, 600);
   r.dispose();
   c.remove();
-  if (Math.abs(p.x - W / 2) > CURRENT_ARENA.cellSize * 2) {
+  if (Math.abs(p.x - W / 2) > STANDARD_ARENA.cellSize * 2) {
     return `after resize the centre mapped to x=${p.x.toFixed(2)}, expected near ${W / 2}`;
   }
   return null;

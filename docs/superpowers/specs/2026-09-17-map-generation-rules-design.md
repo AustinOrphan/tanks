@@ -2,7 +2,7 @@
 status: proposed
 date: 2026-09-17
 scope: A three-tier rule set for generating versus maps -- generative rules, the shipped acceptance filter, and a new measured quality tier calibrated on shipped boards.
-implementation-issues: [819, 820, 821, 822]
+implementation-issues: [819, 820, 821, 822, 1028]
 implementation-prs: []
 supersedes: []
 superseded-by: []
@@ -158,6 +158,32 @@ the same shape at all:
 The versus boards are **tighter, walled, and either exactly rotationally symmetric or not
 symmetric at all**. That is a design language, and it is already the answer to "should a
 generator target campaign-shaped boards" -- no.
+
+### Wall components and block sizes, over wall cells only
+
+A component is a connected group of WALL cells -- characters that are a legend kind, solid or
+destructible together. Earlier counts, including the block-size figures quoted on #821, also
+counted every spawn and enemy letter as a one-cell component, because the tool treated any cell
+that was not `.` as wall (issue #1028). Re-measured over wall cells only; population: the 8
+shipped boards.
+
+| board | letters (not walls) | components (8-conn) | components (4-conn) | smallest (8-conn) |
+| --- | ---: | ---: | ---: | ---: |
+| arena-01 | 4 | 6 | 6 | 9 |
+| arena-02 | 5 | 3 | 3 | 9 |
+| arena-03 | 6 | 7 | 9 | 9 |
+| arena-04 | 7 | 6 | 6 | 9 |
+| arena-05 | 8 | 5 | 5 | 9 |
+| vs-duel-01 | 2 | 5 | 7 | 17 |
+| vs-tri-01 | 2 | 13 | 13 | 5 |
+| vs-quad-01 | 2 | 9 | 13 | 18 |
+
+That is 54 components 8-connected and 62 4-connected over the 8 boards, and **none is below 5
+cells** under either connectivity: every shipped block has 5 cells or more. The old count
+exceeds the new one by exactly each board's letter count. `wallComponentSizes` and
+`MIN_WALL_BLOCK_CELLS` in `tools/mapgen/measure.ts` compute it, `measure.test.ts` pins the table,
+and `npx vite-node tools/mapgen/morphology.mjs` prints it. The interior share is unchanged at two
+decimals by the correction (0.0940 to 0.3405).
 
 **What this cannot establish, stated plainly:** eight authored maps are not a sample drawn
 from a population of good maps. A band derived from them describes them. A board outside the

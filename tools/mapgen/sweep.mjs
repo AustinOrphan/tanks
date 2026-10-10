@@ -1,7 +1,7 @@
 import { evaluateVersusBoard } from '../../src/sim/versus-board';
 import { versusSpawnClearanceFailures } from '../../src/sim/versus-spawns';
 import { loadArena } from '../../src/sim/arena';
-import { measureBoard } from './measure';
+import { measureBoard, smallWallComponents, MIN_WALL_BLOCK_CELLS } from './measure';
 import { RULESETS } from './rulesets.mjs';
 import { writeBoardPng } from './render.mjs';
 import { expressiveRange, renderExpressiveRange } from './expressive-range.mjs';
@@ -115,6 +115,9 @@ for (const job of jobs) {
       accepted: passed.length,
       refusals,
       m: ms,
+      // Issue #1028: accepted boards with no wall component (8-connected, wall cells only)
+      // below the block-size threshold. Reported, not gated.
+      noSmallBlocks: passed.filter((b) => smallWallComponents(b.arena, 8) === 0).length,
       // Tier 4 (issue #820): of the shipped-tier accepted boards, those the spread gate passes.
       spreadPassed: ms.filter((m) => passesSpreadGate(m, n)).length,
     });
@@ -124,7 +127,7 @@ for (const job of jobs) {
   }
 }
 
-console.log('ruleset            N  acc/drawn  wall  dstr  cov  legal  corr  open  neck  rout  pMin  sprd  pts  sight  bank  rot');
+console.log(`ruleset            N  acc/drawn  wall  dstr  cov  legal  corr  open  neck  rout  pMin  sprd  pts  sight  bank  rot  blk${MIN_WALL_BLOCK_CELLS}`);
 for (const r of rows) {
   const g = (field, d = 2) => f(mean(r.m.map((m) => m[field])), d);
   console.log([
@@ -138,12 +141,15 @@ for (const r of rows) {
     f(mean(r.m.map((m) => m.pathMin)), 1).padStart(4), g('pathSpread'),
     f(mean(r.m.map((m) => m.samplePoints)), 0).padStart(3),
     g('openSightFraction'), g('bankGain'), g('asymmetryRotational'),
+    f(r.accepted ? r.noSmallBlocks / r.accepted : NaN),
   ].join('  '));
 }
 console.log();
 console.log('Every figure after acc/drawn is a MEAN over the ACCEPTED boards only, so a low');
 console.log('accept rate means a small denominator -- read the two together. Columns carry the');
 console.log('same meanings as tools/mapgen/calibrate.mjs prints for the shipped boards.');
+console.log(`blk${MIN_WALL_BLOCK_CELLS} = share of accepted boards with no wall component below ${MIN_WALL_BLOCK_CELLS} cells (8-connected,`);
+console.log('wall cells only); every shipped board has none (issue #1028).');
 console.log();
 for (const r of rows) {
   const why = Object.entries(r.refusals).map(([k, v]) => `${k} ${v}`).join(', ');

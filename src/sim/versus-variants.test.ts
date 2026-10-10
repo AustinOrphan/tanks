@@ -14,8 +14,8 @@ import type { WallKind } from './types';
 
 // ---------------------------------------------------------------------------
 // MEASURED DESTRUCTIBLE-CELL COUNTS, the population every fraction/removal-count claim
-// below is derived from. Denominator: 8 shipped arenas (issues #271, #272 and #273 each
-// added one dedicated versus board).
+// below is derived from. Denominator: 9 shipped arenas (issues #271, #272, #273 and #1036
+// each added one dedicated versus board).
 // ---------------------------------------------------------------------------
 
 const DESTRUCTIBLE_COUNTS: Record<string, number> = {
@@ -45,14 +45,19 @@ const DESTRUCTIBLE_COUNTS: Record<string, number> = {
   // Was 20 on the original 27x17 board, whose clusters sat ACROSS the connecting lanes --
   // the arrangement that made egress depend on cover.
   'vs-quad-01': 54,
+  // The four gates of the central court, one 3x3 module on each side of it (issue #1036):
+  // 4 x 9 = 36, the board's only destructibles. Each sits between two of the court's solid
+  // corners, so removing one opens a route through the court rather than a dead-end notch,
+  // and none caps a spawn pocket (sealedSpawns 0 at N=2, 3 and 4).
+  'vs-quad-02': 36,
 };
 
 describe('measured destructible-cell counts per shipped arena', () => {
-  it('ARENA_DEFS holds exactly 8 shipped arenas -- the population this file claims throughout', () => {
-    expect(ARENA_DEFS.length).toBe(8);
+  it('ARENA_DEFS holds exactly 9 shipped arenas -- the population this file claims throughout', () => {
+    expect(ARENA_DEFS.length).toBe(9);
   });
 
-  it('matches DESTRUCTIBLE_COUNTS on all 8 shipped arenas (counted directly from each grid/legend)', () => {
+  it('matches DESTRUCTIBLE_COUNTS on all 9 shipped arenas (counted directly from each grid/legend)', () => {
     for (const arena of ARENA_DEFS) {
       let count = 0;
       for (const row of arena.grid) for (const ch of row) if (arena.legend[ch] === 'destructible') count++;
@@ -81,15 +86,16 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
         }
       }
     }
-    // 8 arenas x (33x27 + 33x27 + 33x27 + 45x33 + 45x33 + 27x21 + 27x17 + 27x17) cells --
-    // pinned so a narrowed scan (e.g. only checking row 0) cannot read as a pass. The
-    // 27x21 term is issue #271's vs-duel-01 and the two 27x17 terms are #272's vs-tri-01
-    // and #273's vs-quad-01, each written as its own factor rather than folded into a
-    // total so the shape of every board stays legible here.
-    expect(compared).toBe(4 * 33 * 27 + 2 * 45 * 33 + 27 * 21 + 27 * 17);
+    // 9 arenas' cells -- 5 x 33x27 + 2 x 45x33 + 27x21 + 27x17 -- pinned so a narrowed
+    // scan (e.g. only checking row 0) cannot read as a pass. The five 33x27 boards are
+    // arena-01..03, vs-quad-01 (rebuilt at 33x27 by #425) and #1036's vs-quad-02; the
+    // 27x21 term is issue #271's vs-duel-01 and the 27x17 term #272's vs-tri-01, each
+    // written as its own factor rather than folded into a total so the shape of every board
+    // stays legible here.
+    expect(compared).toBe(5 * 33 * 27 + 2 * 45 * 33 + 27 * 21 + 27 * 17);
   });
 
-  it('the P cell sits at the identical position in every variant, on all 8 shipped arenas', () => {
+  it('the P cell sits at the identical position in every variant, on all 9 shipped arenas', () => {
     function findP(grid: string[]): { row: number; col: number } {
       for (let r = 0; r < grid.length; r++) {
         const c = grid[r].indexOf('P');
@@ -104,7 +110,7 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
     }
   });
 
-  it('removes exactly round(destructibleCount * fraction) cells, on all 8 shipped arenas', () => {
+  it('removes exactly round(destructibleCount * fraction) cells, on all 9 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       const variant = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 3, DESTRUCTIBLE_REMOVAL_FRACTION);
       const removed = countRemoved(arena.grid, variant);
@@ -130,7 +136,7 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
 });
 
 describe('buildVariantGrid: determinism and seed variety', () => {
-  it('the same seed produces byte-identical output on repeated calls, on all 8 shipped arenas', () => {
+  it('the same seed produces byte-identical output on repeated calls, on all 9 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       const a = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 42, DESTRUCTIBLE_REMOVAL_FRACTION);
       const b = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 42, DESTRUCTIBLE_REMOVAL_FRACTION);
@@ -214,7 +220,7 @@ function reachableFromP1(grid: string[], cols: number, rows: number, legend: Rec
 }
 
 describe('connectivity: every cell reachable in the authored board stays reachable in the variant', () => {
-  it('measured on all 8 shipped arenas x 5 seeds = 40 (arena, seed) pairs: reachable(authored) is always a SUBSET of reachable(variant)', () => {
+  it('measured on all 9 shipped arenas x 5 seeds = 45 (arena, seed) pairs: reachable(authored) is always a SUBSET of reachable(variant)', () => {
     const seeds = [1, 2, 3, 4, 5];
     let checked = 0;
     for (const arena of ARENA_DEFS) {
@@ -229,7 +235,7 @@ describe('connectivity: every cell reachable in the authored board stays reachab
         }
       }
     }
-    expect(checked).toBe(40);
+    expect(checked).toBe(45);
   });
 
   it('reachability strictly GROWS on at least one shipped arena -- the claim is not vacuously true because nothing ever gets removed near reachable floor', () => {
@@ -250,7 +256,7 @@ describe('connectivity: every cell reachable in the authored board stays reachab
 // isVariantSuitable (versus-variants.ts) does not re-check it.
 // ---------------------------------------------------------------------------
 
-describe('room: openFloorCells rises by EXACTLY the removed count, on all 8 shipped arenas', () => {
+describe('room: openFloorCells rises by EXACTLY the removed count, on all 9 shipped arenas', () => {
   it('countOpenFloor(variant) - countOpenFloor(authored) === removedCount', () => {
     function countOpenFloor(grid: string[]): number {
       let n = 0;
@@ -274,14 +280,15 @@ describe('room: openFloorCells rises by EXACTLY the removed count, on all 8 ship
 // ---------------------------------------------------------------------------
 
 describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measured', () => {
-  it('0 of 180 OFFERED (arena, N, seed) draws are unsuitable, and the 60 unoffered ones are accounted for', () => {
+  it('0 of 190 OFFERED (arena, N, seed) draws are unsuitable, and the 80 unoffered ones are accounted for', () => {
     // Population re-derived for the tank-egress gate (issue #423). It used to sweep all
     // 240 draws and claim 0 unsuitable, which held only because nothing checked whether a
     // tank could leave its spawn.
     //
     // The sweep that MATTERS is the offered one, re-derived from the catalogue rather than
     // restated: 5 campaign boards at [2,3,4] x 10 seeds (150), plus vs-duel-01 [2],
-    // vs-tri-01 [3] and vs-quad-01 [4] at 10 each (30) = 180 draws, 0 unsuitable. Every
+    // vs-tri-01 [3], vs-quad-01 [4] and vs-quad-02 [4] at 10 each (40) = 190 draws,
+    // 0 unsuitable. Every
     // combination the menu can actually serve survives destructible removal at fraction 0.4
     // on all ten seeds.
     //
@@ -290,7 +297,7 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
     // the note beside `unofferedUnsuitable` below already explained while this one did not.
     // Both halves now come from one walk of `VERSUS_CATALOG`, so they cannot disagree again.
     //
-    // The other 60 are not swept for suitability, they are ACCOUNTED for, so the number
+    // The other 80 are not swept for suitability, they are ACCOUNTED for, so the number
     // cannot drift silently: vs-quad-01 is still withdrawn (#425) and fails every one of
     // its 30 draws, vs-duel-01 fails 14 of the 20 draws at the counts it is not offered at
     // (5 of 10 at N=3, 9 of 10 at N=4), and vs-tri-01's remaining 20 -- N=2 and N=4, the
@@ -332,9 +339,11 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
         }
       }
     }
-    expect(checked, 'the offered (arena, N, seed) population').toBe(180);
+    expect(checked, 'the offered (arena, N, seed) population').toBe(190);
     expect(unsuitable).toBe(0);
-    expect(unofferedChecked).toBe(60);
+    // 80, up from 60 with issue #1036: vs-quad-02 is offered at N=4 only, so its 20 draws at
+    // N=2 and N=3 are unoffered -- and all 20 pass, which is what keeps the count below at 14.
+    expect(unofferedChecked).toBe(80);
     // 14, down from 44 when issue #425 rebuilt vs-quad-01. The derivation, because the
     // drop is large enough to look like a broken sweep: the old board failed all 30 of its
     // draws (3 counts x 10 seeds) since it failed egress before any destructible was drawn.
@@ -465,7 +474,7 @@ describe('pickVersusVariantGrid: the common case needs no retry', () => {
 // ---------------------------------------------------------------------------
 
 describe('loadArena: versus variants are guard-first on mode AND an explicit seed', () => {
-  it('campaign-coop is BYTE-IDENTICAL to before this feature existed, even when a real seed is passed, on all 8 shipped arenas', () => {
+  it('campaign-coop is BYTE-IDENTICAL to before this feature existed, even when a real seed is passed, on all 9 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       const withoutSeed = loadArena(arena, 1);
       const withSeed = loadArena(arena, 1, 'campaign-coop', 12345);
@@ -473,7 +482,7 @@ describe('loadArena: versus variants are guard-first on mode AND an explicit see
     }
   });
 
-  it('ffa/teams WITHOUT a seed is BYTE-IDENTICAL to before this feature existed, on all 8 shipped arenas', () => {
+  it('ffa/teams WITHOUT a seed is BYTE-IDENTICAL to before this feature existed, on all 9 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       for (const mode of ['ffa', 'teams'] as const) {
         const before = loadArena(arena, 4, mode);
@@ -512,7 +521,7 @@ describe('loadArena: versus variants are guard-first on mode AND an explicit see
     expect(aKeys).not.toEqual(bKeys); // but a DIFFERENT subset was removed
   });
 
-  it('the wired output is itself suitable (gate-guaranteed): spot check on 8 shipped arenas x N=4, seed 1', () => {
+  it('the wired output is itself suitable (gate-guaranteed): spot check on 9 shipped arenas x N=4, seed 1', () => {
     for (const arena of ARENA_DEFS) {
       const { tanks, walls } = loadArena(arena, 4, 'ffa', 1);
       const players = tanks.filter((t) => t.kind === 'player');

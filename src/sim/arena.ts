@@ -1,5 +1,5 @@
 import type {
-  Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry, BotDifficulty,
+  Wall, Tank, Spawn, AABB, TankKind, WallKind, GameMode, ArenaGeometry, BotDifficulty,
 } from './types';
 import { createWorld, type World } from './world';
 import type { WorldRulesInit } from './rules';
@@ -334,9 +334,6 @@ export function loadArena(
   return { walls, tanks, spawns, arenaGeometry: { cols, rows, cellSize, grid, legend } };
 }
 
-/** The board single-arena tools (the gl harness) use; the game itself walks ARENAS. */
-export const CURRENT_ARENA: Arena = ARENAS[0];
-
 /**
  * `rules` nests rather than flattening in, so a new rule is added in rules.ts and never
  * touches this interface. `seed` stays positional: nearly every caller passes it, and
@@ -374,7 +371,3 @@ export function createWorldFor(arena: Arena, seed?: number, init: WorldForInit =
   });
 }
 
-/** Tests, including the pacifist suite's headline metric, rely on this being level 1. */
-export function createArenaWorld(seed?: number, unarmedTrigger?: UnarmedTrigger): World {
-  return createWorldFor(ARENAS[0], seed, { rules: { unarmedTrigger } });
-}

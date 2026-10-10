@@ -1,0 +1,19 @@
+{
+  "id": "stock-marks-four-by-five-draws-a-row",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "  if (total === 4) return { kind: 'row', mark: 8, gap: 2 };\n  return { kind: 'one' };",
+  "replace": "  return { kind: 'row', mark: 8, gap: 2 };",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/stock-cue.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "Four players at five stocks loses its fallback and draws a row of 8px marks, which measured 21.5px over the 254.1px budget at a 2px gap (5.5px over even at 1px): the strip overflows a 390px phone and clips its last entry. The fallback -- one full-size mark and the count -- is what #838 established for pips and #1021 carries over.",
+  "killedBy": [
+    "stock cue: mark sizing on a narrow viewport (issue #1021) matches the measured table in every one of the 15 configurations",
+    "stock cue: mark sizing on a narrow viewport (issue #1021) THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there",
+    "stock cue: mark sizing on a narrow viewport (issue #1021) falls back to one mark and the count at four players and five stocks",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) four players at five stocks: ONE full-size mark and the count, and the cue still has a target",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) the fallback mark goes hollow once the player is out"
+  ]
+}

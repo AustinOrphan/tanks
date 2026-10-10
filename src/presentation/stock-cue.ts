@@ -119,7 +119,63 @@ export type PipLayout =
   | { kind: 'one'; pip: number };
 
 /**
- * The widest viewport that counts as narrow for the rule above, matching the phone tier the
+ * How the `marks` arm draws one entry on a narrow viewport, for a strip of `slots` entries each
+ * holding `total` stocks: at the stylesheet's own size, as a smaller row, or as the crowded
+ * fallback (issue #1021) -- the `marks` analogue of `narrowPipLayout` above.
+ *
+ * MEASURED, NOT DERIVED: real Chromium layout at a 390px viewport against the real stylesheet,
+ * on the page and budget `tools/hud/strip-width.mjs` uses for the pips table (254.1px, the same
+ * calibration). The full-size mark is `0.62em` of the strip's `1rem`, 9.9px at the default UI
+ * scale, with a 2px gap. Figures are px over budget, negative is spare; the closest row of
+ * each group is the one shown:
+ *
+ *   slots  stocks   full/2px    9/2     8/2     8/1    one+digit
+ *     2     1-5      -97.2
+ *     3     1-4      -54.5
+ *     3      5       -18.8
+ *     4     1-3      -35.6
+ *     4      4        12.0    -2.5   -18.5   -30.5     -82.8
+ *     4      5        59.7    41.5    21.5     5.5     -82.8
+ *
+ * A mark is narrower than a pip, so the derivation in the issue expected 3x5 to sit about 4px
+ * over and 4x4 about 46px over; real layout puts 3x5 18.8px INSIDE the budget and 4x4 only
+ * 12px over. Only two configurations of the fifteen need handling.
+ *
+ * Four players at four stocks carries an 8px row with a 2px gap, 18.5px inside the budget. The
+ * 9px row fits by 2.5px, which is the one-pixel fragility the pips table refused; a 1px gap
+ * fits at 9px too, but it closes the space that keeps five squares from reading as one bar.
+ *
+ * Four players at five stocks falls back. 8px marks overflow by 5.5px even at a 1px gap, and
+ * only 7px fits -- below the 8px floor #838 set for pips, which no measurement here has shown
+ * the four outlines read apart under. The fallback is #838's: one full-size mark, then the
+ * count as a digit, which keeps the slot's outline and gives the loss cue its target.
+ *
+ * Only consulted on a narrow viewport; the desktop strip draws every mark at its full size.
+ * Measured at the default UI scale: `.hud-versus-stocks` is sized in `rem`, outside the type
+ * tokens the UI scale multiplies, and the marks follow it in `em`. If the strip moves onto those
+ * tokens the table has to be re-measured.
+ */
+export function narrowMarkLayout(slots: number, total: number): MarkLayout {
+  if (slots <= 3 || total <= 3) return { kind: 'full' };
+  if (total === 4) return { kind: 'row', mark: 8, gap: 2 };
+  return { kind: 'one' };
+}
+
+/**
+ * How the marks arm draws one entry.
+ *
+ * `full` is the arm at the stylesheet's own size. `row` is the same row with a smaller mark and
+ * gap, set through `--hud-mark` and `--hud-mark-gap` on the row so the stylesheet keeps the only
+ * definition of the default. `one` is the crowded fallback: a single full-size mark in the
+ * slot's outline, filled while the player has stock, followed by the count as a digit.
+ */
+export type MarkLayout =
+  | { kind: 'full' }
+  | { kind: 'row'; mark: number; gap: number }
+  | { kind: 'one' };
+
+/**
+ * The widest viewport that counts as narrow for the rules above, matching the phone tier the
  * measurement was taken at. A media query rather than a layout read: the strip is rebuilt on
  * every status that moves, and measuring it each time would force a reflow in the HUD path.
  */

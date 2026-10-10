@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PERSON_LABELS,
   frontierOf,
   renderFrontier,
   longestDependencyChain,
@@ -200,7 +201,10 @@ describe('frontier: bucketing and filters', () => {
 
   it('buckets by readiness and reports the population it considered', () => {
     const f = frontierOf(snap(graph));
-    expect(f.ready.map((r) => r.number)).toEqual([1, 2, 6]);
+    // #2 carries `human-required`: unblocked, but a person must act, so it is WAITING, not
+    // ready (issue #1025). Before that issue this list read [1, 2, 6].
+    expect(f.ready.map((r) => r.number)).toEqual([1, 6]);
+    expect(f.waiting.map((r) => r.number)).toEqual([2]);
     expect(f.blocked.map((r) => r.number)).toEqual([3]);
     expect(f.unknown.map((r) => r.number)).toEqual([4]);
     // 6 issues, one closed and therefore not considered at all.
@@ -212,8 +216,10 @@ describe('frontier: bucketing and filters', () => {
     expect(frontierOf(snap(graph), { labels: ['agent-ready'] }).ready.map((r) => r.number)).toEqual([1]);
     const notHuman = frontierOf(snap(graph), { excludeLabels: ['human-required'] });
     expect(notHuman.ready.map((r) => r.number)).toEqual([1, 6]);
-    // The control for the exclusion: without it, #2 is on the frontier.
-    expect(frontierOf(snap(graph)).ready.map((r) => r.number)).toContain(2);
+    expect(notHuman.waiting).toEqual([]);
+    // The control for the exclusion: without it, #2 is in scope -- in `waiting` since issue
+    // #1025, where this control used to find it among the ready.
+    expect(frontierOf(snap(graph)).waiting.map((r) => r.number)).toContain(2);
   });
 
   it('never puts an unknown issue in the ready bucket, whatever the filter', () => {
@@ -222,6 +228,93 @@ describe('frontier: bucketing and filters', () => {
       const f = frontierOf(snap(graph), filter);
       expect(f.ready.map((r) => r.number), JSON.stringify(filter)).not.toContain(4);
     }
+  });
+});
+
+describe('frontier: waiting on a person (issue #1025)', () => {
+  it('names the four person labels docs/agent/kickoff.md names, and no others', () => {
+    expect([...PERSON_LABELS]).toEqual(['human-required', 'playtest-required', 'hardware-required', 'needs-review']);
+  });
+
+  // A LITERAL list, not `PERSON_LABELS`: generated from the production constant, a label
+  // dropped from the set would take its own control with it.
+  it.each([['human-required'], ['playtest-required'], ['hardware-required'], ['needs-review']])(
+    '%s alone moves an otherwise-ready issue to waiting, and its unlabelled twin stays ready',
+    (label) => {
+      const f = frontierOf(snap([issue(1, { labels: [label] }), issue(2)]));
+      expect(f.waiting.map((r) => r.number)).toEqual([1]);
+      expect(f.ready.map((r) => r.number)).toEqual([2]);
+    },
+  );
+
+  it('lets graph facts outrank labels: a labelled issue that is blocked or unread is neither ready nor waiting', () => {
+    const f = frontierOf(snap([
+      issue(1),
+      issue(2, { labels: ['human-required'], blockedBy: [{ number: 1, state: 'open' }] }),
+      issue(3, { labels: ['playtest-required'], blockedByLoaded: false, declaredBlockedBy: 1 }),
+    ]));
+    expect(f.blocked.map((r) => r.number)).toEqual([2]);
+    expect(f.unknown.map((r) => r.number)).toEqual([3]);
+    expect(f.waiting).toEqual([]);
+    expect(f.ready.map((r) => r.number)).toEqual([1]);
+  });
+
+  it('names on each waiting row the labels that put it there, in issue order', () => {
+    const f = frontierOf(snap([
+      issue(5, { labels: ['human-required', 'playtest-required', 'priority:now'] }),
+      issue(3, { labels: ['playtest-required'] }),
+    ]));
+    expect(f.waiting.map((r) => [r.number, r.personLabels])).toEqual([
+      [3, ['playtest-required']],
+      [5, ['human-required', 'playtest-required']],
+    ]);
+  });
+
+  it('counts every in-scope issue in exactly one of the four buckets, and a closed one in none', () => {
+    const graph = [
+      issue(1),
+      issue(2, { labels: ['hardware-required'] }),
+      issue(3, { blockedBy: [{ number: 1, state: 'open' }] }),
+      issue(4, { blockedByLoaded: false, declaredBlockedBy: 1 }),
+      issue(5, { state: 'closed', labels: ['human-required'] }),
+      issue(6, { labels: ['playtest-required'], milestone: 'Later' }),
+    ];
+    for (const filter of [{}, { milestone: 'Later' }, { excludeLabels: ['playtest-required'] }]) {
+      const f = frontierOf(snap(graph), filter);
+      const all = [...f.ready, ...f.waiting, ...f.blocked, ...f.unknown].map((r) => r.number);
+      expect(f.considered, JSON.stringify(filter)).toBe(all.length);
+      expect(new Set(all).size, JSON.stringify(filter)).toBe(all.length);
+      expect(all, JSON.stringify(filter)).not.toContain(5);
+    }
+    // The filters apply BEFORE bucketing: an excluded label takes the issue out of scope
+    // entirely rather than out of `waiting` alone.
+    const without = frontierOf(snap(graph), { excludeLabels: ['playtest-required'] });
+    expect(without.waiting.map((r) => r.number)).toEqual([2]);
+    expect(without.considered).toBe(4);
+  });
+
+  it('renders four counts, the waiting rows with their labels, and still warns that ready is not startable', () => {
+    const text = renderFrontier(snap([
+      issue(1, { labels: ['priority:now', 'size:s'], title: 'free' }),
+      issue(2, { labels: ['playtest-required', 'size:m'], title: 'needs a playtest' }),
+    ]));
+    expect(text).toContain('**1 ready / 1 waiting / 0 blocked / 0 unknown**, of 2 open issues in scope');
+    expect(text).toContain('## Waiting');
+    expect(text).toContain('- #2 [-/m] needs a playtest -- playtest-required');
+    expect(text).toContain('READY STILL MEANS "NO BLOCKER AND NO PERSON LABEL"');
+  });
+
+  it('says "unblocks", not "makes ready", for an unblocked issue that will wait on a person', () => {
+    const text = renderFrontier(snap([
+      issue(1),
+      issue(2, { labels: ['human-required'], blockedBy: [{ number: 1, state: 'open' }] }),
+    ]));
+    const section = text.split('## What closing an issue would unlock')[1] ?? '';
+    expect(section).toContain('- #1: unblocks 1 (#2), reaches 1');
+    // Nothing in the section calls #2 ready: the rows never say it, and the one sentence that
+    // uses the word says the opposite.
+    for (const line of section.split('\n').filter((l) => l.startsWith('- #'))) expect(line).not.toMatch(/ready/);
+    expect(section).not.toMatch(/makes \d+ ready/);
   });
 });
 
@@ -251,7 +344,7 @@ describe('frontier: the rendered report', () => {
 
   it('carries the denominator on the headline and the priority/size on each row', () => {
     const text = renderFrontier(snap(graph));
-    expect(text).toContain('**1 ready / 1 blocked / 1 unknown**, of 3 open issues in scope');
+    expect(text).toContain('**1 ready / 0 waiting / 1 blocked / 1 unknown**, of 3 open issues in scope');
     expect(text).toContain('- #1 [now/m] a ready one');
     expect(text).toContain('#2 blocked by #1');
     expect(text).toContain('#3 2 blocker(s) this snapshot did not read');
@@ -260,14 +353,15 @@ describe('frontier: the rendered report', () => {
   it('says in the output that ready does not mean startable', () => {
     // LOAD-BEARING, not decoration. Measured on this repository, the native graph called 24
     // of 28 issues ready while about 8 were waiting on a maintainer ruling -- a decision
-    // carries no blocked-by edge, so no relationship data can see it. A reader who takes
-    // this list as a work queue picks one up and stalls.
+    // carries no blocked-by edge, so no relationship data can see it. The `waiting` bucket
+    // (issue #1025) takes the ones a LABEL records; this sentence keeps saying the rest exist.
     const text = renderFrontier(snap(graph));
-    expect(text).toContain('READY MEANS "NO BLOCKER IN THE GRAPH"');
-    expect(text).toContain('decision carries no blocked-by edge');
+    expect(text).toContain('READY STILL MEANS "NO BLOCKER AND NO PERSON LABEL"');
+    expect(text).toContain('decision that no label records carries no blocked-by edge');
+    expect(text).toContain('needs-split, size and agent-ready are not checked');
   });
 
-  it('separates "makes ready" from "reaches" wherever it prints both', () => {
+  it('separates "unblocks" from "reaches" wherever it prints both', () => {
     // The other load-bearing sentence: "closing this unblocks 12" is exactly the claim that
     // gets repeated from a number printed without the qualifier.
     const chain = [
@@ -277,7 +371,8 @@ describe('frontier: the rendered report', () => {
     ];
     const text = renderFrontier(snap(chain));
     expect(text).toContain('LAST standing blocker');
-    expect(text).toContain('- #1: makes 1 ready (#2), reaches 2');
+    // `unblocks`, not "makes ready", since issue #1025: an unblocked issue can be waiting.
+    expect(text).toContain('- #1: unblocks 1 (#2), reaches 2');
   });
 
   it('refuses the chain on a cyclic snapshot and says why, in the report itself', () => {

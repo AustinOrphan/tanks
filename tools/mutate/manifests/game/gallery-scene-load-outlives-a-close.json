@@ -1,0 +1,15 @@
+{
+  "id": "gallery-scene-load-outlives-a-close",
+  "file": "src/game/route-ui.ts",
+  "find": "    galleryGeneration += 1;\n    if (gallery === null) return;\n",
+  "replace": "    if (gallery === null) return;\n    galleryGeneration += 1;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts"
+  ],
+  "killedBy": [
+    "the gallery workbench is mounted with its pane and released with it (issue #730) a close while the scene modules are still loading (issue #1012) a close during the load leaves no body and builds no handle",
+    "the gallery workbench is mounted with its pane and released with it (issue #730) a close while the scene modules are still loading (issue #1012) a teardown during the load leaves no body and builds no handle"
+  ],
+  "why": "The gallery pane's mount waits on three loads since issue #1012 -- the pane module, the selection module and the render layer's scene modules through `galleryWorkbench.load` -- and a close or a teardown can land while any of them is in flight. `disposeGallery` bumps the generation BEFORE its early return so that a dispose with nothing mounted yet still invalidates the pending mount; moved after the return, a dispose in that window spends nothing and the late mount builds a WebGL handle and a body into a pane nobody is looking at, whose listeners no later close disposes. Measured before the race tests existed: this exact mutation left all 42 tests in route-ui.test.ts green, because every gallery case there opened and waited for the mount before closing. The close-and-reopen case survives it, as it should: the reopen's own bump supersedes the first open either way, which is why that case is not in killedBy."
+}

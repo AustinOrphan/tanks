@@ -324,6 +324,23 @@ export type AppLocation =
   | { readonly kind: 'route'; readonly route: AppRoute }
   | { readonly kind: 'gameplay'; readonly session: ResolvedSession; readonly phase: GameplayPhase };
 
+/**
+ * The state machine's location as one string: `route/<route>` or `gameplay/<phase>`.
+ *
+ * Both halves, because a phase alone cannot say that a session is sitting at its own title
+ * screen, and a route alone cannot tell a paused round from a running one.
+ *
+ * Here rather than in `dev-exports.ts`, whose diagnostics file it names the surface for
+ * (issue #1012): `loop.ts` calls it inside the export port's synchronous `round()` reader, so it
+ * cannot load on demand, and importing it from the developer module put that module in the
+ * chunk every page downloads.
+ */
+export function surfaceName(location: AppLocation): string {
+  return location.kind === 'route'
+    ? `route/${location.route.kind}`
+    : `gameplay/${location.phase.kind}`;
+}
+
 // ---------------------------------------------------------------------------
 // Developer metadata
 // ---------------------------------------------------------------------------
