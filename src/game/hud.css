@@ -3914,6 +3914,16 @@
   animation: hud-stock-pip-empty var(--hud-duration-slow) ease-out 1 both;
 }
 
+/* The one-pip fallback's pip is cued while the player still holds stock (issues #838, #1055),
+ * so it swells and bursts but must not empty. `both` holds a cue's last frame until the strip
+ * next rebuilds, which no timer forces, and `hud-stock-pip-empty` ends on the lost pip's 2px
+ * border: measured in Chromium at 390x844, a teams player down from 5 stocks to 4 was still
+ * drawn hollow, the look of a player who is out, 1.5s after the loss. A row's cued pip is always
+ * `--lost`, so this matches the fallback's pip and nothing else. */
+.hud-stock-pip.hud-stock-cue:not(.hud-stock-pip--lost) {
+  animation: hud-stock-pip-swell var(--hud-duration-slow) ease-out 1 both;
+}
+
 /* The burst ring. `animation-delay` is not inherited by default, so a resumed cue's negative
  * delay would reach the pip and not its ring without the `inherit` below.
  *
@@ -3942,6 +3952,13 @@
   0% { border-width: 5px; transform: scale(1); }
   30% { border-width: 5px; transform: scale(1.6); }
   100% { border-width: 2px; transform: scale(1); }
+}
+
+/* `hud-stock-pip-empty`'s swell without its emptying: no border step at all, so the held pip
+ * keeps the border its own size gives it. */
+@keyframes hud-stock-pip-swell {
+  0%, 100% { transform: scale(1); }
+  30% { transform: scale(1.6); }
 }
 
 @keyframes hud-stock-pip-burst {
@@ -4225,8 +4242,9 @@
 /*
  * Issue #230's stock-loss cue arms: the information stays and the movement goes. The badge holds
  * in place and fades; the struck number sits above the new one and fades; the pip still empties
- * and its ring still shows, but neither swells. None of them depends on a hue, so unlike the
- * life-loss pulse above, reduced motion plus forced colours still leaves a cue.
+ * and its ring still shows, but neither swells. The one-pip fallback's pip, cued while the player
+ * still holds stock, dims and settles instead of emptying. None of them depends on a hue, so
+ * unlike the life-loss pulse above, reduced motion plus forced colours still leaves a cue.
  */
 @keyframes hud-stock-badge--still {
   0%, 70% { opacity: 1; transform: translate(-50%, 2px); }
@@ -4269,6 +4287,18 @@
 
 .hud--reduced-motion .hud-stock-pip.hud-stock-cue {
   animation-name: hud-stock-pip-empty--still;
+}
+
+/* The held fallback pip (see `hud-stock-pip-swell`), marked by the hold-then-settle on opacity
+ * the `marks` arm's mark uses, and never emptied. At (0,4,0) it outranks the rule above, which
+ * would otherwise end it on the lost pip's 2px border. */
+@keyframes hud-stock-pip-swell--still {
+  0%, 50% { opacity: 0.4; transform: none; }
+  100% { opacity: 1; transform: none; }
+}
+
+.hud--reduced-motion .hud-stock-pip.hud-stock-cue:not(.hud-stock-pip--lost) {
+  animation-name: hud-stock-pip-swell--still;
 }
 
 .hud--reduced-motion .hud-stock-pip.hud-stock-cue::after {

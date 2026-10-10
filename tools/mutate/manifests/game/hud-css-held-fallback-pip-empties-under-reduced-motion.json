@@ -1,0 +1,11 @@
+{
+  "id": "hud-css-held-fallback-pip-empties-under-reduced-motion",
+  "file": "src/game/hud.css",
+  "find": "  animation-name: hud-stock-pip-swell--still;",
+  "replace": "  animation-name: hud-stock-pip-empty--still;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The reduced-motion half of the held fallback pip (issue #1055, criterion 4): under `.hud--reduced-motion` the held cued pip selects `hud-stock-pip-empty--still`, which also ends on the lost pip's 2px border, so the reduced form drops the information instead of keeping it -- measured in Chromium before the fix, the same 2px 1.5s after the loss. The reduced-motion guard still passes, because the name still ends in `--still`; only the test that reads the keyframe set the held pip ends up with, with the policy class on, can see it."
+}

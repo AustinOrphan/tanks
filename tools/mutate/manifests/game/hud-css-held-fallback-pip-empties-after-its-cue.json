@@ -1,0 +1,11 @@
+{
+  "id": "hud-css-held-fallback-pip-empties-after-its-cue",
+  "file": "src/game/hud.css",
+  "find": "  animation: hud-stock-pip-swell var(--hud-duration-slow) ease-out 1 both;",
+  "replace": "  animation: hud-stock-pip-empty var(--hud-duration-slow) ease-out 1 both;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The one-pip fallback's pip, cued while the player still holds stock, runs the lost pip's emptying keyframes again (issue #1055, criterion 4). `both` holds the last frame until the strip next rebuilds, which no timer forces, so the pip stays on a 2px border -- the look of a player who is out -- while the digit beside it says otherwise. Measured in Chromium at 390x844 before the fix: four teams players at five stocks, P1 down to 4, border 2px 1.5s later. jsdom runs no animation and every HUD case only sees the class, so only the stylesheet test that reads which keyframe set the cascade gives a held cued pip can see it."
+}
