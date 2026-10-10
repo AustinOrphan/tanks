@@ -28,8 +28,8 @@ function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
 
 // TWO enemies, not one. With a single enemy `enemies.every(dead)` and
 // `enemies.some(dead)` are the same predicate, so a one-enemy fixture cannot
-// tell a correct win condition from one that fires on the first kill -- and the
-// shipped arena has three enemies.
+// tell a correct win condition from one that fires on the first kill -- and every
+// shipped campaign level after the first has four or more enemies.
 function makeWorld(): World {
   const player = makeTank('player', 1, 5, 5);
   const brown = makeTank('brown', 2, 5, 15);

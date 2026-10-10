@@ -1,0 +1,16 @@
+{
+  "id": "level-one-brown-moves-to-a-destructible-only-bank",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "\"......###....B..........###......\",",
+  "replace": "\"......###..........B....###......\",",
+  "expect": "killed",
+  "tests": [
+    "src/sim/arena.test.ts"
+  ],
+  "killedBy": [
+    "level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010) keeps the brown at column 13 row 7, world (9, 5): its cell before the edit",
+    "level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010) from the player spawn: no direct line to the brown, and a one-bounce bank onto it, on intact and breached walls",
+    "level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010) banks off the faces its notes name: the west destructible block's east face while it stands, then the solid east pillar's west face"
+  ],
+  "why": "Issue #1010's criterion 4: from the player spawn there is no direct line to level 1's brown and a one-bounce bank onto it, with walls intact and breached. This moves the lone brown to the grey's old cell (column 19, row 7), whose only bank from the player spawn is off the east destructible block: it still has a bank with walls intact and none once the blocks are gone, so the composition check, the walls-and-player check, the co-op placement and the brown's spawn cover all stay green. The bank check fails on its breached half, the faces check fails because the bank with walls intact comes off the east block, not the west block's cell at column 8 row 13, and the cell pin fails because the brown is no longer at its chosen cell. The other tests in arena.test.ts stay green, which is the gap these close."
+}

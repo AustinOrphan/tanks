@@ -25,8 +25,8 @@ that enemy.
 | Enemy | First mission | Movement | AI profile | Mines | Shells |
 | --- | ---: | --- | --- | --- | --- |
 | Brown | 1 | Stationary | Static basic | No | Standard shell; slow fire; max 5; 1 bounce |
-| Grey | 1 | Medium | Defensive basic | Yes (2) | Standard shell; medium fire; max 5; 1 bounce |
-| Teal | 1 | Slow | Mobile mine layer | Yes (2) | Ricochet rocket; fast fire; max 5; 2 bounces |
+| Grey | 2 | Medium | Defensive basic | Yes (2) | Standard shell; medium fire; max 5; 1 bounce |
+| Teal | 2 | Slow | Mobile mine layer | Yes (2) | Ricochet rocket; fast fire; max 5; 2 bounces |
 | Olive | 3 | Slow | Defensive rocket | No | Rocket; slow fire; max 1; no bounces |
 | Green | 4 | Stationary | Ricochet sniper | No | Ricochet rocket; slow fire; max 5; 2 bounces |
 | Yellow | Not in the campaign | Medium | Mobile mine layer | Yes (4) | Standard shell; medium fire; max 1; 1 bounce |

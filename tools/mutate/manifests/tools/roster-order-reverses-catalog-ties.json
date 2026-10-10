@@ -12,5 +12,5 @@
     "README enemy roster is generated, not hand-edited orders rows by first appearance, then catalog order, with absent kinds last",
     "README enemy roster is generated, not hand-edited contains exactly one current generated block"
   ],
-  "why": "Ties are real on the shipped campaign: three enemies first appear in level 1. Reversing the tie-break reorders those rows, so the committed README block stops matching as well as the synthetic case."
+  "why": "Ties are real on the shipped campaign: grey and teal both first appear in level 2 (three enemies first appeared in level 1 until issue #1010 left it a lone brown). Reversing the tie-break reorders those rows, so the committed README block stops matching as well as the synthetic case."
 }

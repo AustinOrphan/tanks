@@ -55,14 +55,15 @@ import type { World } from './world';
 //    `roundStartTick` is `tick + 1`, so it takes 181 steps, not 180, to reach
 //    'live'. `live()` below burns them.
 //
-// 2. GEOMETRY, not timing, decides the escape. Of the 72 poses this harness can
-//    use (8 arenas x their spawns x the +/-x it drives along) only 42 give a
-//    tank a fully unobstructed 3.5-unit run; see `scanOpenPoses`, which prints
-//    both numbers rather than trusting this comment. At a hemmed pose the tank
-//    slides along the wall and simply stops short -- in arena-01 from spawn 1
-//    driving +x it plateaus 0.05 units inside the kill radius and dies with
-//    zero reaction delay. Measuring at an arbitrary spawn silently samples that
-//    class and reports a timing verdict that is really a wall.
+// 2. GEOMETRY, not timing, decides the escape. Of the poses this harness can
+//    use (every arena x its spawns x the +/-x it drives along) only some give a
+//    tank a fully unobstructed 3.5-unit run -- 45 of 72 when issue #1010 landed;
+//    see `scanOpenPoses`, which prints both numbers rather than trusting this
+//    comment. At a hemmed pose the tank slides along the wall and simply stops
+//    short -- in arena-02 from spawn 1 driving +x it plateaus exactly on the kill
+//    radius (the kill test is `<=`) and dies with zero reaction delay. Measuring
+//    at an arbitrary spawn silently samples that class and reports a timing
+//    verdict that is really a wall.
 //
 // 3. THE BLAST IS NOT INSTANT. It expands over MINE_BLAST_EXPAND_TICKS and
 //    holds for MINE_BLAST_HOLD_TICKS, and the kill test re-runs every tick
@@ -268,8 +269,11 @@ measure('mine escape margin (set VITE_RUN_MEASURE=1 to run)', () => {
     console.log(`\nopen poses: ${open.length} of ${cardinalPoses} (arena x spawn x +/-x)`);
 
     // One representative of each class. The hemmed pose is named explicitly rather
-    // than sampled, so the contrast cannot quietly become two open poses.
-    const hemmed = { arena: 0, spawn: 1, away: 1 };
+    // than sampled, so the contrast cannot quietly become two open poses -- unless its
+    // board is edited: arena-01's spawn 1 became the open player spawn when issue #1010
+    // took level 1's grey away, so this is arena-02's grey. Its HEMMED row should
+    // read died YES.
+    const hemmed = { arena: 1, spawn: 1, away: 1 };
     const cases = [
       { label: 'OPEN   ', ...open[0] },
       { label: 'OPEN   ', ...open[1] },

@@ -40,8 +40,18 @@ import {
  */
 const CORPUS_SEEDS = parseSeedList('1-10');
 const CORPUS_TICKS = 1200;
-/** Seeds run a second time for the repeat check: one per mode among the corpus's scenarios. */
-const REPEAT_SEEDS = [1, 7, 8];
+/**
+ * Seeds run a second time for the repeat check: one per mode among the corpus's scenarios,
+ * campaign-coop 1, teams 7 and ffa 9. The fresh-module comparison only sees module-level
+ * state on a corpus run that inherited some, which for the respawn cell means a seed that
+ * respawns a tanks-array slot an earlier corpus seed respawned first. Measured: respawns
+ * occur in seeds 7 (teams, arena-01: slots 3, 2, 3), 9 (ffa, vs-quad-01: slot 0 three
+ * times, then slot 2 at tick 1095) and 10 (campaign-coop, arena-05: slots 9 and 6), so
+ * seed 9's slot 2 is the corpus's one such repeat, and ffa's first seed, 8, never respawns.
+ * Seed 7 inherited slot 3 from co-op seed 3 until level 1 (arena-01) became a lone brown,
+ * whose co-op games (seeds 1, 3 and 6) end before any player respawns.
+ */
+const REPEAT_SEEDS = [1, 7, 9];
 /** Per-test ceiling. A corpus seed measured at most ~0.5 s here; this is headroom, not a target. */
 const SEED_TIMEOUT_MS = 20_000;
 
@@ -70,7 +80,8 @@ describe('generated scenarios: the required corpus', () => {
     // A run on a fresh copy of every module starts from no stored state at all, so it
     // disagrees with a corpus run that inherited some from the seeds before it.
     // Measured: a module-level respawn-cell cache survived the second-run check alone
-    // (manifest entry respawn-cell-memoised-across-worlds).
+    // (manifest entry respawn-cell-memoised-across-worlds); REPEAT_SEEDS says which seed
+    // inherits it.
     const expectSame = (cfg: ScenarioConfig, a: ScenarioRun, b: ScenarioRun): void => {
       expect(firstDivergence(a.digests, b.digests) === -1 ? 'repeatable' : describeDivergence(cfg, a, b)).toBe('repeatable');
     };
