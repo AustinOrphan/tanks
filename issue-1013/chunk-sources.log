@@ -1,0 +1,19 @@
+same file names in dist and sourcemap build: true
+entry index-D40VqqRp.js names controller-selftest-B62NS0iL.js 1 time(s)
+controller-selftest-B62NS0iL.js: dist 2822 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), controller-selftest.ts=true
+   src/game/controller-selftest.ts
+gallery-selection-DqJLKZTq.js: dist 2687 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), controller-selftest.ts=false
+   src/game/gallery-selection.ts
+gallery-workbench-5Nf6WS0g.js: dist 8248 B, identical-after-map-comment=true, 2 sources (2 under src/, 0 elsewhere), controller-selftest.ts=false
+   src/game/gallery-command.ts
+   src/game/gallery-workbench.ts
+index-D40VqqRp.js: dist 1161922 B, identical-after-map-comment=true, 174 sources (171 under src/, 3 elsewhere), controller-selftest.ts=false
+   (outside src/) node_modules/three/build/three.core.js
+   (outside src/) node_modules/three/build/three.module.js
+   (outside src/) node_modules/howler/dist/howler.js
+workbench-scene-CDGIGQX9.js: dist 22440 B, identical-after-map-comment=true, 4 sources (4 under src/, 0 elsewhere), controller-selftest.ts=false
+   src/render/gallery/subjects.ts
+   src/render/gallery/moments.ts
+   src/render/gallery/moment-scene.ts
+   src/render/gallery/workbench-scene.ts
+exit=0

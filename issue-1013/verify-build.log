@@ -1,0 +1,47 @@
+
+> tanks@0.0.0 verify:build
+> npm run build && npm run portability && npm run bundle:budget
+
+
+> tanks@0.0.0 build
+> vite build
+
+[36mvite v8.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[0m 198 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[0m[32mindex.html                                                    [0m[1;2m   10.90 kB[0m[2m │ gzip:   4.41 kB[0m
+[2mdist/[0m[2massets/[0m[32mibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2          [0m[1;2m   14.70 kB[0m
+[2mdist/[0m[2massets/[0m[32mibm-plex-mono-latin-600-normal-BgSNZQsw.woff2          [0m[1;2m   15.62 kB[0m
+[2mdist/[0m[2massets/[0m[32matkinson-hyperlegible-latin-400-normal-BrHNak5F.woff2  [0m[1;2m   17.20 kB[0m
+[2mdist/[0m[2massets/[0m[32matkinson-hyperlegible-latin-700-normal-GZI4o3u0.woff2  [0m[1;2m   17.52 kB[0m
+[2mdist/[0m[2massets/[0m[32mibm-plex-sans-latin-wght-normal-IvpUvPa2.woff2         [0m[1;2m   45.71 kB[0m
+[2mdist/[0m[2massets/[0m[32minter-latin-wght-normal-Dx4kXJAl.woff2                 [0m[1;2m   48.25 kB[0m
+[2mdist/[0m[2massets/[0m[35mindex-7492TDOq.css                                     [0m[1;2m   45.78 kB[0m[2m │ gzip:   8.65 kB[0m
+[2mdist/[0m[2massets/[0m[36mgallery-selection-DqJLKZTq.js                          [0m[1;2m    2.68 kB[0m[2m │ gzip:   1.19 kB[0m
+[2mdist/[0m[2massets/[0m[36mcontroller-selftest-B62NS0iL.js                        [0m[1;2m    2.82 kB[0m[2m │ gzip:   1.14 kB[0m
+[2mdist/[0m[2massets/[0m[36mgallery-workbench-5Nf6WS0g.js                          [0m[1;2m    8.24 kB[0m[2m │ gzip:   3.07 kB[0m
+[2mdist/[0m[2massets/[0m[36mworkbench-scene-CDGIGQX9.js                            [0m[1;2m   22.44 kB[0m[2m │ gzip:   5.63 kB[0m
+[2mdist/[0m[2massets/[0m[36mindex-D40VqqRp.js                                      [0m[33;1m1,161.92 kB[0m[2m │ gzip: 325.89 kB[0m
+
+[33m[plugin builtin:vite-reporter] [33;1m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[0m[39m
+[32m✓ built in 209ms[39m
+
+> tanks@0.0.0 portability
+> node tools/portability/check.mjs dist
+
+subpath-portable: dist/index.html + 5 bundle(s) + the PWA shell checked
+
+> tanks@0.0.0 bundle:budget
+> node tools/bundle-budget/check.mjs dist
+
+js  1,198,119 B raw (92.0% of budget), 333,625 B gzip (92.4%)
+css 45,780 B raw (95.4% of budget), 8,586 B gzip (94.4%)
+fonts 159,028 B over 6 file(s) -- reported, not budgeted
+within budget: dist weighed against the ceilings set from 0b1b513
+exit=0

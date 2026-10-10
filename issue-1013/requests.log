@@ -1,0 +1,31 @@
+[14:15:55] preview up on 4396, pid 27079
+[14:15:56] chromium 151.0.7922.34
+[14:15:56] arm 1 (ordinary): start
+[14:15:56] arm 1: splash dismissed
+[14:15:58] arm 2 (?dev=1): start
+[14:15:58] arm 2: splash dismissed
+[14:15:58] arm 2: Developer Tools open
+[14:16:00] arm 2: Controller Self-Test pane visible
+[14:16:00] arm 2: pad row built (positive control reached)
+[14:16:00] arm 2: pane screenshot -> /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/media-1013/selftest-pane-dev.png
+
+ARM 1 ordinary: chunkRequested=false errors=0 failed=0
+   facts={"url":"http://127.0.0.1:4396/","mainMenuShown":true,"selfTestListExists":true,"selfTestListChildElements":0,"selfTestListChildNodes":0,"selfTestPaneHidden":true,"devToolsEntryRendered":false,"builtBodyNodes":0}
+   index-D40VqqRp.js 1161922
+   = 1161922 bytes of JS requested (1 file(s))
+ARM 2 ?dev=1: reached=true errors=0 failed=0
+   at Developer Tools: chunkRequested=false listChildElements=0 files=index-D40VqqRp.js
+   requested on Self-Test open: controller-selftest-B62NS0iL.js 2822
+   readout: padRows=2 channels=39 down=2 emptyHidden=true listChildren=["hud-selftest-empty hud-selftest-empty--hidden","hud-selftest-pads"] failedLine=null
+   pads: ["Index 0 — Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)","Index 1 — HuiJia  USB GamePad"]
+   copy report: shown=true focused=true chars=1307
+   index-D40VqqRp.js 1161922
+   controller-selftest-B62NS0iL.js 2822
+   = 1164744 bytes of JS requested (2 file(s))
+DIST: 5 js files, 1198119 bytes
+   controller-selftest-B62NS0iL.js 2822
+   gallery-selection-DqJLKZTq.js 2687
+   gallery-workbench-5Nf6WS0g.js 8248
+   index-D40VqqRp.js 1161922
+   workbench-scene-CDGIGQX9.js 22440
+exit=0

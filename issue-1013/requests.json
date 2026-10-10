@@ -1,0 +1,162 @@
+{
+  "port": 4396,
+  "chromium": "151.0.7922.34",
+  "dist": {
+    "jsFiles": [
+      {
+        "file": "controller-selftest-B62NS0iL.js",
+        "bytes": 2822
+      },
+      {
+        "file": "gallery-selection-DqJLKZTq.js",
+        "bytes": 2687
+      },
+      {
+        "file": "gallery-workbench-5Nf6WS0g.js",
+        "bytes": 8248
+      },
+      {
+        "file": "index-D40VqqRp.js",
+        "bytes": 1161922
+      },
+      {
+        "file": "workbench-scene-CDGIGQX9.js",
+        "bytes": 22440
+      }
+    ],
+    "jsBytes": 1198119
+  },
+  "arms": [
+    {
+      "name": "ordinary",
+      "query": "",
+      "facts": {
+        "url": "http://127.0.0.1:4396/",
+        "mainMenuShown": true,
+        "selfTestListExists": true,
+        "selfTestListChildElements": 0,
+        "selfTestListChildNodes": 0,
+        "selfTestPaneHidden": true,
+        "devToolsEntryRendered": false,
+        "builtBodyNodes": 0
+      },
+      "errors": [],
+      "failed": [],
+      "selftestChunkRequested": false,
+      "js": [
+        {
+          "file": "index-D40VqqRp.js",
+          "bytes": 1161922
+        }
+      ],
+      "jsBytes": 1161922
+    },
+    {
+      "name": "dev-selftest",
+      "query": "?dev=1",
+      "reached": true,
+      "errors": [],
+      "failed": [],
+      "atDevTools": {
+        "js": [
+          {
+            "file": "index-D40VqqRp.js",
+            "bytes": 1161922
+          }
+        ],
+        "jsBytes": 1161922,
+        "selftestChunkRequested": false,
+        "selfTestListChildElements": 0
+      },
+      "requestedOnOpen": [
+        {
+          "file": "controller-selftest-B62NS0iL.js",
+          "bytes": 2822
+        }
+      ],
+      "selftestChunkRequestedOnOpen": true,
+      "readout": {
+        "paneHidden": false,
+        "listChildElements": 2,
+        "listChildClasses": [
+          "hud-selftest-empty hud-selftest-empty--hidden",
+          "hud-selftest-pads"
+        ],
+        "emptyHidden": true,
+        "padRows": 2,
+        "padNames": [
+          "Index 0 — Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)",
+          "Index 1 — HuiJia  USB GamePad"
+        ],
+        "channels": 39,
+        "channelValues": [
+          "0.62",
+          "-0.41",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.35",
+          "1.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.05",
+          "-0.98",
+          "0.00",
+          "0.00",
+          "1.00",
+          "-1.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "1.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00"
+        ],
+        "downChannels": 2,
+        "failedLine": null
+      },
+      "report": {
+        "shown": true,
+        "focused": true,
+        "chars": 1307,
+        "firstLines": [
+          "## Controller compatibility report",
+          "",
+          "- User agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+          "- Page: http://127.0.0.1:4396/?dev=1",
+          "- Pads visible: 2",
+          ""
+        ]
+      },
+      "js": [
+        {
+          "file": "index-D40VqqRp.js",
+          "bytes": 1161922
+        },
+        {
+          "file": "controller-selftest-B62NS0iL.js",
+          "bytes": 2822
+        }
+      ],
+      "jsBytes": 1164744
+    }
+  ]
+}
