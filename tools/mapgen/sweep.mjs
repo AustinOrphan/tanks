@@ -6,12 +6,13 @@ import { RULESETS } from './rulesets.mjs';
 import { writeBoardPng } from './render.mjs';
 import { expressiveRange, renderExpressiveRange } from './expressive-range.mjs';
 import { seedRange } from './lib.mjs';
+import { THREE_PLAYER_SPREAD_CEILING, passesSpreadGate } from './spread-gate.mjs';
 
 /**
  * Generate boards from every ruleset over a seed sample, filter them through the SHIPPED
  * acceptance rules, measure the survivors, and print one row per (ruleset, player count).
  *
- * THE THREE TIERS STAY SEPARATE, and the order matters:
+ * THE THREE TIERS STAY SEPARATE, one ruled stage follows them, and the order matters:
  *
  *   1. GENERATE -- the ruleset's own rules build a board from a seed.
  *   2. ACCEPT   -- `evaluateVersusBoard` and `versusSpawnClearanceFailures`, unchanged and
@@ -20,6 +21,12 @@ import { seedRange } from './lib.mjs';
  *                  proposition from one that lands 9 in 10, even if their boards measure
  *                  the same.
  *   3. MEASURE  -- the quality tier ranks the boards that passed.
+ *   4. SPREAD   -- at three players only, the one ruled gate fed by a quality measure
+ *                  (issue #820): `passesSpreadGate` in `spread-gate.mjs` refuses a board whose
+ *                  spawn-path spread is over the ceiling derived from the shipped boards. It
+ *                  runs after the shipped tier, on boards that tier accepted, and a refused seed
+ *                  is reported, not retried. Tiers 1-3 are unchanged by it, and no other quality
+ *                  measure gates anything (see that module's header for why this one does).
  *
  * Acceptance is never used as a score. `versus-board.ts` says of its own criteria that 0 of
  * 15 shipped (arena, N) combinations fail them; a generator tuned to maximise pass rate
@@ -111,6 +118,8 @@ for (const job of jobs) {
       // Issue #1028: accepted boards with no wall component (8-connected, wall cells only)
       // below the block-size threshold. Reported, not gated.
       noSmallBlocks: passed.filter((b) => smallWallComponents(b.arena, 8) === 0).length,
+      // Tier 4 (issue #820): of the shipped-tier accepted boards, those the spread gate passes.
+      spreadPassed: ms.filter((m) => passesSpreadGate(m, n)).length,
     });
     if (PNG_DIR && n === 4 && passed.length) {
       writeBoardPng(passed[0].arena, `${PNG_DIR}/${key}-seed${passed[0].seed}.png`, { playerCount: 4, scale: 20 });
@@ -145,6 +154,26 @@ console.log();
 for (const r of rows) {
   const why = Object.entries(r.refusals).map(([k, v]) => `${k} ${v}`).join(', ');
   if (why) console.log(`  ${r.ruleset} N=${r.playerCount} refused: ${why}`);
+}
+
+// ---- the 3-player spread gate (issue #820) ----
+const threes = rows.filter((r) => r.playerCount === 3);
+if (threes.length > 0) {
+  console.log();
+  console.log(`SPREAD GATE at N=3: pathSpread <= ${THREE_PLAYER_SPREAD_CEILING}, after the shipped tier (seeds ${SEED_OFFSET + 1}-${SEED_OFFSET + SEEDS})`);
+  console.log('ruleset            shipped  +spread  refused (shipped tier; spread)          pathSpread min / median / max');
+  for (const r of threes) {
+    const shippedWhy = Object.entries(r.refusals).map(([k, v]) => `${k} ${v}`).join(', ') || 'none';
+    const spreads = r.m.map((m) => m.pathSpread).sort((a, b) => a - b);
+    const median = spreads.length ? spreads[Math.floor((spreads.length - 1) / 2)] : NaN;
+    console.log([
+      r.ruleset.padEnd(17),
+      `${String(r.accepted).padStart(3)}/${String(r.drawn).padEnd(3)}`,
+      `${String(r.spreadPassed).padStart(3)}/${String(r.drawn).padEnd(3)}`,
+      `${shippedWhy}; spread ${r.accepted - r.spreadPassed}`.padEnd(38),
+      `${f(spreads[0])} / ${f(median)} / ${f(spreads[spreads.length - 1])}`,
+    ].join('  '));
+  }
 }
 
 // ---- expressive range (issue #822) ----

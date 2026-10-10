@@ -56,7 +56,7 @@ one.
 | --- | --- | --- | --- |
 | **Generative** | How is the board built? | the ruleset itself | a grid |
 | **Acceptance** | Is it broken? | `src/sim/versus-board.ts`, `versus-spawns.ts` -- shipped, unchanged | pass / fail |
-| **Quality** | Which of two working boards is better? | `tools/mapgen/measure.ts` -- new, gates nothing | numbers |
+| **Quality** | Which of two working boards is better? | `tools/mapgen/measure.ts` -- new, gates nothing but the ruled 3-player spread gate (#820) | numbers |
 
 Acceptance stays a filter and is never used as a score. A generator tuned to maximise pass
 rate converges on "not broken", which the null ruleset already is. What the sweep does
@@ -188,7 +188,8 @@ decimals by the correction (0.0940 to 0.3405).
 **What this cannot establish, stated plainly:** eight authored maps are not a sample drawn
 from a population of good maps. A band derived from them describes them. A board outside the
 band is unlike everything shipped, which is a reason to look at it, not a reason to reject
-it.
+it. The one exception is the 3-player spread gate (issue #820): a generated 3-player board whose `pathSpread` is over the maximum of the shipped boards offered at three players is refused. That bound is still a description of what ships, applied to one
+measure by a ruling, not a claim that the band defines a good board.
 
 ## Constraints a generator has to satisfy, measured rather than assumed
 
@@ -601,6 +602,17 @@ acceptance tier's live edge is concealment at 3 and 4 players, not connectivity.
 moment a quality measure becomes a gate, a generator can be tuned against it and the measure
 stops describing the board and starts describing the generator.
 
+**The ruled exception: the 3-player spread gate** (issue #820, 2026-10-09). A generated
+3-player board must have `pathSpread` at or below 0.75, the maximum of the boards the catalog
+offers at three players (arena-04), so it refuses no board that ships. It is an exception and
+not a precedent, for four reasons: the ruling asks for a GUARANTEE of comparable opportunity at
+three players, which a number that gates nothing cannot give; the gate runs in `sweep.mjs` after
+generation and after the shipped acceptance tier, so tiers 1 to 3 are unchanged; no ruleset reads
+the ceiling or the player count (rulesets take none), so none can redraw against it; and the
+ceiling is a literal derived from the shipped boards (`THREE_PLAYER_SPREAD_CEILING` in
+`tools/mapgen/spread-gate.mjs`, recomputed by its test). No other quality measure becomes a gate
+without its own ruling.
+
 **2. Pursue `runs` -- long bars, L-bends and carved pathways -- and not the other three**
 (issue #821). It is the only one of the four landing inside every shipped band, and the one
 whose shapes a player would recognise as authored. `rooms` is the runner-up and the family to
@@ -660,10 +672,14 @@ score with the worst spread in the set. A threshold on cell symmetry would order
 the property it is meant to protect, which is precisely the objection that rejected the
 70%-of-diagonal sightline cap above.
 
-So `asymmetryC3` is **reported and not budgeted**. Which quantity the tolerance belongs on --
-fairness/exposure, where `pathSpread` already discriminates across a shipped range of 0.00 to
-0.75, or cell symmetry, where the number would have to come from first principles or from play --
-is the open question on issue #820, and it changes what a generator is built to hit.
+So `asymmetryC3` is **reported and not budgeted**, and stays so. The rulings on issue #820
+answered which quantity the tolerance belongs on: approximate symmetry was chosen (2026-09-25)
+over an inscribed 3-fold region and over not generating 3-player boards; the tolerance goes on
+FAIRNESS, `pathSpread`, not on cell symmetry (2026-10-09); and the ceiling is 0.75, the maximum
+of the shipped set (a follow-up ruling, 2026-10-09). The gate that implements it is the ruled
+exception under proposal 1. `pathSpread` is the distance half of fairness only: two spawns can be
+equally far apart while one stands in the open, and the exposure half that the 2026-09-25 ruling
+listed is not built and not retired.
 
 **6. Then playtest.** Every claim here is static. A bot-vs-bot capture at normal speed on the
 best board from each ruleset is the cheapest thing that would turn any of this into evidence
@@ -678,7 +694,7 @@ playtest criterion.
 
 **Eight boards are not a sample of good boards.** The calibration band describes the eight
 maps that exist. A generated board outside it is unlike what has shipped, which is a reason
-to look at it and not a reason to reject it.
+to look at it and not a reason to reject it. The one exception is the 3-player spread gate (issue #820): a generated 3-player board whose `pathSpread` is over the maximum of the shipped boards offered at three players is refused.
 
 **`routeCount` is a greedy lower bound, not the true count.** Routes are taken
 shortest-first and each one's hull sweep is removed before the next is sought, so a
@@ -698,11 +714,13 @@ at it -- an empty 22x18 board measures 0.68, and the missing third is its own ri
 holds board size fixed at 33x27 for exactly this reason; a comparison across sizes would put
 that drift in the same column as the thing being compared.
 
-**Three-player symmetry is unresolved.** Three-fold rotational symmetry and a rectangular
-board are incompatible, which is why vs-tri-01 measures 0.33 rotational asymmetry against
-0.00 for the other two dedicated boards. Neither structured ruleset here has an answer; both
-impose 180-degree rotation and are therefore fair at 2 and 4 and only approximately fair at
-3. What a generator should do at odd player counts is an open design question.
+**Three-player symmetry is settled by ruling, not solved.** Three-fold rotational symmetry and a
+rectangular board are incompatible, which is why vs-tri-01 measures 0.33 rotational asymmetry
+against 0.00 for the other two dedicated boards. Neither structured ruleset here has an answer;
+both impose 180-degree rotation and are therefore fair at 2 and 4 and only approximately fair at
+3. Issue #820 ruled that approximately fair is acceptable within a stated tolerance on
+`pathSpread`, and the spread gate enforces it (proposal 1). The exposure half of fairness is
+still unmeasured.
 
 **The quality tier has no weights and deliberately produces no single score.** Collapsing
 these columns into one number requires deciding what a good board is, which is a product

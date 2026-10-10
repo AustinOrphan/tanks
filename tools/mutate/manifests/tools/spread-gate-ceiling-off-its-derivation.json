@@ -1,0 +1,14 @@
+{
+  "id": "spread-gate-ceiling-off-its-derivation",
+  "file": "tools/mapgen/spread-gate.mjs",
+  "find": "export const THREE_PLAYER_SPREAD_CEILING = 0.75;",
+  "replace": "export const THREE_PLAYER_SPREAD_CEILING = 0.85;",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/spread-gate.test.ts"
+  ],
+  "why": "The literal moved away from its derivation. 0.85 still passes every shipped board, so only the test that recomputes the ceiling by the ruled rule -- the maximum `pathSpread` at N=3 over the boards offered at three players, rounded up at two decimals -- can see it. A ceiling that drifts from that rule bounds generated boards by nothing that ships.",
+  "killedBy": [
+    "the 3-player spread gate (issue #820) derives its ceiling from the boards offered at three players, and passes every one of them"
+  ]
+}

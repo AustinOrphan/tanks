@@ -28,7 +28,9 @@ import {
  *   acceptance (src/sim/versus-board.ts)  pass/fail, gates, already shipped, unchanged
  *   quality    (this file)                numbers, never gates, ranks passing boards
  *
- * NOTHING HERE GATES ANYTHING and nothing here is imported by the game. It lives under
+ * NOTHING HERE GATES ANYTHING and nothing here is imported by the game. The one ruled gate a
+ * quality measure feeds -- `pathSpread` at three players (issue #820) -- lives in
+ * `spread-gate.mjs` and runs in `sweep.mjs`, not here: this file stays numbers. It lives under
  * `tools/` rather than `src/sim/` for exactly that reason: a new field on an arena or a new
  * module under `src/sim/` is a determinism-surface change (`arena-types.ts` records that the
  * validator rejects unknown keys, and `versus-board.ts` records that it was kept unreachable
