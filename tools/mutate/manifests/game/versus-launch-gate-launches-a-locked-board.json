@@ -3,9 +3,12 @@
   "file": "src/game/versus-config.ts",
   "find": "  if (!unlocked(entry)) {",
   "replace": "  if (false) {",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/versus-config.test.ts"
   ],
-  "why": "The launch-gate place (issue #983): `resolveVersusConfig` stops refusing a concrete board the player has not unlocked. It is the backstop, unreachable while the four places in front of it hold, so only a direct call can see it -- which is why the unit case calls it with a locked concrete board and expects the exact message."
+  "killedBy": [
+    "the campaign board unlock (issue #983) refuses to launch a board the save has not unlocked -- the launch gate's backstop"
+  ],
+  "why": "The launch-gate place (issue #983): `resolveVersusConfig` stops refusing a concrete board the player has not unlocked. It is the backstop, unreachable while the four places in front of it hold, so only a direct call can see it -- which is why the unit case calls it with a locked concrete board and expects the exact message. Proved before its tests existed: SURVIVES at 0 of 20 in scope on the gate's own commit, then KILLED by 1 of 29, measured."
 }

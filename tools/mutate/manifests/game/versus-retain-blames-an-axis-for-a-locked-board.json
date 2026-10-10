@@ -3,10 +3,14 @@
   "file": "src/game/versus-config.ts",
   "find": "  if (entry !== undefined && !unlocked(entry)) {",
   "replace": "  if (false) {",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/versus-config.test.ts",
     "src/game/hud.navigation.test.ts"
   ],
-  "why": "Drops the `'locked'` reason, so a locked board falls through to the axis ternary and is blamed on the mode (it declares the count) -- 'not available in FFA' about a board offered in no mode at all, which sends the player to a control that cannot bring it back. Still clamps to Random, so it is visible only to assertions on the reason or the notice text."
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) an axis change drops a held board the save no longer unlocks, and says only that it is gone (issue #983)",
+    "the campaign board unlock (issue #983) drops a retained board the save has not unlocked, and blames the lock rather than an axis"
+  ],
+  "why": "Drops the `'locked'` reason, so a locked board falls through to the axis ternary and is blamed on the mode (it declares the count) -- 'not available in FFA' about a board offered in no mode at all, which sends the player to a control that cannot bring it back. Still clamps to Random, so it is visible only to assertions on the reason or the notice text. Proved before its tests existed: SURVIVES at 0 of 154 in scope on the gate's own commit, then KILLED by 2 of 166, measured."
 }

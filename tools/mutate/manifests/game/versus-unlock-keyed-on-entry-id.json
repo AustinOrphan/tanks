@@ -3,9 +3,14 @@
   "file": "src/game/versus-config.ts",
   "find": "  return (entry) => !campaignArenas.has(entry.arenaId) || clearedArenas.has(entry.arenaId);",
   "replace": "  return (entry) => !campaignArenas.has(entry.id) || clearedArenas.has(entry.id);",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/versus-config.test.ts"
   ],
-  "why": "Keys the unlock on the catalog entry's id instead of the arena it plays. Every shipped campaign entry has id === arenaId, so the whole shipped offer reads identically; the first entry whose id differs from its campaign arena would slip past the lock. Issue #983 requires the pairing to come from each campaign level's `arenaId`, not from board ids, which only a synthetic entry can tell apart."
+  "killedBy": [
+    "the campaign board unlock (issue #983) pairs a board with its level through the level's arenaId -- not the board's id, and not arena numbering",
+    "the campaign board unlock (issue #983) unlocking a board offers it at exactly the counts and modes its entry declares",
+    "the campaign board unlock (issue #983) drops a retained board the save has not unlocked, and blames the lock rather than an axis"
+  ],
+  "why": "Keys the unlock on the catalog entry's id instead of the arena it plays. Every shipped campaign entry has id === arenaId, so the whole shipped offer reads identically; the first entry whose id differs from its campaign arena would slip past the lock. Issue #983 requires the pairing to come from each campaign level's `arenaId`, not from board ids, which only a synthetic entry can tell apart. Proved before its tests existed: SURVIVES at 0 of 20 in scope on the gate's own commit, then KILLED by 3 of 29, measured."
 }

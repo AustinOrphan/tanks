@@ -3,9 +3,12 @@
   "file": "src/game/hud.ts",
   "find": "        versusConfigState.players, versusConfigState.mode, VERSUS_CATALOG, versusUnlock(),",
   "replace": "        versusConfigState.players, versusConfigState.mode, VERSUS_CATALOG,",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/hud.navigation.test.ts"
   ],
-  "why": "The Map-row place (issue #983): the pane draws a card for every declared board, locked or not, and Random's 'N eligible boards' line counts them. The ruling is that a locked board is absent, so this is the defect the issue exists to remove."
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) shows only the boards this save has unlocked, re-read on every open (issue #983)"
+  ],
+  "why": "The Map-row place (issue #983): the pane draws a card for every declared board, locked or not, and Random's 'N eligible boards' line counts them. The ruling is that a locked board is absent, so this is the defect the issue exists to remove. Proved before its tests existed: SURVIVES at 0 of 134 in scope on the gate's own commit, then KILLED by 1 of 137, measured."
 }

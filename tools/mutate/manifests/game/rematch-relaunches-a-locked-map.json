@@ -3,9 +3,12 @@
   "file": "src/game/loop.ts",
   "find": "          VERSUS_CATALOG, campaignBoardUnlock(deps.progress.highestCleared()),",
   "replace": "          VERSUS_CATALOG, () => true,",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/loop.test.ts"
   ],
-  "why": "Rematch stops re-checking its retained map (issue #983). Settings is reachable from pause, so a player can reset progress mid-match; Rematch then requests the board that reset locked, and the launch gate throws out of the click with nothing to catch it."
+  "killedBy": [
+    "startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5) a finished versus session's Rematch: the same configuration, a fresh match (issue #279) rematches a board a mid-match progress reset locked as Random (issue #983)"
+  ],
+  "why": "Rematch stops re-checking its retained map (issue #983). Settings is reachable from pause, so a player can reset progress mid-match; Rematch then requests the board that reset locked, and the launch gate throws out of the click with nothing to catch it. Proved before its tests existed: SURVIVES at 0 of 491 in scope on the gate's own commit, then KILLED by 1 of 494, measured."
 }

@@ -3,9 +3,12 @@
   "file": "src/game/loop.ts",
   "find": "    if (nowWon && deps.levels.tracksProgress) {",
   "replace": "    if (nowWon) {",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/loop.test.ts"
   ],
-  "why": "The invariant issue #983 leans on: a session whose level system does not track progress -- the sandbox, and the versus level system (levels.ts) -- records no campaign clear. Since #983 the versus Map row reads that progress, so a win that recorded a clear would unlock campaign boards in versus from a sandbox or a versus match. The real progress store also ignores a level its campaign does not hold, which is a second guard behind this one; this entry pins the first, through the recording fake, so neither guard is left resting on the other."
+  "killedBy": [
+    "startGameWith: the main menu records nothing for a sequence that does not track progress (the sandbox)"
+  ],
+  "why": "The invariant issue #983 leans on: a session whose level system does not track progress -- the sandbox, and the versus level system (levels.ts) -- records no campaign clear. Since #983 the versus Map row reads that progress, so a win that recorded a clear would unlock campaign boards in versus from a sandbox or a versus match. The real progress store also ignores a level its campaign does not hold, which is a second guard behind this one; this entry pins the first, through the recording fake, so neither guard is left resting on the other. Not a new gap: the killer predates #983 and was KILLED at 1 of 494, measured."
 }

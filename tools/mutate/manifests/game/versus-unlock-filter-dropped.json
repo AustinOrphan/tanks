@@ -3,10 +3,19 @@
   "file": "src/game/versus-config.ts",
   "find": "    .filter(unlocked)",
   "replace": "    .filter(EVERY_BOARD_UNLOCKED)",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/versus-config.test.ts",
     "src/game/versus-setup-store.test.ts"
   ],
-  "why": "Deletes the gate itself (issue #983): `versusMapChoices` stops applying the unlock, so every place that reads the offer through it -- the Map row, the retained-selection check, the stored-setup check and Random's draw -- offers a campaign board whose level was never cleared. The declaration filter above it is untouched, so every ungated test (the parity pin, the cross-check, the floor) reads identically; only an assertion made at a fresh or partial save can see it."
+  "killedBy": [
+    "the campaign board unlock (issue #983) offers a fresh save, and a save two levels in, exactly these boards at each startable option",
+    "the campaign board unlock (issue #983) unlocking a board offers it at exactly the counts and modes its entry declares",
+    "the campaign board unlock (issue #983) leaves a fresh save at least two non-campaign boards at each startable option, and every one starts",
+    "the campaign board unlock (issue #983) Random draws only from the boards a save has unlocked",
+    "the campaign board unlock (issue #983) drops a retained board the save has not unlocked, and blames the lock rather than an axis",
+    "a stored board this save has not unlocked (issue #983) falls back to Random through the existing fallback after a progress reset, on the next page load",
+    "a stored board this save has not unlocked (issue #983) is refused on the way IN too, so get() and the stored bytes agree"
+  ],
+  "why": "Deletes the gate itself (issue #983): `versusMapChoices` stops applying the unlock, so every place that reads the offer through it -- the Map row, the retained-selection check, the stored-setup check and Random's draw -- offers a campaign board whose level was never cleared. The declaration filter above it is untouched, so every ungated test (the parity pin, the cross-check, the floor) reads identically; only an assertion made at a fresh or partial save can see it. Proved before its tests existed: SURVIVES at 0 of 31 in scope on the gate's own commit, then KILLED by 7 of 42, measured."
 }
