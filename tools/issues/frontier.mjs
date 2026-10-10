@@ -29,10 +29,22 @@
  * @typedef {{ version: number, generatedAt: string, source: { repo: string, ref: string | null },
  *   counts: Record<string, number>, cycles: number[][], issues: SnapshotIssue[] }} Snapshot
  * @typedef {'ready' | 'blocked' | 'unknown' | 'closed'} Readiness
+ *   A graph verdict only. `frontierOf` splits `ready` again into ready and waiting by label.
  */
 
 /** @param {readonly SnapshotIssue[]} issues @returns {Map<number, SnapshotIssue>} */
 const indexOf = (issues) => new Map(issues.map((issue) => [issue.number, issue]));
+
+/**
+ * The labels that say a person must act before the work can finish (issue #1025): the four
+ * `docs/agent/kickoff.md` (Queue, "Readiness") tells an agent to treat as needing a person.
+ * Defined once, here, because the frontier's `waiting` bucket and any reader of it have to agree
+ * about which labels mean "not yours to start".
+ *
+ * A PRESENTATION bucket, not queue eligibility: `metadata.mjs` decides what the Now queue may
+ * hold, and nothing here changes that.
+ */
+export const PERSON_LABELS = Object.freeze(['human-required', 'playtest-required', 'hardware-required', 'needs-review']);
 
 /**
  * Blockers that still stand, and the ones the snapshot cannot speak for.
@@ -201,7 +213,14 @@ export function longestDependencyChain(snapshot) {
 }
 
 /**
- * The frontier: every open issue with no standing blocker, bucketed by readiness.
+ * The frontier: every open issue in scope, bucketed by readiness.
+ *
+ * FOUR BUCKETS (issue #1025). The graph decides first: an issue with a standing blocker is
+ * `blocked` and one whose blockers were not read is `unknown`, whatever its labels. Of the rest,
+ * an issue carrying any of `PERSON_LABELS` is `waiting`, and its row names the labels that put it
+ * there; only an unblocked issue with none of them is `ready`. Before this, `ready` meant only
+ * "no standing blocker", and measured on 2026-10-09 52 of its 72 issues carried a label saying a
+ * person had to finish them -- a work queue pointing at work nobody could start.
  *
  * `labels` filters conjunctively and `milestone` exactly, because #437's default view is
  * scoped to Public Prototype 1.0 and to `agent-ready` leaves -- but both are arguments rather
@@ -223,9 +242,12 @@ export function frontierOf(snapshot, filter = {}) {
   };
 
   /** @typedef {{ number: number, title: string, labels: readonly string[], readiness: Readiness,
-   *   openBlockers: number[], unknownBlockers: number, reason: string }} FrontierRow */
+   *   openBlockers: number[], unknownBlockers: number, reason: string,
+   *   personLabels: string[] }} FrontierRow */
   /** @type {FrontierRow[]} */
   const ready = [];
+  /** @type {FrontierRow[]} */
+  const waiting = [];
   /** @type {FrontierRow[]} */
   const blocked = [];
   /** @type {FrontierRow[]} */
@@ -233,19 +255,22 @@ export function frontierOf(snapshot, filter = {}) {
   for (const issue of snapshot?.issues ?? []) {
     if (issue.state === 'closed' || !matches(issue)) continue;
     const verdict = readinessOf(issue, index);
-    const row = { number: issue.number, title: issue.title, labels: issue.labels, ...verdict };
-    if (verdict.readiness === 'ready') ready.push(row);
-    else if (verdict.readiness === 'blocked') blocked.push(row);
+    const personLabels = PERSON_LABELS.filter((l) => issue.labels.includes(l));
+    const row = { number: issue.number, title: issue.title, labels: issue.labels, ...verdict, personLabels };
+    if (verdict.readiness === 'blocked') blocked.push(row);
     else if (verdict.readiness === 'unknown') unknown.push(row);
+    else if (verdict.readiness === 'ready' && personLabels.length > 0) waiting.push(row);
+    else if (verdict.readiness === 'ready') ready.push(row);
   }
   /** @param {FrontierRow} a @param {FrontierRow} b */
   const byNumber = (a, b) => a.number - b.number;
   return {
     ready: ready.sort(byNumber),
+    waiting: waiting.sort(byNumber),
     blocked: blocked.sort(byNumber),
     unknown: unknown.sort(byNumber),
-    // The denominator for all three, after filtering. Without it "7 ready" is unreadable.
-    considered: ready.length + blocked.length + unknown.length,
+    // The denominator for all four, after filtering. Without it "7 ready" is unreadable.
+    considered: ready.length + waiting.length + blocked.length + unknown.length,
   };
 }
 
@@ -259,14 +284,16 @@ export function frontierOf(snapshot, filter = {}) {
  *
  * TWO SENTENCES IN THE OUTPUT ARE LOAD-BEARING, not decoration:
  *
- * - "Ready means no blocker in the graph, not startable." Measured on this repository, the
- *   native graph called 24 of 28 issues ready while roughly 8 of those were waiting on a
- *   maintainer ruling. A decision carries no blocked-by edge, so no amount of relationship
- *   data can see it, and a reader who takes this list as a work queue will pick one up and
- *   stall.
- * - "`ready` counts only issues this was the LAST blocker for." Closing an issue does not
+ * - "Ready still is not startable." Measured on this repository, the native graph called 24 of
+ *   28 issues ready while roughly 8 of those were waiting on a maintainer ruling. The `waiting`
+ *   bucket now takes the issues whose LABELS say a person must act (issue #1025), but a decision
+ *   no label records carries no blocked-by edge either, so no amount of relationship data can
+ *   see it, and `needs-split`, size and `agent-ready` are not checked at all. A reader who takes
+ *   the ready list as a work queue can still pick one up and stall.
+ * - "`unblocks` counts only issues this was the LAST blocker for." Closing an issue does not
  *   release everything downstream of it, and "closing this unblocks 12" is exactly the claim
- *   that gets repeated from a number printed without that qualifier.
+ *   that gets repeated from a number printed without that qualifier. It says `unblocks`, not
+ *   "makes ready", because an unblocked issue that carries a person label is waiting.
  *
  * @param {Snapshot} snapshot
  * @param {{ milestone?: string | null, labels?: readonly string[], excludeLabels?: readonly string[] }} [filter]
@@ -286,7 +313,7 @@ export function renderFrontier(snapshot, filter = {}) {
   lines.push('');
   lines.push(`Snapshot of \`${snapshot?.source?.repo ?? 'unknown'}\`, generated ${snapshot?.generatedAt ?? 'unknown'}.`);
   lines.push('');
-  lines.push(`**${f.ready.length} ready / ${f.blocked.length} blocked / ${f.unknown.length} unknown**, of ${f.considered} open issues in scope.`);
+  lines.push(`**${f.ready.length} ready / ${f.waiting.length} waiting / ${f.blocked.length} blocked / ${f.unknown.length} unknown**, of ${f.considered} open issues in scope.`);
 
   /** @param {{ labels: readonly string[] }} row @param {string} prefix */
   const tag = (row, prefix) =>
@@ -299,8 +326,17 @@ export function renderFrontier(snapshot, filter = {}) {
       lines.push(`- #${row.number} [${tag(row, 'priority:')}/${tag(row, 'size:')}] ${row.title}`);
     }
     lines.push('');
-    lines.push('READY MEANS "NO BLOCKER IN THE GRAPH", not "startable". An issue waiting on a');
-    lines.push('decision carries no blocked-by edge, so it appears here.');
+    lines.push('READY STILL MEANS "NO BLOCKER AND NO PERSON LABEL", not "startable". A');
+    lines.push('decision that no label records carries no blocked-by edge, so it can still');
+    lines.push('appear here; needs-split, size and agent-ready are not checked.');
+  }
+
+  if (f.waiting.length > 0) {
+    lines.push('');
+    lines.push('## Waiting -- no standing blocker, but a label says a person must act');
+    for (const row of f.waiting) {
+      lines.push(`- #${row.number} [${tag(row, 'priority:')}/${tag(row, 'size:')}] ${row.title} -- ${row.personLabels.join(', ')}`);
+    }
   }
 
   if (f.unknown.length > 0) {
@@ -342,12 +378,13 @@ export function renderFrontier(snapshot, filter = {}) {
     lines.push('');
     lines.push('## What closing an issue would unlock');
     lines.push('');
-    lines.push('`ready` counts only issues this is the LAST standing blocker for; `reaches` is');
-    lines.push('everything downstream at any depth. They are different claims.');
+    lines.push('`unblocks` counts only issues this is the LAST standing blocker for; `reaches` is');
+    lines.push('everything downstream at any depth. They are different claims, and an unblocked');
+    lines.push('issue that carries a person label is waiting, not ready.');
     lines.push('');
     for (const row of unlocks) {
       const names = row.immediate.length ? row.immediate.map((n) => `#${n}`).join(', ') : '-';
-      lines.push(`- #${row.number}: makes ${row.immediate.length} ready (${names}), reaches ${row.downstream.length}`);
+      lines.push(`- #${row.number}: unblocks ${row.immediate.length} (${names}), reaches ${row.downstream.length}`);
     }
   }
 
