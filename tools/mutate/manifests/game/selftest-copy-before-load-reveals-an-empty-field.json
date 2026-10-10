@@ -1,0 +1,14 @@
+{
+  "id": "selftest-copy-before-load-reveals-an-empty-field",
+  "file": "src/game/hud.ts",
+  "find": "    if (selfTest === null) return;\n    const text = selfTest.report();\n",
+  "replace": "    const text = selfTest?.report() ?? '';\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) Copy pressed before the body loaded throws nothing and writes nothing"
+  ],
+  "why": "Issue #1013. Copy pressed before the self-test's body has loaded no longer returns early: it throws nothing, but reveals, focuses and selects an empty report field for a readout that does not exist yet. The sibling entry `selftest-copy-before-load-throws` throws before anything is revealed, so only this one reaches the assertion that the field stays hidden."
+}

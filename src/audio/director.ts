@@ -6,7 +6,7 @@ export interface AudioDirector {
   handle(events: SimEvent[]): void;
   /**
    * Rebind which tank is "the player". loadArena numbers tanks in grid-scan order, so
-   * the player's id differs per arena (16 in ARENA_01, 15 in ARENA_02) -- a director
+   * the player's id differs per arena (2 in ARENA_01, 5 in ARENA_02) -- a director
    * still bound to the old id scores the player's own cannon as an enemy's from the
    * next level onward.
    */

@@ -837,7 +837,8 @@ describe('mapgen morphology: wall components over wall cells only (issue #1028)'
       return n;
     };
     const letters = Object.keys(SHIPPED).map((id) => letterCount(named(id)));
-    expect(letters).toEqual([4, 5, 6, 7, 8, 2, 2, 2]);
+    // arena-01 carried 4 letters until issue #1010 left level 1 a lone brown and its player.
+    expect(letters).toEqual([2, 5, 6, 7, 8, 2, 2, 2]);
     for (const id of Object.keys(SHIPPED)) {
       const def = named(id);
       expect(oldCount(def) - wallComponentSizes(def, 8).length, id).toBe(letterCount(def));

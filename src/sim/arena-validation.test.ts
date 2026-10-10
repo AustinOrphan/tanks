@@ -283,8 +283,12 @@ describe('the cover ratio each arena quotes in its notes', () => {
   // enemy spawn letters. A versus board's real spawns are chosen by the maximin policy at
   // load, so the same number would not mean the same thing there -- `vs-duel-01` is
   // measured by versus-catalog-rules.ts instead. (Issue #271.)
+  //
+  // arena-01's `unseen` was 288 until issue #1010 left level 1 a lone brown: the count reads
+  // sightlines from every authored enemy, and with grey's and teal's gone 130 more open cells
+  // are seen by no enemy. `open` is unchanged because the walls did not move.
   const EXPECTED: Record<string, { unseen: number; open: number }> = {
-    'arena-01': { unseen: 288, open: 774 },
+    'arena-01': { unseen: 418, open: 774 },
     'arena-02': { unseen: 369, open: 747 },
     'arena-03': { unseen: 248, open: 792 },
     'arena-04': { unseen: 284, open: 1359 },
@@ -351,9 +355,10 @@ describe('the STATIONARY-banker spawn rule, which green is the reason for', () =
 
   it('does NOT report a MOBILE banker on the same board', () => {
     // The behaviour gate. Teal banks (weight 0.15) and would trip a rule that only
-    // checked the weight -- as an earlier draft of this rule did, which failed shipped
-    // arena-01 (grey at (13, 5) off 1 wall, teal at (11, 7) off 2) and arena-04. A tank
-    // that drives away at tick 1 does not hold the line the rule is about.
+    // checked the weight -- as an earlier draft of this rule did, which failed arena-01
+    // as it stood before the level-1 edit (issue #1010; grey at (13, 5) off 1 wall, teal
+    // at (11, 7) off 2) and arena-04. A tank that drives away at tick 1 does not hold the
+    // line the rule is about.
     expect(structuralFailures(at('T'))).toEqual([]);
   });
 

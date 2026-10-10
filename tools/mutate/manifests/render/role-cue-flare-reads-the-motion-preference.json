@@ -7,7 +7,7 @@
   "tests": [
     "src/render/entities.test.ts"
   ],
-  "why": "Makes the role cue's muzzle flare depend on the reduced-motion preference, collapsing it to the shipped size for a player who asked for calm: the weapon-class cue would vanish exactly for them. Issue #1018 asks that the cue's geometry be identical under either preference at rest. Killed by the case that builds brown, olive and teal with `both` under each preference and compares every cue part's vertices and world matrix.",
+  "why": "Makes the role cue's muzzle flare depend on the reduced-motion preference, collapsing it to the shipped size for a player who asked for calm: the weapon-class cue would vanish exactly for them. Issue #1018 asks that the cue's geometry be identical under either preference at rest. Killed by the case that builds grey, olive and teal with `both` under each preference and compares every cue part's vertices and world matrix.",
   "killedBy": [
     "the role cue under reduced motion (issue #1018) builds the same hull, turret, barrel, flare and mine block either way, at rest -- population: 3 kinds"
   ]

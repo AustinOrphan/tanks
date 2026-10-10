@@ -59,8 +59,8 @@ export interface ControllerSelfTestView {
  *
  * Injected with a default rather than read inline, so a test states the context instead of
  * asserting whatever jsdom happens to report -- and so the two globals are named in one
- * place. Both are guarded: this module is imported by `hud.ts`, which is constructed in
- * environments that have no `navigator`.
+ * place. Both are guarded: this module is loaded by `hud.ts` (when the pane first opens), which
+ * is constructed in environments that have no `navigator`.
  */
 export function defaultReportContext(): ReportContext {
   return {

@@ -32,7 +32,7 @@
         "w": 1280,
         "h": 51
       },
-      "text": "Practice\n      \n      Lives: 3\n      \n      Enemies: 3\n      Level: 1",
+      "text": "Practice\n      \n      Lives: 3\n      \n      Enemies: 1\n      Level: 1",
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -74,7 +74,7 @@
         "w": 0,
         "h": 0
       },
-      "text": "3",
+      "text": "1",
       "style": {
         "display": "inline",
         "opacity": "1",

@@ -45,7 +45,15 @@ import type { SimEvent } from '../../src/sim/events';
 import type { Spawn, Tank } from '../../src/sim/types';
 import type { EnemyRoleCue } from '../../src/presentation/enemy-role';
 
-export type CueKind = 'brown' | 'olive' | 'teal';
+/**
+ * The kinds the measurement builds, shared by the table page and the harness check so neither
+ * can leave one out: a kind missing from a page's list would give its pairs no cells, and a
+ * guard over no cells passes. Grey joined in issue #1059 as the standard-shell kind that holds
+ * MINE_LAYER, so it carries the riser brown no longer draws; brown stays as the kind on which
+ * both levers are 0 by construction.
+ */
+export const CUE_KINDS = ['brown', 'olive', 'teal', 'grey'] as const;
+export type CueKind = (typeof CUE_KINDS)[number];
 export type CueLever = 'flare' | 'riser';
 export type CueEvent = 'fire' | 'fire-blocked';
 export type CueMotion = 'full' | 'reduced';
@@ -60,18 +68,30 @@ export type CuePose = 'east' | 'toward-camera';
 export const POSE_ANGLE: Record<CuePose, number> = { east: 0, 'toward-camera': Math.PI / 2 };
 
 /**
- * The (kind, lever) pairs whose footprint must be NONZERO: the staging guard. Olive has no riser
- * (`mineCapacity` 0) and brown's standard shell gets the shipped flare size, so neither of those
- * two pairs is here.
+ * The (kind, lever) pairs whose footprint must be NONZERO: the staging guard. A standard shell
+ * gets the shipped flare size, so the flare is carried by olive (0.7) and teal (1.55). The riser
+ * is drawn only on a kind that holds MINE_LAYER (issue #1059), so grey carries it on a standard
+ * shell and teal is the other. Olive's riser is in neither list: no MINE_LAYER, capacity 0.
  */
 export const LEVER_PAIRS: readonly { kind: CueKind; lever: CueLever }[] = [
   { kind: 'olive', lever: 'flare' },
   { kind: 'teal', lever: 'flare' },
-  { kind: 'brown', lever: 'riser' },
+  { kind: 'grey', lever: 'riser' },
   { kind: 'teal', lever: 'riser' },
 ];
-/** Brown's flare footprint is 0 by construction: recorded as a check, not a measurement. */
-export const ZERO_BY_CONSTRUCTION = { kind: 'brown', lever: 'flare' } as const;
+/**
+ * The pairs whose footprint is 0 by construction, recorded as checks and not measurements: a
+ * standard shell draws the shipped flare (brown, grey), and brown holds no MINE_LAYER, so it draws
+ * no riser. A nonzero footprint here means the cue drew what its own rule forbids.
+ */
+export const ZERO_BY_CONSTRUCTION: readonly { kind: CueKind; lever: CueLever }[] = [
+  { kind: 'brown', lever: 'flare' },
+  { kind: 'brown', lever: 'riser' },
+  { kind: 'grey', lever: 'flare' },
+];
+export function isZeroByConstruction(kind: CueKind, lever: CueLever): boolean {
+  return ZERO_BY_CONSTRUCTION.some((p) => p.kind === kind && p.lever === lever);
+}
 
 /**
  * The sampled ticks after the event, fixed before measuring. The event is fed on tick 0; the

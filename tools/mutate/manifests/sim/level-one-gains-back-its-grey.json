@@ -1,0 +1,15 @@
+{
+  "id": "level-one-gains-back-its-grey",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "\"......###....B..........###......\",",
+  "replace": "\"......###....B.....G....###......\",",
+  "expect": "killed",
+  "tests": [
+    "src/sim/arena.test.ts"
+  ],
+  "killedBy": [
+    "level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010) has exactly one enemy spawn, a brown, and one player spawn, read from the raw grid",
+    "level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010) places campaign co-op players where the pre-edit board did, at 1 to 4 players; only their ids moved"
+  ],
+  "why": "Issue #1010's criterion 1: level 1 is exactly one enemy, a brown. This puts the grey back on arena-01 at the cell it held before the edit (column 19, row 7). The board still validates and still passes every structural rule and its spawnBlockRobust claim (it did before the edit), the brown's bank from the player spawn is untouched, and the walls and player spawn do not move, so the criterion-2 and criterion-4 checks stay green. The composition check, read from the raw grid, sees a second enemy letter; the co-op check sees the player ids sit one below the pre-edit board's rather than two, since one extra enemy is numbered ahead of them. The other tests in arena.test.ts stay green, which is the gap these close."
+}

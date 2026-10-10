@@ -145,8 +145,9 @@ describe('spawnBlockRobust tags both wall phases, each tag independently provabl
   });
 
   it('intact defect unaffected by breach: fails via BOTH tags -- the standard board minus its row-5 chord-maker', () => {
-    // Built from the standard test board (issue #1009), which is arena-01's grid and roster
-    // kept apart from campaign level 1, so re-authoring level 1 cannot delete this known-bad.
+    // Built from the standard test board (issue #1009), which is arena-01's grid and its roster
+    // before issue #1010, kept apart from campaign level 1, so re-authoring level 1 cannot
+    // delete this known-bad.
     // Its old row-5 chord-maker (col 5) is also solid, and nothing
     // destructible sits anywhere near it (its only destructibles are the
     // far flank shields at col 2 / col 8), so breaching changes nothing at this

@@ -137,11 +137,17 @@ export function tankDifficulty(kind: TankKind): number {
 
 export const ENEMY_DENSITY_WEIGHT = 30; // same scale as a strong per-tank term
 // Enemies per open cell. Bounds sit with headroom past both ends of the campaign
-// arenas' measured range (arena-01's 0.00388 to arena-03's 0.00631; the test checks
+// arenas' measured range (arena-01's 0.00129 to arena-03's 0.00631; the test checks
 // every campaign arena falls strictly inside) -- fixed, not the arenas' own min/max,
 // for the same reason the per-tank bounds are fixed: a new arena must not rescale
 // the others.
-export const ENEMY_DENSITY_BOUNDS = { min: 0.002, max: 0.008 } as const;
+//
+// `min` was 0.002 until issue #1010 left level 1 one enemy over 774 open cells, which
+// put arena-01 below it and clamped its term to 0. The new `min` gives the bottom the
+// same ratio of headroom the top already had (0.008 / 0.00631 = 1.27): 0.00129 / 1.27
+// is 0.00102, rounded down to one significant figure. Moving it rescaled every
+// campaign level's density term; only difficulty.test.ts reads these totals.
+export const ENEMY_DENSITY_BOUNDS = { min: 0.001, max: 0.008 } as const;
 
 function openCellCount(arena: ArenaShape): number {
   let open = 0;

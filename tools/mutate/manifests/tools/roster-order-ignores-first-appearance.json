@@ -11,5 +11,5 @@
   "killedBy": [
     "README enemy roster is generated, not hand-edited orders rows by first appearance, then catalog order, with absent kinds last"
   ],
-  "why": "Catalog order alone. On the shipped data it renders the SAME rows -- brown, grey and teal tie at level 1, then olive 3, green 4, and yellow is absent, which is catalog order -- so only the synthetic ordering case can tell a sort by appearance from no sort at all."
+  "why": "Catalog order alone. On the shipped data it renders the SAME rows -- brown 1, grey and teal tie at level 2, then olive 3, green 4, and yellow is absent, which is catalog order -- so only the synthetic ordering case can tell a sort by appearance from no sort at all."
 }

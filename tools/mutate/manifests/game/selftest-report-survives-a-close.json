@@ -1,0 +1,14 @@
+{
+  "id": "selftest-report-survives-a-close",
+  "file": "src/game/hud.ts",
+  "find": "      selfTestReportEl.value = '';\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the copyable report (issue #599) empties the field on close, so a second visit never presents a stale snapshot"
+  ],
+  "why": "Issue #599, kept by issue #1013. The report field is no longer emptied on close, so a snapshot of pad state from an earlier visit's Copy is still in the field on the next one, indistinguishable from a fresh reading of hardware that may since have been unplugged."
+}

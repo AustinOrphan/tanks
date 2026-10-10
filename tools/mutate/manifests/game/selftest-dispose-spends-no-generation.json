@@ -1,0 +1,14 @@
+{
+  "id": "selftest-dispose-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "      // load still in flight must not build into the tree this teardown discards.\n      selfTestGeneration += 1;\n",
+  "replace": "      // load still in flight must not build into the tree this teardown discards.\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) a teardown during the load builds nothing into the discarded tree"
+  ],
+  "why": "Issue #1013. `dispose` never runs the self-test's close, so it spends the generation itself; without it a load in flight at teardown is still current when it lands and builds the body into the detached tree the teardown discarded."
+}

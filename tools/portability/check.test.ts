@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free so the workflows can run it
-import { portabilityFailures, manifestFailures } from './check.mjs';
+import { portabilityFailures, manifestFailures, shareImageFailures, metaTags } from './check.mjs';
 
 const RELATIVE_HTML = '<script type="module" crossorigin src="./assets/index-abc.js"></script>';
 const ABSOLUTE_HTML = '<script type="module" crossorigin src="/assets/index-abc.js"></script>';
@@ -226,7 +226,68 @@ describe('web app manifest portability', () => {
   });
 });
 
-describe('the CLI runs both checkers over a real directory', () => {
+/**
+ * The link-card image's negative controls (issue #973). The page is unaffected by every one of
+ * these; only a shared link's card goes blank, which is why the checker runs ahead of the deploy.
+ */
+describe('share image portability', () => {
+  /** The head the real build emits, cut to the tags this checker reads. */
+  const HTML =
+    '<link rel="canonical" href="https://austinorphan.com/tanks/" />\n' +
+    '<meta property="og:url" content="https://austinorphan.com/tanks/" />\n' +
+    '<meta property="og:image" content="https://austinorphan.com/tanks/share-image.png" />\n' +
+    '<meta\n      property="og:image:alt"\n      content="A tilted top-down view of a green arena."\n    />';
+  const DIST = { files: ['index.html', 'share-image.png', 'manifest.webmanifest', 'assets/index-abc.js'] };
+
+  it('passes the shape this repo actually ships', () => {
+    // Fails if any check gains a false positive on genuine output: this runs in ci.yml and
+    // pages.yml ahead of the deploy, so a false positive blocks delivery.
+    expect(shareImageFailures(HTML, DIST)).toEqual([]);
+  });
+
+  it('reads tags whatever their attribute order and line breaks', () => {
+    expect(metaTags(HTML).find((t: Record<string, string>) => t.property === 'og:image:alt')?.content)
+      .toBe('A tilted top-down view of a green arena.');
+    const swapped = HTML.replace(
+      '<meta property="og:image" content="https://austinorphan.com/tanks/share-image.png" />',
+      '<meta\n content="https://austinorphan.com/tanks/share-image.png"\n property="og:image" />',
+    );
+    expect(shareImageFailures(swapped, DIST)).toEqual([]);
+  });
+
+  it('catches a build with no og:image at all', () => {
+    const failures = shareImageFailures(HTML.replace(/<meta property="og:image" [^>]*>/, ''), DIST);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/carries no og:image/);
+  });
+
+  it('catches an og:image that is not absolute', () => {
+    const failures = shareImageFailures(HTML.replace('https://austinorphan.com/tanks/share-image.png', './share-image.png'), DIST);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/not absolute/);
+  });
+
+  it('catches an og:image under another location than the canonical href', () => {
+    // The realistic version: the subpath dropped, so the card asks the portfolio's root.
+    const failures = shareImageFailures(HTML.replace('https://austinorphan.com/tanks/share-image.png', 'https://austinorphan.com/share-image.png'), DIST);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/is not under the canonical href/);
+  });
+
+  it('catches an og:image whose file the build did not emit', () => {
+    const failures = shareImageFailures(HTML, { files: DIST.files.filter((f) => f !== 'share-image.png') });
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/share-image\.png, which is not in the built output/);
+  });
+
+  it('refuses to judge against a page with no canonical href', () => {
+    const failures = shareImageFailures(HTML.replace(/<link rel="canonical"[^>]*>/, ''), DIST);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/links no canonical href/);
+  });
+});
+
+describe('the CLI runs every checker over a real directory', () => {
   // Composition blindness, one layer up from the unit cases above: every assertion in
   // this file so far calls the pure functions directly, so DELETING the manifestFailures
   // call from the CLI -- or the whole `readDist` change that feeds it -- leaves all of
@@ -243,8 +304,11 @@ describe('the CLI runs both checkers over a real directory', () => {
       join(dir, 'index.html'),
       '<script type="module" crossorigin src="./assets/index-abc.js"></script>' +
         '<link rel="manifest" href="./manifest.webmanifest" />' +
-        '<link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />',
+        '<link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />' +
+        '<link rel="canonical" href="https://austinorphan.com/tanks/" />' +
+        '<meta property="og:image" content="https://austinorphan.com/tanks/share-image.png" />',
     );
+    writeFileSync(join(dir, 'share-image.png'), '');
     writeFileSync(join(dir, 'assets/index-abc.js'), 'const ch=`./`;');
     writeFileSync(join(dir, 'manifest.webmanifest'), manifest);
     writeFileSync(join(dir, 'icons/icon-192.png'), '');
@@ -285,6 +349,17 @@ describe('the CLI runs both checkers over a real directory', () => {
     const dir = write(JSON.stringify({ start_url: '/', scope: './', icons: ICONS }));
     const { status, output } = run(dir);
     expect(output).toMatch(/start_url is "\/"/);
+    expect(status).toBe(1);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits non-zero when only the SHARE IMAGE is missing (issue #973)', () => {
+    // The same composition question for the third checker: a CLI that never called it would
+    // exit 0 on a tree whose og:image names a file the build did not emit.
+    const dir = write(JSON.stringify({ start_url: './', scope: './', icons: ICONS }));
+    rmSync(join(dir, 'share-image.png'));
+    const { status, output } = run(dir);
+    expect(output).toMatch(/share-image\.png, which is not in the built output/);
     expect(status).toBe(1);
     rmSync(dir, { recursive: true, force: true });
   });
