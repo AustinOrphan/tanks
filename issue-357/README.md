@@ -1,5 +1,15 @@
 # Issue #357 / #1018: the enemy role cue under its own muzzle effects
 
+> **Before the re-key (issue #1059).** These files photograph and measure the cue as it was before
+> #1059 gated the mine block on `MINE_LAYER`. Here brown still draws a riser, because it carries
+> a capacity without the ability. The evidence for #1019's go is in
+> [`rekey-1059/`](rekey-1059/README.md), produced on the re-keyed cue. These files stay because
+> PR #1041 and a comment on #1019 link to them.
+>
+> Correction (2026-10-10): the population line below said 80 zero-by-construction cells for
+> brown's flare. The published table has 160 such rows of its 800: the pose axis doubled them,
+> and the line kept the earlier figure.
+
 Everything here comes from commit `b613327fadae2aca917248110184fc6869d4d300` on
 `test/role-cue-effect-overlap`, branched from `main` at `34b43f4a`. The cue is `enemyRole=both`:
 the muzzle flare for weapon class and the raised deck block (the riser) for mine load.
@@ -104,7 +114,7 @@ the camera, where the cloud drifts beside the flare. `toward-camera` aims hull a
 screen, which puts the cloud between the camera and the muzzle.
 
 Population: 4 pairs x (fire: 3 effects + refusal: 1 effect) x 5 ticks x 2 presets x 2 motions x
-2 poses = 640 measured cells, plus 80 zero-by-construction cells for brown's flare in each table.
+2 poses = 640 measured cells, plus 160 zero-by-construction cells for brown's flare in each table.
 
 ### What the numbers support
 
