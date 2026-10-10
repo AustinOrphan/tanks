@@ -36,8 +36,12 @@ keys:
 An entry is publication metadata only. The viewport, seed, timing, flags and encoder settings
 belong to the capture recipe it names.
 
+An output must be a regular file in git; `showcase:check` refuses a symbolic link rather than
+measuring the file it points to.
+
 Every GIF reference in `README.md` and in this page, written as a Markdown image or an `<img>`
 tag, must be a relative path to a manifest output, with alt text equal to the manifest's `alt`.
+Alt text is compared as GitHub shows it, so a Markdown image may escape a character such as `\*`.
 Each clip must be referenced from the document its `placement` names. An absolute URL, including
 a link into the `pr-media` branch, fails. A reference inside a code block counts too.
 

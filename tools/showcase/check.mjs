@@ -6,7 +6,7 @@
  * or network. `tools/showcase/check.test.ts` runs it over the repository in `npm run test:unit`.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findRecipe } from '../capture/registry.mjs';
@@ -59,14 +59,19 @@ export function run(root = process.cwd(), io = console) {
 
   const tracked = trackedFiles(root);
   const trackedSet = new Set(tracked);
-  // Only a tracked output is read, so a manifest path can never reach outside the checkout.
+  // Only a tracked regular file is read: a manifest path outside git's list is never opened, and
+  // a tracked symbolic link is refused rather than followed, since git commits only its path.
   const media = {};
   for (const clip of Array.isArray(manifest?.clips) ? manifest.clips : []) {
     const output = clip?.output;
     if (typeof output !== 'string' || !trackedSet.has(output)) continue;
     if (Object.hasOwn(media, output)) continue;
     try {
-      media[output] = gifFacts(readFileSync(path.join(root, output)));
+      const file = path.join(root, output);
+      if (!lstatSync(file).isFile()) {
+        throw new Error('not a regular file; a symbolic link is never followed');
+      }
+      media[output] = gifFacts(readFileSync(file));
     } catch (error) {
       media[output] = { error: error.message };
     }

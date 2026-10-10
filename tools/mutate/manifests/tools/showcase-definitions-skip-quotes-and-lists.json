@@ -1,0 +1,11 @@
+{
+  "id": "showcase-definitions-skip-quotes-and-lists",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  String.raw`^(?:[ \\t>]|[-+*][ \\t]|\\d{1,9}[.)][ \\t])*\\[(${LABEL_CHARACTER}+)\\]:\\s*(?:<([^>]*)>|(\\S+))`,",
+  "replace": "  String.raw`^ {0,3}\\[(${LABEL_CHARACTER}+)\\]:\\s*(?:<([^>]*)>|(\\S+))`,",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "why": "Rule 15: a link definition may sit in a block quote or a list item, at any indent. A reference image resolved through one would otherwise pass unchecked."
+}

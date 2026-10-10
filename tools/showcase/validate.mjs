@@ -256,40 +256,66 @@ function clipProblems(clips, { recipeArtifacts, trackedSet, media }) {
   return messages;
 }
 
-const attributePattern = (name) =>
-  new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i');
-const SRC = attributePattern('src');
-const ALT = attributePattern('alt');
+// Markdown, as CommonMark reads it: image text may hold backslash escapes and one level of
+// balanced brackets, a link label escapes but no brackets, and a destination one level of
+// balanced parentheses. A link definition may sit in block quotes and list items, at any indent,
+// with its destination on the next line.
+const IMAGE_TEXT = String.raw`!\[((?:\\.|[^\[\]\\]|\[(?:\\.|[^\[\]\\])*\])*)\]`;
+const LABEL_CHARACTER = String.raw`(?:\\.|[^\[\]\\])`;
+const DESTINATION = String.raw`(?:<([^>]*)>|((?:\\.|[^\s()\\]|\((?:\\.|[^\s()\\])*\))+))`;
+const INLINE_IMAGE = new RegExp(String.raw`${IMAGE_TEXT}\(\s*${DESTINATION}[^)]*\)`, 'g');
+const REFERENCE_IMAGE = new RegExp(String.raw`${IMAGE_TEXT}(?:\[(${LABEL_CHARACTER}*)\])?(?!\()`, 'g');
+const DEFINITION = new RegExp(
+  String.raw`^(?:[ \t>]|[-+*][ \t]|\d{1,9}[.)][ \t])*\[(${LABEL_CHARACTER}+)\]:\s*(?:<([^>]*)>|(\S+))`,
+  'gm',
+);
 
-function attribute(tag, pattern) {
-  const match = tag.match(pattern);
-  return match === null ? null : (match[1] ?? match[2] ?? match[3]);
+// HTML, as a browser reads it: a quote opens a value only after `=`, and a tag ends at the first
+// `>` outside a quoted value. Reading a tag's attributes in order consumes each value whole, so
+// text inside one value never reads as another attribute.
+const IMG_TAG = /<img\b(?:[^>="']|=\s*(?:"[^"]*"|'[^']*')|=(?!\s*["'])|["'])*>/gi;
+const ATTRIBUTE = /([^\s/>=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+
+/** An `<img>` tag's attributes by lower-case name; the first of a repeated name wins, as in HTML. */
+function attributes(tag) {
+  const found = new Map();
+  for (const match of tag.slice('<img'.length).matchAll(ATTRIBUTE)) {
+    const name = match[1].toLowerCase();
+    if (!found.has(name)) found.set(name, match[2] ?? match[3] ?? match[4] ?? '');
+  }
+  return found;
 }
 
 const linkLabel = (text) => text.trim().replace(/\s+/g, ' ').toLowerCase();
 
+/** Image text as GitHub shows it in the alt attribute: `\*` is `*`. */
+const unescapeMarkdown = (text) => text.replace(/\\([!-/:-@[-`{-~])/g, '$1');
+
 /**
  * Every image reference in a Markdown document whose target is a GIF: inline images, reference
  * images (full, collapsed and shortcut, resolved through their definitions) and `<img>` tags. A
- * reference inside a code block or an HTML comment is counted too, so the check fails closed.
+ * reference inside a code block or an HTML comment is counted too, though GitHub shows it as
+ * text. Image text nested deeper than the patterns above, or holding a bracket inside a code
+ * span, is not recognised.
  */
 function gifReferences(text) {
   const definitions = new Map();
-  for (const match of text.matchAll(/^ {0,3}\[([^\]]+)\]:[ \t]*(?:<([^>]*)>|(\S+))/gm)) {
+  for (const match of text.matchAll(DEFINITION)) {
     const key = linkLabel(match[1]);
     if (!definitions.has(key)) definitions.set(key, match[2] ?? match[3]);
   }
   const found = [];
-  for (const match of text.matchAll(/!\[([^\]]*)\]\(\s*(?:<([^>]*)>|([^\s)]+))[^)]*\)/g)) {
-    found.push({ alt: match[1], target: match[2] ?? match[3] });
+  for (const match of text.matchAll(INLINE_IMAGE)) {
+    found.push({ alt: unescapeMarkdown(match[1]), target: match[2] ?? match[3] });
   }
-  for (const match of text.matchAll(/!\[([^\]]*)\](?:\[([^\]]*)\])?(?!\()/g)) {
+  for (const match of text.matchAll(REFERENCE_IMAGE)) {
     const target = definitions.get(linkLabel(match[2] || match[1]));
-    if (target !== undefined) found.push({ alt: match[1], target });
+    if (target !== undefined) found.push({ alt: unescapeMarkdown(match[1]), target });
   }
-  for (const [tag] of text.matchAll(/<img\b[^>]*>/gi)) {
-    const target = attribute(tag, SRC);
-    if (target !== null) found.push({ alt: attribute(tag, ALT), target });
+  for (const [tag] of text.matchAll(IMG_TAG)) {
+    const tagAttributes = attributes(tag);
+    const target = tagAttributes.get('src');
+    if (target !== undefined) found.push({ alt: tagAttributes.get('alt') ?? null, target });
   }
   return found.filter(({ target }) => /\.gif$/i.test(target.replace(/[?#].*$/, '')));
 }

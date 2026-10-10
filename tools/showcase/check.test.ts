@@ -1,10 +1,10 @@
 // `npm run showcase:check` (issue #1062). The first test IS the required-CI gate: it runs the
 // check over this repository inside `npm run test:unit`. The temporary-repository tests each
-// prove one input `run` gathers (git's tracked list, the GIF bytes, the real capture registry,
-// the manifest), which validate.test.ts cannot see because it passes those inputs in. The last
-// block holds `.gitignore` to the one exception it makes for showcase GIFs.
+// prove one input `run` gathers (git's tracked list, the GIF bytes and only a regular file's, the
+// real capture registry, the manifest), which validate.test.ts cannot see because it passes those
+// inputs in. The last block holds `.gitignore` to the one exception it makes for showcase GIFs.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -154,6 +154,29 @@ describe('showcase:check in a scratch repository', () => {
     expect(lines.error).toEqual([
       "clip 'campaign-round': docs/media/showcase/campaign-round.gif cannot be measured: GIF has no "
         + 'trailer',
+    ]);
+  });
+
+  it('refuses a tracked symbolic link instead of measuring the file it points to', () => {
+    // The link's target is the conforming GIF above, outside the repository. Git commits only
+    // the link's path, so the bytes a reader of the repository would get are not these.
+    const outside = mkdtempSync(join(tmpdir(), 'showcase-outside-'));
+    roots.push(outside);
+    writeFileSync(join(outside, 'clip.gif'), GIF);
+    const root = repository(showcase([CLIP], null), DOCUMENTS);
+    mkdirSync(dirname(join(root, CLIP.output)), { recursive: true });
+    symlinkSync(join(outside, 'clip.gif'), join(root, CLIP.output));
+    execFileSync('git', ['add', '-f', '--', CLIP.output], { cwd: root, stdio: 'ignore' });
+    const index = execFileSync('git', ['ls-files', '-s', '--', CLIP.output], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    expect(index).toMatch(/^120000 /);
+    const { io, lines } = capture();
+    expect(run(root, io)).toBe(1);
+    expect(lines.error).toEqual([
+      "clip 'campaign-round': docs/media/showcase/campaign-round.gif cannot be measured: not a "
+        + 'regular file; a symbolic link is never followed',
     ]);
   });
 

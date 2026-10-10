@@ -122,6 +122,7 @@ const DOCS_CLIP: Clip = {
 };
 
 const CONFORMING = world([README_CLIP, DOCS_CLIP]);
+const EMPTY = world([]);
 
 // Four clips, each at a limit: 640 px wide, exactly 15 fps less one centisecond (3 frames in
 // 19 cs: 19 >= 3 / 15 s - 1 cs), 8.01 s displayed, a 500-character alt, a file exactly its
@@ -172,6 +173,19 @@ function measured(inputs: Inputs, output: string): Facts {
   return inputs.media[output] as Facts;
 }
 
+/** The conforming fixture with one more paragraph at the end of docs/showcase.md. */
+function appended(text: string): () => Inputs {
+  return flip((inputs) => {
+    inputs.documents['docs/showcase.md'] += `\n${text}\n`;
+  });
+}
+
+// The reference-form controls each write one GIF reference to this URL, in one syntax GitHub
+// renders as an image, and expect the one message saying it is not a manifest output.
+const PR_MEDIA_GIF = 'https://raw.githubusercontent.com/example/tanks/pr-media/clip.gif';
+const PR_MEDIA_UNCHECKED = `docs/showcase.md: GIF reference '${PR_MEDIA_GIF}' is not a relative `
+  + 'path to a manifest output';
+
 interface Control {
   rule: number;
   title: string;
@@ -212,6 +226,48 @@ const CONTROLS: Control[] = [
       inputs.manifest.version = 2;
     }),
     expected: 'manifest: version must be 1, got 2',
+  },
+  // The manifest-level shapes flip the 0-clip fixture, which has no references or tracked
+  // outputs, so each broken shape is the only thing wrong.
+  {
+    rule: 1,
+    title: 'a manifest that is not an object',
+    make: flip((inputs) => {
+      (inputs as { manifest: unknown }).manifest = null;
+    }, EMPTY),
+    expected: 'manifest: must be a JSON object',
+  },
+  {
+    rule: 1,
+    title: 'a manifest with no clips key',
+    make: flip((inputs) => {
+      delete (inputs.manifest as Partial<Inputs['manifest']>).clips;
+    }, EMPTY),
+    expected: "manifest: missing key 'clips'",
+  },
+  {
+    rule: 1,
+    title: 'a manifest with no version key',
+    make: flip((inputs) => {
+      delete (inputs.manifest as Partial<Inputs['manifest']>).version;
+    }, EMPTY),
+    expected: "manifest: missing key 'version'",
+  },
+  {
+    rule: 1,
+    title: 'clips that are not an array',
+    make: flip((inputs) => {
+      (inputs.manifest as Record<string, unknown>).clips = {};
+    }, EMPTY),
+    expected: 'manifest: clips must be an array',
+  },
+  {
+    rule: 1,
+    title: 'a clip that is not an object',
+    make: flip((inputs) => {
+      (inputs.manifest as Record<string, unknown>).clips = [null];
+    }, EMPTY),
+    expected: 'clip 0: must be a JSON object',
   },
   {
     rule: 1,
@@ -281,12 +337,14 @@ const CONTROLS: Control[] = [
   },
   {
     rule: 4,
-    title: 'an absolute URL output',
+    title: 'an absolute URL output ending in the showcase path',
     make: rebuilt((clips) => {
-      clips[1].output = 'https://example.com/versus-round.gif';
+      // Ends in a valid output, so only the pattern's start anchor rejects it.
+      clips[1].output = 'https://raw.githubusercontent.com/example/tanks/main/'
+        + 'docs/media/showcase/versus-round.gif';
     }),
-    expected: "clip 'versus-round': output 'https://example.com/versus-round.gif' is not of the form "
-      + 'docs/media/showcase/<name>.gif',
+    expected: "clip 'versus-round': output 'https://raw.githubusercontent.com/example/tanks/main/"
+      + "docs/media/showcase/versus-round.gif' is not of the form docs/media/showcase/<name>.gif",
   },
   {
     rule: 5,
@@ -504,6 +562,125 @@ const CONTROLS: Control[] = [
   },
   {
     rule: 15,
+    title: 'an img tag with a single-quoted src',
+    make: appended(`<img src='${PR_MEDIA_GIF}' alt='A clip'>`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an img tag with an unquoted src',
+    make: appended(`<img src=${PR_MEDIA_GIF} alt=clip>`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an upper-case IMG tag',
+    make: appended(`<IMG SRC="${PR_MEDIA_GIF}" ALT="A clip">`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an img tag with a > inside a quoted attribute',
+    make: appended(`<img alt="tank > wall" src="${PR_MEDIA_GIF}">`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an img tag whose title attribute holds a src',
+    // The quoted title names the docs clip's own output, with its alt; only the real src counts.
+    make: appended(
+      `<img title=' src="media/showcase/versus-round.gif"' alt="${DOCS_CLIP.alt}" src="${PR_MEDIA_GIF}">`,
+    ),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an inline image with an angle-bracket destination',
+    make: appended(`![A clip](<${PR_MEDIA_GIF}>)`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an inline image whose alt text holds brackets',
+    make: appended(`![A [tan] tank fires](${PR_MEDIA_GIF})`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an inline image whose alt text holds an escaped bracket',
+    make: appended(`![A \\] tank fires](${PR_MEDIA_GIF})`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'an inline image whose destination holds parentheses',
+    make: appended('![A clip](https://raw.githubusercontent.com/example/tanks/pr-media/clip(1).gif)'),
+    expected: "docs/showcase.md: GIF reference 'https://raw.githubusercontent.com/example/tanks/"
+      + "pr-media/clip(1).gif' is not a relative path to a manifest output",
+  },
+  {
+    rule: 15,
+    title: 'an upper-case .GIF extension',
+    make: appended('![A clip](https://raw.githubusercontent.com/example/tanks/pr-media/clip.GIF)'),
+    expected: "docs/showcase.md: GIF reference 'https://raw.githubusercontent.com/example/tanks/"
+      + "pr-media/clip.GIF' is not a relative path to a manifest output",
+  },
+  {
+    rule: 15,
+    title: 'a shortcut reference image',
+    make: appended(`![clip]\n\n[clip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a collapsed reference image',
+    make: appended(`![clip][]\n\n[clip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a reference label in another case than its definition',
+    make: appended(`![A clip][Clip]\n\n[clip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a reference image whose alt text holds brackets',
+    make: appended(`![A [tan] tank fires][clip]\n\n[clip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a reference label with an escaped bracket',
+    make: appended(`![A clip][c\\]lip]\n\n[c\\]lip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a link definition with its destination on the next line',
+    make: appended(`![A clip][clip]\n\n[clip]:\n  ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a link definition in a block quote',
+    make: appended(`![A clip][clip]\n\n> [clip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a link definition on a list item marker',
+    make: appended(`![A clip][clip]\n\n- [clip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
+    title: 'a link definition indented four spaces inside a list item',
+    make: appended(`![A clip][clip]\n\n- An item\n\n    [clip]: ${PR_MEDIA_GIF}`),
+    expected: PR_MEDIA_UNCHECKED,
+  },
+  {
+    rule: 15,
     title: 'a clip not referenced from its placement document',
     make: flip((inputs) => {
       inputs.documents['docs/showcase.md'] = '# Showcase\n';
@@ -545,9 +722,9 @@ const CONTROLS: Control[] = [
 describe('showcase validator (issue #1062)', () => {
   describe('positive controls', () => {
     it('passes a conforming manifest with no clips', () => {
-      const empty = world([]);
-      expect(empty.documents['README.md']).not.toMatch(/\.gif/);
-      expect(validate(empty)).toEqual([]);
+      expect(EMPTY.manifest.clips).toEqual([]);
+      expect(EMPTY.documents['README.md']).not.toMatch(/\.gif/);
+      expect(validate(EMPTY)).toEqual([]);
     });
 
     it('passes a conforming manifest with one readme clip and one docs clip', () => {
@@ -564,6 +741,29 @@ describe('showcase validator (issue #1062)', () => {
       expect(Object.values(facts).map((fact) => [fact.frameCount, fact.durationCentiseconds]))
         .toEqual([[3, 20], [3, 19], [9, 801], [3, 20]]);
       expect(validate(BOUNDARY)).toEqual([]);
+    });
+
+    it('matches alt text holding balanced brackets to the manifest alt', () => {
+      const clips = structuredClone([README_CLIP, DOCS_CLIP]);
+      clips[0].alt = 'A tan [player] tank banks a shell off a wall into a brown enemy tank.';
+      const inputs = world(clips);
+      // Brackets in pairs need no escape, so the reference spells the alt as the manifest does.
+      expect(inputs.documents['README.md'])
+        .toContain('![A tan [player] tank banks a shell off a wall into a brown enemy tank.](docs/');
+      expect(validate(inputs)).toEqual([]);
+    });
+
+    it('matches alt text holding backslash escapes to the manifest alt, as GitHub shows it', () => {
+      const clips = structuredClone([README_CLIP, DOCS_CLIP]);
+      clips[1].alt = 'Four tanks trade shells across a *symmetric* board.';
+      const inputs = world(clips);
+      // Unescaped, the asterisks would render as emphasis; escaped, the alt GitHub shows is the
+      // manifest's.
+      inputs.documents['docs/showcase.md'] = inputs.documents['docs/showcase.md']
+        .replace(clips[1].alt, 'Four tanks trade shells across a \\*symmetric\\* board.');
+      expect(inputs.documents['docs/showcase.md'])
+        .toContain('![Four tanks trade shells across a \\*symmetric\\* board.](media/');
+      expect(validate(inputs)).toEqual([]);
     });
 
     it('ignores an image reference that is not a GIF', () => {
@@ -591,6 +791,7 @@ describe('showcase validator (issue #1062)', () => {
       // A control that edited CONFORMING in place instead of a clone would pass by accident.
       expect(validate(CONFORMING)).toEqual([]);
       expect(validate(BOUNDARY)).toEqual([]);
+      expect(validate(EMPTY)).toEqual([]);
     });
   });
 });

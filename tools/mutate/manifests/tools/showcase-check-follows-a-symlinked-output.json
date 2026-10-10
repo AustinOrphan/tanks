@@ -1,0 +1,11 @@
+{
+  "id": "showcase-check-follows-a-symlinked-output",
+  "file": "tools/showcase/check.mjs",
+  "find": "      if (!lstatSync(file).isFile()) {",
+  "replace": "      if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/check.test.ts"
+  ],
+  "why": "showcase:check reads only a regular file. Git commits a symbolic link as its target path, so following one would measure bytes the repository does not hold, from anywhere on disk."
+}

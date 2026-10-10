@@ -1,0 +1,11 @@
+{
+  "id": "showcase-image-text-stops-at-the-first-bracket",
+  "file": "tools/showcase/validate.mjs",
+  "find": "const IMAGE_TEXT = String.raw`!\\[((?:\\\\.|[^\\[\\]\\\\]|\\[(?:\\\\.|[^\\[\\]\\\\])*\\])*)\\]`;",
+  "replace": "const IMAGE_TEXT = String.raw`!\\[([^\\]]*)\\]`;",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "why": "Rule 15: image text may hold balanced brackets and escapes, as CommonMark allows. Stopping at the first ] misses such an image, so a pr-media GIF with brackets in its alt passes unchecked and a correct reference to a clip whose alt has brackets goes unseen."
+}

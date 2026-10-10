@@ -1,7 +1,7 @@
 {
   "id": "showcase-misses-img-tags",
   "file": "tools/showcase/validate.mjs",
-  "find": "  for (const [tag] of text.matchAll(/<img\\b[^>]*>/gi)) {",
+  "find": "  for (const [tag] of text.matchAll(IMG_TAG)) {",
   "replace": "  for (const [tag] of text.matchAll(/(?!)/g)) {",
   "expect": "killed",
   "tests": [

@@ -1,0 +1,11 @@
+{
+  "id": "showcase-compares-alt-text-with-its-escapes",
+  "file": "tools/showcase/validate.mjs",
+  "find": "const unescapeMarkdown = (text) => text.replace(/\\\\([!-/:-@[-`{-~])/g, '$1');",
+  "replace": "const unescapeMarkdown = (text) => text;",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "why": "Rule 15: alt text is compared as GitHub shows it, with Markdown backslash escapes removed. Compared raw, a correct reference that escapes an asterisk fails against its manifest alt."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "showcase-accepts-a-manifest-missing-a-key",
+  "file": "tools/showcase/validate.mjs",
+  "find": "    if (!Object.hasOwn(manifest, key)) messages.push(`manifest: missing key '${key}'`);",
+  "replace": "    void key;",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "why": "Rule 1: the manifest has both its keys, version and clips. A manifest with either key missing would otherwise pass as long as the other was well formed."
+}

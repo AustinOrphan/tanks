@@ -1,0 +1,11 @@
+{
+  "id": "showcase-misses-shortcut-reference-images",
+  "file": "tools/showcase/validate.mjs",
+  "find": "    const target = definitions.get(linkLabel(match[2] || match[1]));",
+  "replace": "    const target = definitions.get(linkLabel(match[2] ?? ''));",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "why": "Rule 15: a shortcut ![clip] or collapsed ![clip][] reference image takes its label from its text. Without that, either form could embed a pr-media GIF unchecked."
+}
