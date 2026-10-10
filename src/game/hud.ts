@@ -2561,8 +2561,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          The body is built by 'controller-selftest.ts' into the empty container below,
          because it is derived from live hardware on every frame and 'hud.ts' models none
          of it. That module is loaded when the pane first opens (issue #1013), so the
-         container stays empty on a page that never opens it. The report TEXTAREA is filled on demand rather than live: a field that
-         rewrote itself sixty times a second could not be selected. -->
+         container stays empty on a page that never opens it. The report TEXTAREA is
+         filled on demand rather than live: a field that rewrote itself sixty times a
+         second could not be selected. -->
     <!-- THE CONFIGURATION MENU (issue #246). Renders the model issue #623 built -- the
          registry-derived control list, the six presets, the URL builder and the explainer --
          and reimplements none of it. The body is built by 'devtools-menu.ts' into the empty

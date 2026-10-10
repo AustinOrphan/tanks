@@ -54,7 +54,8 @@ function openSelfTest(root: HTMLElement): void {
 async function openSelfTestLoaded(root: HTMLElement): Promise<void> {
   openSelfTest(root);
   await vi.waitFor(() => {
-    expect(root.querySelector('.hud-selftest-pads'), 'the self-test body was never built').not.toBeNull();
+    const body = root.querySelector('.hud-selftest-pads');
+    expect(body, 'the self-test body was never built').not.toBeNull();
   });
 }
 
@@ -286,9 +287,8 @@ describe('the self-test body loads when its pane first opens (issue #1013)', () 
     h.setPadDiagnostics([pad({ id: 'Old Frame' })]);
     h.setPadDiagnostics([pad({ id: 'Newest Frame' })]);
     await settled();
-    expect(Array.from(root.querySelectorAll('.hud-selftest-pad-name')).map((n) => n.textContent)).toEqual([
-      'Index 0 — Newest Frame',
-    ]);
+    const names = Array.from(root.querySelectorAll('.hud-selftest-pad-name')).map((n) => n.textContent);
+    expect(names).toEqual(['Index 0 — Newest Frame']);
   });
 
   it('Copy pressed before the body loaded throws nothing and writes nothing', async () => {
