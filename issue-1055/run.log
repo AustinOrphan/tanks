@@ -1,0 +1,28 @@
+Files /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/before/src/game/hud.css and /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/after/src/game/hud.css differ
+Files /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/before/src/game/hud.css.test.ts and /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/after/src/game/hud.css.test.ts differ
+Files /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/before/src/game/hud.match.test.ts and /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/after/src/game/hud.match.test.ts differ
+Files /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/before/src/presentation/stock-cue.test.ts and /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/after/src/presentation/stock-cue.test.ts differ
+Files /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/before/src/presentation/stock-cue.ts and /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/after/src/presentation/stock-cue.ts differ
+wrote /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/media-1055/readings.json
+{
+  "rest": "3x1:0 3x2:0 3x3:0 3x4:0 3x5:0 4x1:0 4x2:0 4x3:0 4x4:0 4x5:0",
+  "cue": [
+    "teams-4x5-first-loss/full: frames 0,0,0,292,459,303 held 303/303",
+    "teams-4x5-first-loss/reduced: frames 1807,1807,1807,1807,1804,309 held 309/309",
+    "teams-4x4-first-loss/full: frames 0,0,0,292,459,303 held 303/303",
+    "teams-4x4-first-loss/reduced: frames 1807,1807,1807,1807,1804,309 held 309/309",
+    "teams-4x5-to-one/full: frames 0,0,0,292,459,303 held 303/303",
+    "teams-4x5-to-one/reduced: frames 1807,1807,1807,1807,1804,309 held 309/309",
+    "teams-4x4-out-control/full: frames 0,0,0,0,0,0 held 0/0",
+    "teams-4x4-out-control/reduced: frames 0,0,0,0,0,0 held 0/0",
+    "teams-3x5-row-control/full: frames 0,0,0,0,0,0 held 0/0",
+    "teams-3x5-row-control/reduced: frames 0,0,0,0,0,0 held 0/0",
+    "ffa-4x5-first-loss/full: frames 0,0,0,302,471,303 held 303/303",
+    "ffa-4x5-first-loss/reduced: frames 1807,1807,1807,1807,1804,309 held 309/309"
+  ],
+  "noiseFloor": {
+    "crops": 106,
+    "maxPixels": 0,
+    "nonZero": 0
+  }
+}

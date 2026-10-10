@@ -1,0 +1,821 @@
+{
+  "rest": [
+    {
+      "config": "3x1",
+      "before": "png/rest/before-teams-3x1.png",
+      "after": "png/rest/after-teams-3x1.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "3x2",
+      "before": "png/rest/before-teams-3x2.png",
+      "after": "png/rest/after-teams-3x2.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "3x3",
+      "before": "png/rest/before-teams-3x3.png",
+      "after": "png/rest/after-teams-3x3.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "3x4",
+      "before": "png/rest/before-teams-3x4.png",
+      "after": "png/rest/after-teams-3x4.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "3x5",
+      "before": "png/rest/before-teams-3x5.png",
+      "after": "png/rest/after-teams-3x5.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "4x1",
+      "before": "png/rest/before-teams-4x1.png",
+      "after": "png/rest/after-teams-4x1.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "4x2",
+      "before": "png/rest/before-teams-4x2.png",
+      "after": "png/rest/after-teams-4x2.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "4x3",
+      "before": "png/rest/before-teams-4x3.png",
+      "after": "png/rest/after-teams-4x3.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "4x4",
+      "before": "png/rest/before-teams-4x4.png",
+      "after": "png/rest/after-teams-4x4.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    },
+    {
+      "config": "4x5",
+      "before": "png/rest/before-teams-4x5.png",
+      "after": "png/rest/after-teams-4x5.png",
+      "size": "1170x135",
+      "pixels": 0,
+      "of": 157950,
+      "noise": 0
+    }
+  ],
+  "cue": [
+    {
+      "id": "teams-4x5-first-loss",
+      "motion": "full",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 292,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 459,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 303,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 303,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 303,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-4x5-first-loss",
+      "motion": "reduced",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 1804,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 309,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 309,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 309,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-4x4-first-loss",
+      "motion": "full",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 292,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 459,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 303,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 303,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 303,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-4x4-first-loss",
+      "motion": "reduced",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 1804,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 309,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 309,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 309,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-4x5-to-one",
+      "motion": "full",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 292,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 459,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 303,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 303,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 303,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-4x5-to-one",
+      "motion": "reduced",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 1807,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 1804,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 309,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 309,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 309,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-4x4-out-control",
+      "motion": "full",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 0,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 0,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-4x4-out-control",
+      "motion": "reduced",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "267x156",
+          "pixels": 0,
+          "of": 41652,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 0,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "267x156",
+        "pixels": 0,
+        "of": 41652,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-3x5-row-control",
+      "motion": "full",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "357x156",
+          "pixels": 0,
+          "of": 55692,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "357x156",
+          "pixels": 0,
+          "of": 55692,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "357x156",
+          "pixels": 0,
+          "of": 55692,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "354x156",
+          "pixels": 0,
+          "of": 55224,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "354x156",
+          "pixels": 0,
+          "of": 55224,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "354x156",
+          "pixels": 0,
+          "of": 55224,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 0,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "354x156",
+        "pixels": 0,
+        "of": 55224,
+        "noise": 0
+      }
+    },
+    {
+      "id": "teams-3x5-row-control",
+      "motion": "reduced",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "357x156",
+          "pixels": 0,
+          "of": 55692,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "357x156",
+          "pixels": 0,
+          "of": 55692,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "357x156",
+          "pixels": 0,
+          "of": 55692,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "357x156",
+          "pixels": 0,
+          "of": 55692,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "354x156",
+          "pixels": 0,
+          "of": 55224,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "354x156",
+          "pixels": 0,
+          "of": 55224,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 0,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "354x156",
+        "pixels": 0,
+        "of": 55224,
+        "noise": 0
+      }
+    },
+    {
+      "id": "ffa-4x5-first-loss",
+      "motion": "full",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "279x156",
+          "pixels": 0,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "279x156",
+          "pixels": 0,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "279x156",
+          "pixels": 0,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "279x156",
+          "pixels": 302,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "279x156",
+          "pixels": 471,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "279x156",
+          "pixels": 303,
+          "of": 43524,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 303,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "279x156",
+        "pixels": 303,
+        "of": 43524,
+        "noise": 0
+      }
+    },
+    {
+      "id": "ffa-4x5-first-loss",
+      "motion": "reduced",
+      "frames": [
+        {
+          "ms": 0,
+          "size": "279x156",
+          "pixels": 1807,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 105,
+          "size": "279x156",
+          "pixels": 1807,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 210,
+          "size": "279x156",
+          "pixels": 1807,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 350,
+          "size": "279x156",
+          "pixels": 1807,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 525,
+          "size": "279x156",
+          "pixels": 1804,
+          "of": 43524,
+          "noise": 0
+        },
+        {
+          "ms": 700,
+          "size": "279x156",
+          "pixels": 309,
+          "of": 43524,
+          "noise": 0
+        }
+      ],
+      "heldTopbar": {
+        "size": "1170x135",
+        "pixels": 309,
+        "of": 157950,
+        "noise": 0
+      },
+      "heldEntry": {
+        "size": "279x156",
+        "pixels": 309,
+        "of": 43524,
+        "noise": 0
+      }
+    }
+  ],
+  "noiseFloor": {
+    "crops": 106,
+    "maxPixels": 0,
+    "nonZero": 0
+  }
+}

@@ -1,0 +1,4542 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "dpr": 3,
+  "framesMs": [
+    0,
+    105,
+    210,
+    350,
+    525,
+    700
+  ],
+  "heldMs": 1500,
+  "trees": {
+    "before": {
+      "root": "/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/before",
+      "tree": "before",
+      "rest": [
+        {
+          "players": 3,
+          "stocks": 1,
+          "file": "png/rest/before-teams-3x1.png",
+          "layout": "10/3",
+          "width": 163.2,
+          "right": 213.4,
+          "edge": 380,
+          "spare": 166.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 2,
+          "file": "png/rest/before-teams-3x2.png",
+          "layout": "10/3",
+          "width": 202.2,
+          "right": 252.4,
+          "edge": 380,
+          "spare": 127.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 3,
+          "file": "png/rest/before-teams-3x3.png",
+          "layout": "10/3",
+          "width": 241.2,
+          "right": 291.4,
+          "edge": 380,
+          "spare": 88.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 4,
+          "file": "png/rest/before-teams-3x4.png",
+          "layout": "10/3",
+          "width": 280.2,
+          "right": 330.4,
+          "edge": 380,
+          "spare": 49.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 5,
+          "file": "png/rest/before-teams-3x5.png",
+          "layout": "9/2",
+          "width": 292.2,
+          "right": 342.4,
+          "edge": 380,
+          "spare": 37.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 1,
+          "file": "png/rest/before-teams-4x1.png",
+          "layout": "9/2",
+          "width": 217,
+          "right": 267.2,
+          "edge": 380,
+          "spare": 112.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 2,
+          "file": "png/rest/before-teams-4x2.png",
+          "layout": "9/2",
+          "width": 261,
+          "right": 311.2,
+          "edge": 380,
+          "spare": 68.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 3,
+          "file": "png/rest/before-teams-4x3.png",
+          "layout": "9/2",
+          "width": 305,
+          "right": 355.2,
+          "edge": 380,
+          "spare": 24.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 4,
+          "file": "png/rest/before-teams-4x4.png",
+          "layout": "10+n",
+          "width": 275.4,
+          "right": 325.6,
+          "edge": 380,
+          "spare": 54.4,
+          "face": true,
+          "labels": [
+            "P1 A 4",
+            "P2 B 4",
+            "P3 A 4",
+            "P4 B 4"
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 5,
+          "file": "png/rest/before-teams-4x5.png",
+          "layout": "10+n",
+          "width": 275.4,
+          "right": 325.6,
+          "edge": 380,
+          "spare": 54.4,
+          "face": true,
+          "labels": [
+            "P1 A 5",
+            "P2 B 5",
+            "P3 A 5",
+            "P4 B 5"
+          ],
+          "sameUnderPips": true
+        }
+      ],
+      "cue": [
+        {
+          "id": "teams-4x5-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-first-loss/before-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-first-loss/before-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-first-loss/before-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-first-loss/before-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-first-loss/before-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-first-loss/before-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-first-loss/before-full-held-topbar.png",
+            "entry": "png/cue/teams-4x5-first-loss/before-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-first-loss/before-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-first-loss/before-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-first-loss/before-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-first-loss/before-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-first-loss/before-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-first-loss/before-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-first-loss/before-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x5-first-loss/before-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-first-loss/before-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-first-loss/before-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-first-loss/before-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-first-loss/before-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-first-loss/before-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-first-loss/before-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-first-loss/before-full-held-topbar.png",
+            "entry": "png/cue/teams-4x4-first-loss/before-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-first-loss/before-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-first-loss/before-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-first-loss/before-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-first-loss/before-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-first-loss/before-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-first-loss/before-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-first-loss/before-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x4-first-loss/before-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-to-one",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-to-one/before-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-to-one/before-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-to-one/before-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-to-one/before-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-to-one/before-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-to-one/before-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-to-one/before-full-held-topbar.png",
+            "entry": "png/cue/teams-4x5-to-one/before-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-to-one",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-to-one/before-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-to-one/before-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-to-one/before-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-to-one/before-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-to-one/before-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-to-one/before-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-to-one/before-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x5-to-one/before-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-out-control",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": -3,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": -3,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-out-control/before-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-out-control/before-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-out-control/before-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-out-control/before-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-out-control/before-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-out-control/before-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-out-control/before-full-held-topbar.png",
+            "entry": "png/cue/teams-4x4-out-control/before-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-out-control",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-out-control/before-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-out-control/before-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-out-control/before-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-out-control/before-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-out-control/before-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-out-control/before-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-out-control/before-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x4-out-control/before-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-3x5-row-control",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-3x5-row-control/before-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-3x5-row-control/before-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-3x5-row-control/before-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-3x5-row-control/before-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-3x5-row-control/before-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-3x5-row-control/before-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-3x5-row-control/before-full-held-topbar.png",
+            "entry": "png/cue/teams-3x5-row-control/before-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 342.421875,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-3x5-row-control",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-3x5-row-control/before-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-3x5-row-control/before-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-3x5-row-control/before-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-3x5-row-control/before-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-3x5-row-control/before-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-3x5-row-control/before-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-3x5-row-control/before-reduced-held-topbar.png",
+            "entry": "png/cue/teams-3x5-row-control/before-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 342.421875,
+            "edge": 380
+          }
+        },
+        {
+          "id": "ffa-4x5-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/ffa-4x5-first-loss/before-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/ffa-4x5-first-loss/before-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/ffa-4x5-first-loss/before-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/ffa-4x5-first-loss/before-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/ffa-4x5-first-loss/before-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/ffa-4x5-first-loss/before-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/ffa-4x5-first-loss/before-full-held-topbar.png",
+            "entry": "png/cue/ffa-4x5-first-loss/before-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 340.5625,
+            "edge": 380
+          }
+        },
+        {
+          "id": "ffa-4x5-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/ffa-4x5-first-loss/before-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/ffa-4x5-first-loss/before-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/ffa-4x5-first-loss/before-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/ffa-4x5-first-loss/before-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/ffa-4x5-first-loss/before-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/ffa-4x5-first-loss/before-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/ffa-4x5-first-loss/before-reduced-held-topbar.png",
+            "entry": "png/cue/ffa-4x5-first-loss/before-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 340.5625,
+            "edge": 380
+          }
+        }
+      ]
+    },
+    "after": {
+      "root": "/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/after",
+      "tree": "after",
+      "rest": [
+        {
+          "players": 3,
+          "stocks": 1,
+          "file": "png/rest/after-teams-3x1.png",
+          "layout": "10/3",
+          "width": 163.2,
+          "right": 213.4,
+          "edge": 380,
+          "spare": 166.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 2,
+          "file": "png/rest/after-teams-3x2.png",
+          "layout": "10/3",
+          "width": 202.2,
+          "right": 252.4,
+          "edge": 380,
+          "spare": 127.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 3,
+          "file": "png/rest/after-teams-3x3.png",
+          "layout": "10/3",
+          "width": 241.2,
+          "right": 291.4,
+          "edge": 380,
+          "spare": 88.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 4,
+          "file": "png/rest/after-teams-3x4.png",
+          "layout": "10/3",
+          "width": 280.2,
+          "right": 330.4,
+          "edge": 380,
+          "spare": 49.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 5,
+          "file": "png/rest/after-teams-3x5.png",
+          "layout": "9/2",
+          "width": 292.2,
+          "right": 342.4,
+          "edge": 380,
+          "spare": 37.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 1,
+          "file": "png/rest/after-teams-4x1.png",
+          "layout": "9/2",
+          "width": 217,
+          "right": 267.2,
+          "edge": 380,
+          "spare": 112.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 2,
+          "file": "png/rest/after-teams-4x2.png",
+          "layout": "9/2",
+          "width": 261,
+          "right": 311.2,
+          "edge": 380,
+          "spare": 68.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 3,
+          "file": "png/rest/after-teams-4x3.png",
+          "layout": "9/2",
+          "width": 305,
+          "right": 355.2,
+          "edge": 380,
+          "spare": 24.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 4,
+          "file": "png/rest/after-teams-4x4.png",
+          "layout": "10+n",
+          "width": 275.4,
+          "right": 325.6,
+          "edge": 380,
+          "spare": 54.4,
+          "face": true,
+          "labels": [
+            "P1 A 4",
+            "P2 B 4",
+            "P3 A 4",
+            "P4 B 4"
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 5,
+          "file": "png/rest/after-teams-4x5.png",
+          "layout": "10+n",
+          "width": 275.4,
+          "right": 325.6,
+          "edge": 380,
+          "spare": 54.4,
+          "face": true,
+          "labels": [
+            "P1 A 5",
+            "P2 B 5",
+            "P3 A 5",
+            "P4 B 5"
+          ],
+          "sameUnderPips": true
+        }
+      ],
+      "cue": [
+        {
+          "id": "teams-4x5-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-first-loss/after-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-first-loss/after-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-first-loss/after-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-first-loss/after-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-first-loss/after-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-first-loss/after-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-first-loss/after-full-held-topbar.png",
+            "entry": "png/cue/teams-4x5-first-loss/after-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-first-loss/after-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-first-loss/after-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-first-loss/after-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-first-loss/after-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-first-loss/after-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-first-loss/after-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-first-loss/after-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x5-first-loss/after-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-first-loss/after-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-first-loss/after-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-first-loss/after-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-first-loss/after-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-first-loss/after-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-first-loss/after-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-first-loss/after-full-held-topbar.png",
+            "entry": "png/cue/teams-4x4-first-loss/after-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-first-loss/after-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-first-loss/after-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-first-loss/after-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-first-loss/after-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-first-loss/after-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-first-loss/after-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-first-loss/after-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x4-first-loss/after-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-to-one",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-to-one/after-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-to-one/after-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-to-one/after-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-to-one/after-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-to-one/after-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-to-one/after-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-to-one/after-full-held-topbar.png",
+            "entry": "png/cue/teams-4x5-to-one/after-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-to-one",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-to-one/after-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-to-one/after-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-to-one/after-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-to-one/after-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-to-one/after-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-to-one/after-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-to-one/after-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x5-to-one/after-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-out-control",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-out-control/after-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-out-control/after-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-out-control/after-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-out-control/after-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-out-control/after-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-out-control/after-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-out-control/after-full-held-topbar.png",
+            "entry": "png/cue/teams-4x4-out-control/after-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-out-control",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-out-control/after-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-out-control/after-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-out-control/after-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-out-control/after-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-out-control/after-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-out-control/after-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-out-control/after-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x4-out-control/after-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-3x5-row-control",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-3x5-row-control/after-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-3x5-row-control/after-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-3x5-row-control/after-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-3x5-row-control/after-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-3x5-row-control/after-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-3x5-row-control/after-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-3x5-row-control/after-full-held-topbar.png",
+            "entry": "png/cue/teams-3x5-row-control/after-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 342.421875,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-3x5-row-control",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-3x5-row-control/after-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-3x5-row-control/after-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-3x5-row-control/after-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-3x5-row-control/after-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-3x5-row-control/after-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-3x5-row-control/after-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-3x5-row-control/after-reduced-held-topbar.png",
+            "entry": "png/cue/teams-3x5-row-control/after-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 342.421875,
+            "edge": 380
+          }
+        },
+        {
+          "id": "ffa-4x5-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/ffa-4x5-first-loss/after-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/ffa-4x5-first-loss/after-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/ffa-4x5-first-loss/after-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/ffa-4x5-first-loss/after-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/ffa-4x5-first-loss/after-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/ffa-4x5-first-loss/after-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/ffa-4x5-first-loss/after-full-held-topbar.png",
+            "entry": "png/cue/ffa-4x5-first-loss/after-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 340.5625,
+            "edge": 380
+          }
+        },
+        {
+          "id": "ffa-4x5-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/ffa-4x5-first-loss/after-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/ffa-4x5-first-loss/after-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/ffa-4x5-first-loss/after-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/ffa-4x5-first-loss/after-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/ffa-4x5-first-loss/after-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/ffa-4x5-first-loss/after-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/ffa-4x5-first-loss/after-reduced-held-topbar.png",
+            "entry": "png/cue/ffa-4x5-first-loss/after-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 340.5625,
+            "edge": 380
+          }
+        }
+      ]
+    },
+    "repeat": {
+      "root": "/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/trees-1055/after",
+      "tree": "after",
+      "rest": [
+        {
+          "players": 3,
+          "stocks": 1,
+          "file": "png/rest/repeat-teams-3x1.png",
+          "layout": "10/3",
+          "width": 163.2,
+          "right": 213.4,
+          "edge": 380,
+          "spare": 166.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 2,
+          "file": "png/rest/repeat-teams-3x2.png",
+          "layout": "10/3",
+          "width": 202.2,
+          "right": 252.4,
+          "edge": 380,
+          "spare": 127.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 3,
+          "file": "png/rest/repeat-teams-3x3.png",
+          "layout": "10/3",
+          "width": 241.2,
+          "right": 291.4,
+          "edge": 380,
+          "spare": 88.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 4,
+          "file": "png/rest/repeat-teams-3x4.png",
+          "layout": "10/3",
+          "width": 280.2,
+          "right": 330.4,
+          "edge": 380,
+          "spare": 49.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 3,
+          "stocks": 5,
+          "file": "png/rest/repeat-teams-3x5.png",
+          "layout": "9/2",
+          "width": 292.2,
+          "right": 342.4,
+          "edge": 380,
+          "spare": 37.6,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 1,
+          "file": "png/rest/repeat-teams-4x1.png",
+          "layout": "9/2",
+          "width": 217,
+          "right": 267.2,
+          "edge": 380,
+          "spare": 112.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 2,
+          "file": "png/rest/repeat-teams-4x2.png",
+          "layout": "9/2",
+          "width": 261,
+          "right": 311.2,
+          "edge": 380,
+          "spare": 68.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 3,
+          "file": "png/rest/repeat-teams-4x3.png",
+          "layout": "9/2",
+          "width": 305,
+          "right": 355.2,
+          "edge": 380,
+          "spare": 24.8,
+          "face": true,
+          "labels": [
+            "P1 A ",
+            "P2 B ",
+            "P3 A ",
+            "P4 B "
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 4,
+          "file": "png/rest/repeat-teams-4x4.png",
+          "layout": "10+n",
+          "width": 275.4,
+          "right": 325.6,
+          "edge": 380,
+          "spare": 54.4,
+          "face": true,
+          "labels": [
+            "P1 A 4",
+            "P2 B 4",
+            "P3 A 4",
+            "P4 B 4"
+          ],
+          "sameUnderPips": true
+        },
+        {
+          "players": 4,
+          "stocks": 5,
+          "file": "png/rest/repeat-teams-4x5.png",
+          "layout": "10+n",
+          "width": 275.4,
+          "right": 325.6,
+          "edge": 380,
+          "spare": 54.4,
+          "face": true,
+          "labels": [
+            "P1 A 5",
+            "P2 B 5",
+            "P3 A 5",
+            "P4 B 5"
+          ],
+          "sameUnderPips": true
+        }
+      ],
+      "cue": [
+        {
+          "id": "teams-4x5-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-first-loss/repeat-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-first-loss/repeat-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-first-loss/repeat-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-first-loss/repeat-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-first-loss/repeat-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-first-loss/repeat-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-first-loss/repeat-full-held-topbar.png",
+            "entry": "png/cue/teams-4x5-first-loss/repeat-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-first-loss/repeat-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-first-loss/repeat-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-first-loss/repeat-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-first-loss/repeat-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-first-loss/repeat-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-first-loss/repeat-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-first-loss/repeat-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x5-first-loss/repeat-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-first-loss/repeat-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-first-loss/repeat-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-first-loss/repeat-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-first-loss/repeat-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-first-loss/repeat-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-first-loss/repeat-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-first-loss/repeat-full-held-topbar.png",
+            "entry": "png/cue/teams-4x4-first-loss/repeat-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-first-loss/repeat-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-first-loss/repeat-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-first-loss/repeat-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-first-loss/repeat-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-first-loss/repeat-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-first-loss/repeat-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-first-loss/repeat-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x4-first-loss/repeat-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-to-one",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-to-one/repeat-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-to-one/repeat-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-to-one/repeat-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-to-one/repeat-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-to-one/repeat-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-to-one/repeat-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-to-one/repeat-full-held-topbar.png",
+            "entry": "png/cue/teams-4x5-to-one/repeat-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x5-to-one",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x5-to-one/repeat-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x5-to-one/repeat-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x5-to-one/repeat-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x5-to-one/repeat-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x5-to-one/repeat-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x5-to-one/repeat-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x5-to-one/repeat-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x5-to-one/repeat-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-out-control",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-out-control/repeat-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-out-control/repeat-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-out-control/repeat-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-out-control/repeat-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-out-control/repeat-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-out-control/repeat-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-out-control/repeat-full-held-topbar.png",
+            "entry": "png/cue/teams-4x4-out-control/repeat-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-4x4-out-control",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-4x4-out-control/repeat-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-4x4-out-control/repeat-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-4x4-out-control/repeat-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-4x4-out-control/repeat-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-4x4-out-control/repeat-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-4x4-out-control/repeat-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-4x4-out-control/repeat-reduced-held-topbar.png",
+            "entry": "png/cue/teams-4x4-out-control/repeat-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": -1,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 325.59375,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-3x5-row-control",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-3x5-row-control/repeat-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-3x5-row-control/repeat-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-3x5-row-control/repeat-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-3x5-row-control/repeat-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "3px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-3x5-row-control/repeat-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-3x5-row-control/repeat-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-3x5-row-control/repeat-full-held-topbar.png",
+            "entry": "png/cue/teams-3x5-row-control/repeat-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 342.421875,
+            "edge": 380
+          }
+        },
+        {
+          "id": "teams-3x5-row-control",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/teams-3x5-row-control/repeat-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/teams-3x5-row-control/repeat-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/teams-3x5-row-control/repeat-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/teams-3x5-row-control/repeat-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/teams-3x5-row-control/repeat-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/teams-3x5-row-control/repeat-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "2px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/teams-3x5-row-control/repeat-reduced-held-topbar.png",
+            "entry": "png/cue/teams-3x5-row-control/repeat-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "2px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip",
+              "hud-stock-pip hud-stock-pip--lost hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-empty--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-pip--lost hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 342.421875,
+            "edge": 380
+          }
+        },
+        {
+          "id": "ffa-4x5-first-loss",
+          "motion": "full",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-full-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-full-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.41079, 0, 0, 1.41079, 0, 0)"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-full-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.6, 0, 0, 1.6, 0, 0)"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-full-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.34421, 0, 0, 1.34421, 0, 0)"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-full-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1.10579, 0, 0, 1.10579, 0, 0)"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-full-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "matrix(1, 0, 0, 1, 0, 0)"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/ffa-4x5-first-loss/repeat-full-held-topbar.png",
+            "entry": "png/cue/ffa-4x5-first-loss/repeat-full-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "matrix(1, 0, 0, 1, 0, 0)"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 340.5625,
+            "edge": 380
+          }
+        },
+        {
+          "id": "ffa-4x5-first-loss",
+          "motion": "reduced",
+          "atLoss": {
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ]
+          },
+          "frames": [
+            {
+              "ms": 0,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-reduced-t0000.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 105,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-reduced-t0105.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 210,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-reduced-t0210.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 350,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-reduced-t0350.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.4",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 525,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-reduced-t0525.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "0.810786",
+                "transform": "none"
+              }
+            },
+            {
+              "ms": 700,
+              "file": "png/cue/ffa-4x5-first-loss/repeat-reduced-t0700.png",
+              "pip": {
+                "borderTopWidth": "5px",
+                "opacity": "1",
+                "transform": "none"
+              }
+            }
+          ],
+          "held": {
+            "topbar": "png/cue/ffa-4x5-first-loss/repeat-reduced-held-topbar.png",
+            "entry": "png/cue/ffa-4x5-first-loss/repeat-reduced-held-entry.png",
+            "pip": {
+              "borderTopWidth": "5px",
+              "opacity": "1",
+              "transform": "none"
+            },
+            "pipClasses": [
+              "hud-stock-pip hud-stock-cue"
+            ],
+            "animations": [
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-swell--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": null
+              },
+              {
+                "delay": 0,
+                "name": "hud-stock-pip-burst--still",
+                "target": "hud-stock-pip hud-stock-cue",
+                "pseudo": "::after"
+              }
+            ],
+            "face": true,
+            "stripRight": 340.5625,
+            "edge": 380
+          }
+        }
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "id": "teams-4x5-first-loss",
+      "title": "Teams, 4 players x 5 stocks: P1 A goes 5 -> 4 (one-pip fallback, still holding stock)",
+      "cue": "marks",
+      "changed": true
+    },
+    {
+      "id": "teams-4x4-first-loss",
+      "title": "Teams, 4 players x 4 stocks: P1 A goes 4 -> 3 (one-pip fallback, still holding stock)",
+      "cue": "marks",
+      "changed": true
+    },
+    {
+      "id": "teams-4x5-to-one",
+      "title": "Teams, 4 players x 5 stocks: P1 A goes 2 -> 1 (one-pip fallback, last stock held)",
+      "cue": "marks",
+      "changed": true
+    },
+    {
+      "id": "teams-4x4-out-control",
+      "title": "CONTROL. Teams, 4 x 4: P1 A goes 1 -> 0 (pip is --lost; the new rule must not match)",
+      "cue": "marks",
+      "changed": false
+    },
+    {
+      "id": "teams-3x5-row-control",
+      "title": "CONTROL. Teams, 3 x 5 (9/2 row): P1 A goes 5 -> 4 (row cue pip is --lost; unchanged)",
+      "cue": "marks",
+      "changed": false
+    },
+    {
+      "id": "ffa-4x5-first-loss",
+      "title": "Supplementary, FFA under `pips`, 4 x 5: P1 goes 5 -> 4 (the same shared fallback rule)",
+      "cue": "pips",
+      "changed": true
+    }
+  ],
+  "pageErrors": []
+}

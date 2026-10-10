@@ -1,0 +1,52 @@
+control: four-player three-stock teams strip at 320px, right edge 349.9px against 312px: overflows, as it must
+
+pips (FFA, with the identity mark the page draws ahead of each entry)
+2p x 1      10/3   strip    113px   right  163.2px   fits, 216.8px spare
+2p x 2      10/3   strip    139px   right  189.2px   fits, 190.8px spare
+2p x 3      10/3   strip    165px   right  215.2px   fits, 164.8px spare
+2p x 4      10/3   strip    191px   right  241.2px   fits, 138.8px spare
+2p x 5      10/3   strip    217px   right  267.2px   fits, 112.8px spare
+3p x 1      10/3   strip  174.5px   right  224.6px   fits, 155.4px spare
+3p x 2      10/3   strip  213.5px   right  263.6px   fits, 116.4px spare
+3p x 3      10/3   strip  252.5px   right  302.6px   fits, 77.4px spare
+3p x 4      10/3   strip  291.5px   right  341.6px   fits, 38.4px spare
+3p x 5       9/2   strip  303.5px   right  353.6px   fits, 26.4px spare
+4p x 1       9/2   strip  231.9px   right  282.1px   fits, 97.9px spare
+4p x 2       9/2   strip  275.9px   right  326.1px   fits, 53.9px spare
+4p x 3       9/2   strip  319.9px   right  370.1px   fits, 9.9px spare
+4p x 4      10+n   strip  290.4px   right  340.6px   fits, 39.4px spare
+4p x 5      10+n   strip  290.4px   right  340.6px   fits, 39.4px spare
+pips: 15 of 15 configurations fit
+
+marks (FFA; the arm suppresses the leading mark)
+2p x 1     9.9/2   strip   76.7px   right  126.8px   fits, 253.2px spare
+2p x 2     9.9/2   strip  100.5px   right  150.7px   fits, 229.3px spare
+2p x 3     9.9/2   strip  124.3px   right  174.5px   fits, 205.5px spare
+2p x 4     9.9/2   strip  148.1px   right  198.3px   fits, 181.7px spare
+2p x 5     9.9/2   strip  171.9px   right  222.1px   fits, 157.9px spare
+3p x 1     9.9/2   strip    120px   right  170.2px   fits, 209.8px spare
+3p x 2     9.9/2   strip  155.7px   right  205.9px   fits, 174.1px spare
+3p x 3     9.9/2   strip  191.4px   right  241.6px   fits, 138.4px spare
+3p x 4     9.9/2   strip  227.1px   right  277.3px   fits, 102.7px spare
+3p x 5     9.9/2   strip  262.9px   right    313px   fits, 67.0px spare
+4p x 1     9.9/2   strip  163.3px   right  213.5px   fits, 166.5px spare
+4p x 2     9.9/2   strip  210.9px   right  261.1px   fits, 118.9px spare
+4p x 3     9.9/2   strip  258.6px   right  308.8px   fits, 71.2px spare
+4p x 4       8/2   strip  275.7px   right  325.9px   fits, 54.1px spare
+4p x 5     9.9+n   strip  217.8px   right  267.9px   fits, 112.1px spare
+marks: 15 of 15 configurations fit
+
+teams (`P1 A ` and its pips, under `marks` and `pips` alike)
+3p x 1      10/3   strip  163.2px   right  213.4px   fits, 166.6px spare
+3p x 2      10/3   strip  202.2px   right  252.4px   fits, 127.6px spare
+3p x 3      10/3   strip  241.2px   right  291.4px   fits, 88.6px spare
+3p x 4      10/3   strip  280.2px   right  330.4px   fits, 49.6px spare
+3p x 5       9/2   strip  292.2px   right  342.4px   fits, 37.6px spare
+4p x 1       9/2   strip    217px   right  267.2px   fits, 112.8px spare
+4p x 2       9/2   strip    261px   right  311.2px   fits, 68.8px spare
+4p x 3       9/2   strip    305px   right  355.2px   fits, 24.8px spare
+4p x 4      10+n   strip  275.4px   right  325.6px   fits, 54.4px spare
+4p x 5      10+n   strip  275.4px   right  325.6px   fits, 54.4px spare
+teams: 10 of 10 configurations fit
+
+every configuration fits
