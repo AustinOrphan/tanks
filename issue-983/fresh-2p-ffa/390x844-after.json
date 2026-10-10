@@ -1,0 +1,122 @@
+{
+  "case": "fresh-2p-ffa",
+  "save": "fresh",
+  "layout": "390x844",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "dpr": 2
+  },
+  "storage": {},
+  "steps": [
+    {
+      "press": "Space"
+    },
+    {
+      "waitHidden": ".hud-splash"
+    },
+    {
+      "click": ".hud-versus-open"
+    },
+    {
+      "waitVisible": ".hud-versus-setup"
+    }
+  ],
+  "dom": {
+    "cards": [
+      {
+        "map": "vs-duel-01",
+        "name": "Pinwheel",
+        "config": "2 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "vs-tri-01",
+        "name": "Keystone",
+        "config": "2/3 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "vs-quad-01",
+        "name": "Quarters",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "random",
+        "name": "Random",
+        "config": "3 eligible boards",
+        "selected": true,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      }
+    ],
+    "players": [
+      "2"
+    ],
+    "mode": [
+      "ffa"
+    ],
+    "mapNote": null,
+    "rowBox": {
+      "w": 390,
+      "h": 363
+    },
+    "gridTemplateColumns": "390px"
+  },
+  "stitch": {
+    "totalCss": 402,
+    "marginCss": 8,
+    "marginBottomCss": 3,
+    "slices": [
+      {
+        "file": "slice-00.png",
+        "offset": 0,
+        "height": 402,
+        "scrollTop": 248,
+        "clip": {
+          "x": 0,
+          "y": 0.0625,
+          "width": 390,
+          "height": 402
+        }
+      }
+    ],
+    "scrollMax": 500
+  },
+  "hover": [
+    {
+      "when": "opened",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "slice 0",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "viewport",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    }
+  ],
+  "pageErrors": []
+}

@@ -1,0 +1,175 @@
+{
+  "case": "cleared-2p-ffa",
+  "save": "all five cleared",
+  "layout": "1280x800",
+  "viewport": {
+    "width": 1280,
+    "height": 800,
+    "dpr": 1
+  },
+  "storage": {
+    "tanks.progress.v1": "{\"levelId\":\"level-05\"}",
+    "tanks.stats.v1": "{\"shotsFired\":214,\"shellKills\":63,\"mineKills\":11,\"deaths\":9,\"selfKills\":1,\"friendlyFireKills\":2,\"minesLaid\":38,\"wallsDestroyed\":120,\"ricochets\":47}"
+  },
+  "steps": [
+    {
+      "press": "Space"
+    },
+    {
+      "waitHidden": ".hud-splash"
+    },
+    {
+      "click": ".hud-versus-open"
+    },
+    {
+      "waitVisible": ".hud-versus-setup"
+    }
+  ],
+  "dom": {
+    "cards": [
+      {
+        "map": "arena-01",
+        "name": "Arena 1",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "arena-02",
+        "name": "Arena 2",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "arena-03",
+        "name": "Arena 3",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "arena-04",
+        "name": "Arena 4",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "arena-05",
+        "name": "Arena 5",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "vs-duel-01",
+        "name": "Pinwheel",
+        "config": "2 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "vs-tri-01",
+        "name": "Keystone",
+        "config": "2/3 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "vs-quad-01",
+        "name": "Quarters",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      },
+      {
+        "map": "random",
+        "name": "Random",
+        "config": "8 eligible boards",
+        "selected": true,
+        "box": {
+          "w": 243,
+          "h": 128
+        }
+      }
+    ],
+    "players": [
+      "2"
+    ],
+    "mode": [
+      "ffa"
+    ],
+    "mapNote": null,
+    "rowBox": {
+      "w": 1248,
+      "h": 265
+    },
+    "gridTemplateColumns": "243.188px 243.203px 243.203px 243.203px 243.188px"
+  },
+  "stitch": {
+    "totalCss": 304,
+    "marginCss": 8,
+    "marginBottomCss": 3,
+    "slices": [
+      {
+        "file": "slice-00.png",
+        "offset": 0,
+        "height": 304,
+        "scrollTop": 190,
+        "clip": {
+          "x": 0,
+          "y": 58.0625,
+          "width": 1280,
+          "height": 304
+        }
+      }
+    ],
+    "scrollMax": 190
+  },
+  "hover": [
+    {
+      "when": "opened",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "slice 0",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "viewport",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    }
+  ],
+  "pageErrors": []
+}

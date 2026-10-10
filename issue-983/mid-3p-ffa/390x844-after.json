@@ -1,0 +1,145 @@
+{
+  "case": "mid-3p-ffa",
+  "save": "MID_CAMPAIGN",
+  "layout": "390x844",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "dpr": 2
+  },
+  "storage": {
+    "tanks.progress.v1": "{\"levelId\":\"level-02\"}",
+    "tanks.run.v2": "{\"campaignId\":\"main\",\"currentLevelId\":\"level-03\",\"livesRemaining\":2,\"status\":\"active\"}",
+    "tanks.stats.v1": "{\"shotsFired\":214,\"shellKills\":63,\"mineKills\":11,\"deaths\":9,\"selfKills\":1,\"friendlyFireKills\":2,\"minesLaid\":38,\"wallsDestroyed\":120,\"ricochets\":47}"
+  },
+  "steps": [
+    {
+      "press": "Space"
+    },
+    {
+      "waitHidden": ".hud-splash"
+    },
+    {
+      "click": ".hud-versus-open"
+    },
+    {
+      "waitVisible": ".hud-versus-setup"
+    },
+    {
+      "waitVisible": ".hud-versus-map-row [data-map=\"vs-duel-01\"]"
+    },
+    {
+      "click": ".hud-versus-players-row [data-players=\"3\"]"
+    },
+    {
+      "waitHidden": ".hud-versus-map-row [data-map=\"vs-duel-01\"]"
+    }
+  ],
+  "dom": {
+    "cards": [
+      {
+        "map": "arena-01",
+        "name": "Arena 1",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "arena-02",
+        "name": "Arena 2",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "vs-tri-01",
+        "name": "Keystone",
+        "config": "2/3 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "vs-quad-01",
+        "name": "Quarters",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "random",
+        "name": "Random",
+        "config": "4 eligible boards",
+        "selected": true,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      }
+    ],
+    "players": [
+      "3"
+    ],
+    "mode": [
+      "ffa"
+    ],
+    "mapNote": null,
+    "rowBox": {
+      "w": 390,
+      "h": 455
+    },
+    "gridTemplateColumns": "390px"
+  },
+  "stitch": {
+    "totalCss": 495,
+    "marginCss": 8,
+    "marginBottomCss": 3,
+    "slices": [
+      {
+        "file": "slice-00.png",
+        "offset": 0,
+        "height": 495,
+        "scrollTop": 194,
+        "clip": {
+          "x": 0,
+          "y": 0.875,
+          "width": 390,
+          "height": 495
+        }
+      }
+    ],
+    "scrollMax": 906
+  },
+  "hover": [
+    {
+      "when": "opened",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "slice 0",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "viewport",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    }
+  ],
+  "pageErrors": []
+}

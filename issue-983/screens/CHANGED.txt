@@ -1,0 +1,5 @@
+A	tools/screens/baseline/screen.versus-setup.fresh.json
+M	tools/screens/baseline/screen.versus-setup.json
+M	tools/screens/baseline/screen.versus-setup.map-replaced.json
+M	tools/screens/baseline/screen.versus-setup.selected.json
+M	tools/screens/baseline/screen.versus-setup.teams.json

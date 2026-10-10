@@ -1,0 +1,195 @@
+{
+  "case": "fresh-4p-teams",
+  "save": "fresh",
+  "layout": "390x844",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "dpr": 2
+  },
+  "storage": {},
+  "steps": [
+    {
+      "press": "Space"
+    },
+    {
+      "waitHidden": ".hud-splash"
+    },
+    {
+      "click": ".hud-versus-open"
+    },
+    {
+      "waitVisible": ".hud-versus-setup"
+    },
+    {
+      "waitVisible": ".hud-versus-map-row [data-map=\"vs-duel-01\"]"
+    },
+    {
+      "click": ".hud-versus-players-row [data-players=\"4\"]"
+    },
+    {
+      "waitHidden": ".hud-versus-map-row [data-map=\"vs-duel-01\"]"
+    },
+    {
+      "click": ".hud-versus-mode-row [data-mode=\"teams\"]"
+    },
+    {
+      "waitVisible": ".hud-versus-friendlyfire-btn"
+    }
+  ],
+  "dom": {
+    "cards": [
+      {
+        "map": "arena-01",
+        "name": "Arena 1",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "arena-02",
+        "name": "Arena 2",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "arena-03",
+        "name": "Arena 3",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "arena-04",
+        "name": "Arena 4",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "arena-05",
+        "name": "Arena 5",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "vs-quad-01",
+        "name": "Quarters",
+        "config": "2/3/4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "vs-quad-02",
+        "name": "Citadel",
+        "config": "4 players · FFA and Teams",
+        "selected": false,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      },
+      {
+        "map": "random",
+        "name": "Random",
+        "config": "7 eligible boards",
+        "selected": true,
+        "box": {
+          "w": 390,
+          "h": 85
+        }
+      }
+    ],
+    "players": [
+      "4"
+    ],
+    "mode": [
+      "teams"
+    ],
+    "mapNote": null,
+    "rowBox": {
+      "w": 390,
+      "h": 734
+    },
+    "gridTemplateColumns": "390px"
+  },
+  "stitch": {
+    "totalCss": 773,
+    "marginCss": 8,
+    "marginBottomCss": 3,
+    "slices": [
+      {
+        "file": "slice-00.png",
+        "offset": 0,
+        "height": 758,
+        "scrollTop": 194,
+        "clip": {
+          "x": 0,
+          "y": 0.875,
+          "width": 390,
+          "height": 758
+        }
+      },
+      {
+        "file": "slice-01.png",
+        "offset": 758,
+        "height": 15,
+        "scrollTop": 952,
+        "clip": {
+          "x": 0,
+          "y": 0.875,
+          "width": 390,
+          "height": 15
+        }
+      }
+    ],
+    "scrollMax": 1528
+  },
+  "hover": [
+    {
+      "when": "opened",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "slice 0",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "slice 1",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    },
+    {
+      "when": "viewport",
+      "count": 0,
+      "deepest": null,
+      "mapCard": false
+    }
+  ],
+  "pageErrors": []
+}
