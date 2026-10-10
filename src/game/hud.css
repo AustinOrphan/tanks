@@ -3917,9 +3917,9 @@
 /* The one-pip fallback's pip is cued while the player still holds stock (issues #838, #1055),
  * so it swells and bursts but must not empty. `both` holds a cue's last frame until the strip
  * next rebuilds, which no timer forces, and `hud-stock-pip-empty` ends on the lost pip's 2px
- * border: measured in Chromium at 390x844, a teams player down from 5 stocks to 4 was still
- * drawn hollow, the look of a player who is out, 1.5s after the loss. A row's cued pip is always
- * `--lost`, so this matches the fallback's pip and nothing else. */
+ * border. Measured in Chromium at 390x844 before this rule: a teams player down from 5 stocks to
+ * 4 was still drawn hollow, the look of a player who is out, 1.5s after the loss. A row's cued
+ * pip is always `--lost`, so this matches the fallback's pip and nothing else. */
 .hud-stock-pip.hud-stock-cue:not(.hud-stock-pip--lost) {
   animation: hud-stock-pip-swell var(--hud-duration-slow) ease-out 1 both;
 }
