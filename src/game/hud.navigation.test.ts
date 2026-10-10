@@ -1239,7 +1239,12 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     //
     // 87 since issue #754's Controller Layout entry, beside Controllers in the same section. The
     // layout pane's own controls do not count: the pane is not open in this walk.
-    expect(totalControls, 'recount the panels above if this moves').toBe(87);
+    //
+    // 89 since issue #1035: the Versus setup pane's Map row at this fixture's default two
+    // players gains two cards, vs-tri-01 and vs-quad-01, the dedicated boards now offered at
+    // the lower counts they measure suitable at. Seven Map controls become nine (Random,
+    // five campaign boards, vs-duel-01, and the two), so that pane goes from 27 to 29.
+    expect(totalControls, 'recount the panels above if this moves').toBe(89);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
@@ -2122,7 +2127,11 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     // so a literal would make every future developer flag break this sweep. What the sweep is
     // ABOUT is unchanged -- every one of them must still announce its choice, asserted below
     // over the whole population.
-    expect(btns.length).toBe(11 + 7 + 8 + 26 + 4 + devMenuSelectables());
+    //
+    // 28 and not 26 in the versus pane since issue #1035: Map goes 7 -> 9 at this fixture's
+    // two players, with vs-tri-01 and vs-quad-01 offered at the lower counts they measure
+    // suitable at.
+    expect(btns.length).toBe(11 + 7 + 8 + 28 + 4 + devMenuSelectables());
     const missing = btns
       .filter((b) => !b.hasAttribute('aria-pressed'))
       .map((b) => Array.from(b.classList).join('.'));
@@ -2986,15 +2995,16 @@ describe('hud: spatial focus follows the drawn layout (issue #495)', () => {
   const active = (): HTMLElement => document.activeElement as HTMLElement;
 
   it('a segmented row walks Left/Right within itself and wraps at its ends; Up/Down leave it for the neighbouring row', () => {
-    // The Map row is the segment with the most options (7); Mode has one enabled button
-    // at two players, which is why it is not the subject here.
+    // The Map row is the segment with the most options (9 since issue #1035 offered
+    // vs-tri-01 and vs-quad-01 at two players); Mode has one enabled button at two players,
+    // which is why it is not the subject here.
     const { hud: h, root } = mountDrawn();
     h.setState('main-menu');
     h.showVersusSetup(true);
     const maps = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-map-row button')).filter((b) => !b.disabled);
     const players = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-players-row button')).filter((b) => !b.disabled);
     const stocks = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-versus-stock-row button')).filter((b) => !b.disabled);
-    expect(maps.length, 'the Map segment population').toBe(7);
+    expect(maps.length, 'the Map segment population').toBe(9);
     maps[0].focus();
     press('ArrowRight');
     expect(active()).toBe(maps[1]);
@@ -3071,7 +3081,8 @@ describe('hud: spatial focus follows the drawn layout (issue #495)', () => {
       visited.add(active());
     }
     expect(visited.size, 'the walk did not cover the pane').toBe(population.length);
-    expect(population.length, 'the population this walk covers').toBe(27);
+    // 29 since issue #1035: the Map row gains vs-tri-01 and vs-quad-01 at two players.
+    expect(population.length, 'the population this walk covers').toBe(29);
   });
 
   it('negative control: with jsdom\'s empty rects the same Right leaves the segment in document order', () => {
@@ -3448,16 +3459,17 @@ describe('the versus map cards (issue #274)', () => {
   });
 
   it('tells Random how many boards it will draw from, counting the row and not the catalog', () => {
-    // WHAT THIS DISCRIMINATES. Two and three players yield SIX eligible boards -- the five
-    // campaign arenas plus that count's one dedicated board -- and four players yields SEVEN
-    // since issue #1036 added vs-quad-02 beside vs-quad-01. That broke the tie this case was
-    // waiting for: while every combination yielded six, no fixture told this line from a
-    // hardcoded `6`, and now the four-player combinations do.
+    // WHAT THIS DISCRIMINATES. Two players yield EIGHT eligible boards -- the five campaign
+    // arenas plus vs-duel-01, vs-tri-01 and vs-quad-01 since issue #1035 offered the last two
+    // at the lower counts they measure suitable at -- and three and four players yield SEVEN:
+    // vs-tri-01 and vs-quad-01 at three (#1035), vs-quad-01 and vs-quad-02 at four (#1036).
+    // While every combination yielded six, no fixture told this line from a hardcoded `6`;
+    // the two-player combination now differs from the rest, so a hardcoded figure fails.
     //
     // It also discriminates the other mistake available here: counting the CATALOG, which
     // has nine entries, instead of the filtered row. That is the number a reader of
-    // `VERSUS_CATALOG.length` would reach for, and Random drawing from nine boards when six
-    // or seven are offered is the criterion "Random never selects outside the displayed
+    // `VERSUS_CATALOG.length` would reach for, and Random drawing from nine boards when seven
+    // or eight are offered is the criterion "Random never selects outside the displayed
     // eligible set" restated as a claim on the card.
     const { hud: h, root } = mount();
     open(root, h);
@@ -3477,8 +3489,8 @@ describe('the versus map cards (issue #274)', () => {
         expect(eligible(), `${players}p ${mode}`).toBeLessThan(VERSUS_CATALOG.length);
       }
     }
-    // The population, recorded rather than assumed: six at two and three players, seven at four.
-    expect([...counts]).toEqual([6, 7]);
+    // The population, recorded rather than assumed: eight at two players, seven at three and four.
+    expect([...counts]).toEqual([8, 7]);
     expect(VERSUS_CATALOG.length).toBe(9);
   });
 

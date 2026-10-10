@@ -125,6 +125,7 @@
       "intent": "A three-player arch: two mirrored bases and a keystone spawn equally far from both.",
       "preview": "vs-tri-01",
       "players": [
+        2,
         3
       ],
       "modes": [
@@ -143,6 +144,8 @@
       "intent": "A four-player rotunda: a centre every corner sees into, four avenues, an island.",
       "preview": "vs-quad-01",
       "players": [
+        2,
+        3,
         4
       ],
       "modes": [

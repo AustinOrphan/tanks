@@ -56,13 +56,14 @@ import type { World } from './world';
 //   * "vs-quad-01 stays withdrawn from the offered catalogue" is now FALSE.
 //     versus-catalog.json offers it at [4]; #425's rebuild returned it, which is what took the
 //     egress sweep's offered population from 17 back to 18.
-//   * "the 21 offered ones" is the wrong population. The catalogue offers 18 (arena, N)
-//     combinations. 21 is a different count from a different sweep -- the shipped-arena roomOk
+//   * "the 21 offered ones" is the wrong population. The catalogue offered 18 (arena, N)
+//     combinations when this was written, and offers 22 since issue #1035. 21 is a different count from a different sweep -- the shipped-arena roomOk
 //     loop's CHECKED verdicts, which are the 24 that exist minus vs-duel-01's three.
 //   * "vs-quad-01 @ N=4 ratio 74.00" is stale. It was a 27x17 board then and is 33x27 now,
 //     measuring 152.50.
 //   * "vs-tri-01 at N=4, ratio 72.25 -- the board sitting on the bound" is not an offered
-//     combination: vs-tri-01 is offered at [3] alone, where it scores 96.33. Issue #722 moved
+//     combination: vs-tri-01 is offered at [2, 3] (since issue #1035; [3] alone when this was
+//     written), and scores 96.33 at N=3. Issue #722 moved
 //     the room guard onto the offered population for exactly this reason, so the "sitting on
 //     the bound" framing below, and the conclusion for #418 that rests on vs-quad-01 being
 //     withdrawn, both need the re-run before they can be relied on.

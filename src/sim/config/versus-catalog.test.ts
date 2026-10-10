@@ -38,29 +38,34 @@ describe('VERSUS_CATALOG', () => {
   it('declares the player counts each entry is CURATED for, not merely the ones it passes at', () => {
     // versus-catalog-rules.test.ts proves these declarations against real geometry; this
     // pin means a narrowed declaration is a deliberate two-file edit, and vs-duel-01 is
-    // the first narrowing. It measures suitable at N=3 and N=4 too (versus-board.test.ts
-    // sweeps all 18 combinations) and is offered at neither: a dedicated duel board is
-    // withheld where it is playable but not designed for. The offer is curation; the
-    // geometry verdict is only the floor beneath it.
+    // the first narrowing. The offer is curation; the geometry verdict is only the floor
+    // beneath it. vs-duel-01 is no longer the example of withholding a playable board: the
+    // egress gate (#423) finds it unsuitable at N=3 and N=4 (versus-board.test.ts sweeps all
+    // 27 combinations), so its [2] is now also a limit. What curation still withholds is
+    // vs-tri-01 at N=4 and vs-quad-02 at N=2 and N=3, below.
     const CURATED_COUNTS: Record<string, number[]> = {
       'arena-01': [2, 3, 4], 'arena-02': [2, 3, 4], 'arena-03': [2, 3, 4],
       'arena-04': [2, 3, 4], 'arena-05': [2, 3, 4],
       'vs-duel-01': [2],
-      // vs-tri-01 is BACK (issue #424), and at [3] alone -- the same narrowing it declared
-      // before it was withdrawn. It measures suitable at N=2 and N=4 too (versusBoardCatalog
-      // reports 22 of 24 suitable and vs-tri-01 is in neither of the 2 failures), so the [3]
-      // here is curation, exactly like vs-duel-01's [2]: a board authored for three players
-      // is withheld where it is playable but not designed.
-      'vs-tri-01': [3],
-      // vs-quad-01 is BACK (issue #425), at [4] alone, and by the same curation rule as its
-      // two siblings: `versusBoardCatalog` now reports it suitable at N=2, 3 and 4 (22 of 24
-      // suitable, and vs-quad-01 is in neither of the 2 remaining failures), so restricting
-      // it to 4 is a design choice about the board it was authored for, not a limit the
-      // measurements impose.
-      'vs-quad-01': [4],
-      // vs-quad-02 (issue #1036) at [4] alone, by the same rule: versusBoardCatalog reports
-      // it suitable at N=2, 3 and 4 (25 of 27 suitable, the 2 failures still vs-duel-01's),
-      // which #1036 required, and offering it at 2 or 3 would be a separate curation edit.
+      // vs-tri-01 came back at [3] alone (issue #424), withheld at N=2 and N=4 by curation:
+      // it measures suitable at both, but a board authored for three players was withheld
+      // where it was playable but not designed. Issue #1035 REVERSED that for N=2, on
+      // purpose: a follow-up ruling on #229 offers a dedicated board at the LOWER counts it
+      // measures suitable at ("offer now; the sign-off can withdraw", on #584's footing of
+      // retaining offerings until evidence identifies a problem), to meet the #355 board
+      // floor at two players. N=4 stays withheld: that is the upward direction, which the
+      // ruling does not cover, and it sits 0.25 open cells per player above the room bound.
+      'vs-tri-01': [2, 3],
+      // vs-quad-01 came back at [4] alone (issue #425), by the same curation. Issue #1035
+      // reversed it for N=2 and N=3 under the same #229 ruling: it measures suitable at
+      // both (versusBoardCatalog reports 25 of 27 suitable, the 2 failures vs-duel-01's),
+      // and it is the only candidate that meets the floor for the 3-FFA and 3-Teams options.
+      // The floor sign-off (#1037) may withdraw any of these added pairs.
+      'vs-quad-01': [2, 3, 4],
+      // vs-quad-02 (issue #1036) at [4] alone: versusBoardCatalog reports it suitable at
+      // N=2, 3 and 4 (25 of 27 suitable, the 2 failures still vs-duel-01's), which #1036
+      // required, and offering it at 2 or 3 would be a separate curation edit. #1035's
+      // widening named vs-tri-01 and vs-quad-01 only.
       'vs-quad-02': [4],
     };
     // Set equality first, so a new entry cannot ship without a row here to review.

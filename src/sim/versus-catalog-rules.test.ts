@@ -23,10 +23,10 @@ import { TANK_RADIUS } from './constants';
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 9 shipped entries validate clean: 0 failures over 38 declared (entry, N, mode) combinations', () => {
-    // 38, not 54: five entries declare 3 player counts x 2 modes (30), and issue #271's
-    // vs-duel-01, issue #272's vs-tri-01, issue #273's vs-quad-01 and issue #1036's
-    // vs-quad-02 each declare 1 x 2.
+  it('all 9 shipped entries validate clean: 0 failures over 44 declared (entry, N, mode) combinations', () => {
+    // 44, not 54: five entries declare 3 player counts x 2 modes (30), vs-quad-01 3 x 2 (6)
+    // and vs-tri-01 2 x 2 (4) since issue #1035, and issue #271's vs-duel-01 and issue
+    // #1036's vs-quad-02 each declare 1 x 2 (4).
     // The sweep covers what each entry PROMISES, so a narrowed declaration shrinks this
     // denominator rather than leaving combinations silently unchecked.
     //
@@ -35,11 +35,14 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     // WITHDRAWN pending #424/#425 because human playtesting found players could not leave
     // their spawns on either board; 33 when #424's rebuild returned vs-tri-01's one
     // combination; 35 when #425's rebuild returned vs-quad-01's two; 36 when issue #627
-    // gave vs-tri-01 `teams` alongside `ffa`; and 38 now that issue #1036 appends vs-quad-02
-    // at N=4 in both modes.
+    // gave vs-tri-01 `teams` alongside `ffa`; 38 when issue #1036 appended vs-quad-02 at N=4
+    // in both modes; and 44 now that issue #1035 offers vs-tri-01 at N=2 and vs-quad-01 at
+    // N=2 and N=3, in both modes. Those six combinations had never run here, because this sweep
+    // reads only declared counts; they pass (connectivity from the `P` cell, spawn clearance and
+    // the five-seed variant concealment check), measured when #1035 landed.
     //
-    // That last step is the first that widens a DECLARATION rather than restoring a
-    // withdrawn board, and it adds a combination this sweep had never run: (vs-tri-01,
+    // #627's step was the first that widened a DECLARATION rather than restoring a
+    // withdrawn board, and it added a combination this sweep had never run: (vs-tri-01,
     // N=3, teams). It passes for a structural reason worth stating rather than
     // discovering -- `versusCatalogEntryFailures` evaluates geometry once per declared N
     // and reports it per declared mode (`playerPositions` loads every board through
@@ -51,7 +54,7 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(38);
+    ).toBe(44);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }

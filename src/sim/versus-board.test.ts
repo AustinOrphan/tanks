@@ -139,16 +139,18 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     return { tightest, tightestLabel, checked };
   }
 
-  /** The (arena, N) pairs the catalogue actually offers -- 18 of the 24 that exist. */
+  /** The (arena, N) pairs the catalogue actually offers -- 22 of the 27 that exist. */
   const isOffered = (arenaId: string, n: number) =>
     VERSUS_CATALOG.some((e) => e.arenaId === arenaId && (e.players as readonly number[]).includes(n));
 
   it('the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin at every count a board is OFFERED at -- the tightest is vs-tri-01 at N=3', () => {
     const { tightest, tightestLabel, checked } = tightestRatio(isOffered);
-    // 19 = five campaign boards x 3 counts, plus vs-duel-01, vs-tri-01, vs-quad-01 and
-    // vs-quad-02 at their single curated counts. The same population the egress sweep below
-    // covers. vs-quad-02 @ N=4 is 163.75, looser than this tightest, so the figure stays.
-    expect(checked, 'the offered (arena, N) population this sweep covers').toBe(19);
+    // 22 = five campaign boards x 3 counts (15), plus vs-duel-01 at 2, vs-tri-01 at 2 and 3,
+    // vs-quad-01 at 2, 3 and 4, and vs-quad-02 at 4 (7). The same population the egress sweep
+    // below covers. vs-quad-02 @ N=4 is 163.75, and the three pairs issue #1035 offered are
+    // 144.50 (vs-tri-01 @ N=2), 305.00 and 203.33 (vs-quad-01 @ N=2 and 3), all looser than
+    // this tightest, so the figure stays.
+    expect(checked, 'the offered (arena, N) population this sweep covers').toBe(22);
     expect(tightestLabel).toBe('vs-tri-01 @ N=3');
     expect(tightest).toBeCloseTo(96.33333, 4);
     // THE BOUND, over the population the game can actually put a player in. 96.33 is 5.35x
@@ -157,11 +159,12 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     // WHY THAT NUMBER IS NOT THE 0.25 THIS COMMENT USED TO REPORT, which is the correction
     // issue #722 asked for. The previous revision swept all 24 shipped combinations, found
     // vs-tri-01 @ N=4 at 72.25, and concluded the bound was "one furnished board away from
-    // failing". vs-tri-01 is offered at N=3 ALONE (versus-catalog.json gives it `[3]`), so that
-    // reading came from a combination the game never sets up. Over the offered population the
-    // headroom is two orders of magnitude larger, and the second-tightest offered combination
-    // is vs-quad-01 @ N=4 at 152.5 -- not the 74.0 recorded when it was a 27x17 board, because
-    // #425 rebuilt it at 33x27.
+    // failing". vs-tri-01 is not offered at N=4 (versus-catalog.json gives it `[2, 3]` since
+    // issue #1035, which widened it downward only), so that reading came from a combination the
+    // game never sets up. Over the offered population the headroom is two orders of magnitude
+    // larger, and the second-tightest offered combination is vs-tri-01 @ N=2 at 144.5 (offered
+    // by #1035), ahead of vs-quad-01 @ N=4 at 152.5 -- not the 74.0 recorded when Quarters was
+    // a 27x17 board, because #425 rebuilt it at 33x27.
     //
     // REVISION POLICY, replacing the "check this figure before authoring the next board" note
     // that #418 was filed against. This assertion is a description of the offered catalogue and
@@ -173,7 +176,7 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     expect(tightest).toBeGreaterThan(MIN_OPEN_FLOOR_PER_PLAYER * 4);
   });
 
-  it('records the tightest ratio across all 27 shipped combinations, including the 8 no one is offered', () => {
+  it('records the tightest ratio across all 27 shipped combinations, including the 5 no one is offered', () => {
     // REPORTED, NOT GATED, and that separation is the point. vs-tri-01 at N=4 scores 72.25 --
     // 0.25 cells of open floor above the bound -- but nothing offers a three-player board to
     // four players, so letting it gate CI made a required check turn on a hypothetical. It is
@@ -185,7 +188,7 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
     expect(all.tightest).toBeCloseTo(72.25, 5);
     // The control that keeps the two blocks honest about each other: the shipped population
     // CONTAINS the offered one, so its tightest can never be the looser of the two. If these
-    // ever coincide, the eight non-offered combinations stopped mattering and the block above is
+    // ever coincide, the five non-offered combinations stopped mattering and the block above is
     // the only one needed.
     const offered = tightestRatio(isOffered);
     expect(all.tightest).toBeLessThan(offered.tightest);
@@ -535,8 +538,9 @@ describe('spawn egress: a tank, not a cell (issue #423)', () => {
     // took this from 18 to 16; #424's rebuild returned vs-tri-01's one combination (17) and
     // #425's rebuild returns vs-quad-01's (18). Back to where it started, with both boards
     // now holding the egress guarantee they were withdrawn for lacking. Issue #1036 adds
-    // vs-quad-02 at its one curated count (19).
-    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(19);
+    // vs-quad-02 at its one curated count (19), and issue #1035 offers vs-tri-01 at 2 and
+    // vs-quad-01 at 2 and 3, the lower counts both already measured suitable at (22).
+    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(22);
   });
 
   it('a destructible seal is fine when the pocket is big enough to survive blowing it', () => {
