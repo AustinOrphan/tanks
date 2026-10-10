@@ -7,8 +7,8 @@
  * and 45 degrees) at the gallery CLI's defaults, 640x480, view `game`, dpr 1, built by
  * `buildGallery` with the options `tools/gallery/main.ts` passes. The CLI cannot hide a mesh, so
  * this page hands `buildGallery` a renderer built as its default one is and wraps its `render` to
- * hide chosen meshes for one draw. The `page frame is the CLI frame` control holds the page's full
- * frame to the CLI's own PNG, pixel for pixel.
+ * hide chosen meshes for one draw. The `page frame is the CLI frame` controls hold both of the
+ * page's full frames, with and without `--enemyRole`, to the CLI's own PNGs, pixel for pixel.
  *
  * FOOTPRINTS, each the pixels that differ from the same draw with one mesh hidden:
  *  - owner, slot s: its `identity-ring` (the ring, or the `shape` marker), counted in the frame
@@ -29,7 +29,10 @@ import { colours, differing } from './role-cue-cells';
 
 const W = 640;
 const H = 480;
-/** `ring` is no `--identityMarker`: the solid ring co-op, teams and single-player keep. */
+/**
+ * `ring` is no `--identityMarker`: the solid ring co-op and teams keep; a single-player world
+ * draws no ring (`identityApplies` needs two player tanks).
+ */
 const MARKERS = [{ name: 'shape', style: 'shape' }, { name: 'ring', style: null }] as const;
 /** Body angles in degrees, by slot, as `subjects.ts`'s `identity` element poses them. */
 const ANGLES = [0, 90, 180, 45];
@@ -140,7 +143,8 @@ async function measure() {
 
     const A = withCue.frame();
     const B = noCue.frame();
-    full[name] = A;
+    full[`${name}-cue`] = A;
+    full[`${name}-nocue`] = B;
     const ownerB = noCue.tanks.map((t) => differing(B, noCue.frame([t.ring])));
     const ownerA = withCue.tanks.map((t) => differing(A, withCue.frame([t.ring])));
     const cue = withCue.tanks.map((t) => differing(A, withCue.frame(t.blocks)));
@@ -178,6 +182,12 @@ async function measure() {
     let crossed = 0;
     for (let s = 0; s < 4; s++) for (let t = s + 1; t < 4; t++) crossed += sharedCount(ownerB[s], ownerB[t]);
     check(`disjoint rings share nothing, ${name}`, crossed === 0, `${crossed} pixels shared between different slots' rings`);
+    // Ties the rows' owner-to-cue pairing to the whole frame. Exact while no pixel sits in two
+    // owner footprints (the control above) or two cue footprints; either would fail it, not pass.
+    const perSlot = cells.reduce((n, r) => n + r.shared + r.sharedOtherSlots, 0);
+    const whole = sharedCount(ownerB.flat(), [...union]);
+    check(`per-slot shared accounts for every owner and cue pixel, ${name}`, perSlot === whole,
+      `${perSlot} pixels across the rows, ${whole} in all owner footprints and all cue footprints`);
 
     // The footprint map: the frame in dim grey, owner footprints (cue absent) yellow, cue magenta,
     // pixels in both white.
@@ -191,17 +201,20 @@ async function measure() {
     dumps[`${name}-footprints`] = png(map);
   }
 
+  // Both page frames the counts use: A, with the cue, and B, without it (the headline owner
+  // footprint). Each is also held to a CLI frame it must differ from, so a match is not vacuous.
   const cli = page.__identityCueCli ?? {};
-  for (const { name } of MARKERS) {
-    const other = name === 'shape' ? 'ring' : 'shape';
-    if (!cli[name] || !cli[other]) {
-      check(`page frame is the CLI frame, ${name}`, false, 'no CLI frame supplied; run the page through its runner');
+  const pairs = MARKERS.flatMap(({ name }) =>
+    [[`${name}-cue`, `${name === 'shape' ? 'ring' : 'shape'}-cue`], [`${name}-nocue`, `${name}-cue`]]);
+  for (const [key, other] of pairs) {
+    if (!cli[key] || !cli[other]) {
+      check(`page frame is the CLI frame, ${key}`, false, 'no CLI frame supplied; run the page through its runner');
       continue;
     }
-    const same = differing(full[name], await decode(cli[name])).length;
-    const crossed = differing(full[name], await decode(cli[other])).length;
-    check(`page frame is the CLI frame, ${name}`, same === 0 && crossed > 0,
-      `${same} pixels differ from the CLI's ${name} frame; ${crossed} from its ${other} frame`);
+    const same = differing(full[key], await decode(cli[key])).length;
+    const crossed = differing(full[key], await decode(cli[other])).length;
+    check(`page frame is the CLI frame, ${key}`, same === 0 && crossed > 0,
+      `${same} pixels differ from the CLI's ${key} frame; ${crossed} from its ${other} frame`);
   }
   return { rows, controls, width: W, height: H, dumps };
 }

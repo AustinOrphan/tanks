@@ -10,11 +10,11 @@
  *   node tools/gl/identity-cue-overlap.mjs
  *   IDENTITY_CUE_DIR=/some/dir node tools/gl/identity-cue-overlap.mjs   # also writes the evidence
  *
- * First it runs the gallery CLI itself, once per marker, so the page can prove its full frame is
- * the CLI's frame to the pixel. That proof needs one rasteriser on both sides, so this browser is
- * launched with the CLI's own SwiftShader flags (tools/gallery/run.mjs) and there is no host-GPU
- * mode. `IDENTITY_CUE_DIR` receives the table as JSON and markdown, the page's frames and the
- * CLI's frames.
+ * First it runs the gallery CLI itself, with and without `--enemyRole` per marker, so the page can
+ * prove both of its full frames are the CLI's frames to the pixel. That proof needs one rasteriser
+ * on both sides, so this browser is launched with the CLI's own SwiftShader flags
+ * (tools/gallery/run.mjs) and there is no host-GPU mode. `IDENTITY_CUE_DIR` receives the table as
+ * JSON and markdown, the page's frames and the CLI's frames.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -26,13 +26,19 @@ const PORT = Number(process.env.GL_TEST_PORT ?? 5181);
 const BASE = `http://localhost:${PORT}/`;
 const OUT = process.env.IDENTITY_CUE_DIR ?? null;
 const ROOT = new URL('../../', import.meta.url).pathname;
-/** The two CLI frames the page must reproduce: `ring` is no `--identityMarker`. */
+const MARKERS = ['shape', 'ring'];
+/**
+ * The four CLI frames the page must reproduce, both frames the counts use per marker: `ring` is no
+ * `--identityMarker`, `-nocue` no `--enemyRole`.
+ */
 const CLI = {
-  shape: ['--identityMarker', 'shape'],
-  ring: [],
+  'shape-cue': ['--identityMarker', 'shape', '--enemyRole', 'both'],
+  'ring-cue': ['--enemyRole', 'both'],
+  'shape-nocue': ['--identityMarker', 'shape'],
+  'ring-nocue': [],
 };
-const cliArgs = (marker) => ['--elements', 'identity', ...CLI[marker], '--enemyRole', 'both',
-  '--view', 'game', '--w', '640', '--h', '480', '--out', `gallery-out/identity-cue-overlap-${marker}`];
+const cliArgs = (key) => ['--elements', 'identity', ...CLI[key],
+  '--view', 'game', '--w', '640', '--h', '480', '--out', `gallery-out/identity-cue-overlap-${key}`];
 
 const installed = JSON.parse(readFileSync(`${ROOT}node_modules/three/package.json`, 'utf8')).version;
 
@@ -56,12 +62,12 @@ if (await respondsOn(BASE)) {
 
 const started = Date.now();
 const cliFrames = {};
-for (const marker of Object.keys(CLI)) {
-  console.error(`[identity-cue] npm run gallery -- ${cliArgs(marker).join(' ')}`);
-  const log = execFileSync(process.execPath, [`${ROOT}tools/gallery/run.mjs`, ...cliArgs(marker)], { cwd: ROOT }).toString();
+for (const key of Object.keys(CLI)) {
+  console.error(`[identity-cue] npm run gallery -- ${cliArgs(key).join(' ')}`);
+  const log = execFileSync(process.execPath, [`${ROOT}tools/gallery/run.mjs`, ...cliArgs(key)], { cwd: ROOT }).toString();
   process.stderr.write(log);
-  if (!log.includes('pageerrors: none')) throw new Error(`the gallery CLI reported page errors for ${marker}`);
-  cliFrames[marker] = `${ROOT}gallery-out/identity-cue-overlap-${marker}/frame.png`;
+  if (!log.includes('pageerrors: none')) throw new Error(`the gallery CLI reported page errors for ${key}`);
+  cliFrames[key] = `${ROOT}gallery-out/identity-cue-overlap-${key}/frame.png`;
 }
 
 const VITE_BIN = `${ROOT}node_modules/.bin/vite`;
@@ -123,12 +129,12 @@ try {
     lines.push(`| ${r.marker} | ${r.slot} | ${r.bodyAngle} deg | ${r.ownerNoCue} | ${r.ownerWithCue} | ${r.cue} | ${r.shared} | ${r.covered} | ${r.sharedWithCue} | ${r.sharedOtherSlots} |`);
   }
   lines.push('');
-  for (const marker of Object.keys(CLI)) {
+  for (const marker of MARKERS) {
     const nonzero = rows.filter((r) => r.marker === marker && (r.shared > 0 || r.sharedOtherSlots > 0)).map((r) => r.slot);
     lines.push(`Slots with a nonzero shared count, ${marker} (population: 4 slots): ${nonzero.length ? nonzero.join(', ') : 'none'}.`);
   }
   lines.push('');
-  for (const marker of Object.keys(CLI)) lines.push(`CLI frame, ${marker}: npm run gallery -- ${cliArgs(marker).join(' ')}`);
+  for (const key of Object.keys(CLI)) lines.push(`CLI frame, ${key}: npm run gallery -- ${cliArgs(key).join(' ')}`);
   lines.push('');
   lines.push('| control | result | detail |');
   lines.push('| --- | --- | --- |');
@@ -140,7 +146,7 @@ try {
     writeFileSync(`${OUT}/identity-cue-overlap.json`, `${JSON.stringify({ installed, visual: 'software-gl', seconds: Number(seconds), ...result }, null, 2)}\n`);
     writeFileSync(`${OUT}/identity-cue-overlap.md`, `${text}\n`);
     for (const [name, url] of Object.entries(dumps)) writeFileSync(`${OUT}/${name}.png`, Buffer.from(url.split(',')[1], 'base64'));
-    for (const [marker, file] of Object.entries(cliFrames)) copyFileSync(file, `${OUT}/cli-${marker}-cue.png`);
+    for (const [key, file] of Object.entries(cliFrames)) copyFileSync(file, `${OUT}/cli-${key}.png`);
   }
   if (controls.some((c) => !c.pass) || pageErrors.length) process.exitCode = 1;
 } finally {
