@@ -111,9 +111,14 @@ export const STOCK_CUE_MS = 700;
  *     4      4     one+digit      275.4       54.4
  *     4      5     one+digit      275.4       54.4
  *
- * The fallback is still needed at four players at four and five stocks: a row at the 8px floor,
- * with a 2px gap, overflows by 3.2px and 43.2px. Measured at the default UI scale only; the
- * strip is under the player's UI scale since #1048, so 125% and 150% need measuring of their own.
+ * The one-pip fallback stays at four players at four and five stocks. It fits, with 54.4px to
+ * spare; #1055 leaves a rung that fits unchanged; and this rule is shared with FFA, where every
+ * row at the 8px floor overflows four players at four stocks (8/2 by 18.1px, 8/1 by 6.1px). For
+ * teams alone, an 8px row with a 1px gap would fit 4x4 with 8.8px to spare, while an 8/2 row
+ * overflows it by 3.2px; at 4x5 every 8px row overflows (8/2 by 43.2px, 8/1 by 27.2px). Those
+ * rows were measured on the same page by drawing a full row in place of each fallback.
+ * Everything here holds at the default UI scale (100%) only; the strip is under the player's UI
+ * scale since #1048, so 125% and 150% need measuring of their own.
  */
 export function narrowPipLayout(slots: number, total: number): PipLayout {
   if (slots <= 2) return { kind: 'row', pip: 10, gap: 3 };

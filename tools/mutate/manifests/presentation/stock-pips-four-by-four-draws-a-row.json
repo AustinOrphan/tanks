@@ -8,7 +8,7 @@
     "src/presentation/stock-cue.test.ts",
     "src/game/hud.match.test.ts"
   ],
-  "why": "Four players at four and five stocks lose the one-pip fallback and draw a row of 9px pips. Measured on the real HUD at 390px, even a row at the 8px floor puts a teams strip 3.2px and 43.2px past the topbar's content edge, and an FFA strip, which also carries the identity mark, 18.1px and 58.1px; 9px pips are wider still. The fallback -- one full-size pip and the count -- is #838's, and #1055 measured that a teams entry needs it at exactly these two cells, keeping its letter. The FFA pips cases already caught this before #1055 (2 tests failed); the teams cases name the teams half of the same contract.",
+  "why": "Four players at four and five stocks lose the one-pip fallback and draw a row of 9px pips. Measured on the real HUD at 390px and UI scale 100%, that 9px row puts a teams strip 19.2px and 63.2px past the topbar's content edge, and an FFA strip, which also carries the identity mark, 34.1px and 78.1px. The fallback -- one full-size pip and the count -- is #838's, and #1055 measured that it holds a teams entry's letter at these two cells with 54.4px to spare, so it keeps the rung. The FFA pips cases already caught this before #1055 (2 tests failed); the teams cases name the teams half of the same contract.",
   "killedBy": [
     "stock cue: pip sizing on a narrow viewport (issue #835) keeps ONE pip and states the count, rather than dropping the shape entirely",
     "stock cue: a teams entry on a narrow viewport (issue #1055) takes the rung measured to hold the letter in every one of the 10 teams configurations",

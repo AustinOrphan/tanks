@@ -170,8 +170,8 @@ describe('stock cue: a teams entry on a narrow viewport (issue #1055)', () => {
     '4x1': ROW9, // 112.8
     '4x2': ROW9, // 68.8
     '4x3': ROW9, // 24.8
-    '4x4': ONE, // 54.4; a row of 8px pips overflows by 3.2
-    '4x5': ONE, // 54.4; a row of 8px pips overflows by 43.2
+    '4x4': ONE, // 54.4; an 8px row overflows by 3.2 with a 2px gap (an 8/1 row would fit by 8.8)
+    '4x5': ONE, // 54.4; an 8px row overflows by 43.2 with a 2px gap, 27.2 with a 1px gap
   };
 
   /** The cells where `rule` disagrees with the measured table. */
