@@ -7,5 +7,9 @@
   "tests": [
     "src/game/hud.selftest.test.ts"
   ],
-  "why": "Issue #1013. The pane's close stops spending the load's generation, so a load still in flight when Back (or a surface change through `setState`) closes the pane is still current when it lands, and builds the body into a pane nobody is looking at."
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) a close during the load builds no body into the closed pane",
+    "the self-test body loads when its pane first opens (issue #1013) a load that fails after the pane closed reports nothing into it"
+  ],
+  "why": "Issue #1013. The pane's close stops spending the load's generation, so a load still in flight when Back (or a surface change through `setState`) closes the pane is still current when it lands, and builds the body into a pane nobody is looking at -- or, if the load failed, writes its failure line there."
 }

@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.selftest.test.ts"
   ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) paints the LATEST frame pushed before the body loaded"
+  ],
   "why": "Issue #1013. A pad frame pushed before the body has loaded is dropped instead of held. `route-ui.ts` pushes its first frame synchronously on open, before any import can land, so the pane opens on the empty state over a connected pad until the next animation frame -- and with no poll running, for good."
 }

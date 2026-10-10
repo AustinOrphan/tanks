@@ -7,5 +7,18 @@
   "tests": [
     "src/game/hud.selftest.test.ts"
   ],
+  "killedBy": [
+    "the controller self-test pane (issue #599) renders the pads it is pushed, and keeps rendering them frame after frame",
+    "the copyable report (issue #599) empties the field on close, so a second visit never presents a stale snapshot",
+    "the copyable report (issue #599) fills the field from the LAST frame pushed, reveals it, and selects it",
+    "the self-test body loads when its pane first opens (issue #1013) Copy pressed before the body loaded throws nothing and writes nothing",
+    "the self-test body loads when its pane first opens (issue #1013) THE CONTROL: the open loads the body, the empty state and the pad list, once it lands",
+    "the self-test body loads when its pane first opens (issue #1013) a close and reopen during the load builds the body once, for the reopen",
+    "the self-test body loads when its pane first opens (issue #1013) a load that fails is reported in the pane, and the next open builds the body in its place",
+    "the self-test body loads when its pane first opens (issue #1013) builds the body once: a second visit keeps the same rows",
+    "the self-test body loads when its pane first opens (issue #1013) paints the LATEST frame pushed before the body loaded",
+    "the self-test takes the pad off the menu (issue #599) consumes and drops every gamepad action except Back while the pane is open",
+    "the self-test takes the pad off the menu (issue #599) the KEYBOARD is untouched: Tab order and Enter still reach Copy Report"
+  ],
   "why": "Issue #1013. The open stops starting the load, so the self-test's body is never built and the pane is blank. This is the negative control for THE CONTROL case and for every adapted case that awaits the body: without it, the absence cases could pass because nothing is ever built at all."
 }

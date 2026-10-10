@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.selftest.test.ts"
   ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) a load that fails is reported in the pane, and the next open builds the body in its place"
+  ],
   "why": "Issue #1013. The self-test's load loses its rejection handler, so a failed load (offline, or a chunk name a deploy made stale) leaves the pane blank and becomes an unhandled rejection, which `boot.ts` treats as the match failing whenever a session exists. The criterion is that the failure is reported in the pane."
 }

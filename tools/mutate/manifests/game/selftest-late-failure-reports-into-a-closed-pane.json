@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.selftest.test.ts"
   ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) a load that fails after the pane closed reports nothing into it"
+  ],
   "why": "Issue #1013. The failure path stops checking its generation, so a load that fails after the pane closed writes its failure line into the closed pane, where the next visit finds it beside (or instead of) the body."
 }
