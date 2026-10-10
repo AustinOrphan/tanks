@@ -41,6 +41,8 @@ measuring the file it points to.
 
 Every GIF reference in `README.md` and in this page, written as a Markdown image or an `<img>`
 tag, must be a relative path to a manifest output, with alt text equal to the manifest's `alt`.
+The path is relative to the document: `README.md` writes `docs/media/showcase/<name>.gif`, and
+this page writes `media/showcase/<name>.gif`.
 Alt text is compared as GitHub shows it, so a Markdown image may escape a character such as `\*`.
 Each clip must be referenced from the document its `placement` names. An absolute URL, including
 a link into the `pr-media` branch, fails. A reference inside a code block counts too.

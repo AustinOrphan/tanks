@@ -824,4 +824,9 @@ describe('showcase gifFacts (issue #1062)', () => {
     expect(() => gifFacts(whole.subarray(0, 10))).toThrow(/shorter than its logical screen/);
     expect(() => gifFacts(Buffer.from('PNG...'))).toThrow(/invalid GIF signature/);
   });
+
+  it('throws on a well-formed GIF with no frames rather than reporting zeros', () => {
+    // The block parser accepts it and reports 0 frames in 0 cs, which every timing rule passes.
+    expect(() => gifFacts(buildGif({ delays: [] }))).toThrow(/no image frames/);
+  });
 });
