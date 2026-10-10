@@ -8,5 +8,8 @@
     "src/presentation/identity.test.ts",
     "src/render/entities.test.ts"
   ],
-  "why": "RING PAIR, ONE COLOUR-VISION TYPE family (issue #1056). Moves High contrast ring 1 four levels in red (#8ffd00 to #8bfd00): ring0 vs ring1 under tritan falls from 11.26 to 10.92, under the floor of 11, so only the tritan row of the colour-vision test fails. In normal vision the tightest pair RISES slightly (18.74 to 18.94, still under its recorded ceiling of 19.24), protan and deutan are unchanged within 0.01, and ring 1 sits 17.82 from the nearest paint. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056)."
+  "why": "RING PAIR, ONE COLOUR-VISION TYPE family (issue #1056). Moves High contrast ring 1 four levels in red (#8ffd00 to #8bfd00): ring0 vs ring1 under tritan falls from 11.26 to 10.92, under the floor of 11, so only the tritan row of the colour-vision test fails. In normal vision the tightest pair RISES slightly (18.74 to 18.94, still under its recorded ceiling of 19.24), protan and deutan are unchanged within 0.01, and ring 1 sits 17.82 from the nearest paint. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: floors, composited over the felt (issue #1056) high contrast: every ring pair clears 11 under tritan"
+  ]
 }

@@ -188,10 +188,11 @@ export const OWNER_PALETTES: Readonly<Record<OwnerPaletteId, OwnerPalette>> = {
    * | teams | 35.98 A-B | 37.90 A-C | 18.90 A-C | 31.93 A-B |
    *
    * Ground contrast: rings 2.91 / 2.22 / 1.59 / 1.19; teams 1.47 / 3.42 / 3.80. Classic
-   * predates the 3:1 and colour-vision floors and is held only to the ones #586's AC2 names
-   * for both palettes: 38.82 from the felt (ring0), rings 17.09 from the roster (ring0 vs
-   * teal) and 19.41 from the placeholder, teams 33.36 from the player hull and 25.54 from the
-   * placeholder. Its tightest paint pair, ring1 vs orange at 1.17, is tolerated by #586.
+   * predates the 3:1 and colour-vision floors and is not held to them. It is held to the
+   * floors both palettes share: 38.82 from the felt (ring0), rings 17.09 from the roster
+   * (ring0 vs teal) and 19.41 from the placeholder (ring3), teams 33.36 from the player hull
+   * (team B) and 25.54 from the placeholder (team A), team pairs 35.98 against TEAM_FLOOR.
+   * Its tightest paint pair, ring1 vs orange at 1.17, is tolerated by #586.
    */
   classic: { rings: IDENTITY_RING_COLORS, teams: TEAM_COLORS },
   /**

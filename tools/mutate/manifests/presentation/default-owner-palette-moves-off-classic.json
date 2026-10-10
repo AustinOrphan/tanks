@@ -7,5 +7,8 @@
   "tests": [
     "src/presentation/identity.test.ts"
   ],
-  "why": "The default owner palette is what a player who never opens Settings is given once the setting child of #586 lands, so moving it off Classic would recolour every existing player's rings and team colours. Nothing reads it yet (issue #1056), so the catalogue test is its only guard."
+  "why": "The default owner palette is what a player who never opens Settings is given once the setting child of #586 lands, so moving it off Classic would recolour every existing player's rings and team colours. Nothing reads it yet (issue #1056), so the catalogue test is its only guard.",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) offers Classic and High contrast, Classic first and the default, each labelled and complete"
+  ]
 }

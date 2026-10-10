@@ -8,5 +8,8 @@
     "src/presentation/identity.test.ts",
     "src/render/entities.test.ts"
   ],
-  "why": "ROSTER OR PLACEHOLDER family (issue #1056). Moves High contrast ring 3 toward the yellow roster tank #E7C928: composited it lands 14.83 from that hull, under OWNER_FLOOR 15, which only entities.test.ts's measured ring sweep sees -- the hex-inequality sweep it replaced passed any colour not byte-equal to a roster hex. The ring pairs drop but stay clear (normal 18.64, protan 13.42, deutan 12.56, tritan 11.26) and keep their names. No High contrast colour can fail the placeholder half alone: on a step-3 RGB grid (636,056 colours; 113,934 reach 3:1 and sit 30 from the felt), the closest of those to #c23b8f is 24.87, so this family's control is the roster half. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056)."
+  "why": "ROSTER OR PLACEHOLDER family (issue #1056). Moves High contrast ring 3 toward the yellow roster tank #E7C928: composited it lands 14.83 from that hull, under OWNER_FLOOR 15, which only entities.test.ts's measured ring sweep sees -- the hex-inequality sweep it replaced passed any colour not byte-equal to a roster hex. The ring pairs drop but stay clear (normal 18.64, protan 13.42, deutan 12.56, tritan 11.26) and keep their names. No High contrast colour can fail the placeholder half alone: on a step-3 RGB grid (636,056 colours; 113,934 reach 3:1 and sit 30 from the felt), the closest of those to #c23b8f is 24.87, so this family's control is the roster half. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "player identity: ring and shell tint the high-contrast ring set sits at least OWNER_FLOOR from every roster kind and the rendered placeholder"
+  ]
 }

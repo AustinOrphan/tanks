@@ -8,5 +8,8 @@
     "src/presentation/identity.test.ts",
     "src/render/entities.test.ts"
   ],
-  "why": "TEAM PAIR, NORMAL VISION (issue #1056). Moves High contrast team A from the cyan it shares with ring 0 to the lilac #dcc8ff: team A vs team C falls from 31.52 to 21.72, under TEAM_FLOOR 25, which entities.test.ts holds both palettes' team sets to. Under tritan the tightest pair stays team A vs team B at 17.63, clear of 17; ground contrast 3.35, paints 17.79, and the player hull 27.94. Anchored on the start of the teams line because the same hex also opens the rings line. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056)."
+  "why": "TEAM PAIR, NORMAL VISION (issue #1056). Moves High contrast team A from the cyan it shares with ring 0 to the lilac #dcc8ff: team A vs team C falls from 31.52 to 21.72, under TEAM_FLOOR 25, which entities.test.ts holds both palettes' team sets to. Under tritan the tightest pair stays team A vs team B at 17.63, clear of 17; ground contrast 3.35, paints 17.79, and the player hull 27.94. Anchored on the start of the teams line because the same hex also opens the rings line. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "player identity: ring and shell tint team colours, both owner palettes: exactly 3 hues, measurably clear of each other, the player hull and the placeholder"
+  ]
 }

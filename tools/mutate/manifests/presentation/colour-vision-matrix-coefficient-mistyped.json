@@ -7,5 +7,10 @@
   "tests": [
     "src/presentation/colour-distance.test.ts"
   ],
-  "why": "A one-digit typo in a transcribed matrix (protan row 2, 0.786281 to 0.886281). Every Machado row sums to 1, which is what keeps a neutral grey neutral; the typo breaks that sum and tints the greys toward green under protan, which the all-256-greys test catches. Transcription is the realistic way this helper goes wrong."
+  "why": "A one-digit typo in a transcribed matrix (protan row 2, 0.786281 to 0.886281). Every Machado row sums to 1, which is what keeps a neutral grey neutral; the typo breaks that sum and tints the greys toward green under protan, which the all-256-greys test catches. Transcription is the realistic way this helper goes wrong.",
+  "killedBy": [
+    "colour-vision simulation (Machado 2009, severity 1) leaves every neutral grey unchanged under all three types, within one level",
+    "colour-vision simulation (Machado 2009, severity 1) pins one colour under each type, so a swapped matrix fails",
+    "colour-vision simulation (Machado 2009, severity 1) clamps a channel the matrix pushes outside [0, 1]"
+  ]
 }

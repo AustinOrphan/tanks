@@ -7,5 +7,10 @@
   "tests": [
     "src/presentation/colour-distance.test.ts"
   ],
-  "why": "Issue #1056's required control: swapping two of the three Machado matrices must change a pinned result. Protan and deutan are the pair most easily confused, and both are plausible-looking, so only known values can tell them apart: #d64545 reads #918441 under deutan and #6d6544 under protan, and the paint shop's Red and Green collapse to 6.75 under deutan but stay 24.47 apart under protan. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056)."
+  "why": "Issue #1056's required control: swapping two of the three Machado matrices must change a pinned result. Protan and deutan are the pair most easily confused, and both are plausible-looking, so only known values can tell them apart: #d64545 reads #918441 under deutan and #6d6544 under protan, and the paint shop's Red and Green collapse to 6.75 under deutan but stay 24.47 apart under protan. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "colour-vision simulation (Machado 2009, severity 1) collapses a red and a green that normal vision separates by far more than 20, under deutan",
+    "colour-vision simulation (Machado 2009, severity 1) pins one colour under each type, so a swapped matrix fails",
+    "colour-vision simulation (Machado 2009, severity 1) clamps a channel the matrix pushes outside [0, 1]"
+  ]
 }

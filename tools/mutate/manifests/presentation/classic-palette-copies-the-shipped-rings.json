@@ -7,5 +7,8 @@
   "tests": [
     "src/presentation/identity.test.ts"
   ],
-  "why": "Classic in the catalogue drifts from the arrays the game draws (issue #1056). The palette holds IDENTITY_RING_COLORS by reference so that a player who picks \"Classic\" is given the shipped look by construction; a copy can be edited apart from it, as here, where ring 3 is one level off. The literal pin of IDENTITY_RING_COLORS still passes because the shipped array did not move, so only the identity half of the test (toBe, not toEqual) catches it."
+  "why": "Classic in the catalogue drifts from the arrays the game draws (issue #1056). The palette holds IDENTITY_RING_COLORS by reference so that a player who picks \"Classic\" is given the shipped look by construction; a copy can be edited apart from it, as here, where ring 3 is one level off. The literal pin of IDENTITY_RING_COLORS still passes because the shipped array did not move, so only the identity half of the test (toBe, not toEqual) catches it.",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) Classic is the shipped seven hexes, written out, and the very arrays every consumer reads"
+  ]
 }
