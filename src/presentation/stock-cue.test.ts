@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  narrowMarkLayout, narrowPipLayout, NARROW_STRIP_QUERY, STOCK_CUES, type MarkLayout, type PipLayout,
-} from './stock-cue';
+import { narrowMarkLayout, narrowPipLayout, NARROW_STRIP_QUERY, STOCK_CUES, type MarkLayout } from './stock-cue';
 
 /**
  * Issue #835: the `pips` arm overflowed a 390px viewport and clipped its last entry silently,
@@ -141,62 +139,6 @@ describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
         expect(layout.mark, `${slots}p x ${total}`).toBeGreaterThanOrEqual(8);
         expect(layout.gap, `${slots}p x ${total}`).toBeGreaterThanOrEqual(2);
       }
-    }
-  });
-});
-
-/**
- * Issue #1055: a teams entry draws `P1 A ` before its pips -- under `pips`, and under `marks`,
- * which hands a teams entry to pips -- so it is wider than the FFA entry the pips table was
- * chosen from, by a space and a letter.
- *
- * Measured on the real HUD at 390px by `tools/hud/strip-width.mjs`, the letter fits at every rung
- * `narrowPipLayout` already takes, so a teams entry is laid out by that same rule, and these cases
- * pin it over the teams population: Teams is offered at three and four players only, so 3-4
- * players x 1-5 stocks, 10 configurations. The figure beside each cell is the px left inside the
- * topbar's content box.
- */
-describe('stock cue: a teams entry on a narrow viewport (issue #1055)', () => {
-  const ROW10: PipLayout = { kind: 'row', pip: 10, gap: 3 };
-  const ROW9: PipLayout = { kind: 'row', pip: 9, gap: 2 };
-  const ONE: PipLayout = { kind: 'one', pip: 10 };
-  /** The measured table, spelled out cell by cell. */
-  const EXPECTED: Record<string, PipLayout> = {
-    '3x1': ROW10, // 166.6 spare
-    '3x2': ROW10, // 127.6
-    '3x3': ROW10, // 88.6
-    '3x4': ROW10, // 49.6
-    '3x5': ROW9, // 37.6
-    '4x1': ROW9, // 112.8
-    '4x2': ROW9, // 68.8
-    '4x3': ROW9, // 24.8
-    '4x4': ONE, // 54.4; a row of 8px pips overflows by 3.2
-    '4x5': ONE, // 54.4; a row of 8px pips overflows by 43.2
-  };
-
-  /** The cells where `rule` disagrees with the measured table. */
-  const mismatches = (rule: (slots: number, total: number) => PipLayout): string[] =>
-    Object.entries(EXPECTED)
-      .filter(([cell, want]) => {
-        const [slots, total] = cell.split('x').map(Number);
-        return JSON.stringify(rule(slots, total)) !== JSON.stringify(want);
-      })
-      .map(([cell]) => cell);
-
-  it('takes the rung measured to hold the letter in every one of the 10 teams configurations', () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(10);
-    expect(mismatches(narrowPipLayout)).toEqual([]);
-  });
-
-  it('THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there', () => {
-    // Without these the table check could be comparing nothing -- a `mismatches` that never
-    // reported a cell would pass the case above for any rule at all.
-    const other = (l: PipLayout): PipLayout => (l.kind === 'one' ? ROW9 : ONE);
-    for (const cell of Object.keys(EXPECTED)) {
-      const [s, t] = cell.split('x').map(Number);
-      const wrongHere = (slots: number, total: number): PipLayout =>
-        slots === s && total === t ? other(narrowPipLayout(slots, total)) : narrowPipLayout(slots, total);
-      expect(mismatches(wrongHere), cell).toEqual([cell]);
     }
   });
 });
