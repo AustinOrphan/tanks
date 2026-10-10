@@ -3,7 +3,7 @@ import {
   ENEMY_ROLE_CUES, isEnemyRoleCue, weaponLever, mineLever,
   weaponShapeFor, mineShapeFor,
 } from './enemy-role';
-import { configFor } from '../sim/config';
+import { configFor, hasAbility, TankAbility } from '../sim/config';
 import { TANK_KINDS } from '../sim/config/validate';
 
 const ENEMIES = TANK_KINDS.filter((k) => k !== 'player');
@@ -169,61 +169,78 @@ describe('enemy role cues: the mapping is the number the player needs', () => {
 });
 
 describe('enemy role cues: what the grammar can and cannot separate (issue #357)', () => {
-  const signature = (kind: (typeof ENEMIES)[number]) => {
-    const c = configFor(kind);
-    return `${weaponShapeFor('girth', c.weapon.bulletType).barrelGirth}`
-      + `|${mineShapeFor('deck', c.mineCapacity).deckBar}`;
+  type Kind = (typeof ENEMIES)[number];
+  /**
+   * The mine load `makeTank` (entities.ts) hands `mineShapeFor`: none for a kind without
+   * MINE_LAYER, otherwise its roster budget (issue #1059). Restated here because presentation
+   * may not import render, so this file pins what the MAPPING does with that load; the drawn
+   * count is pinned against the real gate in entities.test.ts ('the mine cue follows
+   * MINE_LAYER, not mine capacity'), which is where a drift between the two fails.
+   */
+  const mineLoad = (kind: Kind): number =>
+    hasAbility(kind, TankAbility.MINE_LAYER) ? configFor(kind).mineCapacity : 0;
+  /** The raw roster capacity: the misreading the retired four-group ceiling came from. */
+  const rawCapacity = (kind: Kind): number => configFor(kind).mineCapacity;
+
+  type Lever = 'girth' | 'flare' | 'dome' | 'hull';
+  const weaponOf = (kind: Kind, lever: Lever = 'girth'): string =>
+    Object.values(weaponShapeFor(lever, configFor(kind).weapon.bulletType)).join(',');
+  const minesOf = (kind: Kind, load: (k: Kind) => number = mineLoad): string =>
+    `${mineShapeFor('deck', load(kind)).deckBar}`;
+  const signature = (kind: Kind, load = mineLoad, lever: Lever = 'girth'): string =>
+    `${weaponOf(kind, lever)}|${minesOf(kind, load)}`;
+
+  /** The roster grouped by `sig`: how many groups, and which kinds share one. */
+  const groupsOf = (sig: (k: Kind) => string): { groups: number; collided: string[][] } => {
+    const groups = new Map<string, string[]>();
+    for (const kind of ENEMIES) groups.set(sig(kind), [...(groups.get(sig(kind)) ?? []), kind]);
+    const all = [...groups.values()].map((ks) => [...ks].sort());
+    return { groups: all.length, collided: all.filter((ks) => ks.length > 1).sort() };
   };
 
-  it('separates the roster into FOUR groups, not six -- and that is the ceiling, not a bug', () => {
-    // The finding this whole vocabulary is shaped by. Grouping the roster by anything a STILL
-    // FRAME can encode does not reach six: brown and grey carry the same projectile, the same
-    // bounce count and the same mine load, and so do teal and green. They differ only in
-    // movement speed, rotation speed, fire rate and AI behaviour -- every one of them temporal.
-    //
-    // Asserted as a POPULATION so the claim cannot rot quietly: if a future roster change makes
-    // one of those pairs differ in something showable, this fails and the ceiling is wrong.
-    const groups = new Map<string, string[]>();
-    for (const kind of ENEMIES) {
-      const sig = signature(kind);
-      groups.set(sig, [...(groups.get(sig) ?? []), kind]);
-    }
-    expect(groups.size, 'the number of visually separable groups').toBe(4);
-
-    const collided = [...groups.values()].filter((ks) => ks.length > 1).map((ks) => ks.sort());
-    expect(collided.sort(), 'the pairs a static cue cannot separate').toEqual([
-      ['brown', 'grey'],
-      ['green', 'teal'],
-    ]);
+  it('separates the six enemy kinds once mine load reads MINE_LAYER -- population: 6 enemy kinds, no pair collides', () => {
+    // Weapon class and mine load, the two facts the levers encode, give every enemy kind its
+    // own signature: brown (standard shell, no mines), grey (standard, two), yellow (standard,
+    // four), teal (ricochet, two), green (ricochet, none) and olive (rocket, none). Brown and
+    // green carry a capacity of 2 but hold no MINE_LAYER, and the simulation gates every mine
+    // on the ability, so they lay none.
+    expect(groupsOf((k) => signature(k)), 'the groups the grammar separates').toEqual({
+      groups: 6, collided: [],
+    });
+    // The negative fixture: keyed on the raw capacity, brown reads as grey and green as teal,
+    // and the count falls to the four the retired ceiling claimed as the most a still frame
+    // could separate.
+    expect(groupsOf((k) => signature(k, rawCapacity)), 'keyed on raw capacity').toEqual({
+      groups: 4, collided: [['brown', 'grey'], ['green', 'teal']],
+    });
   });
 
-  it('does not widen the ceiling when the hull lever joins the grammar (issue #831)', () => {
-    // A seventh lever is a seventh way of saying the same three weapon states, not a seventh
-    // group. Hull shape encodes WEAPON CLASS, which brown and grey already share and teal and
-    // green already share, so adding it to the signature must leave the count at four.
-    //
-    // This is the check that a new lever cannot quietly widen the ceiling by being keyed on
-    // something it should not be: if `hull` were derived from the kind name rather than the
-    // resolved weapon, this would read six and the ceiling argument would silently become
-    // false while every other test still passed.
-    const withHull = (kind: (typeof ENEMIES)[number]) => {
-      const c = configFor(kind);
-      const h = weaponShapeFor('hull', c.weapon.bulletType);
-      return `${signature(kind)}|${h.hullCorner}|${h.hullNose}`;
-    };
-    const groups = new Set(ENEMIES.map(withHull));
-    expect(groups.size, 'the hull lever must not add a group').toBe(4);
+  it('gives every weapon lever the same three groups, the hull included, so mine load is what reaches six (issue #831) -- population: 4 weapon levers x 6 enemy kinds', () => {
+    // A seventh lever is a seventh way of saying the same three weapon states, not a new group.
+    // Each weapon lever, hull shape included, encodes WEAPON CLASS, so on its own it must group
+    // the roster exactly as the bullet type does: brown, grey and yellow fire the standard
+    // shell, green and teal the ricochet rocket, olive the fast one. With mine load beside it,
+    // each reaches the same six. A lever keyed on the kind name rather than the resolved weapon
+    // would read six on its own, and a lever that lost a state would read two.
+    for (const lever of ['girth', 'flare', 'dome', 'hull'] as const) {
+      expect(groupsOf((k) => weaponOf(k, lever)), `${lever} alone`).toEqual({
+        groups: 3, collided: [['brown', 'grey', 'yellow'], ['green', 'teal']],
+      });
+      expect(groupsOf((k) => signature(k, mineLoad, lever)).groups, `${lever} with mine load`).toBe(6);
+    }
   });
 
-  it('gives the two unique kinds signatures nothing else shares', () => {
-    // Olive is the only zero-bounce rocket and the only kind that lays no mines; yellow is the
-    // only one carrying four. They are what the grammar buys over hue alone, so they are pinned
-    // by name rather than left to the count above.
-    expect(signature('olive'), 'olive is no longer unique').toBe('0.78|0');
-    expect(signature('yellow'), 'yellow is no longer unique').toBe('1|0.62');
-    for (const other of ENEMIES.filter((k) => k !== 'olive' && k !== 'yellow')) {
-      expect(signature(other), `${other} collides with a unique kind`).not.toBe('0.78|0');
-      expect(signature(other), `${other} collides with a unique kind`).not.toBe('1|0.62');
-    }
+  it('separates olive by weapon class alone and yellow by mine load alone; the other four need both levers', () => {
+    // Olive is the only zero-bounce rocket and yellow the only kind carrying four mines, so one
+    // lever already sets each apart. Brown, grey, teal and green each share their weapon class
+    // with one kind and their mine load with another, and those four are what `both`, two
+    // levers on one silhouette, exists to separate.
+    const alone = (sig: (k: Kind) => string): string[] =>
+      ENEMIES.filter((k) => ENEMIES.filter((o) => sig(o) === sig(k)).length === 1);
+    expect(alone((k) => weaponOf(k)), 'kinds weapon class alone separates').toEqual(['olive']);
+    expect(alone((k) => minesOf(k)), 'kinds mine load alone separates').toEqual(['yellow']);
+    // The negative fixture: on the raw capacity olive stands alone on mine load too, the
+    // reading that called it the only kind that lays no mines while brown and green lay none.
+    expect(alone((k) => minesOf(k, rawCapacity)), 'keyed on raw capacity').toEqual(['olive', 'yellow']);
   });
 });
