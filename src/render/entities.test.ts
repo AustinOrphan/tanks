@@ -2990,7 +2990,7 @@ describe('entity views — a stock respawn snaps to the selected spawn point (#2
   });
 });
 
-// Role-cue readers shared by the three describes below, each reading ONE tank's view.
+// Role-cue readers shared by the describes below, each reading ONE tank's view.
 
 /** The root group of tank `id`, found from its barrel. */
 function rootOf(views: ReturnType<typeof createEntityViews>, id: number): THREE.Object3D {
@@ -3037,10 +3037,12 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
   };
 
   it('draws no mine block for a tank whose session took its mines away', () => {
-    // THE CASE THIS EXISTS FOR: `?dev=1&pp1Roles=1` stamps `mineCap: 0` on Brown, Teal and
-    // Green (issue #358) while their roster entries still read 2. A cue keyed on the kind
-    // would draw a mine block on a tank that cannot lay one -- the cue contradicting the one
-    // thing it exists to report. Keyed on the tank, the deck is clean.
+    // THE CASE THIS EXISTS FOR: `?dev=1&pp1Roles=1` stamps `mineCap: 0` on Teal (issue #358)
+    // while its roster entry still reads 2, and Teal holds MINE_LAYER, so only the budget can
+    // clear its deck. (The arm also zeroes Brown, Olive and Green, which the MINE_LAYER gate
+    // already gives no block.) A cue keyed on the roster capacity would draw a mine block on a
+    // tank that cannot lay one -- the cue contradicting the one thing it exists to report.
+    // Keyed on the tank's own budget, inside the gate, the deck is clean.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene, undefined, null, null, null, 'riser');
     const w = worldWith('teal', 0);

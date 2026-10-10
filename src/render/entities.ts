@@ -932,6 +932,8 @@ export function createEntityViews(
     // the block inside the gate but cannot open it (issue #1059). Keyed on the ability, never a
     // kind name, so re-arming a kind in tank-defs.json moves its cue. The rule lives here rather
     // than in `mineShapeFor` because presentation may name the simulation only as types.
+    // `Tank.disarmed` (the dev sandbox's scenery) is deliberately not read: like the flare,
+    // the cue reports what the tank is armed with, not whether this session lets it act.
     const mineLoad = hasAbility(kind, TankAbility.MINE_LAYER) ? (mineCap ?? cfg.mineCapacity) : 0;
     const mines = mineShapeFor(mineLever(enemyRole), mineLoad);
     const girth = weapon.barrelGirth ?? 1;

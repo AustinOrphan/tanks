@@ -236,8 +236,8 @@ describe('enemy role cues: what the grammar can and cannot separate (issue #357)
   it('separates olive by weapon class alone and yellow by mine load alone; the other four need both levers', () => {
     // Olive is the only zero-bounce rocket and yellow the only kind carrying four mines, so one
     // lever already sets each apart. Brown, grey, teal and green each share their weapon class
-    // with one kind and their mine load with another, and those four are what `both`, two
-    // levers on one silhouette, exists to separate.
+    // with at least one other kind and their mine load with at least one other, and those four
+    // are what `both`, two levers on one silhouette, exists to separate.
     const alone = (sig: (k: Kind) => string): string[] =>
       ENEMIES.filter((k) => ENEMIES.filter((o) => sig(o) === sig(k)).length === 1);
     expect(alone((k) => weaponOf(k)), 'kinds weapon class alone separates').toEqual(['olive']);
