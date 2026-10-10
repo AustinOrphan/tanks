@@ -158,11 +158,12 @@ export function structuralFailures(arena: Arena): string[] {
     //
     // STATIONARY bankers only, and that restriction is measured, not assumed. Applied to
     // every banking profile it failed two shipped arenas when it was written: arena-01, as
-    // it stood before the level-1 edit (issue #1010), where the grey at (13, 5) banked onto
-    // the spawn off 1 wall and the teal at (11, 7) off 2; and arena-04, whose two teals
-    // still do the same. Those boards played fine because grey and teal are mobile -- they
-    // leave the spawn geometry within about a second, so the line they hold at tick 0 is
-    // a curiosity. A stationary gunner never leaves, so it holds that line for the whole
+    // it stood before the level-1 edit (issue #1010), where the grey at (13, 5) and the teal
+    // at (11, 7) each had a one-bounce bank onto the spawn (the failure message printed each
+    // shell's ricochet count, 1 and 2, not a count of walls on the path); and arena-04, whose
+    // two teals still do the same. Those boards played fine because grey and teal are mobile
+    // -- they leave the spawn geometry within about a second, so the line they hold at tick 0
+    // is a curiosity. A stationary gunner never leaves, so it holds that line for the whole
     // level and on every respawn. That difference is the whole rule; widening it to
     // mobile tanks would reject levels the game has shipped.
     //
