@@ -121,6 +121,8 @@ describe('arena ids out of storage cannot crash the launch path', () => {
   // MODEL-level test in versus-setup.test.ts covers that branch through the injected
   // predicate instead. It becomes reachable here once #271/#272/#273 author dedicated
   // two-, three- and four-player arenas, which is precisely why the guard exists now.
+  // (Issue #983 added a different way for the store to refuse a real id -- a campaign board
+  // the save has not unlocked -- tested in the describe at the end of this file.)
 
   it('keeps an arena the stored (players, mode) really supports', () => {
     // Non-vacuity for the two above: the repair must not simply flatten every id to random.
