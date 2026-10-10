@@ -55,8 +55,8 @@ export const STOCK_CUE_MS = 700;
 
 /**
  * How big a pip may be, for a strip of `slots` entries each holding `total` stocks, on a
- * viewport too narrow to show them at full size -- or `null` when no legible size fits and the
- * arm must fall back to the shipped digit.
+ * viewport too narrow to show them at full size -- or the one-pip fallback when no legible size
+ * fits (see `PipLayout`).
  *
  * THE ARM OVERFLOWED A PHONE AND THE OVERFLOW WAS SILENT (issue #835). The strip is a flex row
  * of `white-space: nowrap` entries with no wrapping or scrolling, so at four players the last
@@ -68,6 +68,9 @@ export const STOCK_CUE_MS = 700;
  * 261.1px for the four-player three-stock strip where the page reads 345px, so the surrounding
  * topbar is 83.9px, and the issue's 338px budget is 254.1px in harness terms -- where 261.1 is
  * duly 7px over, which is what makes the calibration a calibration rather than a fudge.
+ * (That harness, a bare strip against 254.1px, had drifted from the page by issue #1055 and now
+ * measures the real HUD instead; every rung this rule takes still fits there, the tightest being
+ * four players at three stocks with 9.9px to spare.)
  *
  *   slots  stocks   10px/3px   largest that fits
  *     2     3-5       fits        10/3
@@ -87,6 +90,35 @@ export const STOCK_CUE_MS = 700;
  *
  * Only consulted on a narrow viewport. At desktop widths the strip has room and every arm draws
  * at its full size, which is where the #230 comparison is mostly read.
+ *
+ * A TEAMS ENTRY IS LAID OUT BY THIS SAME RULE (issue #1055). It draws `P1 A ` before its pips,
+ * under `pips` and under `marks` (which hands a teams entry to pips), so it carries a space and a
+ * letter the table above never measured. Measured on the real HUD at a 390px viewport
+ * (`tools/hud/strip-width.mjs`), lettered A, B, A, B, the widest split: the letter fits at every
+ * rung this rule already takes, so a teams entry needs no rule of its own. Spare is the room left
+ * inside the topbar's content box, which ends at 380px. Teams is offered at three and four
+ * players only, so these 10 configurations are the whole population:
+ *
+ *   slots  stocks        rung   strip px   spare px
+ *     3      1          10/3      163.2      166.6
+ *     3      2          10/3      202.2      127.6
+ *     3      3          10/3      241.2       88.6
+ *     3      4          10/3      280.2       49.6
+ *     3      5           9/2      292.2       37.6
+ *     4      1           9/2      217.0      112.8
+ *     4      2           9/2      261.0       68.8
+ *     4      3           9/2      305.0       24.8
+ *     4      4     one+digit      275.4       54.4
+ *     4      5     one+digit      275.4       54.4
+ *
+ * The one-pip fallback stays at four players at four and five stocks. It fits, with 54.4px to
+ * spare; #1055 leaves a rung that fits unchanged; and this rule is shared with FFA, where every
+ * row at the 8px floor overflows four players at four stocks (8/2 by 18.1px, 8/1 by 6.1px). For
+ * teams alone, an 8px row with a 1px gap would fit 4x4 with 8.8px to spare, while an 8/2 row
+ * overflows it by 3.2px; at 4x5 every 8px row overflows (8/2 by 43.2px, 8/1 by 27.2px). Those
+ * rows were measured on the same page by drawing a full row in place of each fallback.
+ * Everything here holds at the default UI scale (100%) only; the strip is under the player's UI
+ * scale since #1048, so 125% and 150% need measuring of their own.
  */
 export function narrowPipLayout(slots: number, total: number): PipLayout {
   if (slots <= 2) return { kind: 'row', pip: 10, gap: 3 };
@@ -110,9 +142,10 @@ export function narrowPipLayout(slots: number, total: number): PipLayout {
  * that cannot burst is not a degraded arm, it is the absence of one, and #230 would have been
  * ranking a blank.
  *
- * One full-size pip plus the digit measures 205.1px at four players against the 254.1px budget,
- * 49px of room, so the glyph does not even need shrinking to fit. The count stays exact, the
- * shape stays present, and the cue keeps its target.
+ * Measured on the real HUD at 390px (issue #1055), one full-size pip plus the digit leaves 39.4px
+ * inside the topbar's content box at four FFA players and 54.4px at four teams, so the glyph does
+ * not even need shrinking to fit. The count stays exact, the shape stays present, and the cue
+ * keeps its target.
  */
 export type PipLayout =
   | { kind: 'row'; pip: number; gap: number }
@@ -124,10 +157,11 @@ export type PipLayout =
  * fallback (issue #1021) -- the `marks` analogue of `narrowPipLayout` above.
  *
  * MEASURED, NOT DERIVED: real Chromium layout at a 390px viewport against the real stylesheet,
- * on the page and budget `tools/hud/strip-width.mjs` uses for the pips table (254.1px, the same
- * calibration). The full-size mark is `0.62em` of the strip's `1rem`, 9.9px at the default UI
- * scale, with a 2px gap. Figures are px over budget, negative is spare; the closest row of
- * each group is the one shown:
+ * on the page and budget `tools/hud/strip-width.mjs` then used for the pips table (254.1px, the
+ * same calibration; issue #1055 replaced that harness with a measurement of the real HUD, where
+ * every layout this rule takes still fits). The full-size mark is `0.62em` of the strip's `1rem`,
+ * 9.9px at the default UI scale, with a 2px gap. Figures are px over budget, negative is spare;
+ * the closest row of each group is the one shown:
  *
  *   slots  stocks   full/2px    9/2     8/2     8/1    one+digit
  *     2     1-5      -97.2

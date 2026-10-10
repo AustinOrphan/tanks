@@ -1,0 +1,16 @@
+{
+  "id": "stock-pips-fallback-pip-loses-the-cue",
+  "file": "src/game/hud.ts",
+  "find": "        if (running !== null) cueEl(pip);\n        pips.appendChild(pip);",
+  "replace": "        pips.appendChild(pip);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The one-pip fallback stops carrying the stock-loss cue: four players at four or five stocks on a phone lose a stock and nothing swells or bursts, because the single pip is the only element the cue could animate -- the defect #838 rejected the bare digit for. A teams entry reaches this branch at exactly those two cells (issue #1055 measured the fallback fitting there with the letter, 54.4px to spare at UI scale 100%, so it keeps the rung), so the teams cases pin it beside the FFA one; the pip is also the element `.hud--reduced-motion .hud-stock-pip.hud-stock-cue` reaches, so the reduced-motion form loses its target with it.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) pips: a narrow viewport shrinks the pip, and hands back the digit when none fits (#835)",
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) pips: four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) marks: four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target"
+  ]
+}
