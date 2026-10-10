@@ -1,0 +1,15 @@
+{
+  "id": "level-one-brown-moves-to-the-teal-cell",
+  "file": "src/sim/config/data/arenas.json",
+  "find": "        \"......###....B..........###......\",\n        \"......###...............###......\",\n        \".................................\",\n        \".................................\",",
+  "replace": "        \"......###...............###......\",\n        \"......###...............###......\",\n        \".................................\",\n        \"................B................\",",
+  "expect": "killed",
+  "tests": [
+    "src/sim/arena.test.ts"
+  ],
+  "killedBy": [
+    "level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010) keeps the brown at column 13 row 7, world (9, 5): its cell before the edit",
+    "level 1: a lone brown on arena-01, with a bank shot from the player spawn (issue #1010) banks off the faces its notes name: the west destructible block's east face while it stands, then the solid east pillar's west face"
+  ],
+  "why": "Issue #1010's criterion 4 and the notes' bank-shot lesson. This moves level 1's lone brown to the teal's old cell (column 16, row 10), the second cell #1010 named. From the player spawn that cell still has no direct line and a one-bounce bank on intact and breached walls, so the bank-offer check, the composition check, the walls-and-player check and the co-op check all stay green. What changes is the reflector: with walls intact the bank now comes off the solid east pillar, not the west destructible block's east face the notes name, so only the faces check (which reads the bounce from reflectSweep) and the cell pin see it. This is the gap the faces check closes beyond the bank-offer check."
+}

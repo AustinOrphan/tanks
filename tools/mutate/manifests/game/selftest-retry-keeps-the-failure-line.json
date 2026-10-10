@@ -1,0 +1,14 @@
+{
+  "id": "selftest-retry-keeps-the-failure-line",
+  "file": "src/game/hud.ts",
+  "find": "    selfTestListEl.replaceChildren(); // a previous attempt's failure line\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) a load that fails is reported in the pane, and the next open builds the body in its place"
+  ],
+  "why": "Issue #1013. A load no longer clears the container before it starts, so after a failed load the next open builds the body beside the old failure line, and the pane says the self-test could not be loaded while showing it."
+}

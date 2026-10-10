@@ -14,5 +14,5 @@
     "firstAppearanceFor (issue #777) reads a cell through SPAWN_LETTERS, so green is N and a G is grey",
     "README enemy roster is generated, not hand-edited contains exactly one current generated block"
   ],
-  "why": "A raw-character rule, keyed on the kind's initial, instead of the loader's SPAWN_LETTERS map. Green is N because G was grey's first, so this reads every grey cell as green and reports Green in level 1 of the shipped campaign."
+  "why": "A raw-character rule, keyed on the kind's initial, instead of the loader's SPAWN_LETTERS map. Green is N because G was grey's first, so this reads every grey cell as green and reports Green in level 2 of the shipped campaign, where grey first appears (level 1 until issue #1010 left it a lone brown)."
 }

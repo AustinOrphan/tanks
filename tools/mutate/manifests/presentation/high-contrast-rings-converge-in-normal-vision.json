@@ -1,0 +1,16 @@
+{
+  "id": "high-contrast-rings-converge-in-normal-vision",
+  "file": "src/presentation/identity.ts",
+  "find": "0xfdfdbb",
+  "replace": "0xfdfdb4",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "RING PAIR, NORMAL VISION family (issue #1056). Moves High contrast ring 3 seven levels toward ring 1 in blue (#fdfdbb to #fdfdb4): ring1 vs ring3 falls from 18.74 to 17.97, under the floor of 18. The same pair also drops under protan (14.50) and deutan (13.85), both still clear of 11, and ring 3 moves to 17.09 from the yellow roster tank, clear of OWNER_FLOOR 15. Ground contrast, felt and paint figures stay clear and every tightest-pair name holds. The literal pin of High contrast's seven hexes fails too, as it does for every High contrast move; it compares hexes, not figures, so this entry is what shows the floor test can fail. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: floors, composited over the felt (issue #1056) high contrast: every ring pair clears 18 in normal vision",
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out"
+  ]
+}

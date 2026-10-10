@@ -7,8 +7,12 @@
   "tests": [
     "src/presentation/enemy-role.test.ts"
   ],
-  "why": "The zero-bounce arm collapsed onto the standard shell, so olive's rocket wears the same barrel as a shell that bounces. Olive is one of only TWO kinds this grammar separates from the pack at all -- it is the sole zero-bounce, no-mine kind -- so this quietly drops a quarter of what the cue buys while every other tank still looks correct.",
+  "why": "The zero-bounce arm collapsed onto the standard shell, so olive's rocket wears the same barrel as a shell that bounces. Olive is the one kind its weapon class alone separates, and it lays no mines, like brown, so under this mutation it reads as brown and the grammar separates five enemy kinds rather than six (issue #1059) while every other tank still looks correct.",
   "killedBy": [
-    "enemy role cues: the mapping is the number the player needs orders EVERY weapon lever by the bounce budget -- population: all 3 levers x 3 types"
+    "enemy role cues: the mapping is the number the player needs orders EVERY weapon lever by the bounce budget -- population: all 3 levers x 3 types",
+    "enemy role cues: the mapping is the number the player needs agrees with the ROSTER rather than restating it -- every enemy, collars vs ricochetCount",
+    "enemy role cues: what the grammar can and cannot separate (issue #357) separates the six enemy kinds once mine load reads MINE_LAYER -- population: 6 enemy kinds, no pair collides",
+    "enemy role cues: what the grammar can and cannot separate (issue #357) gives every weapon lever the same three groups, the hull included, so mine load is what reaches six (issue #831) -- population: 4 weapon levers x 6 enemy kinds",
+    "enemy role cues: what the grammar can and cannot separate (issue #357) separates olive by weapon class alone and yellow by mine load alone; the other four need both levers"
   ]
 }

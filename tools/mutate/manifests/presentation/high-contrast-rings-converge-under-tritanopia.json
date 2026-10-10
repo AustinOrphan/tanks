@@ -1,0 +1,16 @@
+{
+  "id": "high-contrast-rings-converge-under-tritanopia",
+  "file": "src/presentation/identity.ts",
+  "find": "0x8ffd00",
+  "replace": "0x8bfd00",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "RING PAIR, ONE COLOUR-VISION TYPE family (issue #1056). Moves High contrast ring 1 four levels in red (#8ffd00 to #8bfd00): ring0 vs ring1 under tritan falls from 11.26 to 10.92, under the floor of 11, so of the floor tests only the tritan row of the colour-vision one fails. In normal vision the tightest pair RISES slightly (18.74 to 18.94, still under its recorded ceiling of 19.24), protan and deutan are unchanged within 0.01, and ring 1 sits 17.82 from the nearest paint. The literal pin of High contrast's seven hexes fails too, as it does for every High contrast move; it compares hexes, not figures, so this entry is what shows the floor test can fail. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: floors, composited over the felt (issue #1056) high contrast: every ring pair clears 11 under tritan",
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out"
+  ]
+}

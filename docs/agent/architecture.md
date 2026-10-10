@@ -24,7 +24,8 @@ what it is given.
 **Presentation contracts sit between the application and its projections (issue #473).**
 `src/presentation/` owns the renderer-independent vocabulary that more than one layer
 reads: `identity.ts` (player-slot and team colours, team letters, `resolveOwnerColor`,
-`identityApplies`), `customization.ts` (the hull/accent/skin/spawn-animation catalog and
+`identityApplies`, and the owner palette ids, labels and palettes, which nothing reads yet),
+`customization.ts` (the hull/accent/skin/spawn-animation catalog and
 `skinScroll`), `blocked-fire.ts` (the blocked-fire cue set) and `quality.ts` (the
 render-quality preset ids and the shipped default). It carries no DOM, no Three.js, no
 package, no persistence and no session orchestration, and it may name
@@ -703,8 +704,9 @@ the player spawn" tested `lineOfSight` only, which was the same as "no enemy can
 SHOOT the player spawn" for exactly as long as no stationary enemy could bank.
 There is now a second rule: no STATIONARY banking enemy may hold a ricochet path
 onto the spawn. Restricted to stationary bankers on evidence, not taste — applied
-to every banking profile it rejects shipped arena-01 (grey banks onto the spawn
-off 1 wall, teal off 2) and arena-04's teals. Mobile tanks leave that geometry
+to every banking profile it rejected arena-01 as it stood before the level-1 edit
+(issue #1010: grey banked onto the spawn off 1 wall, teal off 2) and still rejects
+arena-04's teals. Mobile tanks leave that geometry
 within a second; a turret never does. `BANK_SIGHTLINE_ARENA` is the negative
 control, and swapping its one spawn letter for `T` and `B` controls the
 behaviour gate and the weight gate separately.

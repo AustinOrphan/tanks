@@ -2123,7 +2123,7 @@ export function startGameWith(
   }
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
-  // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
+  // per arena (2 in ARENA_01, 5 in ARENA_02). Every world rebuild recomputes it and
   // rebinds the director, or the player's own cannon scores as an enemy's.
   let playerId = world.tanks.find((t) => t.kind === 'player')?.id;
   /**

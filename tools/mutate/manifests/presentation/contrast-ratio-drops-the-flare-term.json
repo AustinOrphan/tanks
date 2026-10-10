@@ -1,0 +1,14 @@
+{
+  "id": "contrast-ratio-drops-the-flare-term",
+  "file": "src/presentation/colour-distance.ts",
+  "find": "return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);",
+  "replace": "return Math.max(la, lb) / Math.min(la, lb);",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/colour-distance.test.ts"
+  ],
+  "why": "WCAG's 0.05 term models ambient flare and is what bounds the ratio at 21. Without it black against white divides by zero (Infinity) and #777777 on white reads 5.42 instead of 4.48 -- a mid-grey that fails the 4.5 text floor would pass it, and the High contrast 3:1 floor would be measured on an inflated scale. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "WCAG contrast ratio is 21 for black against white, 1 for a colour against itself, and the same either way round"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "selftest-capture-skips-the-body-wait",
+  "file": "tools/screens/states.mjs",
+  "find": "      { waitVisible: '.hud-selftest-pad' },\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "the screen-state catalogue waits for the self-test body to be built before checking its empty state is gone (issue #1013)"
+  ],
+  "why": "Issue #1013. The Controller Self-Test screen state stops waiting for a built pad row. Its body now loads when the pane opens, and `waitHidden` in `tools/screens/steps.mjs` passes for an element that does not exist, so the empty-state wait can pass before the body is built and the capture then measures selectors that are not there."
+}

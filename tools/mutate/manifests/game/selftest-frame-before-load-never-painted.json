@@ -1,0 +1,14 @@
+{
+  "id": "selftest-frame-before-load-never-painted",
+  "file": "src/game/hud.ts",
+  "find": "        if (selfTestPendingPads !== null) selfTest.update(selfTestPendingPads);\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.selftest.test.ts"
+  ],
+  "killedBy": [
+    "the self-test body loads when its pane first opens (issue #1013) paints the LATEST frame pushed before the body loaded"
+  ],
+  "why": "Issue #1013. The frame held while the body loaded is never painted once the body exists, so the pane shows the empty state over a connected pad until the next push."
+}

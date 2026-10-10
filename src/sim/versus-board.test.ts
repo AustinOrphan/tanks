@@ -10,6 +10,7 @@ import { lineOfSight } from './ai/targeting';
 import type { Arena } from './arena';
 import type { WallKind } from './types';
 import { VERSUS_CATALOG } from './config/versus-catalog';
+import { STANDARD_ARENA } from './config/arena-fixtures';
 
 // ---------------------------------------------------------------------------
 // SHIPPED-ARENA SWEEP. Three populations, not one, and issue #869 was filed because this
@@ -438,6 +439,30 @@ describe("versus-board: the 'ffa' hardcode rests on teams placing identically", 
     const teams = loadArena(ARENA_DEFS[0], 4, 'teams').tanks.filter((t) => t.kind === 'player');
     expect(ffa.every((t) => t.team === undefined)).toBe(true);
     expect(teams.every((t) => t.team !== undefined)).toBe(true);
+  });
+});
+
+// Issue #1010 left campaign level 1 a lone brown. arena-01 is also offered in versus (at 2, 3
+// and 4 players), and versus reads the grid differently from the campaign: `countOpenFloor`
+// and the spawn candidate pool take '.' only, so the grey and teal cells the edit floored
+// joined both. Measured live against the pre-edit board, the standard board (STANDARD_ARENA,
+// arena-01's grid and roster before the edit), so a later edit to either side shows up here.
+describe("versus on arena-01 after level 1's re-roster (issue #1010)", () => {
+  const arena01 = ARENA_DEFS.find((a) => a.id === 'arena-01')!;
+  const players = (arena: Arena, n: number) =>
+    loadArena(arena, n, 'ffa').tanks.filter((t) => t.kind === 'player').map((t) => t.pos);
+
+  it('places the same spawns and gives the same verdicts as the pre-edit board at N = 2, 3 and 4, on 2 more open-floor cells', () => {
+    for (const n of [2, 3, 4]) {
+      expect(players(arena01, n), `N=${n} spawns`).toEqual(players(STANDARD_ARENA, n));
+      const { openFloorCells, openFloorPerPlayer, ...after } = evaluateVersusBoard(arena01, n);
+      const { openFloorCells: wasCells, openFloorPerPlayer: _was, ...before } = evaluateVersusBoard(STANDARD_ARENA, n);
+      expect(after, `N=${n} verdict`).toEqual(before);
+      expect(after.suitable, `N=${n} suitable`).toBe(true);
+      // 770 '.' cells before; the grey's and the teal's cells make 772.
+      expect({ openFloorCells, wasCells }, `N=${n} open floor`).toEqual({ openFloorCells: 772, wasCells: 770 });
+      expect(openFloorPerPlayer, `N=${n} per player`).toBeCloseTo(772 / n, 12);
+    }
   });
 });
 

@@ -5,7 +5,9 @@
 // a constant would make every one of them pass. So it is pinned against published
 // reference pairs, not merely exercised.
 import { describe, it, expect } from 'vitest';
-import { distance, overFelt, ARENA_FELT } from './colour-distance';
+import {
+  distance, overFelt, ARENA_FELT, contrastRatio, simulateColourVision, COLOUR_VISIONS,
+} from './colour-distance';
 import { IDENTITY_RING_COLORS } from './identity';
 
 describe('CIEDE2000', () => {
@@ -80,5 +82,74 @@ describe('CIEDE2000', () => {
     const composited = pairs((c) => overFelt(c));
     expect(composited, 'compositing must not cost more than a quarter of the separation')
       .toBeGreaterThan(authored * 0.75);
+  });
+});
+
+// Issue #1056's two helpers, each pinned to values that follow from its definition rather
+// than read back from this implementation: a guard built on an unvalidated metric certifies
+// whatever the metric says, which is why the CIEDE2000 block above exists.
+describe('WCAG contrast ratio', () => {
+  it('is 21 for black against white, 1 for a colour against itself, and the same either way round', () => {
+    // Both ends follow from the definition: (1 + 0.05) / (0 + 0.05) = 21, and equal
+    // luminances give 1. Dropping the 0.05 flare term sends black/white to Infinity; taking
+    // the smaller luminance over the larger gives 1/21.
+    expect(contrastRatio(0x000000, 0xffffff)).toBeCloseTo(21, 10);
+    expect(contrastRatio(0xffffff, 0x000000), 'order does not matter').toBeCloseTo(21, 10);
+    for (const c of [0x000000, 0xffffff, 0x3fd0ff, ARENA_FELT]) {
+      expect(contrastRatio(c, c), `${c.toString(16)} vs itself`).toBeCloseTo(1, 10);
+    }
+    // A mid-scale reference, where the linearisation matters: #777777 on white is the grey
+    // WebAIM's checker reports as 4.47:1 (it truncates), just under the 4.5 text floor.
+    expect(contrastRatio(0x777777, 0xffffff)).toBeCloseTo(4.478, 3);
+  });
+});
+
+describe('colour-vision simulation (Machado 2009, severity 1)', () => {
+  it('leaves every neutral grey unchanged under all three types, within one level', () => {
+    // Every matrix row sums to 1, so a grey maps to itself; a mistyped coefficient breaks the
+    // sum and tints the greys. Population: all 256 greys x 3 types; measured deviation 0. The
+    // identity function passes this too, which is why the two tests below exist.
+    let checked = 0;
+    for (let g = 0; g < 256; g++) {
+      const grey = (g << 16) | (g << 8) | g;
+      for (const vision of COLOUR_VISIONS) {
+        const seen = simulateColourVision(grey, vision);
+        for (const shift of [16, 8, 0]) {
+          expect(Math.abs(((seen >> shift) & 0xff) - g), `grey ${g} under ${vision}`)
+            .toBeLessThanOrEqual(1);
+        }
+        checked += 1;
+      }
+    }
+    expect(checked, '256 greys x 3 types').toBe(768);
+  });
+
+  it('collapses a red and a green that normal vision separates by far more than 20, under deutan', () => {
+    // The paint shop's own Red and Green swatches: 67.61 apart in normal vision and 6.75 under
+    // deutan. Protan (24.47) and tritan (65.14) keep them apart (measured 2026-10-10 on
+    // origin/main c200cf62), so a simulation that returned its input, or ran another type's
+    // matrix for deutan, fails the second check.
+    const red = 0xd64545;
+    const green = 0x4fae52;
+    expect(distance(red, green), 'normal vision separates them').toBeGreaterThan(20);
+    const deutan = distance(simulateColourVision(red, 'deutan'), simulateColourVision(green, 'deutan'));
+    expect(deutan, 'deutan collapses them').toBeLessThan(10);
+  });
+
+  it('pins one colour under each type, so a swapped matrix fails', () => {
+    // Each type gives #d64545 a different answer, so exchanging any two matrices fails two of
+    // these lines. The values also hold the order of operations: the matrix applies to LINEAR
+    // light, so applying it to the 8-bit sRGB values, or transposed, gives other colours.
+    expect(simulateColourVision(0xd64545, 'protan').toString(16)).toBe('6d6544');
+    expect(simulateColourVision(0xd64545, 'deutan').toString(16)).toBe('918441');
+    expect(simulateColourVision(0xd64545, 'tritan').toString(16)).toBe('eb1c47');
+  });
+
+  it('clamps a channel the matrix pushes outside [0, 1]', () => {
+    // Protan's first row takes pure green to 1.053 linear, and deutan's third row takes pure
+    // red below zero. Unclamped, the first overflows its byte into the next channel and the
+    // second goes negative; neither result is a colour.
+    expect(simulateColourVision(0x00ff00, 'protan').toString(16)).toBe('ffe500');
+    expect(simulateColourVision(0xff0000, 'deutan').toString(16)).toBe('a39000');
   });
 });

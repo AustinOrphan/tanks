@@ -1,0 +1,15 @@
+{
+  "id": "high-contrast-ring-hex-drifts-under-every-floor",
+  "file": "src/presentation/identity.ts",
+  "find": "0xfdfdbb",
+  "replace": "0xfdfdb8",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "THE RECORDED TABLE CANNOT GO STALE (issue #1056). Moves High contrast ring 3 three levels down in blue, #fdfdbb to #fdfdb8. Every floor and every tightest-pair row still passes: the ring pairs fall to 18.35 / 15.01 / 14.42 (normal / protan / deutan) under the same names, tritan stays 11.26, ring 3's ground contrast is 4.71, and the felt, paint, roster and placeholder minima are unchanged (38.83, 17.87, 17.33, 30.23). Yet identity.ts still records 18.74 / 15.54 / 14.79, the protan cell 0.53 stale. Only the literal pin of High contrast's seven hexes fails, which is what makes identity.ts's claim that no colour moves without a test failing true. Measured with colour-distance.ts on 2026-10-10 (origin/main c200cf62 plus issue #1056).",
+  "killedBy": [
+    "owner palettes: the catalogue (issue #1056) High contrast is the seven hexes its recorded table was measured from, written out"
+  ]
+}

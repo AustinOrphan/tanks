@@ -982,6 +982,9 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-devtools' },
       { click: '.hud-selftest-open' },
       { waitVisible: '.hud-selftest' },
+      // The body is loaded when the pane first opens (issue #1013), and `waitHidden` passes
+      // for an element that does not exist yet, so the built body is waited for first.
+      { waitVisible: '.hud-selftest-pad' },
       { waitHidden: '.hud-selftest-empty' },
     ],
     // The empty state is measured for its ABSENCE beside a populated list: a pane that
