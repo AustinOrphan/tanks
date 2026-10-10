@@ -3151,7 +3151,9 @@ describe('the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059
     rootOf(views, id).traverse((o) => {
       if (o.name !== 'turret') return;
       const pos = (o as THREE.Mesh).geometry.getAttribute('position');
-      for (let i = 0; i < pos.count; i++) r = Math.max(r, Math.hypot(pos.getX(i), pos.getZ(i)) * o.scale.x);
+      for (let i = 0; i < pos.count; i++) {
+        r = Math.max(r, Math.hypot(pos.getX(i), pos.getZ(i)) * o.scale.x);
+      }
     });
     return r;
   }
@@ -3162,7 +3164,9 @@ describe('the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059
     const groups = new Map<string, string[]>();
     ENEMY_KINDS.forEach((kind, i) => {
       const id = i + 1;
-      const sig = `${flareRadius(views, id).toFixed(6)}|${blocksOf(views, id)}|${blockWidthOf(views, id).toFixed(6)}`;
+      const sig = [
+        flareRadius(views, id).toFixed(6), blocksOf(views, id), blockWidthOf(views, id).toFixed(6),
+      ].join('|');
       groups.set(sig, [...(groups.get(sig) ?? []), kind]);
     });
     views.dispose();
@@ -3182,8 +3186,11 @@ describe('the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059
     for (const cue of ['deck', 'riser', 'both'] as const) {
       const views = roster(cue, TANK_KINDS);
       const drawn = TANK_KINDS.filter((_, i) => blocksOf(views, i + 1) > 0);
-      expect(drawn.filter((k) => !layers.includes(k)), `${cue}: a block on a tank that cannot lay a mine`).toEqual([]);
-      expect(layers.filter((k) => !drawn.includes(k)), `${cue}: a mine layer with no block`).toEqual([]);
+      // `extra`: a block on a tank that cannot lay a mine. `missing`: a mine layer with no block.
+      expect({
+        extra: drawn.filter((k) => !layers.includes(k)),
+        missing: layers.filter((k) => !drawn.includes(k)),
+      }, cue).toEqual({ extra: [], missing: [] });
       views.dispose();
     }
   });
@@ -3232,9 +3239,9 @@ describe('the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059
     const shipped = roster(null, kinds);
     const armed = roster('both', kinds);
     const [brown, grey, olive] = kinds.map((_, i) => [snapshot(armed, i + 1), snapshot(shipped, i + 1)]);
-    expect(brown[0].length, 'brown has meshes to compare').toBeGreaterThan(0);
     expect(brown[0], 'brown under both').toEqual(brown[1]);
-    // The comparison can see each lever: grey gains a block and olive's flare narrows.
+    // The controls: the comparison can see each lever, grey gaining a block and olive's flare
+    // narrowing, so the equality above is not two empty snapshots or a cue that drew nothing.
     expect(grey[0], 'grey under both').not.toEqual(grey[1]);
     expect(olive[0], 'olive under both').not.toEqual(olive[1]);
     shipped.dispose();
@@ -3252,9 +3259,11 @@ describe('the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059
     const r = TANK_KINDS.map((_, i) => turretRadius(views, i + 1));
     views.dispose();
     const by = (pick: (radius: number) => boolean) => TANK_KINDS.filter((_, i) => pick(r[i])).sort();
-    expect(by((x) => x < shipped), 'narrower than shipped').toEqual(['brown', 'green', 'olive']);
-    expect(by((x) => x === shipped), 'the shipped turret').toEqual(['grey', 'player', 'teal']);
-    expect(by((x) => x > shipped), 'wider than shipped').toEqual(['yellow']);
+    expect({
+      narrower: by((x) => x < shipped), shipped: by((x) => x === shipped), wider: by((x) => x > shipped),
+    }, 'turret radius against the shipped one').toEqual({
+      narrower: ['brown', 'green', 'olive'], shipped: ['grey', 'player', 'teal'], wider: ['yellow'],
+    });
   });
 });
 

@@ -223,10 +223,13 @@ describe('enemy role cues: what the grammar can and cannot separate (issue #357)
     // each reaches the same six. A lever keyed on the kind name rather than the resolved weapon
     // would read six on its own, and a lever that lost a state would read two.
     for (const lever of ['girth', 'flare', 'dome', 'hull'] as const) {
-      expect(groupsOf((k) => weaponOf(k, lever)), `${lever} alone`).toEqual({
-        groups: 3, collided: [['brown', 'grey', 'yellow'], ['green', 'teal']],
+      expect({
+        alone: groupsOf((k) => weaponOf(k, lever)),
+        withMineLoad: groupsOf((k) => signature(k, mineLoad, lever)).groups,
+      }, lever).toEqual({
+        alone: { groups: 3, collided: [['brown', 'grey', 'yellow'], ['green', 'teal']] },
+        withMineLoad: 6,
       });
-      expect(groupsOf((k) => signature(k, mineLoad, lever)).groups, `${lever} with mine load`).toBe(6);
     }
   });
 
