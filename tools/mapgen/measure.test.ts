@@ -5,7 +5,7 @@ import { evaluateVersusBoard } from '../../src/sim/versus-board';
 import { lineOfSight as losImpl } from '../../src/sim/ai/targeting';
 import {
   measureBoard, tankLattice, geodesic, nearestLegal, openingShots, wallAABBs,
-  rotationalAsymmetry,
+  rotationalAsymmetry, wallComponentSizes, smallWallComponents, wallCellTest, MIN_WALL_BLOCK_CELLS,
 } from './measure';
 
 /**
@@ -757,5 +757,128 @@ describe('mapgen quality measures: 3-fold symmetry (issue #820)', () => {
     const best = scores.reduce((a, b) => (a.c3 <= b.c3 ? a : b));
     expect(best.c3, `${best.id} is now nearly 3-fold symmetric; see issue #820`)
       .toBeGreaterThan(0.2);
+  });
+});
+
+/**
+ * WALL COMPONENTS OVER WALL CELLS ONLY (issue #1028).
+ *
+ * The block counts quoted on #821 treated every cell that was not `.` as wall, so each spawn
+ * and enemy letter was a one-cell "block", and the control used to check them shared the same
+ * definition and could not see it. These pin the corrected table for the 8 boards it was
+ * measured on, explain the old numbers exactly, and hold the threshold and both connectivities
+ * to hand-built fixtures.
+ */
+describe('mapgen morphology: wall components over wall cells only (issue #1028)', () => {
+  /** Walls-only component counts per board, measured at 469152f4 and re-measured on this tree. */
+  const SHIPPED: Record<string, { c8: number; c4: number; smallest8: number }> = {
+    'arena-01': { c8: 6, c4: 6, smallest8: 9 },
+    'arena-02': { c8: 3, c4: 3, smallest8: 9 },
+    'arena-03': { c8: 7, c4: 9, smallest8: 9 },
+    'arena-04': { c8: 6, c4: 6, smallest8: 9 },
+    'arena-05': { c8: 5, c4: 5, smallest8: 9 },
+    'vs-duel-01': { c8: 5, c4: 7, smallest8: 17 },
+    'vs-tri-01': { c8: 13, c4: 13, smallest8: 5 },
+    'vs-quad-01': { c8: 9, c4: 13, smallest8: 18 },
+  };
+  /** The letters each of those boards carries today: cells that are neither floor nor a legend key. */
+  const letterCount = (def: Arena) =>
+    def.grid.join('').split('').filter((ch) => ch !== '.' && !(ch in def.legend)).length;
+  const board = (grid: string[]) => ({
+    cols: grid[0].length, rows: grid.length, grid, legend: { '#': 'solid', x: 'destructible' },
+  }) as unknown as Arena;
+  const named = (id: string) => {
+    const def = ARENA_DEFS.find((d) => d.id === id);
+    if (def === undefined) throw new Error(`${id} is not shipped any more`);
+    return def;
+  };
+
+  it('pins the walls-only table, both connectivities, for the 8 boards it was measured on', () => {
+    // Per board id, not a count of ARENA_DEFS: a board added later is reported below, not
+    // asserted, so it cannot break this.
+    for (const [id, want] of Object.entries(SHIPPED)) {
+      const def = named(id);
+      const sizes8 = wallComponentSizes(def, 8);
+      expect(sizes8.length, `${id} 8-connected`).toBe(want.c8);
+      expect(wallComponentSizes(def, 4).length, `${id} 4-connected`).toBe(want.c4);
+      expect(Math.min(...sizes8), `${id} smallest`).toBe(want.smallest8);
+      // No shipped component is a small block under either connectivity.
+      expect(smallWallComponents(def, 8), `${id} small, 8-connected`).toBe(0);
+      expect(smallWallComponents(def, 4), `${id} small, 4-connected`).toBe(0);
+    }
+  });
+
+  it('THE CONTROL: the old "not floor" count exceeds the new one by exactly the board s letters', () => {
+    // The explanation of the old numbers, held as an equality: every letter was a component
+    // of its own. This local copy of the old definition is test code only.
+    const oldCount = (def: Arena) => {
+      const wall = (c: number, r: number) =>
+        c >= 0 && r >= 0 && c < def.cols && r < def.rows && def.grid[r][c] !== '.';
+      const seen = def.grid.map((row) => new Array<boolean>(row.length).fill(false));
+      let n = 0;
+      for (let r = 0; r < def.rows; r++) {
+        for (let c = 0; c < def.cols; c++) {
+          if (!wall(c, r) || seen[r][c]) continue;
+          n++;
+          const stack: [number, number][] = [[c, r]];
+          seen[r][c] = true;
+          while (stack.length > 0) {
+            const [cc, rr] = stack.pop() as [number, number];
+            for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+              const nc = cc + dc;
+              const nr = rr + dr;
+              if (!wall(nc, nr) || seen[nr][nc]) continue;
+              seen[nr][nc] = true;
+              stack.push([nc, nr]);
+            }
+          }
+        }
+      }
+      return n;
+    };
+    const letters = Object.keys(SHIPPED).map((id) => letterCount(named(id)));
+    expect(letters).toEqual([4, 5, 6, 7, 8, 2, 2, 2]);
+    for (const id of Object.keys(SHIPPED)) {
+      const def = named(id);
+      expect(oldCount(def) - wallComponentSizes(def, 8).length, id).toBe(letterCount(def));
+    }
+  });
+
+  it('changes no walls-only count or size when every letter is floored', () => {
+    for (const id of Object.keys(SHIPPED)) {
+      const def = named(id);
+      const floored = { ...def, grid: def.grid.map((row) => row.replace(/./g, (ch) => (ch === '.' || ch in def.legend ? ch : '.'))) };
+      expect(letterCount(floored), id).toBe(0);
+      for (const connectivity of [4, 8] as const) {
+        expect(wallComponentSizes(floored, connectivity), `${id} ${connectivity}`).toEqual(wallComponentSizes(def, connectivity));
+      }
+    }
+  });
+
+  it('reports a 2x2 block as one component of 4, below the threshold', () => {
+    const b = board(['.....', '.##..', '.##..', '.....']);
+    expect(wallComponentSizes(b, 8)).toEqual([4]);
+    expect(MIN_WALL_BLOCK_CELLS).toBe(5);
+    expect(smallWallComponents(b, 8)).toBe(1);
+  });
+
+  it('reports an L of 5 cells as one component of 5, not below the threshold', () => {
+    const b = board(['.#...', '.#...', '.#...', '.##..', '.....']);
+    expect(wallComponentSizes(b, 8)).toEqual([5]);
+    expect(smallWallComponents(b, 8)).toBe(0);
+  });
+
+  it('joins two blocks touching only at a corner when 8-connected, and not when 4-connected', () => {
+    const b = board(['##...', '##...', '..x#.', '..##.']);
+    expect(wallComponentSizes(b, 8)).toEqual([8]);
+    expect(wallComponentSizes(b, 4)).toEqual([4, 4]);
+  });
+
+  it('counts a spawn letter beside a wall as no wall at all', () => {
+    const b = board(['.....', '.##P.', '.##B.', '.....']);
+    expect(wallComponentSizes(b, 8)).toEqual([4]);
+    expect(wallCellTest(b)(3, 1)).toBe(false);
+    expect(wallCellTest(b)(1, 1)).toBe(true);
+    expect(wallCellTest(b)(-1, 0), 'off the board is not wall').toBe(false);
   });
 });
