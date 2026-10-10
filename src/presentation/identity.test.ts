@@ -81,8 +81,9 @@ describe('owner palettes: the catalogue (issue #1056)', () => {
   it('High contrast is the seven hexes its recorded table was measured from, written out', () => {
     // The floors and tightest-pair rows below notice a move only when it crosses a floor,
     // renames a pair or raises one by 0.5. Ring 3 three levels down in blue (#fdfdb8) passes
-    // them all while identity.ts's protan cell for it goes stale by 0.53 (15.54 to 15.01). So
-    // a move fails here first: re-measure the table in identity.ts, then update these.
+    // them all while identity.ts's rings protan cell, ring1 vs ring3, goes stale by 0.53 (15.54
+    // to 15.01). So a move fails here first: re-measure the table in identity.ts, then update
+    // these.
     const remeasure = 're-measure the table in identity.ts before moving a High contrast colour';
     expect(OWNER_PALETTES['high-contrast'].rings, remeasure).toEqual([0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb]);
     expect(OWNER_PALETTES['high-contrast'].teams, remeasure).toEqual([0x63d1fd, 0xc6fd00, 0xf2c6bb]);
