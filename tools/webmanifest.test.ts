@@ -256,8 +256,8 @@ function shareImageFailures(page: string, factsFor: (publicPath: string) => PngF
 
 /**
  * The real file's facts, read off its bytes and its IHDR chunk -- the header alone, not
- * `decodePng`, which decodes only the RGBA icons this file's other cases read and refuses an
- * RGB photo-like frame.
+ * `decodePng`, which decodes only the 8-bit RGBA icons this file's other cases read and refuses
+ * any other colour type, the share image's palette PNG included.
  */
 function realFacts(publicPath: string): PngFacts | null {
   const file = repo(join('public', publicPath));

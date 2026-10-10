@@ -36,10 +36,11 @@
     <!-- The link-card image is public/share-image.png, which vite copies into dist/ and the
          same deploy serves (issue #973): a 1200x630 PNG with a brand panel (the splash title in
          the bundled IBM Plex Sans) beside one frame of `npm run gallery -- --scene game`, the
-         real game shot through its real camera with no developer query, cropped and scaled
-         only. Its layout keeps the whole title in the centred square that some apps crop to.
-         The one-off script that composed it is quoted in the pull request, as #973's amended
-         rules ask. Absolute for the reason canonical and og:url are. Replacing the picture is a
+         real game shot through its real camera with no developer query, cropped, scaled and
+         palette-reduced only. Its layout keeps the whole title in the centred square that some
+         apps crop to. The one-off scripts that composed it, and their inputs, are on the
+         pr-media branch under issue-973/ and linked from PR #1047, as #973's amended rules ask.
+         Absolute for the reason canonical and og:url are. Replacing the picture is a
          swap of that one file; tools/webmanifest.test.ts holds these tags to the file's real
          size, and tools/portability/check.mjs checks the BUILT output carries it. -->
     <meta property="og:image" content="https://austinorphan.com/tanks/share-image.png" />
