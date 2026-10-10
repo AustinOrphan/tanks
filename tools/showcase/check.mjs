@@ -63,7 +63,8 @@ export function run(root = process.cwd(), io = console) {
   const media = {};
   for (const clip of Array.isArray(manifest?.clips) ? manifest.clips : []) {
     const output = clip?.output;
-    if (typeof output !== 'string' || !trackedSet.has(output) || Object.hasOwn(media, output)) continue;
+    if (typeof output !== 'string' || !trackedSet.has(output)) continue;
+    if (Object.hasOwn(media, output)) continue;
     try {
       media[output] = gifFacts(readFileSync(path.join(root, output)));
     } catch (error) {

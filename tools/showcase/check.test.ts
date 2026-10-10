@@ -40,7 +40,10 @@ describe('showcase:check over this repository', () => {
   it('is the showcase:check package script, and passes as a process', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
     expect(pkg.scripts['showcase:check']).toBe('node tools/showcase/check.mjs');
-    const result = spawnSync(process.execPath, ['tools/showcase/check.mjs'], { cwd: ROOT, encoding: 'utf8' });
+    const result = spawnSync(process.execPath, ['tools/showcase/check.mjs'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    });
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/^showcase:check passed over \d+ clip\(s\)/);
   });
@@ -102,11 +105,14 @@ function repository(files: Record<string, string | Buffer>, track: string[]): st
     writeFileSync(join(root, file), content);
   }
   // -f: the developer's own global excludes must not decide what this fixture tracks.
-  if (track.length > 0) execFileSync('git', ['add', '-f', '--', ...track], { cwd: root, stdio: 'ignore' });
+  if (track.length > 0) {
+    execFileSync('git', ['add', '-f', '--', ...track], { cwd: root, stdio: 'ignore' });
+  }
   return root;
 }
 
 const DOCUMENTS = ['tools/showcase/manifest.json', 'README.md', 'docs/showcase.md'];
+const WITH_GIF = [...DOCUMENTS, CLIP.output];
 
 function showcase(clips: object[], gif: Buffer | null = GIF): Record<string, string | Buffer> {
   return {
@@ -119,7 +125,7 @@ function showcase(clips: object[], gif: Buffer | null = GIF): Record<string, str
 
 describe('showcase:check in a scratch repository', () => {
   it('passes a tracked, conforming clip and counts it', () => {
-    const root = repository(showcase([CLIP]), [...DOCUMENTS, CLIP.output]);
+    const root = repository(showcase([CLIP]), WITH_GIF);
     const { io, lines } = capture();
     expect(run(root, io)).toBe(0);
     expect(lines.error).toEqual([]);
@@ -142,7 +148,7 @@ describe('showcase:check in a scratch repository', () => {
   });
 
   it('measures the GIF bytes, so a truncated file fails instead of measuring as zeros', () => {
-    const root = repository(showcase([CLIP], GIF.subarray(0, GIF.length - 1)), [...DOCUMENTS, CLIP.output]);
+    const root = repository(showcase([CLIP], GIF.subarray(0, GIF.length - 1)), WITH_GIF);
     const { io, lines } = capture();
     expect(run(root, io)).toBe(1);
     expect(lines.error).toEqual([
@@ -152,14 +158,14 @@ describe('showcase:check in a scratch repository', () => {
   });
 
   it('asks the real capture registry for each recipe and its artifact formats', () => {
-    const still = repository(showcase([{ ...CLIP, recipe: 'screen.levels' }]), [...DOCUMENTS, CLIP.output]);
+    const still = repository(showcase([{ ...CLIP, recipe: 'screen.levels' }]), WITH_GIF);
     const stillLines = capture();
     expect(run(still, stillLines.io)).toBe(1);
     expect(stillLines.lines.error).toEqual([
       "clip 'campaign-round': recipe 'screen.levels' declares no gif artifact (it declares png)",
     ]);
 
-    const typo = repository(showcase([{ ...CLIP, recipe: 'flow.campaign-round.doc' }]), [...DOCUMENTS, CLIP.output]);
+    const typo = repository(showcase([{ ...CLIP, recipe: 'flow.campaign-round.doc' }]), WITH_GIF);
     const typoLines = capture();
     expect(run(typo, typoLines.io)).toBe(1);
     expect(typoLines.lines.error).toEqual([
@@ -186,7 +192,8 @@ describe('showcase:check in a scratch repository', () => {
   });
 
   it('refuses a manifest that is not JSON', () => {
-    const root = repository({ ...showcase([]), 'tools/showcase/manifest.json': '{ "version": 1,' }, DOCUMENTS);
+    const files = { ...showcase([]), 'tools/showcase/manifest.json': '{ "version": 1,' };
+    const root = repository(files, DOCUMENTS);
     const { io, lines } = capture();
     expect(run(root, io)).toBe(1);
     expect(lines.error).toHaveLength(1);
@@ -278,9 +285,11 @@ describe('showcase .gitignore exception', () => {
       'the showcase negation is missing',
       'lines that single out docs/media/showcase/: []',
     ]],
-    ['the negation moved above *.gif', real.replace(`${NEGATION}\n`, '').replace('*.gif\n', `${NEGATION}\n*.gif\n`), [
-      'the negation precedes *.gif',
-    ]],
+    [
+      'the negation moved above *.gif',
+      real.replace(`${NEGATION}\n`, '').replace('*.gif\n', `${NEGATION}\n*.gif\n`),
+      ['the negation precedes *.gif'],
+    ],
     ['a rule ignoring docs/media/ added', `${real}docs/media/\n`, [
       'lines that single out docs/media/showcase/: ["!docs/media/showcase/*.gif","docs/media/"]',
     ]],

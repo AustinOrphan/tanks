@@ -215,7 +215,9 @@ function clipProblems(clips, { recipeArtifacts, trackedSet, media }) {
       messages.push(`${name}: ${output} is ${facts.bytes} bytes; its maxBytes is ${maxBytes}`);
     }
     if (facts.width > SHOWCASE_LIMITS.widthPixels) {
-      messages.push(`${name}: ${output} is ${facts.width} px wide; at most ${SHOWCASE_LIMITS.widthPixels}`);
+      messages.push(
+        `${name}: ${output} is ${facts.width} px wide; at most ${SHOWCASE_LIMITS.widthPixels}`,
+      );
     }
     // displayed >= frames / fps - quantum, in centiseconds and multiplied through by fps.
     const fps = SHOWCASE_LIMITS.framesPerSecond;
@@ -254,9 +256,10 @@ function clipProblems(clips, { recipeArtifacts, trackedSet, media }) {
   return messages;
 }
 
-const ATTRIBUTE = (name) => new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i');
-const SRC = ATTRIBUTE('src');
-const ALT = ATTRIBUTE('alt');
+const attributePattern = (name) =>
+  new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i');
+const SRC = attributePattern('src');
+const ALT = attributePattern('alt');
 
 function attribute(tag, pattern) {
   const match = tag.match(pattern);
@@ -270,7 +273,7 @@ const linkLabel = (text) => text.trim().replace(/\s+/g, ' ').toLowerCase();
  * images (full, collapsed and shortcut, resolved through their definitions) and `<img>` tags. A
  * reference inside a code block or an HTML comment is counted too, so the check fails closed.
  */
-export function gifReferences(text) {
+function gifReferences(text) {
   const definitions = new Map();
   for (const match of text.matchAll(/^ {0,3}\[([^\]]+)\]:[ \t]*(?:<([^>]*)>|(\S+))/gm)) {
     const key = linkLabel(match[1]);
@@ -322,7 +325,8 @@ function documentProblems(clips, documents) {
       const owners = (reference.path === null ? null : clipsByOutput.get(reference.path)) ?? [];
       if (owners.length === 0) {
         messages.push(
-          `${document}: GIF reference '${reference.target}' is not a relative path to a manifest output`,
+          `${document}: GIF reference '${reference.target}' is not a relative path to a `
+            + 'manifest output',
         );
         continue;
       }
@@ -384,7 +388,10 @@ export function validateShowcase({ manifest, recipeArtifacts, tracked, media, do
   ];
 }
 
-/** What a check covered: the clips, the tracked files under `docs/media/showcase/`, the set's bytes. */
+/**
+ * What a check covered: the clips, the tracked files under `docs/media/showcase/` and the set's
+ * bytes.
+ */
 export function showcasePopulation({ manifest, tracked, media }) {
   const { clips } = shapeProblems(manifest);
   return {
