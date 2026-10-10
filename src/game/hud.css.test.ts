@@ -3958,3 +3958,56 @@ describe('hud.css: the UI scale reaches all text (issue #1031)', () => {
     expect(added[0]).toMatch(message);
   });
 });
+
+/**
+ * A LOCKED ACHIEVEMENT'S DESCRIPTION IS DIMMED ONCE (issue #971).
+ *
+ * The row carries the locked treatment, `opacity: 0.45`, and the description used to carry its
+ * own 0.8 on top -- an effective 0.36, read from pixels at 2.75:1, under both contrast floors and
+ * below its own label. The ruling: stop multiplying. `opacity` is not inherited, so the product
+ * is accumulated up the ancestor chain here, from rows built the way `hud.ts` builds them, against
+ * the real stylesheet (`hud.ts`'s own import puts it in this document).
+ */
+describe('hud.css: a locked achievement description is dimmed once, not twice (issue #971)', () => {
+  function row(earned: boolean): { label: HTMLElement; desc: HTMLElement } {
+    const li = document.createElement('li');
+    li.className = earned ? 'hud-achievement hud-achievement--earned' : 'hud-achievement';
+    const head = document.createElement('div');
+    head.className = 'hud-achievement-head';
+    const label = document.createElement('span');
+    label.className = 'hud-achievement-label';
+    label.textContent = 'First Blood';
+    head.appendChild(label);
+    const desc = document.createElement('span');
+    desc.className = 'hud-achievement-desc';
+    desc.textContent = 'Destroy your first enemy tank.';
+    li.append(head, desc);
+    document.body.appendChild(li);
+    return { label, desc };
+  }
+  /** The opacity an element actually renders at: its own times every ancestor's. */
+  const effective = (el: HTMLElement): number => {
+    let product = 1;
+    for (let at: HTMLElement | null = el; at !== null; at = at.parentElement) {
+      product *= Number(getComputedStyle(at).opacity || '1');
+    }
+    return Math.round(product * 1000) / 1000;
+  };
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('renders a locked description at exactly its label s opacity, the row s 0.45', () => {
+    // EQUALS, not "no lower": a change in either direction fails.
+    const locked = row(false);
+    expect(effective(locked.label)).toBe(0.45);
+    expect(effective(locked.desc)).toBe(effective(locked.label));
+  });
+
+  it('THE CONTROL: leaves an earned row exactly as it rendered, label at 1 and description at 0.8', () => {
+    // The ruling is about locked rows; the earned description keeps the 0.8 it always had.
+    const earned = row(true);
+    expect(effective(earned.label)).toBe(1);
+    expect(effective(earned.desc)).toBe(0.8);
+  });
+});

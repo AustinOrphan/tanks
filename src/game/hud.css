@@ -1123,6 +1123,14 @@
   outline-offset: var(--hud-focus-offset);
 }
 
+/* MOBILE-FIRST, BY CHOICE, for Public Prototype 1.0 (issue #971): this file has no `min-width`
+ * media query at all, against the `max-width` ones below. The base rules are the phone layout;
+ * larger screens get the same composition with more room, which the ruling on #985's
+ * criterion 1 accepted for Public Prototype 1.0 (rows wrap, panes scroll), and root-relative
+ * type already follows the reader. A composition of their own for large displays is #1033, after
+ * the cutover. A `min-width` query added before then is a scoped exception that its pull request
+ * records beside this note and in docs/superpowers/specs/2026-09-26-viewport-composition.md. */
+
 /* On a phone the topbar did not fit: measured at 393px wide, the volume slider ran 35px
  * PAST the viewport edge and the row wrapped to 72px tall, eating the top of the board.
  * Shrink the type, tighten the gaps and narrow the slider so it stays one row.
@@ -3023,7 +3031,15 @@
  * tank and never crops it. framing.ts records the aspect below which that bracket fails as
  * 0.249; 2.00 is nowhere near it. The width, which does not shrink, is what keeps the tank
  * from being clipped: measured, the pane overflows horizontally only below a 260px
- * viewport, so a 320px phone clears it by 30px each side (issue #971). */
+ * viewport, so a 320px phone clears it by 30px each side (issue #971).
+ *
+ * THE ELASTICITY IS AN ACCIDENT WORTH KEEPING, and nothing else pins it (issue #971): it holds
+ * only because `.hud-customize` is a flex column and this canvas keeps the default
+ * `flex-shrink: 1`. Measured, 0 of 27 runs clip it (9 viewports x a root font of 16, 20 and
+ * 24px), and its drawing buffer tracks its CSS box (aspect 1.0000 at 260x130 and at 260x190).
+ * Changing either fact needs that 27-run measurement repeated. Its size is in px, so it is one
+ * of the few things here that does not follow the reader's font size -- a recorded choice, not
+ * an oversight. */
 .hud-preview {
   width: 260px;
   height: 190px;
@@ -3386,13 +3402,21 @@
   border-left-color: var(--hud-gold);
 }
 
+/* The earned description keeps the 0.8 it always rendered at. It is declared HERE rather than on
+ * `.hud-achievement-desc` because there it multiplied with the locked row's 0.45: a locked
+ * description rendered at 0.36, read from pixels at 2.75:1 -- under both contrast floors and below
+ * its own label (issue #971). A locked description now takes only the row's 0.45, the same as its
+ * label. */
+.hud-achievement--earned .hud-achievement-desc {
+  opacity: 0.8;
+}
+
 .hud-achievement-label {
   font-weight: var(--hud-weight-normal);
 }
 
 .hud-achievement-desc {
   font-size: 0.85em;
-  opacity: 0.8;
 }
 
 /*

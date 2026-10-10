@@ -63,6 +63,48 @@
         "margin-top": "16px",
         "margin-bottom": "16px"
       }
+    },
+    {
+      "selector": ".hud-achievement",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 461,
+        "y": 246,
+        "w": 357,
+        "h": 46
+      },
+      "text": "Locked. First BloodDestroy a tank with a shell.",
+      "style": {
+        "display": "flex",
+        "opacity": "0.45",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-achievement-desc",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 476,
+        "y": 270,
+        "w": 164,
+        "h": 18
+      },
+      "text": "Destroy a tank with a shell.",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "13.6px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
     }
   ]
 }
