@@ -173,4 +173,19 @@ describe('a stored board this save has not unlocked (issue #983)', () => {
     store.set({ ...defaultVersusSetup(), arenaId: 'arena-02' });
     expect(store.get().arenaId).toBe('arena-02');
   });
+
+  it('reads the unlock at every check, so a level cleared after the store was built is kept', () => {
+    // One store, one page: level 3 is cleared after construction. The first set is the
+    // negative control -- with level 2 cleared the store refuses Arena 3 -- so the keep below is
+    // the clear reaching the store, not a store that never applied the unlock.
+    const storage = createMemoryStorage();
+    let cleared = 2;
+    const store = createVersusSetupStore(storage, () => campaignBoardUnlock(cleared));
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(store.get().arenaId, 'level 3 not yet cleared').toBe('random');
+    cleared = 3;
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(store.get().arenaId, 'level 3 cleared since').toBe('arena-03');
+    expect(JSON.parse(storage.getItem(VERSUS_SETUP_KEY) as string).arenaId).toBe('arena-03');
+  });
 });

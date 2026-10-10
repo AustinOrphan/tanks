@@ -3,7 +3,7 @@
   "file": "src/game/storage.ts",
   "find": "      () => campaignBoardUnlock(progress.highestCleared()),",
   "replace": "      ((u) => () => u)(campaignBoardUnlock(progress.highestCleared())),",
-  "expect": "survives",
+  "expect": "killed",
   "tests": [
     "src/game/storage.test.ts"
   ],

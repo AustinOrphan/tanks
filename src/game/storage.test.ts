@@ -222,6 +222,21 @@ describe('createStores', () => {
     expect(storedArenaOn('level-03'), 'level 3 cleared').toBe('arena-03');
   });
 
+  it('binds that progress read live, so a level cleared after the page booted keeps its board across a reload (issue #983)', () => {
+    // The page calls createStores once and keeps the result, so the progress the setup store
+    // reads must be the progress NOW, not at construction. The first set is the negative
+    // control: before level 3 is cleared the same store refuses Arena 3, so the keep below is
+    // the clear arriving, not a store that was never gated.
+    const storage = createMemoryStorage();
+    storage.setItem(PROGRESS_KEY, JSON.stringify({ levelId: 'level-02' }));
+    const stores = createStores(storage);
+    stores.versusSetup.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(stores.versusSetup.get().arenaId, 'level 3 not yet cleared').toBe('random');
+    stores.progress.recordCleared(CAMPAIGN_LEVELS[2]);
+    stores.versusSetup.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(createStores(storage).versusSetup.get().arenaId, 'after the reload').toBe('arena-03');
+  });
+
   it('survives a storage whose every method throws', () => {
     // Safari private mode. Construction must not throw -- the game boots at
     // defaults and loses only persistence.
