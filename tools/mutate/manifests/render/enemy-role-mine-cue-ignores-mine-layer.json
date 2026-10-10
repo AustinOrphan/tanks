@@ -7,5 +7,12 @@
   "tests": [
     "src/render/entities.test.ts"
   ],
-  "why": "Drops the MINE_LAYER gate, so the mine cue keys on raw capacity again. Brown and Green carry a capacity of 2 and no MINE_LAYER, and the simulation refuses every mine from them (world.ts, ai/index.ts), so `deck`, `riser` and `both` would draw a 0.3 block and `crown` the shipped turret on two tanks that cannot lay a mine -- the failure PR #830 named -- and the drawn roster would fall from six groups to four, brown reading as grey and green as teal (issue #1059)."
+  "killedBy": [
+    "enemy role cues read the tank, not its kind (issues #357, #773) cannot open the gate with a session budget: a kind without MINE_LAYER draws no block at mineCap 4",
+    "the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059) draws the block on exactly the kinds that hold MINE_LAYER -- population: all 7 kinds in TANK_KINDS, under deck, riser and both",
+    "the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059) separates the six enemy kinds by what `both` draws, no pair colliding -- population: 6 enemy kinds (TANK_KINDS minus player)",
+    "the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059) draws brown under `both` as the shipped tank, mesh for mesh and vertex for vertex",
+    "the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059) narrows the turret under `crown` on exactly the kinds that lay no mines -- population: all 7 kinds in TANK_KINDS"
+  ],
+  "why": "Drops the MINE_LAYER gate, so the mine cue keys on raw capacity again. Brown and Green carry a capacity of 2 and no MINE_LAYER, and the simulation refuses every mine from them (world.ts, ai/index.ts), so `deck`, `riser` and `both` would draw a 0.3 block and `crown` the shipped turret on two tanks that cannot lay a mine -- the failure PR #830 named -- and the drawn roster would fall from six groups to four, brown reading as grey and green as teal (issue #1059). Outside Vitest, `npm run test:gl` fails it too, run by hand: the role cue overlap check reads brown's riser footprint as 128 pixels, want 0 by construction."
 }
