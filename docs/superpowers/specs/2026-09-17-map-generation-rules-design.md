@@ -519,9 +519,9 @@ rows -- and `reflector-faces-for-bank-shots`, since a bank shot needs a flat unb
 come off and a board of 2x2 blocks offers almost none.
 
 `runs` implements both literally: carve a protected 3-cell circuit plus one spur, then place
-cover as one-cell-thick runs of 4 to 8 cells, drawing an L-bend for 45% of them. (Since issue
-#1029 the runs are 5 to 8 cells and kept inside the half the rotation copies; the table below
-and its 20 seeds describe the generator before that. See the section after this one.)
+cover as one-cell-thick runs of 4 to 8 cells, drawing an L-bend for 45% of them. (Since
+issue #1029 the runs are 5 to 8 cells and kept inside the half the rotation copies; the table
+below and its 20 seeds describe the generator before that. See the section after this one.)
 
 | ruleset | wall | legal | corr | open | neck | rout | long | sight | bank |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -650,10 +650,12 @@ and after the spread gate (#820):
 
 The piece-count knob is still dead at 16: `pieces=16` and `pieces=24` print identical rows in
 the variant sweep (N=4) on both samples. Interior share is not reported here: the pieces are one
-cell thick, so it is 0.00 by construction, and its gate is issue #1065's. The tables are
-`sweep.mjs`'s own blocks, computed by `tools/mapgen/sweep-report.mjs`; the per-cause rows come
-from `sweep.mjs --variants`, which adds the four configurations above to `runs`. Nothing here
-has been played.
+cell thick, so it is 0.00 by construction, and its gate is issue #1065's. The result tables
+are `sweep.mjs`'s own blocks, computed by `tools/mapgen/sweep-report.mjs`. In the per-cause
+table, the drawn and N=4 columns are the small-component block of `sweep.mjs --variants`, which
+adds those configurations to `runs`; that mode runs N=4 only, so the N=2 column was counted with
+the same `smallWallComponents` and the shipped acceptance tier in a one-off script. Nothing
+here has been played.
 
 ### Individual rules, swept one at a time
 
