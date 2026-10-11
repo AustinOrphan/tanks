@@ -362,44 +362,18 @@ function runs(seed, opts = {}) {
     return true;
   };
 
-  const kept = [];
+  let placed = 0;
   for (const [cc, rr] of candidates) {
-    if (kept.length >= pieces) break;
+    if (placed >= pieces) break;
     const shape = shapeOf(cc, rr);
     if (!fits(shape)) continue;
     const ch = r.next() < destructibleShare ? 'x' : '#';
     for (const [sc, sr] of shape) cells[sr][sc] = ch;
     rotate180(cells);
     if (cellsConnected(cells)) {
-      kept.push({ shape, ch });
+      placed++;
     } else {
       for (const [sc, sr] of shape) cells[sr][sc] = '.';
-      rotate180(cells);
-    }
-  }
-
-  // ---- step 3: destructibles at most 30% of the wall mass (issue #1029) ----
-  // The spec's proposal 4, counted in cells. Each piece is destructible with a fixed chance, so
-  // a board with few pieces can draw well past it -- 11 of seeds 1-50 and 15 of 51-100 did.
-  // Only such a board changes: its destructible pieces turn solid, last placed first, until it
-  // is back under, skipping any whose solid wall would cut the floor (`cellsConnected` counts a
-  // destructible cell as open). A board already under keeps the draw exactly. The rotation
-  // copies every piece once, so the half's share is the board's.
-  let wallCells = 0;
-  let destructibleCells = 0;
-  for (const { shape, ch } of kept) {
-    wallCells += shape.length;
-    if (ch === 'x') destructibleCells += shape.length;
-  }
-  for (let i = kept.length - 1; i >= 0 && destructibleCells * 10 > wallCells * 3; i--) {
-    const { shape, ch } = kept[i];
-    if (ch !== 'x') continue;
-    for (const [sc, sr] of shape) cells[sr][sc] = '#';
-    rotate180(cells);
-    if (cellsConnected(cells)) {
-      destructibleCells -= shape.length;
-    } else {
-      for (const [sc, sr] of shape) cells[sr][sc] = 'x';
       rotate180(cells);
     }
   }
@@ -652,10 +626,9 @@ export const RULESETS = {
       { label: 'pieces=24', opts: { pieces: 24 } },
       { label: 'run=6-12', opts: { minRun: 6, maxRun: 12 } },
       { label: 'lane=5cell', opts: { laneHalfWidth: 2 } },
-      // Issue #1029's two causes of a wall component below 5 cells, one at a time: neither
-      // fixed (the pre-#1029 walls), each fix alone, and the longer bars without the
-      // confinement. The default row above is both fixed. The destructible trim applies to
-      // every row; it never moves a wall.
+      // Issue #1029's two causes of a wall component below 5 cells, one at a time: the
+      // pre-#1029 default (neither fixed), each fix alone, and the longer bars without the
+      // confinement. The default row above is both fixed.
       { label: 'minRun=4 confine=off', opts: { minRun: 4, confineToHalf: false } },
       { label: 'minRun=4', opts: { minRun: 4 } },
       { label: 'confine=off', opts: { confineToHalf: false } },

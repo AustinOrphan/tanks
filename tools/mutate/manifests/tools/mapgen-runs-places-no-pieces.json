@@ -7,7 +7,7 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "A generator that places no pieces has no wall component of any size, so a test asserting none below 5 cells passes on boards that are empty. The population test has to show every board in it has walls to count, or it is vacuous.",
+  "why": "A generator that places no pieces has no wall component of any size, so a test asserting none below 5 cells passes on boards that are empty. The population test has to show every board in it has walls to count, or it is vacuous. The destructible exception list carries a guard of its own, for the same reason.",
   "killedBy": [
     "runs: no wall component below 5 cells (issue #1029) draws no wall component below 5 cells, 8- or 4-connected, on any default board for seeds 1-100",
     "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 1: the old minRun 4, confinement still on, draws a 4-cell straight run",
