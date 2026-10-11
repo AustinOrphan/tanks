@@ -1,0 +1,14 @@
+{
+  "id": "showcase-allows-a-file-over-its-max-bytes",
+  "file": "tools/showcase/validate.mjs",
+  "find": "    if (maxBytes !== null && facts.bytes > maxBytes) {",
+  "replace": "    if (maxBytes !== null && facts.bytes > maxBytes + 1) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 8: a file one byte larger than its maxBytes"
+  ],
+  "why": "Rule 8: a clip's measured size is at most its own maxBytes, the budget its manifest entry declares."
+}

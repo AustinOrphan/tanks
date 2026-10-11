@@ -1,0 +1,14 @@
+{
+  "id": "showcase-allows-a-max-bytes-over-2-mib",
+  "file": "tools/showcase/validate.mjs",
+  "find": "    if (maxBytes !== null && maxBytes > SHOWCASE_LIMITS.clipBytes) {",
+  "replace": "    if (maxBytes !== null && maxBytes > SHOWCASE_LIMITS.clipBytes + 1) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 7: a maxBytes one byte over 2 MiB"
+  ],
+  "why": "Rule 7: a clip's own byte budget is at most 2 MiB (2,097,152), so raising maxBytes cannot lift a GIF past the policy's per-file limit."
+}

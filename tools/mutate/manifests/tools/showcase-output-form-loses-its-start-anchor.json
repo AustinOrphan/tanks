@@ -1,0 +1,14 @@
+{
+  "id": "showcase-output-form-loses-its-start-anchor",
+  "file": "tools/showcase/validate.mjs",
+  "find": "const OUTPUT_FORM = /^docs\\/media\\/showcase\\/[a-z0-9]+(?:-[a-z0-9]+)*\\.gif$/;",
+  "replace": "const OUTPUT_FORM = /docs\\/media\\/showcase\\/[a-z0-9]+(?:-[a-z0-9]+)*\\.gif$/;",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 4: an absolute URL output ending in the showcase path"
+  ],
+  "why": "Rule 4: an output starts at docs/media/showcase/. Without the start anchor, an absolute URL or a deeper path that merely ends in the showcase directory would pass."
+}

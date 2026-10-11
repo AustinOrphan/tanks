@@ -19,6 +19,9 @@ screens-check-out/
 /artifacts/capture/
 /artifacts/compare/
 *.gif
+# ...except an approved showcase clip directly under docs/media/showcase/, which
+# `npm run showcase:check` holds to the publication limits in docs/showcase.md
+!docs/media/showcase/*.gif
 audio-out/
 
 # scratch fixtures written (and deleted) by tools/mutate's own end-to-end test --

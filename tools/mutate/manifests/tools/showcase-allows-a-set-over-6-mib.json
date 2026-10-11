@@ -1,0 +1,14 @@
+{
+  "id": "showcase-allows-a-set-over-6-mib",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  setBytes: 6_291_456, // 6 MiB",
+  "replace": "  setBytes: 6_291_457, // 6 MiB",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 13: a set one byte over 6 MiB"
+  ],
+  "why": "Rule 13: the whole set is at most 6 MiB (6,291,456 bytes). Four clips at the 2 MiB per-file limit would be 8 MiB, so this is a separate limit, and the control has every clip within its own budget."
+}

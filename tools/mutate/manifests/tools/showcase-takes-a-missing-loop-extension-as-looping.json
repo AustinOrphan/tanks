@@ -1,0 +1,14 @@
+{
+  "id": "showcase-takes-a-missing-loop-extension-as-looping",
+  "file": "tools/showcase/validate.mjs",
+  "find": "    if (facts.loopCount !== 0) {",
+  "replace": "    if (facts.loopCount > 0) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 12: a GIF with no loop extension"
+  ],
+  "why": "Rule 12: the GIF loops forever, which is a measured loop count of 0. A GIF with no NETSCAPE extension plays once and stops; reading its null loop count as \"not positive\" would pass it."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "showcase-allows-a-stray-tracked-file",
+  "file": "tools/showcase/validate.mjs",
+  "find": "    if (file.startsWith(SHOWCASE_DIR) && !outputs.has(file)) {",
+  "replace": "    if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 14: a stray MP4 beside the clips",
+    "showcase validator (issue #1062) negative controls rule 14: a second GIF that no clip names"
+  ],
+  "why": "Rule 14: every tracked file under docs/media/showcase/ is a manifest output, so a stray MP4, PNG frame or second GIF cannot reach the repository behind the .gitignore negation without the limits applying to it."
+}
