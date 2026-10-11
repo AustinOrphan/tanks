@@ -237,29 +237,41 @@ describe('topbar clearance verdict (issue #687)', () => {
 /**
  * Issue #1068's table, one row per `failures.push` site in `clearanceFailures`: the state it
  * measured, the elements its line must name by selector (keys of CLEARANCE_SELECTORS, plus
- * `chip` for the chip's own selector), and the failing shapes above that reach it. Row 6, the
- * board not found, names no element: the board is found in a screenshot and has no selector.
+ * `chip` for the chip's own selector), the failing shapes above that reach it, and its marker,
+ * a fragment of that site's wording that no other site prints. The marker is what ties a line
+ * to the site it is filed under: rows 1 and 2 owe the same selector and state, so a shape that
+ * drifted from one to the other would pass on those alone. Row 6, the board not found, names
+ * no element: the board is found in a screenshot and has no selector.
  */
 type Names = keyof typeof CLEARANCE_SELECTORS | 'chip';
-type Site = { row: number; state: 'match' | 'menu'; names: Names[]; shapes: (keyof typeof FAILING)[] };
+type Site = {
+  row: number;
+  state: 'match' | 'menu';
+  names: Names[];
+  shapes: (keyof typeof FAILING)[];
+  marker: string;
+};
 const SITES: Site[] = [
-  { row: 1, state: 'match', names: ['topbar'], shapes: ['matchTopbarHidden'] },
-  { row: 2, state: 'match', names: ['topbar'], shapes: ['topInsetNeverApplied', 'sideInsetNeverApplied'] },
-  { row: 3, state: 'match', names: ['toasts', 'topbar'], shapes: ['toastRailInBar'] },
-  { row: 4, state: 'match', names: ['capacity'], shapes: ['flashWithNoBox'] },
-  { row: 5, state: 'match', names: ['capacity', 'chip'], shapes: ['flashOnChips'] },
-  { row: 6, state: 'match', names: [], shapes: ['boardNotFound'] },
-  { row: 7, state: 'match', names: ['capacity'], shapes: ['flashOnBoard'] },
-  { row: 8, state: 'match', names: ['capacity'], shapes: ['flashUnderSideInset', 'flashUnderTopInset'] },
-  { row: 9, state: 'match', names: ['capacity', 'topbar'], shapes: ['chipsMoved', 'chipAppeared'] },
-  { row: 10, state: 'menu', names: ['topbar'], shapes: ['menuTopbarShown'] },
-  { row: 11, state: 'menu', names: ['toasts'], shapes: ['menuToastsInInset'] },
+  { row: 1, state: 'match', names: ['topbar'], shapes: ['matchTopbarHidden'], marker: 'nothing was cleared' },
+  { row: 2, state: 'match', names: ['topbar'], shapes: ['topInsetNeverApplied', 'sideInsetNeverApplied'], marker: 'ignores the' },
+  { row: 3, state: 'match', names: ['toasts', 'topbar'], shapes: ['toastRailInBar'], marker: 'whose bottom is' },
+  { row: 4, state: 'match', names: ['capacity'], shapes: ['flashWithNoBox'], marker: 'has no box' },
+  { row: 5, state: 'match', names: ['capacity', 'chip'], shapes: ['flashOnChips'], marker: 'topbar chip' },
+  { row: 6, state: 'match', names: [], shapes: ['boardNotFound'], marker: 'not found in the screenshot' },
+  { row: 7, state: 'match', names: ['capacity'], shapes: ['flashOnBoard'], marker: 'drawn board' },
+  { row: 8, state: 'match', names: ['capacity'], shapes: ['flashUnderSideInset', 'flashUnderTopInset'], marker: 'outside the safe area' },
+  { row: 9, state: 'match', names: ['capacity', 'topbar'], shapes: ['chipsMoved', 'chipAppeared'], marker: 'moved the chips' },
+  { row: 10, state: 'menu', names: ['topbar'], shapes: ['menuTopbarShown'], marker: 'no-topbar case' },
+  { row: 11, state: 'menu', names: ['toasts'], shapes: ['menuToastsInInset'], marker: 'is inside the' },
 ];
 
 const selectorOf = (name: Names) =>
   name === 'chip' ? `${CLEARANCE_SELECTORS.topbar} > :nth-child(` : CLEARANCE_SELECTORS[name];
 
-/** What one failure line lacks for its row: its state, a selector it owes, or one it must not carry. */
+/**
+ * What one failure line lacks for its row: its state, a selector it owes, one it must not
+ * carry, its row's marker, or another row's marker beside its own.
+ */
 function lineProblems(line: string, site: Site): string[] {
   const problems: string[] = [];
   if (!line.includes(` state=${site.state}: `)) problems.push(`no state=${site.state}`);
@@ -271,24 +283,37 @@ function lineProblems(line: string, site: Site): string[] {
   for (const name of site.names) {
     if (!line.includes(selectorOf(name))) problems.push(`no ${selectorOf(name)}`);
   }
+  if (!line.includes(site.marker)) problems.push(`not from row ${site.row}`);
+  for (const other of SITES) {
+    if (other.row !== site.row && line.includes(other.marker)) problems.push(`carries row ${other.row}'s marker`);
+  }
   return problems;
 }
+
+/** Every line the failing shapes print, each filed under the row its shape is listed in. */
+const sweep = (sites: Site[]) =>
+  sites.flatMap((site) =>
+    site.shapes.flatMap((shape) => clearanceFailures(FAILING[shape]()).map((line) => ({ site, shape, line }))),
+  );
+
+/** The rows at least one swept line is filed under, in order; a row missing is a site no shape reaches. */
+const rowsReached = (swept: ReturnType<typeof sweep>) => [...new Set(swept.map(({ site }) => site.row))];
 
 describe('clearance failure lines name their element and state (issue #1068)', () => {
   it('walks every failing shape and finds each line naming its selectors and its state', () => {
     // Population: 14 failing shapes, giving 15 lines (the chip shape overlaps 2 chips), reach
-    // all 11 push sites. 10 sites name an element: 13 shapes, 14 lines. 1 site names none,
-    // the board not found: 1 shape, 1 line, which must carry no selector.
+    // all 11 push sites, each line carrying its own site's marker and no other's. 10 sites
+    // name an element: 13 shapes, 14 lines. 1 site names none, the board not found: 1 shape,
+    // 1 line, which must carry no selector.
     const source = readFileSync(new URL('./clearance.mjs', import.meta.url), 'utf8');
     expect(SITES.length, 'a push site in clearance.mjs with no row in the sweep').toBe(source.match(/failures\.push\(/g)?.length);
     expect(SITES.map((s) => s.row)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(SITES.flatMap((s) => s.shapes).sort(), 'a failing shape the sweep skips').toEqual(Object.keys(FAILING).sort());
-    const swept = SITES.flatMap((site) =>
-      site.shapes.flatMap((shape) => clearanceFailures(FAILING[shape]()).map((line) => ({ site, shape, line }))),
-    );
+    const swept = sweep(SITES);
     expect(swept.map(({ site, shape, line }) => [shape, lineProblems(line, site)])).toEqual(
       swept.map(({ shape }) => [shape, []]),
     );
+    expect(rowsReached(swept), 'push sites reached by a shape filed under them').toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(swept.length, 'lines swept').toBe(15);
     expect(swept.filter(({ site }) => site.names.length > 0).length, 'lines that name an element').toBe(14);
     expect(new Set(swept.map(({ shape }) => shape)).size, 'shapes that failed').toBe(14);
@@ -315,5 +340,22 @@ describe('clearance failure lines name their element and state (issue #1068)', (
     expect(
       lineProblems('844x390 inset=left 59, right 21 state=match: the board .hud-capacity was not found in the screenshot', row(6)),
     ).toEqual(['names .hud-capacity, but row 6 is about no element']);
+  });
+
+  it('fails a line filed under a push site that did not print it, or a site no shape reaches', () => {
+    // Known-bad lines, spelled out rather than taken from the verdict. The first is what the
+    // hidden-topbar shape printed with the topbar check skipped: row 2's line, which names
+    // row 1's selector and state, so only the markers tell the two sites apart.
+    const row = (n: number) => SITES[n - 1];
+    expect(lineProblems('390x844 inset=top 47 state=match: topbar .hud-topbar padding-top 0px ignores the 47px top inset', row(1))).toEqual([
+      'not from row 1',
+      "carries row 2's marker",
+    ]);
+    // A marker that a second site also prints would let a shape drift between the two unseen.
+    expect(
+      lineProblems('390x844 inset=top 47 state=menu: menu toast rail .hud-toasts top 14 is inside the 47px top inset, whose bottom is 77', row(11)),
+    ).toEqual(["carries row 3's marker"]);
+    // A row left with no shapes is a push site the sweep no longer reaches.
+    expect(rowsReached(sweep(SITES.map((s) => (s.row === 4 ? { ...s, shapes: [] } : s))))).toEqual([1, 2, 3, 5, 6, 7, 8, 9, 10, 11]);
   });
 });
