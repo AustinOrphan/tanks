@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-runs-draws-no-destructibles",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "    destructibleShare = 0.22,\n",
+  "replace": "    destructibleShare = 0,\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "The per-piece destructible chance drops to 0, so no board carries a destructible and the exception list has nothing to count. The test's non-vacuity guard (more than 50 of the 100 default boards for seeds 1-100 carry destructibles; 94 measured, 0 under this mutation) fails first, and the exact pin of the 26 boards over 30% of their wall mass would fail behind it.",
+  "killedBy": [
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+  ]
+}

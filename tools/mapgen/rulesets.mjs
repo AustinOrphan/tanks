@@ -255,6 +255,17 @@ function topology(seed, opts = {}) {
  * and keeps route count at or above 2. If the bars behave like `scatter`'s blocks instead --
  * same measures, different shapes -- then piece SHAPE does not matter and only density does,
  * which would itself be worth knowing.
+ *
+ * NO WALL COMPONENT BELOW 5 CELLS (issue #1029), because no shipped board has one (#1028). Two
+ * things made one, and each needs its own fix -- measured over two disjoint 50-seed samples,
+ * either fix alone still left a fragment on most boards, and the two together left none:
+ *   1. A straight run drawn at `minRun` IS a component of that size, so `minRun` is 5, not 4.
+ *   2. `rotate180` copies the first half of the board over the second, so a piece that
+ *      crossed the midpoint index kept only its first-half stretch -- a fragment of any size.
+ *      `confineToHalf` rejects any piece cell at or past that index in `fits()`. It is a
+ *      switch, on by default, only so each cause can be measured alone and the regression
+ *      test can control for it; `rotate180` itself is untouched, since four other rulesets
+ *      use it.
  */
 function runs(seed, opts = {}) {
   const {
@@ -262,8 +273,9 @@ function runs(seed, opts = {}) {
     pieces = 16,
     destructibleShare = 0.22,
     laneHalfWidth = 1,   // 1 -> a 3-cell lane, the comfortable corridor
-    minRun = 4,
+    minRun = 5,
     maxRun = 8,
+    confineToHalf = true,
   } = opts;
   const r = rng(seed);
   const cells = blankCells(board);
@@ -328,6 +340,8 @@ function runs(seed, opts = {}) {
   const fits = (shape) => {
     for (const [cc, rr] of shape) {
       if (cc < 1 || rr < 1 || cc >= board.cols - 1 || rr >= board.rows - 1) return false;
+      // The same half the start cells are drawn from: past it, `rotate180` overwrites the cell.
+      if (confineToHalf && rr * board.cols + cc >= (board.rows * board.cols) / 2) return false;
       if (protectedCells[rr][cc]) return false;
       // Keep the spawn anchor's neighbourhood clear, and keep a one-cell gap from anything
       // already placed -- including from this piece's own rotated image, which `rotate180`
@@ -603,7 +617,7 @@ export const RULESETS = {
   },
   runs: {
     name: 'runs',
-    summary: 'carve a protected circulation circuit first, then cover as 1-cell-thick runs of 4-8 cells and L-bends',
+    summary: 'carve a protected circulation circuit first, then cover as 1-cell-thick runs of 5-8 cells and L-bends, each kept inside the half the rotation copies',
     prediction: 'longer flat faces and a drawn loop: wall fraction toward the shipped floor, a longer longest-sightline than rooms, bottleneck held at the carved lane width, route count at or above 2',
     generate: runs,
     variants: [
@@ -612,6 +626,13 @@ export const RULESETS = {
       { label: 'pieces=24', opts: { pieces: 24 } },
       { label: 'run=6-12', opts: { minRun: 6, maxRun: 12 } },
       { label: 'lane=5cell', opts: { laneHalfWidth: 2 } },
+      // Issue #1029's two causes of a wall component below 5 cells, one at a time: the
+      // pre-#1029 default (neither fixed), each fix alone, and the longer bars without the
+      // confinement. The default row above is both fixed.
+      { label: 'minRun=4 confine=off', opts: { minRun: 4, confineToHalf: false } },
+      { label: 'minRun=4', opts: { minRun: 4 } },
+      { label: 'confine=off', opts: { confineToHalf: false } },
+      { label: 'run=6-12 confine=off', opts: { minRun: 6, maxRun: 12, confineToHalf: false } },
     ],
   },
   spines: {

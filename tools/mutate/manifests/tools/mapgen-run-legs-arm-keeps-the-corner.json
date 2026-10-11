@@ -1,0 +1,15 @@
+{
+  "id": "mapgen-run-legs-arm-keeps-the-corner",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "      if (cells.every(([c, r]) => r === r0 || c === c0)) return { run: Math.max(w, h), arm: Math.min(w, h) - 1 };\n",
+  "replace": "      if (cells.every(([c, r]) => r === r0 || c === c0)) return { run: Math.max(w, h), arm: Math.min(w, h) };\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The arm keeps the corner cell, which belongs to the straight run, so every L-arm length reads one cell long and the reported arm distribution stops matching what `runs` draws (2-5 cells at the defaults).",
+  "killedBy": [
+    "the run-length read-back (issue #1029) reads a straight run, and an L's longer leg as the run and its shorter leg less the corner as the arm",
+    "the run-length read-back (issue #1029) sums the components and summarises the lengths over a sample of boards"
+  ]
+}

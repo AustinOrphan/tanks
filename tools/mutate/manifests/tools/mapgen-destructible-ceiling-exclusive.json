@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-destructible-ceiling-exclusive",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    exceptions: shares.filter((s) => s.share > ceiling + DESTRUCTIBLE_TOLERANCE),\n",
+  "replace": "    exceptions: shares.filter((s) => s.share >= ceiling),\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The ceiling becomes exclusive: a board at exactly 30% destructible is listed as an exception, where the criterion is \"at or under 30% of wall mass\".",
+  "killedBy": [
+    "destructibles over wall mass (issue #1029) passes a board at exactly 30% and reads a board with no wall as 0, not 0/0"
+  ]
+}

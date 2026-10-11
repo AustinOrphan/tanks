@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-band-miss-passed-on-its-median",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    else if ((n - inside) * 2 > n) verdict = 'miss';\n",
+  "replace": "    else if ((n - inside) * 2 > n) verdict = 'ok';\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "A median inside the band with most boards outside it passes as `ok`. Issue #1029 names exactly this case: it is a miss, reported as one, because a median can sit in a band that almost no board in the sample does.",
+  "killedBy": [
+    "the shipped bands and the in-band share (issue #1029) takes the median, not the mean, and reads \"most outside\" as more than half"
+  ]
+}

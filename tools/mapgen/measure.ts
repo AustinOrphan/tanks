@@ -1270,22 +1270,31 @@ export const MIN_WALL_BLOCK_CELLS = 5;
  * not depend on a player count.
  */
 export function wallComponentSizes(board: GridBoard, connectivity: 4 | 8): number[] {
+  return wallComponents(board, connectivity).map((cells) => cells.length).sort((a, b) => b - a);
+}
+
+/**
+ * Every connected wall component as its cells, `[c, r]`, components in row-major order of their
+ * first cell -- the walk `wallComponentSizes` counts, for a reader that needs a component's
+ * SHAPE (issue #1029's run-length read-back in `sweep-report.mjs`) rather than its size.
+ */
+export function wallComponents(board: GridBoard, connectivity: 4 | 8): [number, number][][] {
   const { cols, rows } = board;
   const wall = wallCellTest(board);
   const neighbours = connectivity === 8
     ? [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]
     : [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const seen = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
-  const sizes: number[] = [];
+  const components: [number, number][][] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (!wall(c, r) || seen[r][c]) continue;
-      let size = 0;
+      const cells: [number, number][] = [];
       const stack: [number, number][] = [[c, r]];
       seen[r][c] = true;
       while (stack.length > 0) {
         const [cc, rr] = stack.pop() as [number, number];
-        size++;
+        cells.push([cc, rr]);
         for (const [dc, dr] of neighbours) {
           const nc = cc + dc;
           const nr = rr + dr;
@@ -1294,10 +1303,10 @@ export function wallComponentSizes(board: GridBoard, connectivity: 4 | 8): numbe
           stack.push([nc, nr]);
         }
       }
-      sizes.push(size);
+      components.push(cells);
     }
   }
-  return sizes.sort((a, b) => b - a);
+  return components;
 }
 
 /** How many of a board's wall components are below `MIN_WALL_BLOCK_CELLS`. */

@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-run-legs-run-is-the-shorter-leg",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "      if (cells.every(([c, r]) => r === r0 || c === c0)) return { run: Math.max(w, h), arm: Math.min(w, h) - 1 };\n",
+  "replace": "      if (cells.every(([c, r]) => r === r0 || c === c0)) return { run: Math.min(w, h), arm: Math.max(w, h) - 1 };\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "An L's legs read the wrong way round: the arm is reported as the straight run and the run as the arm, so the run-length distribution states arm lengths as straights. `runs` draws the arm shorter than the straight for every length it uses, which is what makes the longer leg the run.",
+  "killedBy": [
+    "the run-length read-back (issue #1029) reads a straight run, and an L's longer leg as the run and its shorter leg less the corner as the arm"
+  ]
+}

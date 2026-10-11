@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-band-edges-compared-unrounded",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "export const BAND_HALF_UNIT = 0.005;",
+  "replace": "export const BAND_HALF_UNIT = 0;",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The bands' two-decimal edges are compared against unrounded measures, so a board at the shipped route-count maximum, 7/3 = 2.333..., reads OUTSIDE the 1.00-2.33 band that maximum defines, and every such board lowers the in-band share the issue reports.",
+  "killedBy": [
+    "the shipped bands and the in-band share (issue #1029) counts a value inside at two decimals as inside, the shipped 7/3 route count included"
+  ]
+}

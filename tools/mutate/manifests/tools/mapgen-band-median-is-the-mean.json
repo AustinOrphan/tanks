@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-band-median-is-the-mean",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    const median = medianOf(values);\n",
+  "replace": "    const median = values.reduce((s, v) => s + v, 0) / n;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The band verdict reads the mean as the median: one outlying board drags a sample whose middle sits inside the band outside it, or the reverse. Issue #1029 exists because the sweep printed only means; a median that is secretly a mean reprints the same table.",
+  "killedBy": [
+    "the shipped bands and the in-band share (issue #1029) takes the median, not the mean, and reads \"most outside\" as more than half"
+  ]
+}

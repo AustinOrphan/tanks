@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-run-length-report-keeps-the-last-board",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    straight += legs.straight;\n",
+  "replace": "    straight = legs.straight;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The sample total keeps only the last board's straight pieces, so the run-length block undercounts the straights of every board but one while its lengths still cover the whole sample.",
+  "killedBy": [
+    "the run-length read-back (issue #1029) sums the components and summarises the lengths over a sample of boards"
+  ]
+}

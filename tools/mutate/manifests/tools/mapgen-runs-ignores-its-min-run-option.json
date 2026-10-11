@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-runs-ignores-its-min-run-option",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "    const len = minRun + r.int(maxRun - minRun + 1);\n",
+  "replace": "    const len = 5 + r.int(maxRun - 5 + 1);\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "The draw ignores `minRun` and always starts at 5: the default board is unchanged, but `{ minRun: 4 }` no longer reproduces cause 1, so the cause-1 control would compare the fixed generator with itself -- and so would the `run=6-12` variant. Only the control's own seeds can see it.",
+  "killedBy": [
+    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 1: the old minRun 4, confinement still on, draws a 4-cell straight run"
+  ]
+}

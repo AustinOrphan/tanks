@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-small-blocks-4-connected-reads-8",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    c4: smallWallComponents(b.arena, 4),\n",
+  "replace": "    c4: smallWallComponents(b.arena, 8),\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The 4-connected count is taken 8-connected, so the second column repeats the first. Issue #1029 asks for both because they disagree where blocks meet at a corner: two bars touching diagonally are one component of 6 under 8-connectivity and two of 3 under 4.",
+  "killedBy": [
+    "small wall components, 8- and 4-connected (issue #1029) counts two 3-cell bars touching at a corner as small only 4-connected"
+  ]
+}

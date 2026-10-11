@@ -1,0 +1,17 @@
+{
+  "id": "mapgen-shipped-band-drifts-from-the-spec",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "  bankGain: Object.freeze({ min: 0.09, max: 0.29 }),",
+  "replace": "  bankGain: Object.freeze({ min: 0.09, max: 0.3 }),",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "One carried band edge drifts from the spec's shipped band row it is quoted from: bank gain's ceiling widens to 0.30, so a board the spec calls outside the shipped band is reported inside it. The bands are carried, not re-measured, so the spec row is the only thing to hold them to.",
+  "killedBy": [
+    "the shipped bands and the in-band share (issue #1029) carries the spec's shipped band row, column by column"
+  ],
+  "reads": [
+    "docs/superpowers/specs/2026-09-17-map-generation-rules-design.md"
+  ]
+}
