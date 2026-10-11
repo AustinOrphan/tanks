@@ -7,5 +7,8 @@
   "tests": [
     "tools/mapgen/measure.test.ts"
   ],
-  "why": "The thin share loses its empty-board guard, so a board with no wall cells reads 0/0 = NaN instead of the 0 issue #1065 requires, under either connectivity."
+  "why": "The thin share loses its empty-board guard, so a board with no wall cells reads 0/0 = NaN instead of the 0 issue #1065 requires, under either connectivity.",
+  "killedBy": [
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads 0 for both shares on a board with no wall cells"
+  ]
 }

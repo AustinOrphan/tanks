@@ -7,5 +7,8 @@
   "tests": [
     "tools/mapgen/thickness-gate.test.ts"
   ],
-  "why": "The minimum moved off its rule (the shipped minimum, vs-duel-01's 0.0940, rounded down): 0.08 still passes every shipped board and still refuses a fixture at 0.05, so only the test that recomputes the band from ARENA_DEFS can see it. A band that no longer matches its derivation is no longer a description of what ships."
+  "why": "The minimum moved off its rule (the shipped minimum, vs-duel-01's 0.0940, rounded down): 0.08 still passes every shipped board and still refuses a fixture at 0.05, so only the test that recomputes the band from ARENA_DEFS can see it. A band that no longer matches its derivation is no longer a description of what ships.",
+  "killedBy": [
+    "the thickness gate (issue #1065) derives its band and thin ceiling from every shipped board by the rule"
+  ]
 }

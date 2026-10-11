@@ -7,5 +7,8 @@
   "tests": [
     "tools/mapgen/measure.test.ts"
   ],
-  "why": "The interior share loses its empty-board guard, so a board with no wall cells reads 0/0 = NaN instead of the 0 issue #1065 requires. The gate refuses NaN as it refuses 0, so only the measure's own fixture can see it; a NaN in a sample also drops out of medianOf while Math.min and Math.max turn NaN, so the sweep block would misreport."
+  "why": "The interior share loses its empty-board guard, so a board with no wall cells reads 0/0 = NaN instead of the 0 issue #1065 requires. The gate refuses NaN as it refuses 0, so only the measure's own fixture can see it; a NaN in a sample also drops out of medianOf while Math.min and Math.max turn NaN, so the sweep block would misreport.",
+  "killedBy": [
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads 0 for both shares on a board with no wall cells"
+  ]
 }

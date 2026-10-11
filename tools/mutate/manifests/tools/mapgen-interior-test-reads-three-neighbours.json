@@ -7,5 +7,13 @@
   "tests": [
     "tools/mapgen/measure.test.ts"
   ],
-  "why": "The interior test forgets the neighbour above, so a wall cell with wall to its left, right and below counts as interior: the bottom row of every bar two cells thick and the top-middle cell of a 3x3 block read as interior, a 2x3 slab stops being thin, and every shipped board's interior share rises. Issue #1065's band is read off that share, so the gate would admit boards whose masses are only slabs."
+  "why": "The interior test forgets the neighbour above, so a wall cell with wall to its left, right and below counts as interior: the top row of every horizontal bar two cells thick and the top-middle cell of a 3x3 block read as interior, a 2x3 slab stops being thin, and every shipped board's interior share rises (vs-duel-01's 0.0940 to 0.1880, vs-quad-01's 0.3405 to 0.4229). Issue #1065's band is read off that share, so the gate would admit boards whose masses are only slabs.",
+  "killedBy": [
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) pins the per-board table, both connectivities for the thin figures, for the 9 boards it was counted on",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads a 3x3 block as interior 1 of 9 and thin 0",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads a 2x3 slab as interior 0 and thin 1: two cells thick is still thin",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) takes the thin share over ALL wall cells when one component is thin and one thick",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) joins a block and a cell touching only at a corner when 8-connected: thin 0, and 1 of 10 when 4-connected",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) counts a spawn letter beside a wall as no wall: a slab with a row of letters under it stays a slab"
+  ]
 }

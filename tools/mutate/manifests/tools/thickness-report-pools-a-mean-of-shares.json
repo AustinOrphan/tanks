@@ -7,5 +7,9 @@
   "tests": [
     "tools/mapgen/thickness-gate.test.ts"
   ],
-  "why": "The pooled thin share becomes the mean of the per-board shares, which weighs a small board's walls as heavily as a large one's. Issue #1065 reports it beside the shipped 96 of 1,410 wall cells (6.8%), a ratio of cell sums; the mean over the 9 shipped boards is 0.0733, so the two figures would not compare."
+  "why": "The pooled thin share becomes the mean of the per-board shares, which weighs a small board's walls as heavily as a large one's. Issue #1065 reports it beside the shipped 96 of 1,410 wall cells (6.8%), a ratio of cell sums; the mean over the 9 shipped boards is 0.0733, so the two figures would not compare.",
+  "killedBy": [
+    "the thickness report the sweep prints (issue #1065) pools the thin share as thin cells over wall cells, not as a mean of per-board shares",
+    "the thickness report the sweep prints (issue #1065) reports the shipped set as the sweep prints it beside the generated rows"
+  ]
 }
