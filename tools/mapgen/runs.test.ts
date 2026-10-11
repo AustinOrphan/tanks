@@ -120,7 +120,8 @@ describe('runs: destructibles at most 30% of the wall mass (issue #1029)', () =>
     //   under it (2248), first placed first (2436) or removing the piece (2330) each move it;
     // - boards carrying destructibles 94: 93 trimming to 20%, 89 touching boards under the cap;
     // - boards ending above 0.28, seeds 33, 38, 65 and 97: 33 and 65 draw there and are left
-    //   alone, and 38 and 97 are trimmed to 0.283 and 0.290, so a lower cap trims all four.
+    //   alone, and 38 and 97 are trimmed to 0.283 and 0.290, so a cap at 0.28 or lower trims all
+    //   four, and first placed first leaves seed 22 there too.
     const boards = seedRange(0, 100).map((seed) => ({ seed, ...cellCounts(generate(seed)) }));
     expect(boards.length).toBe(100);
     expect(boards.reduce((sum, b) => sum + b.wall, 0)).toBe(13424);
