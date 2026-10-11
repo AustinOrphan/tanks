@@ -7,5 +7,8 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The trim keeps going past the 30% cap to 20%: every board still ends under the ceiling the criterion names, so the per-board check passes, but it turns solid more pieces than the cap needs. Over seeds 1-100 (every default board drawn) destructible cells fall from 2450 to 1778 and no board is left above 0.20, where seeds 33, 38, 65 and 97 end between 0.28 and the cap. Only a pin on how far the trim goes sees it."
+  "why": "The trim keeps going past the 30% cap to 20%: every board still ends under the ceiling the criterion names, so the per-board check passes, but it turns solid more pieces than the cap needs. Over seeds 1-100 (every default board drawn) destructible cells fall from 2450 to 1778 and no board is left above 0.20, where seeds 33, 38, 65 and 97 end between 0.28 and the cap. Only a pin on how far the trim goes sees it.",
+  "killedBy": [
+    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
+  ]
 }

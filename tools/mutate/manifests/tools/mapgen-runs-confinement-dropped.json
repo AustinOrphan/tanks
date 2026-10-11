@@ -10,6 +10,7 @@
   "why": "Issue #1029's cause 2 restored: `fits()` loses the half-board check, so a piece crossing the midpoint index is cut by `rotate180` to its first-half stretch. At `minRun` 5 that leaves a fragment on 42 of seeds 1-50 and 32 of 51-100; the bar still has its full length in the draw, which is why only the board can show it.",
   "killedBy": [
     "runs: no wall component below 5 cells (issue #1029) draws no wall component below 5 cells, 8- or 4-connected, on any default board for seeds 1-100",
-    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 1: the old minRun 4, confinement still on, draws a 4-cell straight run"
+    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 1: the old minRun 4, confinement still on, draws a 4-cell straight run",
+    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
   ]
 }

@@ -10,6 +10,7 @@
   "why": "Issue #1029's cause 1 restored: the default `minRun` returns to 4, so a straight run drawn at the minimum is a 4-cell wall component, below the block-size target no shipped board misses. The confinement alone leaves a fragment on 49 of seeds 1-50 and 48 of 51-100, so nothing but the seeded population test sees this.",
   "killedBy": [
     "runs: no wall component below 5 cells (issue #1029) draws no wall component below 5 cells, 8- or 4-connected, on any default board for seeds 1-100",
-    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 2: the half-board confinement removed, at minRun 5, leaves a piece cut at the seam"
+    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 2: the half-board confinement removed, at minRun 5, leaves a piece cut at the seam",
+    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
   ]
 }

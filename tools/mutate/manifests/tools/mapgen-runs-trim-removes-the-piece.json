@@ -7,5 +7,8 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The trim deletes a destructible piece instead of turning it solid: the board still ends under the cap and every remaining component is still a whole piece, so neither the ceiling test nor the block-size test sees it, but the trim now moves walls. Over seeds 1-100 (every default board drawn) wall cells fall from 13424 to 12790 and destructible cells from 2450 to 2330."
+  "why": "The trim deletes a destructible piece instead of turning it solid: the board still ends under the cap and every remaining component is still a whole piece, so neither the ceiling test nor the block-size test sees it, but the trim now moves walls. Over seeds 1-100 (every default board drawn) wall cells fall from 13424 to 12790 and destructible cells from 2450 to 2330.",
+  "killedBy": [
+    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
+  ]
 }
