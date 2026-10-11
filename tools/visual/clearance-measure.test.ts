@@ -96,7 +96,8 @@ describe('clearance measurement in the page (issue #1068)', () => {
     const m = MEASURE_CLEARANCE({ stage: true, selectors: CLEARANCE_SELECTORS });
     expect(m.chips.length, 'no chip is shown, so no chip selector was checked').toBeGreaterThan(0);
     // Control: a selector renamed in one place, here the argument, matches nothing in the HUD.
-    expect(() => MEASURE_CLEARANCE({ stage: true, selectors: { ...CLEARANCE_SELECTORS, toasts: '.hud-toast' } })).toThrow(
+    const renamed = { ...CLEARANCE_SELECTORS, toasts: '.hud-toast' };
+    expect(() => MEASURE_CLEARANCE({ stage: true, selectors: renamed })).toThrow(
       'clearance: .hud-toast matches 0 elements, not 1',
     );
   });
