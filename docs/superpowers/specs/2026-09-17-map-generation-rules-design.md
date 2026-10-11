@@ -597,18 +597,11 @@ board with few pieces can draw well past the 30%-of-wall-mass cap of proposal 4 
 before this issue (12 and 14 of the 50 drawn boards over 0.30 at the old defaults, up to 0.68)
 and after the block fix (11 and 15, up to 0.52). A lower chance does not bound a per-board figure: at
 0.10, 1 and 3 boards were still over. So a board that draws over the cap now turns its
-destructible pieces solid, last placed first, until it is at or under 30% of its wall cells.
-It moves no wall cell (100 of 100 boards), leaves the 39 and 35 boards already under
-byte-identical, and lowers the mean destructible share of wall from 0.207 and 0.234 to 0.175
-and 0.186 (all 50 drawn boards per sample). `tools/mapgen/runs.test.ts` pins those claims
-through the totals over seeds 1-100 (every drawn board): 13424 wall cells, 2450 destructible
-cells, 94 boards carrying any, and seeds 33, 38, 65 and 97 ending between 0.28 and the cap.
-The trim would also skip a piece whose solid wall cut the floor, but under the current
-placement rules that cannot happen: every piece keeps a one-cell gap from every other wall
-and from its own rotated image, and none sits on the outer ring, so each is a lone bar with
-floor all round it. Over 9000 boards (seeds 1-1000 in each of nine `runs` configurations)
-3542 pieces were turned solid and none was skipped; the skip stays for a piece shape that can
-touch another wall.
+destructible pieces solid, last placed first, until it is at or under 30% of its wall cells,
+skipping any piece whose solid wall would cut the floor. It moves no wall cell (100 of 100
+boards), leaves the 39 and 35 boards already under byte-identical, and lowers the mean
+destructible share of wall from 0.207 and 0.234 to 0.175 and 0.186 (all 50 drawn boards per
+sample).
 
 **The result**, default `runs`, from `npx vite-node tools/mapgen/sweep.mjs --seeds 50` and the
 same with `--seed-offset 50`. Accepted of drawn, with every refusal named; N=3 is shown before
