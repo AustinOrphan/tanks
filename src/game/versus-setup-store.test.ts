@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createVersusSetupStore, defaultVersusSetup, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { defaultSlots } from './versus-setup';
-import { versusMapChoices } from './versus-config';
+import { campaignBoardUnlock, versusMapChoices } from './versus-config';
 
 /** A Storage whose every method throws -- private mode, or storage disabled by policy. */
 function hostileStorage(): Storage {
@@ -121,6 +121,8 @@ describe('arena ids out of storage cannot crash the launch path', () => {
   // MODEL-level test in versus-setup.test.ts covers that branch through the injected
   // predicate instead. It becomes reachable here once #271/#272/#273 author dedicated
   // two-, three- and four-player arenas, which is precisely why the guard exists now.
+  // (Issue #983 added a different way for the store to refuse a real id -- a campaign board
+  // the save has not unlocked -- tested in the describe at the end of this file.)
 
   it('keeps an arena the stored (players, mode) really supports', () => {
     // Non-vacuity for the two above: the repair must not simply flatten every id to random.
@@ -139,5 +141,51 @@ describe('arena ids out of storage cannot crash the launch path', () => {
     const a = createVersusSetupStore(storage);
     a.set({ ...defaultVersusSetup(), arenaId: 'random' });
     expect(createVersusSetupStore(storage).get().arenaId).toBe('random');
+  });
+});
+
+describe('a stored board this save has not unlocked (issue #983)', () => {
+  // The store is handed the unlock as a getter, and `createStores` binds it to the progress
+  // store (storage.test.ts pins that wiring). Arena 3 is level 3's board. The UNGATED path --
+  // no unlock passed, every declared board allowed -- is the round-trip case above, which
+  // stores and keeps the same board.
+
+  it('falls back to Random through the existing fallback after a progress reset, on the next page load', () => {
+    // A page with level 3 cleared stores Arena 3 and keeps it (the negative control); progress
+    // is then reset, and the next page's store reads the same bytes.
+    const storage = createMemoryStorage();
+    let cleared = 3;
+    const unlock = () => campaignBoardUnlock(cleared);
+    const before = createVersusSetupStore(storage, unlock);
+    before.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(before.get().arenaId, 'kept while level 3 is cleared').toBe('arena-03');
+    cleared = 0;
+    expect(createVersusSetupStore(storage, unlock).get().arenaId, 'after the reset').toBe('random');
+  });
+
+  it('is refused on the way IN too, so get() and the stored bytes agree', () => {
+    // Level 2 cleared: Arena 3 is refused and Arena 2, the negative control, is kept.
+    const storage = createMemoryStorage();
+    const store = createVersusSetupStore(storage, () => campaignBoardUnlock(2));
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(store.get().arenaId).toBe('random');
+    expect(JSON.parse(storage.getItem(VERSUS_SETUP_KEY) as string).arenaId).toBe('random');
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-02' });
+    expect(store.get().arenaId).toBe('arena-02');
+  });
+
+  it('reads the unlock at every check, so a level cleared after the store was built is kept', () => {
+    // One store, one page: level 3 is cleared after construction. The first set is the
+    // negative control -- with level 2 cleared the store refuses Arena 3 -- so the keep below is
+    // the clear reaching the store, not a store that never applied the unlock.
+    const storage = createMemoryStorage();
+    let cleared = 2;
+    const store = createVersusSetupStore(storage, () => campaignBoardUnlock(cleared));
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(store.get().arenaId, 'level 3 not yet cleared').toBe('random');
+    cleared = 3;
+    store.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(store.get().arenaId, 'level 3 cleared since').toBe('arena-03');
+    expect(JSON.parse(storage.getItem(VERSUS_SETUP_KEY) as string).arenaId).toBe('arena-03');
   });
 });

@@ -4,6 +4,7 @@ import { defaultSlots } from './versus-setup';
 // node-testable on their own -- no World, no RunStore.
 import { describe, it, expect } from 'vitest';
 import {
+  campaignBoardUnlock,
   versusMapChoices,
   pickVersusArena,
   resolveVersusConfig,
@@ -12,6 +13,7 @@ import {
 } from './versus-config';
 import { versusBoardCatalog } from '../sim/versus-board';
 import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalog-types';
+import type { CampaignLevel } from '../sim/config/campaign-types';
 import { VERSUS_CATALOG } from '../sim/config/versus-catalog';
 import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 
@@ -183,6 +185,164 @@ describe('the versus board floor (issue #355): boards that are not campaign aren
       const boards = nonCampaignBoards(players, mode);
       expect(boards.length, `${players}-${mode} offers ${boards.join(', ') || 'none'}`).toBeGreaterThanOrEqual(2);
     }
+  });
+});
+
+describe('the campaign board unlock (issue #983)', () => {
+  // The ruling on #355: a campaign board is offered in versus only once its campaign level has
+  // been cleared, and a board no campaign level plays is always offered. `highestCleared` is
+  // ProgressStore's 1-based count of levels cleared, so every save holds one of 0..5 here.
+  const cfg = (players: 2 | 3 | 4, mode: VersusMode, arenaId: string): VersusConfig => ({
+    mode, players, arenaId, stock: 3, friendlyFire: false, slots: defaultSlots(players),
+  });
+  const arenaOf = (entryId: string): string =>
+    (VERSUS_CATALOG.find((e) => e.id === entryId) as VersusCatalogEntry).arenaId;
+  /** Synthetic entries that play a CAMPAIGN arena (arena-02, level 2's board). */
+  const campaignEntries = [
+    entryFixture({ id: 'vs-campaign-both', arenaId: 'arena-02', players: [2, 3], modes: ['ffa', 'teams'] }),
+    entryFixture({ id: 'vs-campaign-duo', arenaId: 'arena-02', players: [2], modes: ['ffa'] }),
+  ];
+
+  it('unlocks exactly the boards of the levels cleared so far, and every board no level plays', () => {
+    // The shipped catalog (9 entries) at each of the 6 progress values a save can hold: 54
+    // verdicts, written as the unlocked ids per row. Each row adds the next level's board and
+    // nothing else, and the four dedicated boards are unlocked in every row.
+    const unlockedAt = (h: number): string[] =>
+      VERSUS_CATALOG.filter(campaignBoardUnlock(h)).map((e) => e.id);
+    const DEDICATED = ['vs-duel-01', 'vs-tri-01', 'vs-quad-01', 'vs-quad-02'];
+    expect(unlockedAt(0), 'a fresh save').toEqual(DEDICATED);
+    expect(unlockedAt(1)).toEqual(['arena-01', ...DEDICATED]);
+    expect(unlockedAt(2)).toEqual(['arena-01', 'arena-02', ...DEDICATED]);
+    expect(unlockedAt(3)).toEqual(['arena-01', 'arena-02', 'arena-03', ...DEDICATED]);
+    expect(unlockedAt(4)).toEqual(['arena-01', 'arena-02', 'arena-03', 'arena-04', ...DEDICATED]);
+    expect(unlockedAt(5), 'the whole campaign cleared').toEqual(
+      ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05', ...DEDICATED],
+    );
+  });
+
+  it("pairs a board with its level through the level's arenaId -- not the board's id, and not arena numbering", () => {
+    // SYNTHETIC levels and entries, because the shipped data cannot tell these apart: every
+    // shipped campaign entry has id === arenaId, and campaign.json plays the arenas in
+    // numbered order. Here the FIRST level plays arena-03, and two entries point the wrong way
+    // round: one plays a campaign arena under a dedicated-looking id, and one is NAMED like a
+    // campaign arena but plays a board no level plays.
+    const levels: CampaignLevel[] = [
+      { id: 'lvl-first', arenaId: 'arena-03' },
+      { id: 'lvl-second', arenaId: 'arena-01' },
+    ];
+    const entries = [
+      entryFixture({ id: 'vs-plays-arena-01', arenaId: 'arena-01' }),
+      entryFixture({ id: 'vs-plays-arena-03', arenaId: 'arena-03' }),
+      entryFixture({ id: 'arena-01', arenaId: 'vs-dedicated' }),
+    ];
+    const unlockedAt = (h: number): string[] =>
+      entries.filter(campaignBoardUnlock(h, levels)).map((e) => e.id);
+    expect(unlockedAt(0), 'nothing cleared').toEqual(['arena-01']);
+    expect(unlockedAt(1), 'the first level plays arena-03').toEqual(['vs-plays-arena-03', 'arena-01']);
+    expect(unlockedAt(2)).toEqual(['vs-plays-arena-01', 'vs-plays-arena-03', 'arena-01']);
+  });
+
+  it('offers a fresh save, and a save two levels in, exactly these boards at each startable option', () => {
+    // The five startable options (Teams is not offered at two players) at two saves: 10 lists.
+    // Two levels is the screen states' MID_CAMPAIGN save (tools/screens/states.mjs).
+    const choices = (players: 2 | 3 | 4, mode: VersusMode, h: number): string[] =>
+      versusMapChoices(players, mode, VERSUS_CATALOG, campaignBoardUnlock(h));
+    expect(choices(2, 'ffa', 0)).toEqual(['vs-duel-01', 'vs-tri-01', 'vs-quad-01']);
+    expect(choices(3, 'ffa', 0)).toEqual(['vs-tri-01', 'vs-quad-01']);
+    expect(choices(3, 'teams', 0)).toEqual(['vs-tri-01', 'vs-quad-01']);
+    expect(choices(4, 'ffa', 0)).toEqual(['vs-quad-01', 'vs-quad-02']);
+    expect(choices(4, 'teams', 0)).toEqual(['vs-quad-01', 'vs-quad-02']);
+    expect(choices(2, 'ffa', 2)).toEqual(['arena-01', 'arena-02', 'vs-duel-01', 'vs-tri-01', 'vs-quad-01']);
+    expect(choices(3, 'ffa', 2)).toEqual(['arena-01', 'arena-02', 'vs-tri-01', 'vs-quad-01']);
+    expect(choices(3, 'teams', 2)).toEqual(['arena-01', 'arena-02', 'vs-tri-01', 'vs-quad-01']);
+    expect(choices(4, 'ffa', 2)).toEqual(['arena-01', 'arena-02', 'vs-quad-01', 'vs-quad-02']);
+    expect(choices(4, 'teams', 2)).toEqual(['arena-01', 'arena-02', 'vs-quad-01', 'vs-quad-02']);
+  });
+
+  it('unlocking a board offers it at exactly the counts and modes its entry declares', () => {
+    // The unlock is applied after the declaration filter, so it can only take away. Every
+    // shipped campaign entry declares all six (players, mode) combinations, so only a narrowed
+    // campaign entry can show it: swept over all six, startable or not.
+    const entries = [
+      entryFixture({ id: 'vs-narrow', arenaId: 'arena-01', players: [2], modes: ['ffa'] }),
+    ];
+    const offeredAt = (h: number): string[] =>
+      [[2, 'ffa'], [2, 'teams'], [3, 'ffa'], [3, 'teams'], [4, 'ffa'], [4, 'teams']]
+        .filter(([n, m]) =>
+          versusMapChoices(n as number, m as VersusMode, entries, campaignBoardUnlock(h)).length > 0)
+        .map(([n, m]) => `${n}-${m}`);
+    expect(offeredAt(1), 'unlocked: its one declared combination').toEqual(['2-ffa']);
+    expect(offeredAt(0), 'locked: none').toEqual([]);
+  });
+
+  it('leaves a fresh save at least two non-campaign boards at each startable option, and every one starts', () => {
+    // Criterion 5 of #983, and the reason it was sequenced behind #229's floor: the gate takes
+    // campaign boards only, so a fresh save keeps exactly the dedicated boards. Over the five
+    // startable options: the 11 boards offered (3 + 2 + 2 + 2 + 2) each started by name, and
+    // Random started at seeds 1..20 at every option (100 starts), each on a board it offers.
+    const fresh = campaignBoardUnlock(0);
+    const campaignArenas = new Set(CAMPAIGN_LEVELS.map((level) => level.arenaId));
+    const OPTIONS: readonly { players: 2 | 3 | 4; mode: VersusMode }[] = [
+      { players: 2, mode: 'ffa' },
+      { players: 3, mode: 'ffa' },
+      { players: 3, mode: 'teams' },
+      { players: 4, mode: 'ffa' },
+      { players: 4, mode: 'teams' },
+    ];
+    for (const { players, mode } of OPTIONS) {
+      const offered = versusMapChoices(players, mode, VERSUS_CATALOG, fresh);
+      expect(offered.length, `${players}-${mode} offers ${offered.join(', ') || 'none'}`).toBeGreaterThanOrEqual(2);
+      for (const id of offered) {
+        expect(campaignArenas.has(arenaOf(id)), `${players}-${mode}: ${id} plays a campaign arena`).toBe(false);
+        expect(resolveVersusConfig(cfg(players, mode, id), 1, VERSUS_CATALOG, fresh).arenaId).toBe(arenaOf(id));
+      }
+      for (let seed = 1; seed <= 20; seed++) {
+        const drawn = resolveVersusConfig(cfg(players, mode, 'random'), seed, VERSUS_CATALOG, fresh);
+        expect(offered, `${players}-${mode} Random at seed ${seed}`).toContain(drawn.arenaId);
+      }
+    }
+  });
+
+  it('Random draws only from the boards a save has unlocked', () => {
+    // Measured, 3-FFA at seeds 1..20 on a fresh save: vs-quad-01 x12, vs-tri-01 x8. The same
+    // seeds drawn from the declared offer land on a campaign board 16 times (seed 1 -> arena-05).
+    // Both boards must appear, so this also fails on a draw that collapsed to one of them.
+    const fresh = campaignBoardUnlock(0);
+    const drawn = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      drawn.add(pickVersusArena(cfg(3, 'ffa', 'random'), seed, VERSUS_CATALOG, fresh));
+    }
+    expect([...drawn].sort()).toEqual(['vs-quad-01', 'vs-tri-01']);
+  });
+
+  it("refuses to launch a board the save has not unlocked -- the launch gate's backstop", () => {
+    const arena2 = cfg(3, 'ffa', 'arena-02');
+    expect(() => resolveVersusConfig(arena2, 1, VERSUS_CATALOG, campaignBoardUnlock(1)))
+      .toThrow("versus-config: map 'arena-02' is locked until its campaign level is cleared");
+    // The negative control: the same board once level 2 is cleared, by identity as ever.
+    expect(resolveVersusConfig(arena2, 1, VERSUS_CATALOG, campaignBoardUnlock(2))).toBe(arena2);
+  });
+
+  it('drops a retained board the save has not unlocked, and blames the lock rather than an axis', () => {
+    // Level 2 is not cleared, so both arena-02 entries are locked. The first DECLARES (3,
+    // teams), so only the lock can have dropped it -- the axis rule would call it 'mode'. The
+    // second does not declare three players either, and the lock still wins: it is offered at
+    // no combination, so naming the count would point at a control that cannot bring it back.
+    const locked = campaignBoardUnlock(1);
+    expect(retainArenaChoice('vs-campaign-both', 3, 'teams', campaignEntries, locked)).toEqual({
+      arenaId: 'random',
+      dropped: { id: 'vs-campaign-both', reason: 'locked' },
+    });
+    expect(retainArenaChoice('vs-campaign-duo', 3, 'ffa', campaignEntries, locked)).toEqual({
+      arenaId: 'random',
+      dropped: { id: 'vs-campaign-duo', reason: 'locked' },
+    });
+  });
+
+  it('keeps a retained campaign board once its level is cleared', () => {
+    // The negative control for the case above, every assertion of which is about a drop.
+    expect(retainArenaChoice('vs-campaign-both', 3, 'teams', campaignEntries, campaignBoardUnlock(2)))
+      .toEqual({ arenaId: 'vs-campaign-both', dropped: null });
   });
 });
 

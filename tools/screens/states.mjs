@@ -772,15 +772,18 @@ export const SCREEN_STATES = Object.freeze([
     id: 'screen.versus-setup.selected',
     title: 'Versus Setup, a board chosen',
     description:
-      'Arena 3 picked (issue #274). The pane default is Random, so this is the only state ' +
+      'Arena 2 picked (issue #274). The pane default is Random, so this is the only state ' +
       'showing the selection ring on a card with a board schematic in it -- the state ' +
       "#274's \"selected state remains obvious without relying on color\" criterion is about.",
     storage: MID_CAMPAIGN,
+    // Arena 2, not Arena 3 as before issue #983: a campaign board is offered in versus only
+    // once its level is cleared, and MID_CAMPAIGN has cleared levels 1 and 2, so Arena 3 has
+    // no card here to click. Arena 2 keeps the one save and still rings a board schematic.
     steps: [
       ...PAST_SPLASH,
       { click: '.hud-versus-open' },
       { waitVisible: '.hud-versus-setup' },
-      { click: '.hud-versus-map-row [data-map="arena-03"]' },
+      { click: '.hud-versus-map-row [data-map="arena-02"]' },
       // Waiting on the ROW rather than on the clicked card: the row is replaced wholesale on
       // every selection, so the node clicked above is gone by the time this resolves.
       { waitVisible: '.hud-versus-map-row' },
@@ -800,8 +803,9 @@ export const SCREEN_STATES = Object.freeze([
     //
     // Issue #627 is what made the map row worth a picture. Keystone (`vs-tri-01`) declared
     // `ffa` alone until #584 established that asymmetric Teams are intentionally supported,
-    // so this row offered five boards and Random here and now offers six and Random. That
-    // button is reachable in exactly this state and no other.
+    // so before that this row did not offer it at all. That button is reachable in exactly
+    // this state and no other. Since issue #983 the row offers only what the save has
+    // unlocked: on MID_CAMPAIGN, Arena 1, Arena 2, Keystone, Quarters and Random.
     //
     // Waiting on the friendly-fire toggle rather than on the Keystone button is deliberate:
     // it confirms the pane really entered Teams, which is the precondition. Waiting on the
@@ -841,6 +845,36 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-versus-map-note' },
     ],
     measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-note'],
+  }),
+  state({
+    id: 'screen.versus-setup.fresh',
+    title: 'Versus Setup, nothing played',
+    description:
+      'The Map row a player with no campaign progress sees, at three players (issue #983). ' +
+      'Every campaign board is locked, so the row holds Keystone, Quarters and Random: fewer ' +
+      'cards than the five columns it has room for at desktop width.',
+    // A FRESH save, and the only Versus Setup state on one: the other four use MID_CAMPAIGN,
+    // whose two unlocked arenas fill the row's first line. Three players rather than the
+    // default two because three is the shortest row a fresh save can show -- three cards, at
+    // 3-FFA, 3-Teams, 4-FFA and 4-Teams alike -- where two players shows four.
+    //
+    // `.hud-versus-map-card` is measured for its WIDTH, which records how the row lays out a
+    // short line. With `auto-fill` the grid kept five tracks and left the three cards against
+    // the left edge, 243px each with about 500px empty beside them, under rows that are all
+    // centred; `auto-fit` (hud.css) collapses the empty tracks, so the three span the row.
+    //
+    // Waiting on Pinwheel's card to GO is what proves the row was rebuilt for three players:
+    // that board is two-player only. A wait on a card the row keeps would pass with the
+    // Players click silently ignored.
+    steps: [
+      ...PAST_SPLASH,
+      { click: '.hud-versus-open' },
+      { waitVisible: '.hud-versus-setup' },
+      { waitVisible: '.hud-versus-map-row [data-map="vs-duel-01"]' },
+      { click: '.hud-versus-players-row [data-players="3"]' },
+      { waitHidden: '.hud-versus-map-row [data-map="vs-duel-01"]' },
+    ],
+    measure: ['.hud-versus-setup', '.hud-versus-map-row', '.hud-versus-map-card'],
   }),
   // ---- Developer Tools -------------------------------------------------------------
   state({

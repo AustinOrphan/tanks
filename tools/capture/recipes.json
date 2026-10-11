@@ -944,8 +944,8 @@
       "allowUnexpectedEvents": true
     },
     "title": "Versus Setup, a board chosen",
-    "description": "The Versus Setup pane with Arena 3 picked, showing the selection ring on a map card.",
-    "altText": "Screenshot of the Tanks! versus setup screen, a grid of map cards each showing a board schematic, with Arena 3 ringed as the current choice.",
+    "description": "The Versus Setup pane with Arena 2 picked, showing the selection ring on a map card.",
+    "altText": "Screenshot of the Tanks! versus setup screen, a grid of map cards each showing a board schematic, with Arena 2 ringed as the current choice.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
   },
@@ -1044,6 +1044,55 @@
     "title": "Versus Setup, a map choice replaced",
     "description": "The Versus Setup pane after a player count change dropped the chosen map.",
     "altText": "Screenshot of the Tanks! versus setup screen showing a notice that the chosen map is unavailable.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "screen.versus-setup.fresh",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.versus-setup.fresh"
+    },
+    "fixture": {
+      "id": "screen.versus-setup.fresh",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Versus Setup, nothing played",
+    "description": "The Versus Setup pane on a fresh save at three players, where every campaign board is locked and the Map row holds two boards and Random.",
+    "altText": "Screenshot of the Tanks! versus setup screen on a fresh save, a row of three map cards spanning the pane: Keystone, Quarters and Random.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
   },

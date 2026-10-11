@@ -60,6 +60,9 @@ describe('capture recipe schema', () => {
       'screen.versus-setup.selected',
       'screen.versus-setup.teams',
       'screen.versus-setup.map-replaced',
+      // Issue #983: the Map row on a fresh save, the one Versus Setup state with every
+      // campaign board locked.
+      'screen.versus-setup.fresh',
       'screen.about',
       'screen.about.document',
       'screen.devtools',

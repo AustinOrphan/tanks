@@ -1,8 +1,8 @@
 {
   "id": "rematch-resolves-random-before-handing-it-over",
   "file": "src/game/loop.ts",
-  "find": "        deps.requestVersusSession(deps.initialVersusConfig);",
-  "replace": "        deps.requestVersusSession({ ...deps.initialVersusConfig, arenaId: deps.levels.start.arenaId });",
+  "find": "        deps.requestVersusSession(arenaId === retained.arenaId ? retained : { ...retained, arenaId });",
+  "replace": "        deps.requestVersusSession({ ...retained, arenaId: deps.levels.start.arenaId });",
   "expect": "killed",
   "tests": [
     "src/game/loop.test.ts"

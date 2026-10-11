@@ -1,0 +1,14 @@
+{
+  "id": "versus-store-built-without-progress",
+  "file": "src/game/storage.ts",
+  "find": "      () => campaignBoardUnlock(progress.highestCleared()),",
+  "replace": "      () => () => true,",
+  "expect": "killed",
+  "tests": [
+    "src/game/storage.test.ts"
+  ],
+  "killedBy": [
+    "createStores hands the versus setup store this save's progress, so a stored board it has not unlocked reads back as Random (issue #983)"
+  ],
+  "why": "The browser wiring of the stored-setup place: `createStores` builds the setup store without the progress read, so the store-level gate exists and is tested but is never handed the real progress. Every store-level case injects its own unlock, so only a case that goes through `createStores` can see this. Proved before its tests existed: SURVIVES at 0 of 49 in scope on the gate's own commit, then KILLED by 1 of 50, measured."
+}

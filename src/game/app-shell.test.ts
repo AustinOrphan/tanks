@@ -11,6 +11,7 @@ import {
 } from './render-capability';
 import { createBrowserDeps } from './loop';
 import type { AudioEngine } from '../audio/engine';
+import { CAMPAIGN_LEVELS } from '../sim/arena';
 
 function realSettings(namespace: 'production' | 'developer' = 'production'): AppSettings {
   const storage = createMemoryStorage();
@@ -122,6 +123,34 @@ describe('createBrowserDeps: the page-owned audio wiring (issue #317)', () => {
     // The READ side is separately wrong if it is wired to a snapshot taken at deps
     // construction, which is why this asks the SAME deps object again rather than a new one.
     expect(deps.launchGate.dismissed(), 'the gate read a stale snapshot').toBe(true);
+  });
+});
+
+describe("createBrowserDeps: the page HUD's versus Map row reads this save's progress (issue #983)", () => {
+  it("offers a fresh save only the boards no campaign level plays, and a cleared level's board from the next open", () => {
+    // The wiring `main.ts` ships: every HUD test injects its own HUD, so only the page's real
+    // factory shows whether the pane is handed the progress store at all. Two players, FFA.
+    const { shell } = build();
+    const deps = createBrowserDeps(shell);
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const hud = deps.createHud(root);
+    const maps = (): string[] =>
+      Array.from(root.querySelectorAll<HTMLElement>('.hud-versus-map-row [data-map]'))
+        .map((b) => b.dataset.map as string);
+    try {
+      hud.setState('main-menu');
+      hud.showVersusSetup(true);
+      expect(maps(), 'a fresh save').toEqual(['vs-duel-01', 'vs-tri-01', 'vs-quad-01', 'random']);
+      // A clear recorded through the SAME progress store a session writes to.
+      deps.progress.recordCleared(CAMPAIGN_LEVELS[0]);
+      hud.showVersusSetup(false);
+      hud.showVersusSetup(true);
+      expect(maps(), 'level 1 cleared').toEqual(['arena-01', 'vs-duel-01', 'vs-tri-01', 'vs-quad-01', 'random']);
+    } finally {
+      hud.dispose();
+      document.body.innerHTML = '';
+    }
   });
 });
 

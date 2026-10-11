@@ -1,0 +1,15 @@
+{
+  "id": "versus-start-ignores-progress",
+  "file": "src/game/loop.ts",
+  "find": "    campaignBoardUnlock(deps.progress.highestCleared()),",
+  "replace": "    () => true,",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "killedBy": [
+    "applyVersusToDeps / versusAwareDeps: the reboot seam issue #983: the Start boundary reads this save's progress refuses a concrete campaign board the save has not cleared, and starts it once it has",
+    "applyVersusToDeps / versusAwareDeps: the reboot seam issue #983: the Start boundary reads this save's progress draws Random from the boards the save has unlocked"
+  ],
+  "why": "The Start boundary hands the launch gate no unlock, so a session starts on a locked concrete board and Random draws from every declared board, on a fresh save as readily as a finished one. Proved before its tests existed: SURVIVES at 0 of 491 in scope on the gate's own commit, then KILLED by 2 of 494, measured."
+}

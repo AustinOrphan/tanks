@@ -4569,22 +4569,32 @@
 /* ---- Versus map cards (issue #274) ------------------------------------------------ */
 
 /* A grid rather than the flex row its siblings use, so the cards line up in columns
-   whatever their names measure -- `auto-fill` with a minimum is what makes the same rule
+   whatever their names measure -- `auto-fit` with a minimum is what makes the same rule
    serve a phone (one column), a desktop (two or three) and a TV, with no breakpoint to keep
    in step with the pane's other rows.
 
    `max-width` rather than shrink-to-fit, and it is load-bearing rather than cosmetic: this
    pane centres its children, so without a definite width the grid sizes to content and
-   `auto-fill` resolves against whatever that happened to be. The measure also bounds how far
+   `auto-fit` resolves against whatever that happened to be. The measure also bounds how far
    Start can be pushed down the pane -- see the card rule below.
 
    78rem, up from 46rem (issue #1032): room for five 15rem columns and their gaps, so where the
    pane has the width -- 1280px and up -- the seven cards take two rows instead of three, and
    so would the nine #229 plans to offer. That row is what let the pane fit 1920x1080; the
-   cards themselves, and the narrowest column a card can get, are unchanged. */
+   cards themselves, and the narrowest column a card can get, are unchanged.
+
+   `auto-fit`, not `auto-fill` (issue #983). `auto-fill` keeps a track for every column that
+   fits, empty or not, so a row shorter than the five columns sat against the left edge with
+   the empty tracks beside it, and `justify-content: center` had nothing to centre. Before the
+   board gate every option offered at least eight cards, so the first line was always full; on
+   a fresh save the gate leaves three or four. `auto-fit` collapses the empty tracks, so a
+   short row spans the measure like every other row in the pane. A line of five or more cards,
+   and the one-column phone layout, lay out exactly as before. The cost is width: three cards
+   at 1280px are about 410px each rather than 243px, which leaves more room beside the text.
+   `screen.versus-setup.fresh` measures it. */
 .hud-versus-map-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   justify-content: center;
   gap: var(--hud-space-2);
   width: 100%;

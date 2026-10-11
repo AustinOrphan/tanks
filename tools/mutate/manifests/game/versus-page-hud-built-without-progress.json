@@ -1,0 +1,14 @@
+{
+  "id": "versus-page-hud-built-without-progress",
+  "file": "src/game/loop.ts",
+  "find": "        versusUnlock: () => campaignBoardUnlock(progress.highestCleared()),",
+  "replace": "        // versusUnlock unbound",
+  "expect": "killed",
+  "tests": [
+    "src/game/app-shell.test.ts"
+  ],
+  "killedBy": [
+    "createBrowserDeps: the page HUD's versus Map row reads this save's progress (issue #983) offers a fresh save only the boards no campaign level plays, and a cleared level's board from the next open"
+  ],
+  "why": "The browser wiring of the Map-row place: the page's HUD factory is built without the progress read, so the pane falls back to every declared board. Every HUD test injects its own HUD, so only a case that builds the HUD through `createBrowserDeps` can see this -- the one HUD a production page actually has. Proved before its tests existed: SURVIVES at 0 of 15 in scope on the gate's own commit, then KILLED by 1 of 16, measured."
+}

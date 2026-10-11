@@ -15,6 +15,7 @@ import {
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { exportSave, importSave, SAVE_FORMAT, SAVE_VERSION } from './save';
 import { PROGRESS_KEY } from './progress';
+import { defaultVersusSetup, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
 import { PERSISTED_DATA } from './persistence-inventory';
@@ -205,6 +206,35 @@ describe('createStores', () => {
     expect(stores.progress.highestCleared()).toBe(3);
     expect(stores.customization.hull()).toBe('green');
     expect(stores.customization.skin()).toBe('camo');
+  });
+
+  it("hands the versus setup store this save's progress, so a stored board it has not unlocked reads back as Random (issue #983)", () => {
+    // Through createStores, the one place the two stores meet. The same stored setup names
+    // Arena 3 on two saves: one with level 2 cleared, where the board is locked, and one with
+    // level 3 cleared, the negative control, where it is kept.
+    const storedArenaOn = (levelId: string): string => {
+      const storage = createMemoryStorage();
+      storage.setItem(PROGRESS_KEY, JSON.stringify({ levelId }));
+      storage.setItem(VERSUS_SETUP_KEY, JSON.stringify({ ...defaultVersusSetup(), arenaId: 'arena-03' }));
+      return createStores(storage).versusSetup.get().arenaId;
+    };
+    expect(storedArenaOn('level-02'), 'level 3 not cleared').toBe('random');
+    expect(storedArenaOn('level-03'), 'level 3 cleared').toBe('arena-03');
+  });
+
+  it('binds that progress read live, so a level cleared after the page booted keeps its board across a reload (issue #983)', () => {
+    // The page calls createStores once and keeps the result, so the progress the setup store
+    // reads must be the progress NOW, not at construction. The first set is the negative
+    // control: before level 3 is cleared the same store refuses Arena 3, so the keep below is
+    // the clear arriving, not a store that was never gated.
+    const storage = createMemoryStorage();
+    storage.setItem(PROGRESS_KEY, JSON.stringify({ levelId: 'level-02' }));
+    const stores = createStores(storage);
+    stores.versusSetup.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(stores.versusSetup.get().arenaId, 'level 3 not yet cleared').toBe('random');
+    stores.progress.recordCleared(CAMPAIGN_LEVELS[2]);
+    stores.versusSetup.set({ ...defaultVersusSetup(), arenaId: 'arena-03' });
+    expect(createStores(storage).versusSetup.get().arenaId, 'after the reload').toBe('arena-03');
   });
 
   it('survives a storage whose every method throws', () => {

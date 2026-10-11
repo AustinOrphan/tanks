@@ -1,7 +1,7 @@
 {
   "id": "rematch-returns-to-the-pane-instead-of-playing",
   "file": "src/game/loop.ts",
-  "find": "        deps.requestVersusSession(deps.initialVersusConfig);",
+  "find": "        deps.requestVersusSession(arenaId === retained.arenaId ? retained : { ...retained, arenaId });",
   "replace": "        sm.toMainMenu();\n        slot.openVersusSetup();",
   "expect": "killed",
   "tests": [

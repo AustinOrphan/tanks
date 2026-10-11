@@ -25,6 +25,7 @@ import {
 } from '../input/touch';
 import { COUNTDOWN_TICKS, LIVES, VERSUS_STOCK } from '../sim/constants';
 import { createRunStore, DEFAULT_CAMPAIGN_ID, RUN_KEY, type ActiveRun } from './run';
+import { createProgressStore, type ProgressStore } from './progress';
 import type { World } from '../sim/world';
 import { countPlayerTanks } from '../sim/world';
 import type { SimEvent } from '../sim/events';
@@ -424,6 +425,17 @@ interface Recorder {
   frameCaptures: number;
   /** Every value passed to hud.setPadDiagnostics, in order (each a snapshot copy). */
   padDiagnosticsPushes: PadDiagnostic[][];
+}
+
+/**
+ * A REAL progress store over memory storage with the first `levels` campaign levels cleared
+ * (0 = a fresh save). Real rather than faked so the versus gate (issue #983) is read through
+ * the same `highestCleared()` the browser wires.
+ */
+function progressClearedThrough(levels: number): ProgressStore {
+  const progress = createProgressStore(createMemoryStorage());
+  if (levels > 0) progress.recordCleared(CAMPAIGN_LEVELS[levels - 1]);
+  return progress;
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; savedQuality?: QualityPreset; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
@@ -5190,7 +5202,8 @@ describe('startGameWith: dev flags stay off by default', () => {
 
     /** A session started from the Versus Setup pane: `applyVersusToDeps` stamps its mode. */
     function bootFromPane(config: VersusConfig, devFlags: Partial<DevFlags> = {}): ReturnType<typeof boot> {
-      const base = makeDeps({ devFlags });
+      // Level 1 cleared, so arena-01 is unlocked (issue #983); the board is incidental here.
+      const base = makeDeps({ devFlags, progressHighest: 1 });
       return boot({ ...base, deps: { ...base.deps, ...applyVersusToDeps(base.deps, { config }, noop) } });
     }
 
@@ -7865,7 +7878,8 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       // player who wants another round no longer detours through a configuration screen
       // to ask for the configuration they already had.
       const calls: VersusConfig[] = [];
-      const base = makeDeps();
+      // Level 2 cleared, so CONFIG's arena-02 is unlocked and the rematch keeps it (#983).
+      const base = makeDeps({ progressHighest: 2 });
       const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
       const levelBuildsBeforeClick = h.rec.levelBuilds.length;
       h.setState('outcome-win');
@@ -7887,13 +7901,29 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
 
     it('lose: the same rematch path, not the campaign Retry rebuild', () => {
       const calls: VersusConfig[] = [];
-      const base = makeDeps();
+      const base = makeDeps({ progressHighest: 2 });
       const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
       const levelBuildsBeforeClick = h.rec.levelBuilds.length;
       h.setState('outcome-lose');
       h.hud.startRestart();
       expect(calls).toEqual([CONFIG]);
       expect(h.rec.levelBuilds.length).toBe(levelBuildsBeforeClick);
+      h.handle.dispose();
+    });
+
+    it('rematches a board a mid-match progress reset locked as Random (issue #983)', () => {
+      // Settings, and Reset progress in it, is reachable from pause, so the save can lose level
+      // 2 while a match on arena-02 runs. The rematch must not hand that board to the launch
+      // gate, which throws, and the host shows a failed-match overlay whose Retry fails the
+      // same way. The win case above is the negative control: the same config, level 2 still
+      // cleared, rematches unchanged.
+      const calls: VersusConfig[] = [];
+      const base = makeDeps({ progressHighest: 2 });
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
+      base.deps.progress.reset();
+      h.setState('outcome-win');
+      h.hud.startRestart();
+      expect(calls).toEqual([{ ...CONFIG, arenaId: 'random' }]);
       h.handle.dispose();
     });
 
@@ -8201,10 +8231,22 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
    * run on this machine's actual localStorage cannot leak in -- `createVersusLevelSystem`
    * never reads it anyway, per its own doc comment) and `devFlags` overridable, so H1's
    * `corpseBlock` fixture does not have to round-trip through a real `location.search`.
+   *
+   * `progress` is a real store with the WHOLE campaign cleared by default, so every campaign
+   * board is unlocked (issue #983) and the seed tables below keep measuring the catalog's full
+   * declared offer; the launch-gate cases hand in a fresher save.
    */
-  function baseDeps(devFlags: Partial<DevFlags> = {}): BrowserPageDeps {
+  function baseDeps(
+    devFlags: Partial<DevFlags> = {},
+    progress: ProgressStore = progressClearedThrough(CAMPAIGN_LEVELS.length),
+  ): BrowserPageDeps {
     const deps = createBrowserDeps();
-    return { ...deps, run: createRunStore(createMemoryStorage()), devFlags: { ...deps.devFlags, ...devFlags } };
+    return {
+      ...deps,
+      run: createRunStore(createMemoryStorage()),
+      progress,
+      devFlags: { ...deps.devFlags, ...devFlags },
+    };
   }
 
   it('with no versus config: threads requestVersusSession and nulls initialVersusConfig, leaving levels/devFlags untouched', () => {
@@ -8284,7 +8326,9 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     });
 
     it('versusAwareDeps forwards requestCampaignSession to applyVersusToDeps unchanged', () => {
-      const result = versusAwareDeps({ config: CONFIG }, noop, campaignNoop);
+      // vs-tri-01, not CONFIG's arena-02: `versusAwareDeps` reads the real browser progress,
+      // a fresh save here, on which only boards no campaign level plays are offered (#983).
+      const result = versusAwareDeps({ config: { ...CONFIG, arenaId: 'vs-tri-01' } }, noop, campaignNoop);
       expect(result.requestCampaignSession).toBe(campaignNoop);
     });
 
@@ -8346,7 +8390,8 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     // matched to the SAME measured deriveSeed/pickVersusArena table versus-config.test.ts's
     // own "distributes" case pins: deriveSeed is a no-op for inputs under 512
     // (`wallMs ^ (wallMs >>> 9)` clears no bits), so wallMs 1/2 here resolve through
-    // pickVersusArena exactly like seeds 1/2 do there.
+    // pickVersusArena exactly like seeds 1/2 do there. On `baseDeps`'s default save, the whole
+    // campaign cleared, so all seven boards are unlocked (issue #983) and that table holds.
     const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
     it("random resolves to a member of versusMapChoices(players), and levels.bounds matches THAT arena exactly -- the defect's direct oracle", () => {
@@ -8423,6 +8468,29 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       const quitRebuilt = result.levels.world(result.levels.start, 1, undefined, 3);
       expect(initial.rules.arenaGeometry?.cols).toBe(27); // vs-tri-01
       expect(quitRebuilt.rules.arenaGeometry?.cols).toBe(27); // still vs-tri-01, not arena-05
+    });
+  });
+
+  describe("issue #983: the Start boundary reads this save's progress", () => {
+    const random3: VersusConfig = { ...CONFIG, arenaId: 'random' };
+
+    it('refuses a concrete campaign board the save has not cleared, and starts it once it has', () => {
+      // The launch gate is the backstop -- the pane never hands it a locked board -- so it is
+      // driven directly. CONFIG names arena-02, level 2's board.
+      expect(() => applyVersusToDeps(baseDeps({}, progressClearedThrough(1)), { config: CONFIG }, noop))
+        .toThrow("versus-config: map 'arena-02' is locked until its campaign level is cleared");
+      const cleared = applyVersusToDeps(baseDeps({}, progressClearedThrough(2)), { config: CONFIG }, noop);
+      expect(cleared.levels.start.arenaId, 'the negative control: level 2 cleared').toBe('arena-02');
+    });
+
+    it('draws Random from the boards the save has unlocked', () => {
+      // wallMs 1 is seed 1 (see the group above). At 3-FFA seed 1 draws arena-05 from the
+      // declared offer and vs-quad-01 from a fresh save's (versus-config.test.ts, measured).
+      const freshDeps = { ...baseDeps({}, progressClearedThrough(0)), wallMs: () => 1 };
+      const fresh = applyVersusToDeps(freshDeps, { config: random3 }, noop);
+      expect(fresh.levels.start.arenaId, 'a fresh save').toBe('vs-quad-01');
+      const full = applyVersusToDeps({ ...baseDeps(), wallMs: () => 1 }, { config: random3 }, noop);
+      expect(full.levels.start.arenaId, 'the negative control: the whole campaign cleared').toBe('arena-05');
     });
   });
 });
@@ -10191,7 +10259,9 @@ describe('quitting a versus match leaves a campaign-shaped Main Menu behind', ()
 });
 
 describe('boot + startGameWith: the Launch gate is once per document load (issue #317)', () => {
-  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+  // A board no campaign level plays, so it is offered on the fresh save these sessions boot
+  // with (issue #983); which board is incidental to the lifecycle under test.
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'vs-duel-01', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
 
   it('a Campaign -> Versus reboot does not replay the splash', () => {
     // `startEmpty` since issue #428: a started match enters gameplay, and this case is
@@ -10334,7 +10404,9 @@ function liveHostListeners(h: ReturnType<typeof makeDeps>, type: string): number
 }
 
 describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => {
-  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+  // A board no campaign level plays, so it is offered on the fresh save these sessions boot
+  // with (issue #983); which board is incidental to the lifecycle under test.
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'vs-duel-01', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
 
   /**
    * Five sessions over a realistic route, four of them retired: Campaign -> Main Menu ->

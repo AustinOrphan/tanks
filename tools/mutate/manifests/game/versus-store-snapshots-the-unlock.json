@@ -1,0 +1,16 @@
+{
+  "id": "versus-store-snapshots-the-unlock",
+  "file": "src/game/versus-setup-store.ts",
+  "find": "  const arenaAllowed = (id: string, players: number, mode: 'ffa' | 'teams'): boolean =>\n    versusMapChoices(players, mode, VERSUS_CATALOG, unlocked()).includes(id);",
+  "replace": "  const unlockedAtBuild = unlocked();\n  const arenaAllowed = (id: string, players: number, mode: 'ffa' | 'teams'): boolean =>\n    versusMapChoices(players, mode, VERSUS_CATALOG, unlockedAtBuild).includes(id);",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-setup-store.test.ts",
+    "src/game/storage.test.ts"
+  ],
+  "killedBy": [
+    "createStores binds that progress read live, so a level cleared after the page booted keeps its board across a reload (issue #983)",
+    "a stored board this save has not unlocked (issue #983) reads the unlock at every check, so a level cleared after the store was built is kept"
+  ],
+  "why": "The setup store reads its unlock once, when it is built, instead of at every check (issue #983). The store lives as long as the page, so a level cleared after boot does not reach it: the player picks the newly unlocked board, the pane's own live check offers it and the match runs on it, but `set` quietly stores Random, so the next page load has forgotten the choice. The same tidy-looking hoist of a getter as versus-unlock-snapshotted-when-the-hud-is-built, on the store's side. Proved before its tests existed: SURVIVES at 0 of 63 in scope (versus-setup-store.test.ts 13, storage.test.ts 50), then KILLED by 2 of 65, measured. Its storage.test.ts killer goes through createStores; the store-level one injects its own getter, so each would catch it alone."
+}
