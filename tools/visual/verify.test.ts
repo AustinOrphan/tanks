@@ -40,4 +40,23 @@ describe('verify.mjs: the seams no vitest run can execute', () => {
     expect(firstGoto, 'no navigation was found').toBeGreaterThan(-1);
     expect(at, 'the override is installed after the first navigation').toBeLessThan(firstGoto);
   });
+
+  it('measures the clearance through the selectors its verdict prints, spelling none of its own', () => {
+    // Issue #1068. MEASURE_CLEARANCE runs in the page, so it is handed CLEARANCE_SELECTORS
+    // rather than closing over it, and the hand-off is inside the browser run. The path is the
+    // measurement itself through the end of `measureClearance`, which drives it.
+    const start = src.indexOf('export const MEASURE_CLEARANCE = ');
+    const driver = src.indexOf('\nasync function measureClearance(');
+    const end = src.indexOf('\n}\n', driver);
+    expect(start, 'MEASURE_CLEARANCE was not found').toBeGreaterThan(-1);
+    expect(driver, 'measureClearance does not follow MEASURE_CLEARANCE').toBeGreaterThan(start);
+    expect(end, 'measureClearance has no end').toBeGreaterThan(driver);
+    // Line comments may name a selector; only code is held to this.
+    const path = src.slice(start, end).replace(/^\s*\/\/.*$/gm, '');
+    expect(path.match(/['"`]\.hud-[\w-]*/g), 'a selector spelled out in the clearance path').toBeNull();
+    expect(path.match(/page\.evaluate\(MEASURE_CLEARANCE, [^)]*\)/g)).toEqual([
+      'page.evaluate(MEASURE_CLEARANCE, { stage: false, selectors: CLEARANCE_SELECTORS })',
+      'page.evaluate(MEASURE_CLEARANCE, { stage: true, selectors: CLEARANCE_SELECTORS })',
+    ]);
+  });
 });

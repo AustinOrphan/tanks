@@ -1,0 +1,18 @@
+{
+  "id": "verify-clearance-measures-a-renamed-selector",
+  "file": "tools/visual/verify.mjs",
+  "find": "    toasts: box(selectors.toasts),",
+  "replace": "    toasts: box('.hud-toast'),",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance-measure.test.ts",
+    "tools/visual/verify.test.ts"
+  ],
+  "killedBy": [
+    "clearance measurement in the page (issue #1068) measures the HUD's own markup through CLEARANCE_SELECTORS, every selector naming one element",
+    "clearance measurement in the page (issue #1068) names each shown chip by its place among all of the bar's children, through the selectors it is handed",
+    "clearance measurement in the page (issue #1068) throws, naming the selector, rather than measure one that matches several elements or none",
+    "verify.mjs: the seams no vitest run can execute measures the clearance through the selectors its verdict prints, spelling none of its own"
+  ],
+  "why": "Has the in-page measurement read the toast rail through a selector of its own, renamed, while the verdict still prints CLEARANCE_SELECTORS: the two copies issue #1068 removed, drifted apart. MEASURE_CLEARANCE runs only inside the browser, so before clearance-measure.test.ts no unit test executed it and only the `visual` job would have failed."
+}

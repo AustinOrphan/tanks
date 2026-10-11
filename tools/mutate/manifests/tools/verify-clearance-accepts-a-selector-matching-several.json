@@ -1,0 +1,14 @@
+{
+  "id": "verify-clearance-accepts-a-selector-matching-several",
+  "file": "tools/visual/verify.mjs",
+  "find": "    if (found.length !== 1) throw",
+  "replace": "    if (found.length < 1) throw",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance-measure.test.ts"
+  ],
+  "killedBy": [
+    "clearance measurement in the page (issue #1068) throws, naming the selector, rather than measure one that matches several elements or none"
+  ],
+  "why": "Lets a selector that matches several elements through, measuring the first. Every selector the verdict prints has to name one element or the line sends a reader to the wrong one, and querySelector's first match is exactly the silent choice the old measurement made."
+}

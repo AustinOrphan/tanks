@@ -1,0 +1,17 @@
+{
+  "id": "verify-clearance-measures-a-copied-selector",
+  "file": "tools/visual/verify.mjs",
+  "find": "    capacity: box(selectors.capacity),",
+  "replace": "    capacity: box('.hud-capacity'),",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance-measure.test.ts",
+    "tools/visual/verify.test.ts"
+  ],
+  "killedBy": [
+    "clearance measurement in the page (issue #1068) names each shown chip by its place among all of the bar's children, through the selectors it is handed",
+    "clearance measurement in the page (issue #1068) throws, naming the selector, rather than measure one that matches several elements or none",
+    "verify.mjs: the seams no vitest run can execute measures the clearance through the selectors its verdict prints, spelling none of its own"
+  ],
+  "why": "Spells the flash's selector out in the measurement instead of reading it from its argument. Today the copy is equal and the page measures the same element, so nothing a real page can show fails: only the run against a page whose elements have other names, and the source check on the clearance path, see that the measurement stopped following CLEARANCE_SELECTORS, which is the drift that waits for the next rename."
+}

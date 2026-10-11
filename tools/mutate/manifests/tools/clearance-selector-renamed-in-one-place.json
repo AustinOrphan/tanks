@@ -1,0 +1,18 @@
+{
+  "id": "clearance-selector-renamed-in-one-place",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  toasts: '.hud-toasts',",
+  "replace": "  toasts: '.hud-toast',",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts",
+    "tools/visual/clearance-measure.test.ts"
+  ],
+  "killedBy": [
+    "clearance failure lines name their element and state (issue #1068) fails a line with its selector or state taken out, or a board line naming one",
+    "clearance measurement in the page (issue #1068) measures the HUD's own markup through CLEARANCE_SELECTORS, every selector naming one element",
+    "topbar clearance verdict (issue #687) fails a menu toast rail inside the inset once no topbar is there to clear it",
+    "topbar clearance verdict (issue #687) fails the toast rail starting inside the bar -- the shipped 64px under a 77px bar"
+  ],
+  "why": "Renames the toast rail's selector in CLEARANCE_SELECTORS and nowhere else, so the tooling measures and prints `.hud-toast` while the HUD still renders `.hud-toasts` (issue #1068). The measurement throws in the page on a selector that matches no element, which only the required `visual` job would show; the HUD-markup test in clearance-measure.test.ts is what catches the drift in a unit run, and the verdict's spelled-out lines catch the reworded messages."
+}
