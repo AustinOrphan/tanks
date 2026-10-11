@@ -9,7 +9,6 @@
   ],
   "why": "A board with no destructibles is trivially under any ceiling on them, so the 30% test would pass on a generator that had stopped drawing any. The population has to carry destructibles to count, or the assertion is vacuous.",
   "killedBy": [
-    "runs: destructibles at most 30% of the wall mass (issue #1029) keeps destructibles at or under 30% of the wall cells on every default board for seeds 1-100",
-    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
+    "runs: destructibles at most 30% of the wall mass (issue #1029) keeps destructibles at or under 30% of the wall cells on every default board for seeds 1-100"
   ]
 }

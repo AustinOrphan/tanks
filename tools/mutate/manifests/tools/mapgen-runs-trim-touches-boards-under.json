@@ -7,8 +7,5 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The trim also turns the last placed piece solid on a board already under the cap, so a board the criterion has nothing against no longer keeps its draw. Over seeds 1-100 (every default board drawn) it changes 17 boards: destructible cells fall from 2450 to 2248 and boards carrying any from 94 to 89, while every board is still under 30%.",
-  "killedBy": [
-    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
-  ]
+  "why": "The trim also turns the last placed piece solid on a board already under the cap, so a board the criterion has nothing against no longer keeps its draw. Over seeds 1-100 (every default board drawn) it changes 17 boards: destructible cells fall from 2450 to 2248 and boards carrying any from 94 to 89, while every board is still under 30%."
 }

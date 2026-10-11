@@ -7,9 +7,8 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The destructible trim never runs, so `runs` is back to a fixed per-piece chance with no ceiling: 11 of seeds 1-50 and 15 of 51-100 draw over 30% of their wall mass, up to 0.52, against the spec's proposal 4 and issue #1029's criterion. The draw's mean stays near 0.21, so the sweep's means hide it: the per-board ceiling test sees it, and so do the trim's population totals.",
+  "why": "The destructible trim never runs, so `runs` is back to a fixed per-piece chance with no ceiling: 11 of seeds 1-50 and 15 of 51-100 draw over 30% of their wall mass, up to 0.52, against the spec's proposal 4 and issue #1029's criterion. The draw's mean stays near 0.21, so only a per-board check sees it.",
   "killedBy": [
-    "runs: destructibles at most 30% of the wall mass (issue #1029) keeps destructibles at or under 30% of the wall cells on every default board for seeds 1-100",
-    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
+    "runs: destructibles at most 30% of the wall mass (issue #1029) keeps destructibles at or under 30% of the wall cells on every default board for seeds 1-100"
   ]
 }

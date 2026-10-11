@@ -7,8 +7,5 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The trim walks the placed pieces first placed first instead of last placed first. Every trimmed board still ends under the cap, but a different set of pieces turns solid: over seeds 1-100 (every default board drawn) all 26 trimmed boards change, destructible cells move from 2450 to 2436, and seed 22 ends above 0.28.",
-  "killedBy": [
-    "runs: destructibles at most 30% of the wall mass (issue #1029) trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned"
-  ]
+  "why": "The trim walks the placed pieces first placed first instead of last placed first. Every trimmed board still ends under the cap, but a different set of pieces turns solid: over seeds 1-100 (every default board drawn) all 26 trimmed boards change, destructible cells move from 2450 to 2436, and seed 22 ends above 0.28."
 }
