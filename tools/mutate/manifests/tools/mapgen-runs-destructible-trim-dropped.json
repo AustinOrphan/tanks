@@ -1,7 +1,7 @@
 {
   "id": "mapgen-runs-destructible-trim-dropped",
   "file": "tools/mapgen/rulesets.mjs",
-  "find": "  for (let i = kept.length - 1; i >= 0 && overCeiling(); i--) {\n",
+  "find": "  for (let i = kept.length - 1; i >= 0 && destructibleCells * 10 > wallCells * 3; i--) {\n",
   "replace": "  for (let i = kept.length - 1; i >= 0 && false; i--) {\n",
   "expect": "killed",
   "tests": [

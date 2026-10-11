@@ -1,8 +1,8 @@
 {
   "id": "mapgen-runs-trim-ceiling-at-half",
   "file": "tools/mapgen/rulesets.mjs",
-  "find": "    return destructible * 10 > wall * 3;\n",
-  "replace": "    return destructible * 10 > wall * 5;\n",
+  "find": "  for (let i = kept.length - 1; i >= 0 && destructibleCells * 10 > wallCells * 3; i--) {\n",
+  "replace": "  for (let i = kept.length - 1; i >= 0 && destructibleCells * 10 > wallCells * 5; i--) {\n",
   "expect": "killed",
   "tests": [
     "tools/mapgen/runs.test.ts"
