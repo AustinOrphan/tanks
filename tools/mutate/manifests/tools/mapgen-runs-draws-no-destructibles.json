@@ -7,7 +7,7 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "A board with no destructibles has no destructible share, so the list of boards over 30% of their wall mass empties and reads as the criterion met by a generator that had stopped drawing any. The population has to carry destructibles to count, or the exception list is vacuous.",
+  "why": "The per-piece destructible chance drops to 0, so no board carries a destructible and the exception list has nothing to count. The test's non-vacuity guard (more than 50 of the 100 default boards for seeds 1-100 carry destructibles; 94 measured, 0 under this mutation) fails first, and the exact pin of the 26 boards over 30% of their wall mass would fail behind it.",
   "killedBy": [
     "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
   ]
