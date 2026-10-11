@@ -837,8 +837,9 @@ The one thing that would settle which ruleset is better is a bot-vs-bot capture 
 speed on the best board from each, which the versus rulings already accept as satisfying a
 playtest criterion.
 
-**Eight boards are not a sample of good boards.** The calibration band describes the eight
-maps that exist. A generated board outside it is unlike what has shipped, which is a reason
+**Nine boards are not a sample of good boards.** The calibration band describes the eight
+maps that existed when it was measured (vs-quad-02, added since, is not in it), and the
+thickness band the 9 that ship now. A generated board outside it is unlike what has shipped, which is a reason
 to look at it and not a reason to reject it. The two exceptions are ruled gates on one measure
 each: the 3-player spread gate (issue #820) refuses a generated 3-player board whose `pathSpread`
 is over the maximum of the shipped boards offered at three players, and the thickness gate (issue

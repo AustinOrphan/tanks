@@ -934,15 +934,18 @@ describe('mapgen thickness: interior share and thin share over wall cells only (
       expect(got.thin8, `${id} thin share, 8-connected`).toBeCloseTo(want.thinShare, 4);
       expect(got.thin4, `${id} thin share, 4-connected`).toBeCloseTo(want.thinShare, 4);
     }
-    // The totals the issue quotes, over the same 9 boards: 1,410 wall cells and 96 thin cells
-    // under both connectivities, in 10 thin components 8-connected and 12 4-connected.
-    const rows = Object.values(SHIPPED);
-    expect(rows.reduce((s, r) => s + r.wall, 0)).toBe(1410);
-    expect(rows.reduce((s, r) => s + r.thinCells, 0)).toBe(96);
-    expect([rows.reduce((s, r) => s + r.thin8, 0), rows.reduce((s, r) => s + r.thin4, 0)]).toEqual([10, 12]);
+    // The totals the issue quotes, summed from what production measured over the same 9 boards:
+    // 1,410 wall cells and 96 thin cells under both connectivities, in 10 thin components
+    // 8-connected and 12 4-connected.
+    const reads = Object.keys(SHIPPED).map((id) => read(named(id)));
+    expect(reads.reduce((s, r) => s + r.c8.wallCells, 0)).toBe(1410);
+    expect([reads.reduce((s, r) => s + r.c8.thinCells, 0), reads.reduce((s, r) => s + r.c4.thinCells, 0)])
+      .toEqual([96, 96]);
+    expect([reads.reduce((s, r) => s + r.c8.thinComponents, 0), reads.reduce((s, r) => s + r.c4.thinComponents, 0)])
+      .toEqual([10, 12]);
   });
 
-  it('THE CONTROL: the two connectivities differ on vs-duel-01 s thin component count and nowhere else', () => {
+  it('THE CONTROL: the two connectivities differ on vs-duel-01\'s thin component count and nowhere else', () => {
     // Why the table pins both: the shares cannot tell 8 from 4 on any shipped board, so the
     // component count on vs-duel-01 is the one shipped figure that sees the connectivity.
     const differs = Object.keys(SHIPPED).filter((id) => {

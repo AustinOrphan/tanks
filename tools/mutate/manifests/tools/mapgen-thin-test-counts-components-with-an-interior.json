@@ -10,7 +10,7 @@
   "why": "The thin test inverted: the components counted thin are the ones WITH an interior cell, so a board of masses reads as all thin and a board of one-cell bars as none. The thin share issue #1065 reports against its ceiling would then measure the masses the ruling asks for, and the shipped table (thin cells on vs-duel-01 and vs-tri-01 only) would invert.",
   "killedBy": [
     "mapgen thickness: interior share and thin share over wall cells only (issue #1065) pins the per-board table, both connectivities for the thin figures, for the 9 boards it was counted on",
-    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) THE CONTROL: the two connectivities differ on vs-duel-01 s thin component count and nowhere else",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) THE CONTROL: the two connectivities differ on vs-duel-01's thin component count and nowhere else",
     "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads a 3x3 block as interior 1 of 9 and thin 0",
     "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads a bar one cell thick as interior 0 and thin 1, the 3x3 block its control",
     "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads a 2x3 slab as interior 0 and thin 1: two cells thick is still thin",
