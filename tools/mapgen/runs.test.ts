@@ -44,8 +44,8 @@ const touchesSeam = (cells: [number, number][]): boolean => cells.some(([c, r]) 
 const isStraight = (cells: [number, number][]): boolean =>
   new Set(cells.map(([c]) => c)).size === 1 || new Set(cells.map(([, r]) => r)).size === 1;
 
-/** A board's wall and destructible cells as fractions of the board, as `BoardMeasures` has them. */
-const fractions = (arena: { grid: string[]; legend: Record<string, string> }) => {
+/** A board's cells, wall cells and destructible cells, counted by the legend. */
+const cellCounts = (arena: { grid: string[]; legend: Record<string, string> }) => {
   let wall = 0;
   let destructible = 0;
   let total = 0;
@@ -57,6 +57,12 @@ const fractions = (arena: { grid: string[]; legend: Record<string, string> }) =>
       if (kind === 'destructible') destructible++;
     }
   }
+  return { total, wall, destructible };
+};
+
+/** A board's wall and destructible cells as fractions of the board, as `BoardMeasures` has them. */
+const fractions = (arena: { grid: string[]; legend: Record<string, string> }) => {
+  const { total, wall, destructible } = cellCounts(arena);
   return { wallFraction: wall / total, destructibleFraction: destructible / total };
 };
 
@@ -103,6 +109,24 @@ describe('runs: destructibles at most 30% of the wall mass (issue #1029)', () =>
     // Before the trim, 11 of seeds 1-50 and 15 of 51-100 drew over the ceiling.
     expect(boards.filter((b) => b.m.destructibleFraction > 0).length).toBeGreaterThan(50);
     expect(destructibleReport(boards).exceptions).toEqual([]);
+  });
+
+  it('trims only boards over the ceiling, only down to it, last placed first, moving no wall cell: seeds 1-100 pinned', () => {
+    // A finished board cannot show what the trim did, so the population's totals pin it.
+    // Population: seeds 1-100, every default board drawn; 26 draw over the cap and are trimmed,
+    // the other 74 keep their draw byte for byte. Each pin moves under a mapgen-runs-trim-* entry:
+    // - wall cells 13424: the trim turns pieces solid and removes none (12790 if it removed them);
+    // - destructible cells 2450: trimming past the cap (1778 at 20%), touching a board already
+    //   under it (2248), first placed first (2436) or removing the piece (2330) each move it;
+    // - boards carrying destructibles 94: 93 trimming to 20%, 89 touching boards under the cap;
+    // - boards ending above 0.28, seeds 33, 38, 65 and 97: 33 and 65 draw there and are left
+    //   alone, and 38 and 97 are trimmed to 0.283 and 0.290, so a lower cap trims all four.
+    const boards = seedRange(0, 100).map((seed) => ({ seed, ...cellCounts(generate(seed)) }));
+    expect(boards.length).toBe(100);
+    expect(boards.reduce((sum, b) => sum + b.wall, 0)).toBe(13424);
+    expect(boards.reduce((sum, b) => sum + b.destructible, 0)).toBe(2450);
+    expect(boards.filter((b) => b.destructible > 0).length).toBe(94);
+    expect(boards.filter((b) => b.destructible / b.wall > 0.28).map((b) => b.seed)).toEqual([33, 38, 65, 97]);
   });
 
   it('THE CONTROL: a board 40% destructible by wall cells is reported over the ceiling', () => {

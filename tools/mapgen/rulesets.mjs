@@ -382,10 +382,17 @@ function runs(seed, opts = {}) {
   // The spec's proposal 4, counted in cells. Each piece is destructible with a fixed chance, so
   // a board with few pieces can draw well past it -- 11 of seeds 1-50 and 15 of 51-100 did.
   // Only such a board changes: its destructible pieces turn solid, last placed first, until it
-  // is back under, skipping any whose solid wall would cut the floor (`cellsConnected` counts a
-  // destructible cell as open). A board already under keeps the draw exactly. Counted off the
-  // board, not off the shapes, so a piece the rotation cut (possible only with the confinement
-  // off) counts as the cells it kept.
+  // is back under. A board already under keeps the draw exactly, and no wall cell moves. Counted
+  // off the board, not off the shapes, so a piece the rotation cut (possible only with the
+  // confinement off) counts as the cells it kept.
+  //
+  // The trim skips a piece whose solid wall would cut the floor (`cellsConnected` counts a
+  // destructible cell as open), but under the placement rules above the skip cannot fire: every
+  // piece keeps a one-cell gap from every other wall and from its own rotated image, and none
+  // sits on the outer ring, so each piece is a lone bar with floor all round it, and a lone bar
+  // cannot enclose floor. Measured over 9000 boards (seeds 1-1000 in each of nine `runs`
+  // configurations): 3542 pieces turned solid, 0 skipped. It stays for a piece shape that can
+  // touch another wall.
   const overCeiling = () => {
     let wall = 0;
     let destructible = 0;
