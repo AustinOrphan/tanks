@@ -753,7 +753,10 @@ band, so none can redraw against it; and the band is a literal derived from the 
 limits travel with it: nine boards are not a sample of good boards; "thin" means no interior cell,
 not one cell thick (the literal one-cell-thick cells are 48 of the 1,410, on vs-duel-01 and
 vs-tri-01); and a crossing of two bars two cells thick counts as interior, as the ruling defines
-it. No other quality measure becomes a gate without its own ruling.
+it. At default settings it passes none of the boards the shipped tier accepts from any of the five
+rulesets, at N=2, 3 and 4 in both of `sweep.mjs`'s 50-seed samples (seeds 1-50 and 51-100):
+`topology`'s interior share starts at 0.354, over the maximum, and the other four measure 0.000.
+No other quality measure becomes a gate without its own ruling.
 
 **2. Pursue `runs` -- long bars, L-bends and carved pathways -- and not the other three**
 (issue #821). It is the only one of the four landing inside every shipped band, and the one

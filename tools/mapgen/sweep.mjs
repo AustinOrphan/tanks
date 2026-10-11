@@ -214,9 +214,9 @@ if (threes.length > 0) {
   console.log('tier accepted -- at N=3 the same boards the spread gate reads, not only those it passes. Medians interpolate (medianOf),');
   console.log('unlike the spread block\'s lower median. pooled = thin cells / wall cells summed over the accepted boards.');
   console.log([
-    'ruleset'.padEnd(LABEL), 'N', 'shipped', '+thick ', 'refused (shipped tier; thickness)'.padEnd(37),
+    'ruleset'.padEnd(LABEL), 'N', 'shipped', '+thick ', 'refused (shipped tier; thickness)'.padEnd(39),
     'interior min / med / max'.padEnd(25), 'thin min / med / max'.padEnd(21), `>${THIN_SHARE_CEILING}`.padStart(6),
-    'pooled thin'.padEnd(17), 'any thin',
+    'pooled thin'.padEnd(19), 'any thin',
   ].join('  '));
   for (const r of rows) {
     const t = r.thick;
@@ -226,11 +226,11 @@ if (threes.length > 0) {
       String(r.playerCount),
       `${String(r.accepted).padStart(3)}/${String(r.drawn).padEnd(3)}`,
       `${String(t.passed).padStart(3)}/${String(r.drawn).padEnd(3)}`,
-      `${shippedWhy}; thickness ${t.n - t.passed}`.padEnd(37),
+      `${shippedWhy}; thickness ${t.n - t.passed}`.padEnd(39),
       mmm(t.interior).padEnd(25),
       mmm(t.thin).padEnd(21),
       `${t.overCeiling}/${t.n}`.padStart(6),
-      pooled(t).padEnd(17),
+      pooled(t).padEnd(19),
       `${t.withThin}/${t.n}`,
     ].join('  '));
   }
