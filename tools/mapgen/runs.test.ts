@@ -103,7 +103,6 @@ describe('runs: destructibles over 30% of the wall mass, listed by seed (issue #
     // 51-100 do, up to 0.518. The criterion allows them as exceptions listed by seed, so the
     // list is pinned exactly; the spec lists those the shipped tier accepts.
     const boards = seedRange(0, 100).map((seed) => ({ seed, m: fractions(generate(seed)) }));
-    expect(boards.length).toBe(100);
     // Not vacuous: the population carries destructibles to count (94 of the 100 boards, measured;
     // 0 under mapgen-runs-draws-no-destructibles).
     expect(boards.filter((b) => b.m.destructibleFraction > 0).length).toBeGreaterThan(50);

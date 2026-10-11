@@ -7,5 +7,8 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "A board with no destructibles has no destructible share, so the list of boards over 30% of their wall mass empties and reads as the criterion met by a generator that had stopped drawing any. The population has to carry destructibles to count, or the exception list is vacuous."
+  "why": "A board with no destructibles has no destructible share, so the list of boards over 30% of their wall mass empties and reads as the criterion met by a generator that had stopped drawing any. The population has to carry destructibles to count, or the exception list is vacuous.",
+  "killedBy": [
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+  ]
 }

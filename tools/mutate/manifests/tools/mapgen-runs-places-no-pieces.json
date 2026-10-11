@@ -11,6 +11,7 @@
   "killedBy": [
     "runs: no wall component below 5 cells (issue #1029) draws no wall component below 5 cells, 8- or 4-connected, on any default board for seeds 1-100",
     "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 1: the old minRun 4, confinement still on, draws a 4-cell straight run",
-    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 2: the half-board confinement removed, at minRun 5, leaves a piece cut at the seam"
+    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 2: the half-board confinement removed, at minRun 5, leaves a piece cut at the seam",
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
   ]
 }

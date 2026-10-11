@@ -11,6 +11,7 @@
   "why": "The destructible share is read over the whole board instead of over the wall: `destructibleFraction` is a fraction of ALL cells, so a 10% wall that is 40% destructible reads 4% and passes the 30%-of-wall-mass ceiling it breaks.",
   "killedBy": [
     "destructibles over wall mass (issue #1029) divides by the wall, not the board: 4% of the board is 40% of a 10% wall",
-    "runs: destructibles at most 30% of the wall mass (issue #1029) THE CONTROL: a board 40% destructible by wall cells is reported over the ceiling"
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share",
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) THE CONTROL: a board 40% destructible by wall cells is reported over the ceiling"
   ]
 }

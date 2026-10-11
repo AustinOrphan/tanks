@@ -7,5 +7,8 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The per-piece destructible chance drifts from 0.22 to 0.25. The population still carries destructibles (97 of seeds 1-100 against 94, every default board drawn), so the non-vacuity guard passes, but the boards over 30% of their wall mass go from 26 to 37, so the exceptions the spec lists by seed are no longer the generator's. Only the exact pin of the list sees it."
+  "why": "The per-piece destructible chance drifts from 0.22 to 0.25. The population still carries destructibles (97 of seeds 1-100 against 94, every default board drawn), so the non-vacuity guard passes, but the boards over 30% of their wall mass go from 26 to 37, so the exceptions the spec lists by seed are no longer the generator's. Only the exact pin of the list sees it.",
+  "killedBy": [
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+  ]
 }
