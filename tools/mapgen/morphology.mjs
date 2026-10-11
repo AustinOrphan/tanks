@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { RULESETS } from './rulesets.mjs';
 import { ARENA_DEFS } from '../../src/sim/arena';
-import { MIN_WALL_BLOCK_CELLS, wallCellTest, wallComponentSizes } from './measure';
+import { MIN_WALL_BLOCK_CELLS, interiorShare, thinShare, wallCellTest, wallComponentSizes } from './measure';
 import { seedRange } from './lib.mjs';
+import { spreadOf } from './expressive-range.mjs';
+import { INTERIOR_SHARE_MAX, INTERIOR_SHARE_MIN, THIN_SHARE_CEILING } from './thickness-gate.mjs';
 
 /**
  * MORPHOLOGY: what a board is made of, as distinct from how it plays.
@@ -14,7 +16,10 @@ import { seedRange } from './lib.mjs';
  *
  * The finding this file was written to test, and which it confirmed: a wall cell counts as
  * INTERIOR when all four orthogonal neighbours are walled, and a bar one or two cells thick
- * can never have one. All 8 shipped boards measure an interior share between 0.09 and 0.34.
+ * can never have one. All 8 shipped boards measure an interior share between 0.09 and 0.34 --
+ * a two-decimal record of that measurement, not a limit: 0.34 would refuse vs-quad-01's 0.3405.
+ * The limit is the thickness gate's band, `INTERIOR_SHARE_MIN` and `INTERIOR_SHARE_MAX` in
+ * `thickness-gate.mjs` (0.09 to 0.35 over the 9 boards that ship now, issue #1065).
  * Four of the five generators measured exactly 0.00 -- they were building lines where every
  * authored board builds masses. Three cells is the thinnest run that can have an interior, and
  * three cells is 2.0 world units: two tank widths, a block to circle rather than a line to
@@ -25,8 +30,9 @@ import { seedRange } from './lib.mjs';
  * one-cell wall "shape" -- and every generated board carries one `P` the same way. The shape
  * counts below are walls only; the interior band quoted above held at two decimals under the
  * correction (0.0940 to 0.3405, re-measured for #1028). An authored board with no legend is read
- * with `DEFAULT_LEGEND`. The component logic itself lives in `measure.ts`, where it is tested;
- * this file is a smoke run that prints it.
+ * with `DEFAULT_LEGEND`. The component and thickness logic lives in `measure.ts`, where it is
+ * tested -- the interior share and, beside it, the thin share (issue #1065): wall cells in
+ * 8-connected components with no interior cell -- and this file is a smoke run that prints it.
  *
  *   npx vite-node tools/mapgen/morphology.mjs [--seeds 20] [--seed-offset 0]
  *   npx vite-node tools/mapgen/morphology.mjs --authored /path/to/exported/boards
@@ -69,14 +75,6 @@ function stats(grid, cols, rows, legend = DEFAULT_LEGEND) {
     }
   }
 
-  // THICKNESS: a wall cell with all four orthogonal neighbours also wall is interior, which can
-  // only happen in a mass at least 3 cells across one way. A one-cell-thick bar has none.
-  let interior = 0;
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    if (!wall(c, r)) continue;
-    if (wall(c + 1, r) && wall(c - 1, r) && wall(c, r + 1) && wall(c, r - 1)) interior++;
-  }
-
   // DIAGONALITY: a wall cell diagonally joined to another with neither shared orthogonal
   // neighbour walled is a staircase step -- the signature of a diagonal or curved run.
   let steps = 0;
@@ -98,7 +96,9 @@ function stats(grid, cols, rows, legend = DEFAULT_LEGEND) {
     meanComp: comps.length ? wallCells / comps.length : 0,
     dcomps,
     softShare: wallCells ? softCells / wallCells : 0,
-    interior: wallCells ? interior / wallCells : 0,
+    // THICKNESS (issue #1065): `measure.ts`'s, so this prints the figures the gate reads.
+    interior: interiorShare(board),
+    thin: thinShare(board, 8),
     steps: wallCells ? steps / wallCells : 0,
   };
 }
@@ -127,7 +127,7 @@ if (authoredArg > 0 && process.argv[authoredArg + 1]) {
   }
 }
 
-// --- the eight shipped boards, the independent control ---
+// --- the shipped boards, the independent control ---
 for (const def of ARENA_DEFS) {
   rows.push({ who: 'shipped', name: def.id, ...stats(def.grid, def.cols, def.rows, def.legend) });
 }
@@ -162,7 +162,7 @@ for (const job of jobs) {
     wallCells: mean('wallCells'), comps: mean('comps'), smallest: mean('smallest'), small: mean('small'),
     biggest: mean('biggest'),
     meanComp: mean('meanComp'), dcomps: mean('dcomps'), softShare: mean('softShare'),
-    interior: mean('interior'), steps: mean('steps'),
+    interior: mean('interior'), thin: mean('thin'), steps: mean('steps'),
     // Block sizes per board (issue #1028): the share of a board's components below the
     // threshold, as a median and range over the seeds, and the share of boards with none.
     blocks: {
@@ -171,11 +171,16 @@ for (const job of jobs) {
       max: shares[shares.length - 1],
       none: acc.filter((x) => x.small === 0).length / acc.length,
     },
+    // Thickness per board (issue #1065): min / median / max over the seeds, both shares.
+    thickness: {
+      interior: spreadOf(acc.map((x) => x.interior)),
+      thin: spreadOf(acc.map((x) => x.thin)),
+    },
   });
 }
 
 console.log(`seeds ${SEEDS[0]}-${SEEDS[SEEDS.length - 1]} for every generated row (${SEEDS.length} boards each)`);
-console.log(`who        name             wall  shapes  min  <${MIN_WALL_BLOCK_CELLS}  biggest  mean  soft%  softblobs  interior  diag`);
+console.log(`who        name             wall  shapes  min  <${MIN_WALL_BLOCK_CELLS}  biggest  mean  soft%  softblobs  interior    thin  diag`);
 for (const r of rows) {
   console.log([
     r.who.padEnd(9), String(r.name).padEnd(16),
@@ -183,7 +188,7 @@ for (const r of rows) {
     f(r.comps, 1).padStart(6), f(r.smallest, 0).padStart(3), f(r.small, 1).padStart(4),
     f(r.biggest).padStart(7), f(r.meanComp, 1).padStart(5),
     f(r.softShare).padStart(5), f(r.dcomps, 1).padStart(9),
-    f(r.interior, 4).padStart(8), f(r.steps).padStart(5),
+    f(r.interior, 4).padStart(8), f(r.thin, 4).padStart(6), f(r.steps).padStart(5),
   ].join('  '));
 }
 console.log();
@@ -193,10 +198,18 @@ for (const r of rows.filter((x) => x.blocks)) {
   console.log(`  ${String(r.name).padEnd(16)} median ${f(b.median)}  range ${f(b.min)}-${f(b.max)}  boards with none ${f(b.none)}`);
 }
 console.log();
+console.log(`THICKNESS per generated row, over its ${SEEDS.length} seeds: min / median / max of each board's share`);
+console.log(`(the gate's band is ${INTERIOR_SHARE_MIN}-${INTERIOR_SHARE_MAX} on the interior share; the thin share is reported against ${THIN_SHARE_CEILING})`);
+for (const r of rows.filter((x) => x.thickness)) {
+  const mmm = (s) => `${f(s.min, 3)} / ${f(s.median, 3)} / ${f(s.max, 3)}`;
+  console.log(`  ${String(r.name).padEnd(18)} interior ${mmm(r.thickness.interior)}   thin ${mmm(r.thickness.thin)}`);
+}
+console.log();
 console.log('shapes   = connected wall components, 8-connected, over wall (legend) cells only');
 console.log(`min      = the smallest component, in cells; <${MIN_WALL_BLOCK_CELLS} = components below ${MIN_WALL_BLOCK_CELLS} cells`);
 console.log('biggest  = largest component as a share of all wall cells');
 console.log('mean     = mean cells per component');
 console.log('softblobs= connected destructible components');
 console.log('interior = share of wall cells with all 4 orthogonal neighbours walled (thickness)');
+console.log('thin     = share of wall cells in 8-connected components with no interior cell');
 console.log('diag     = share of wall cells forming a staircase step (diagonal or curved runs)');

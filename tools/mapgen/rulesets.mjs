@@ -434,7 +434,10 @@ function spines(seed, opts = {}) {
      * two tank widths, a block to circle rather than a line to shoot past.
      *
      * Measured: every one of the 8 shipped boards has an interior share between 0.09 and 0.34,
-     * and `scatter`, `rooms`, `runs` and `spines` at thickness 1 all measure exactly 0.00.
+     * and `scatter`, `rooms`, `runs` and `spines` at thickness 1 all measure exactly 0.00. (The
+     * two decimals are a record, not a limit: 0.34 would refuse vs-quad-01's 0.3405. The limit
+     * is `INTERIOR_SHARE_MIN` and `INTERIOR_SHARE_MAX` in `thickness-gate.mjs`, 0.09 to 0.35,
+     * issue #1065, which no ruleset reads.)
      * At 2 it is still 0.00 -- a two-cell bar has no enclosed cell either -- and at 3 it is
      * 0.25, inside the shipped band, with every gameplay measure also still in band.
      *

@@ -93,32 +93,38 @@ describe('the thickness gate (issue #1065)', () => {
 });
 
 describe('the thickness report the sweep prints (issue #1065)', () => {
-  // Four boards with every figure known by construction.
+  // Boards with every figure known by construction, each interior share well clear of the band:
+  // a fixture near an edge would move with a re-derived constant, which is the derivation
+  // test's job, not this block's.
   const block3 = board(['.....', '.###.', '.###.', '.###.', '.....']); // interior 1/9, thin 0 of 9
   const block4 = board(['......', '.####.', '.####.', '.####.', '.####.', '......']); // interior 4/16, thin 0 of 16
+  const block6 = board(['........', ...Array(6).fill('.######.'), '........']); // interior 16/36, thin 0
   const bar = board(['.......', '.#####.', '.......']); // interior 0, thin 5 of 5
-  const mixed = board(['.........', '.###.....', '.###.###.', '.###.....', '.........']); // interior 1/12, thin 3 of 12
+  // A 4x4 block and a bar of 3: interior 4/19, thin 3/19.
+  const mixed = board(['..........', '.####.....', '.####.###.', '.####.....', '.####.....', '..........']);
+  const sample = [
+    { seed: 1, arena: block3 }, { seed: 2, arena: bar }, { seed: 3, arena: block6 }, { seed: 4, arena: mixed },
+  ];
 
   it('counts the boards the gate passes, by the interior share, and names every refused seed', () => {
-    const r = thicknessReport([
-      { seed: 1, arena: block3 }, { seed: 2, arena: bar }, { seed: 3, arena: block4 }, { seed: 4, arena: mixed },
-    ]);
-    // The bar (0) and the mixed board (1/12, under 0.09) are refused; the blocks pass.
-    expect(r).toMatchObject({ n: 4, passed: 2, refusedSeeds: [2, 4] });
-    // The control for "by the interior share": the bar's thin share, 1, and the blocks' 0 would
-    // refuse all three of them, and the mixed board's 0.25 would pass it.
+    const r = thicknessReport(sample);
+    // The bar (0, under the band) and the 6x6 block (0.444, over it) are refused.
+    expect(r).toMatchObject({ n: 4, passed: 2, refusedSeeds: [2, 3] });
+    // The control for "by the interior share": by the thin shares -- 0, 1, 0 and 0.158 -- only
+    // the mixed board would land in the band, and seeds 1 and 3 would swap verdicts.
+    expect(thinShare(mixed, 8)).toBe(3 / 19);
   });
 
   it('reports the min / median / max of both shares, the boards over the thin ceiling, and any thin', () => {
-    const r = thicknessReport([
-      { seed: 1, arena: block3 }, { seed: 2, arena: bar }, { seed: 3, arena: block4 }, { seed: 4, arena: mixed },
-    ]);
+    const r = thicknessReport(sample);
     expect(r.interior.min).toBe(0);
-    expect(r.interior.max).toBe(0.25);
-    // Interpolated between 1/12 and 1/9, medianOf's median.
-    expect(r.interior.median).toBeCloseTo((1 / 12 + 1 / 9) / 2, 12);
-    expect(r.thin).toEqual({ min: 0, median: 0.125, max: 1 });
-    // Only the bar (1) is over 0.37; the mixed board's 0.25 is thin and under it, its control.
+    expect(r.interior.max).toBe(16 / 36);
+    // Interpolated between 1/9 and 4/19, medianOf's median.
+    expect(r.interior.median).toBeCloseTo((1 / 9 + 4 / 19) / 2, 12);
+    expect(r.thin.min).toBe(0);
+    expect(r.thin.median).toBeCloseTo(3 / 38, 12);
+    expect(r.thin.max).toBe(1);
+    // Only the bar (1) is over 0.37; the mixed board's 0.158 is thin and under it, its control.
     expect(r.overCeiling).toBe(1);
     expect(r.withThin).toBe(2);
   });

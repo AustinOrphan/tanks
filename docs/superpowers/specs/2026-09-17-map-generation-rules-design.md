@@ -3,7 +3,7 @@ status: proposed
 date: 2026-09-17
 last-reviewed: 2026-10-11
 scope: A three-tier rule set for generating versus maps -- generative rules, the shipped acceptance filter, and a new measured quality tier calibrated on shipped boards.
-implementation-issues: [819, 820, 821, 822, 1028, 1029]
+implementation-issues: [819, 820, 821, 822, 1028, 1029, 1065]
 implementation-prs: []
 supersedes: []
 superseded-by: []
@@ -57,7 +57,7 @@ one.
 | --- | --- | --- | --- |
 | **Generative** | How is the board built? | the ruleset itself | a grid |
 | **Acceptance** | Is it broken? | `src/sim/versus-board.ts`, `versus-spawns.ts` -- shipped, unchanged | pass / fail |
-| **Quality** | Which of two working boards is better? | `tools/mapgen/measure.ts` -- new, gates nothing but the ruled 3-player spread gate (#820) | numbers |
+| **Quality** | Which of two working boards is better? | `tools/mapgen/measure.ts` -- new, gates nothing but two ruled gates, the 3-player spread gate (#820) and the interior-share thickness gate (#1065) | numbers |
 
 Acceptance stays a filter and is never used as a score. A generator tuned to maximise pass
 rate converges on "not broken", which the null ruleset already is. What the sweep does
@@ -184,13 +184,20 @@ cells** under either connectivity: every shipped block has 5 cells or more. The 
 exceeds the new one by exactly each board's letter count. `wallComponentSizes` and
 `MIN_WALL_BLOCK_CELLS` in `tools/mapgen/measure.ts` compute it, `measure.test.ts` pins the table,
 and `npx vite-node tools/mapgen/morphology.mjs` prints it. The interior share is unchanged at two
-decimals by the correction (0.0940 to 0.3405).
+decimals by the correction (0.0940 to 0.3405). Recounted over the 9 boards that ship now for issue
+#1065 (the 8 above and vs-quad-02, at 0.2991): 1,410 wall cells and 63 components 8-connected (71
+4-connected), and the interior share still spans 0.0940 (vs-duel-01) to 0.3405 (vs-quad-01).
+Rounded outward at two decimals, that span is the thickness gate's band, 0.09 to 0.35 (proposal 1;
+`tools/mapgen/thickness-gate.mjs`).
 
 **What this cannot establish, stated plainly:** eight authored maps are not a sample drawn
 from a population of good maps. A band derived from them describes them. A board outside the
 band is unlike everything shipped, which is a reason to look at it, not a reason to reject
-it. The one exception is the 3-player spread gate (issue #820): a generated 3-player board whose `pathSpread` is over the maximum of the shipped boards offered at three players is refused. That bound is still a description of what ships, applied to one
-measure by a ruling, not a claim that the band defines a good board.
+it. There are two exceptions, each applied to one measure by its own ruling: the 3-player spread
+gate (issue #820) refuses a generated 3-player board whose `pathSpread` is over the maximum of the
+shipped boards offered at three players, and the thickness gate (issue #1065) refuses a generated
+board whose interior share is outside 0.09 to 0.35, the band the 9 shipped boards span. Each bound
+is still a description of what ships, not a claim that the band defines a good board.
 
 ## Constraints a generator has to satisfy, measured rather than assumed
 
@@ -715,9 +722,9 @@ acceptance tier's live edge is concealment at 3 and 4 players, not connectivity.
 ## What this proposes
 
 **1. Keep the three tiers separate, permanently.** Acceptance stays a pass/fail filter in
-`src/sim/`, gating what may be offered. Quality stays a tool in `tools/`, gating nothing. The
-moment a quality measure becomes a gate, a generator can be tuned against it and the measure
-stops describing the board and starts describing the generator.
+`src/sim/`, gating what may be offered. Quality stays a tool in `tools/`, gating nothing but
+the two ruled exceptions below. The moment a quality measure becomes a gate, a generator can be
+tuned against it and the measure stops describing the board and starts describing the generator.
 
 **The ruled exception: the 3-player spread gate** (issue #820, 2026-10-09). A generated
 3-player board must have `pathSpread` at or below 0.75, the maximum of the boards the catalog
@@ -727,8 +734,26 @@ three players, which a number that gates nothing cannot give; the gate runs in `
 generation and after the shipped acceptance tier, so tiers 1 to 3 are unchanged; no ruleset reads
 the ceiling or the player count (rulesets take none), so none can redraw against it; and the
 ceiling is a literal derived from the shipped boards (`THREE_PLAYER_SPREAD_CEILING` in
-`tools/mapgen/spread-gate.mjs`, recomputed by its test). No other quality measure becomes a gate
-without its own ruling.
+`tools/mapgen/spread-gate.mjs`, recomputed by its test).
+
+**The second ruled exception: the thickness gate** (issue #1065, carrying the thickness ruling on
+#821 of 2026-10-09: mirror the shipped set, thin runs for circulation and masses for cover). A
+generated board's interior share -- interior cells, wall cells whose four orthogonal neighbours
+are all wall, over wall cells -- must lie in 0.09 to 0.35: the per-board minimum and maximum over
+the 9 shipped boards, 0.0940 (vs-duel-01) and 0.3405 (vs-quad-01), rounded outward at two
+decimals, so it refuses no board that ships. The thin share -- wall cells in 8-connected
+components with no interior cell, over wall cells -- is reported against a ceiling of 0.37,
+vs-tri-01's 0.3690 rounded up, and is not gated: the ruling asks for it to be a minority, which is
+a criterion and not a second gate. It too is an exception and not a precedent: it gates the one
+measure the ruling names; it runs in `sweep.mjs` after generation and after the shipped acceptance
+tier, at every player count, so tiers 1 to 3 are unchanged; no ruleset imports it or reads the
+band, so none can redraw against it; and the band is a literal derived from the shipped boards
+(`INTERIOR_SHARE_MIN`, `INTERIOR_SHARE_MAX` and `THIN_SHARE_CEILING` in
+`tools/mapgen/thickness-gate.mjs`, recomputed by its test over every board in `ARENA_DEFS`). Three
+limits travel with it: nine boards are not a sample of good boards; "thin" means no interior cell,
+not one cell thick (the literal one-cell-thick cells are 48 of the 1,410, on vs-duel-01 and
+vs-tri-01); and a crossing of two bars two cells thick counts as interior, as the ruling defines
+it. No other quality measure becomes a gate without its own ruling.
 
 **2. Pursue `runs` -- long bars, L-bends and carved pathways -- and not the other three**
 (issue #821). It is the only one of the four landing inside every shipped band, and the one
@@ -811,7 +836,11 @@ playtest criterion.
 
 **Eight boards are not a sample of good boards.** The calibration band describes the eight
 maps that exist. A generated board outside it is unlike what has shipped, which is a reason
-to look at it and not a reason to reject it. The one exception is the 3-player spread gate (issue #820): a generated 3-player board whose `pathSpread` is over the maximum of the shipped boards offered at three players is refused.
+to look at it and not a reason to reject it. The two exceptions are ruled gates on one measure
+each: the 3-player spread gate (issue #820) refuses a generated 3-player board whose `pathSpread`
+is over the maximum of the shipped boards offered at three players, and the thickness gate (issue
+#1065) refuses a generated board whose interior share is outside 0.09 to 0.35, the band of the 9
+boards that ship now.
 
 **`routeCount` is a greedy lower bound, not the true count.** Routes are taken
 shortest-first and each one's hull sweep is removed before the next is sought, so a
