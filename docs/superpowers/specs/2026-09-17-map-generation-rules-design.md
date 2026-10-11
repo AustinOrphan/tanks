@@ -592,16 +592,17 @@ confinement also reaches 0 but is a larger change than the criterion needs. `rot
 unchanged, and the other four rulesets are byte-identical for seeds 1-50 before and after: 200
 per-board SHA-256 digests (`scatter`, `rooms`, `topology`, `spines`, 50 each).
 
-**Destructibles, and a trim.** Each piece is destructible with a fixed chance of 0.22, so a
-board with few pieces can draw well past the 30%-of-wall-mass cap of proposal 4 below. It did
-before this issue (12 and 14 of the 50 drawn boards over 0.30 at the old defaults, up to 0.68)
-and after the block fix (11 and 15, up to 0.52). A lower chance does not bound a per-board figure: at
-0.10, 1 and 3 boards were still over. So a board that draws over the cap now turns its
-destructible pieces solid, last placed first, until it is at or under 30% of its wall cells,
-skipping any piece whose solid wall would cut the floor. It moves no wall cell (100 of 100
-boards), leaves the 39 and 35 boards already under byte-identical, and lowers the mean
-destructible share of wall from 0.207 and 0.234 to 0.175 and 0.186 (all 50 drawn boards per
-sample).
+**Destructibles are listed, not fixed.** Each piece is destructible with a fixed chance of
+0.22, so a board with few pieces can draw well past the 30%-of-wall-mass cap of proposal 4
+below. It did before this issue (12 and 14 of the 50 drawn boards over 0.30 at the old
+defaults, up to 0.68) and does after the block fix (11 and 15, up to 0.52; the mean share of
+wall is 0.207 and 0.234 over all 50 drawn boards per sample). A lower chance does not bound a
+per-board figure: at 0.10, 1 and 3 boards were still over. This issue changes only the run
+length and the confinement, and its criterion allows the boards over the cap as exceptions
+listed by seed, so they are listed below and the criterion is not claimed met. A trim that
+turns a board's destructible pieces solid, last placed first, until it is at or under 30% of
+its wall cells is on branch `feat/mapgen-runs-destructible-trim`, for the owner to take or
+drop: it moves no wall cell and changes only the 26 boards over the cap in seeds 1-100.
 
 **The result**, default `runs`, from `npx vite-node tools/mapgen/sweep.mjs --seeds 50` and the
 same with `--seed-offset 50`. Accepted of drawn, with every refusal named; N=3 is shown before
@@ -616,8 +617,19 @@ and after the spread gate (#820):
 
 - **Wall components below 5 cells: none** on any accepted board, 8- or 4-connected, in either
   sample at any N (populations: the accepted counts above). All 100 drawn boards are clean too.
-- **Destructibles: none over 30%** of wall mass; the largest share is 0.29 on the accepted
-  boards of both samples at every N.
+- **Destructibles over 30% of wall mass: the criterion is not met.** The accepted boards over
+  the cap, by seed with their share of wall cells, are exceptions:
+  - seeds 1-50: at N=2, 11 of 50 -- 6 (0.325), 7 (0.518), 11 (0.517), 12 (0.342), 22 (0.481),
+    25 (0.443), 34 (0.323), 38 (0.450), 41 (0.330), 43 (0.310), 48 (0.321); at N=4 the same 11
+    of 49 (seed 28, refused, is under the cap). Largest share 0.518, at every N.
+  - seeds 51-100: at N=2, 15 of 50 -- 51 (0.446), 52 (0.407), 54 (0.362), 55 (0.467),
+    56 (0.333), 59 (0.479), 72 (0.355), 74 (0.433), 75 (0.313), 77 (0.351), 80 (0.453),
+    81 (0.451), 86 (0.431), 97 (0.406), 100 (0.312); at N=4, 14 of 49, the same less seed 74,
+    which the shipped tier refuses. Largest share 0.479, at every N.
+
+  N=3 before the spread gate accepts every board, so its list is N=2's, and the gate refuses
+  none of these. The sweep prints the shares to two decimals; the three-decimal figures are
+  `destructibleReport`'s, and `tools/mapgen/runs.test.ts` pins the list for seeds 1-100.
 - **Shipped bands**: the median of the accepted boards, and how many of them lie inside the
   band (the row above, carried; an edge counts at two decimals):
 
@@ -628,13 +640,14 @@ and after the spread gate (#820):
 | corr 0.01-0.84 | 0.16, 50/50 | 0.16, 50/50 | 0.16, 49/49 | 0.18, 50/50 | 0.18, 50/50 | 0.19, 49/49 |
 | open 0.01-0.57 | 0.16, 50/50 | 0.16, 50/50 | 0.17, 49/49 | 0.14, 50/50 | 0.14, 50/50 | 0.14, 49/49 |
 | neck 1.33-6.00 | 2.00, 50/50 | 2.00, 50/50 | 2.00, 49/49 | 2.00, 50/50 | 2.00, 50/50 | 2.00, 49/49 |
-| rout 1.00-2.33 | 2.00, 50/50 | 2.00, 50/50 | 1.67, 49/49 | 2.00, 50/50 | 1.67, 50/50 | 1.67, 49/49 |
+| rout 1.00-2.33 | 2.00, 50/50 | 2.00, 50/50 | 1.67, 49/49 | 2.00, 50/50 | 2.00, 49/50 | 1.67, 49/49 |
 | long 0.60-0.82 | 0.71, 49/50 | 0.71, 49/50 | 0.71, 48/49 | 0.71, 50/50 | 0.71, 50/50 | 0.71, 49/49 |
 | sight 0.17-0.43 | 0.24, 50/50 | 0.24, 50/50 | 0.24, 49/49 | 0.24, 50/50 | 0.24, 50/50 | 0.24, 49/49 |
 | bank 0.09-0.29 | 0.22, 50/50 | 0.22, 50/50 | 0.22, 49/49 | 0.22, 50/50 | 0.22, 50/50 | 0.22, 49/49 |
 
-  Every median is inside its band and no band is a miss. The only board outside any band is
-  seed 37, at a longest sightline of 0.854 of the diagonal, at all three counts.
+  Every median is inside its band and no band is a miss. Two boards fall outside a band: seed
+  37 at a longest sightline of 0.854 of the diagonal, at all three counts, and seed 52 at a
+  route count of 2.67, at N=3 only.
 - **Run lengths**, read back off the accepted boards: straight runs 5 / 6 / 8 cells (min /
   median / max) and L-arms 2 / 3 / 5, in both samples at every N. At N=2, seeds 1-50 carry 1022
   components (856 straight, 166 L) and 51-100 carry 1056 (912 straight, 144 L), none of any
