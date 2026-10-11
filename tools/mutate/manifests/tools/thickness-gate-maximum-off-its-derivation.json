@@ -1,0 +1,11 @@
+{
+  "id": "thickness-gate-maximum-off-its-derivation",
+  "file": "tools/mapgen/thickness-gate.mjs",
+  "find": "export const INTERIOR_SHARE_MAX = 0.35;\n",
+  "replace": "export const INTERIOR_SHARE_MAX = 0.36;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/thickness-gate.test.ts"
+  ],
+  "why": "The maximum moved off its rule (the shipped maximum, vs-quad-01's 0.3405, rounded up): 0.36 still passes every shipped board and still refuses a fixture at 0.45, so only the derivation test can see it."
+}

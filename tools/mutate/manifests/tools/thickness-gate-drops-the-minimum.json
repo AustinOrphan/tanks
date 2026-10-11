@@ -1,0 +1,11 @@
+{
+  "id": "thickness-gate-drops-the-minimum",
+  "file": "tools/mapgen/thickness-gate.mjs",
+  "find": "  return share >= INTERIOR_SHARE_MIN - THICKNESS_TOLERANCE\n    && share",
+  "replace": "  return share",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/thickness-gate.test.ts"
+  ],
+  "why": "The gate keeps its maximum and loses its minimum, so a board of one-cell bars -- interior share 0, every default runs board -- passes, and so does a board with no wall cells at all. The ruling's band has two edges; issue #1065 expects the gate to refuse every default board of the five rulesets, most of them for being under the minimum."
+}

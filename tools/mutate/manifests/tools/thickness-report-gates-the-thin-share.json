@@ -1,0 +1,11 @@
+{
+  "id": "thickness-report-gates-the-thin-share",
+  "file": "tools/mapgen/thickness-gate.mjs",
+  "find": "  const passing = read.filter((b) => passesThicknessGate(b.interior));\n",
+  "replace": "  const passing = read.filter((b) => passesThicknessGate(b.thin));\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/thickness-gate.test.ts"
+  ],
+  "why": "The sweep's report applies the gate to the thin share instead of the interior share, so the passed count and the refused seeds answer a question the ruling did not ask: a board of masses (thin 0) is refused and a board whose thin share happens to sit in 0.09-0.35 passes. Issue #1065 gates the interior share only."
+}

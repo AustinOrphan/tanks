@@ -1,0 +1,11 @@
+{
+  "id": "thickness-gate-thin-ceiling-off-its-derivation",
+  "file": "tools/mapgen/thickness-gate.mjs",
+  "find": "export const THIN_SHARE_CEILING = 0.37;\n",
+  "replace": "export const THIN_SHARE_CEILING = 0.40;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/thickness-gate.test.ts"
+  ],
+  "why": "The thin ceiling moved off its rule (the shipped maximum, vs-tri-01's 0.3690, rounded up): 0.40 still holds every shipped board, so only the test that recomputes it from ARENA_DEFS can see it. The sweep's over-the-ceiling count would quietly read against a bound no shipped board defines."
+}

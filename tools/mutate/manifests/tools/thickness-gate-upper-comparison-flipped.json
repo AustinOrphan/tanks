@@ -1,0 +1,11 @@
+{
+  "id": "thickness-gate-upper-comparison-flipped",
+  "file": "tools/mapgen/thickness-gate.mjs",
+  "find": "    && share <= INTERIOR_SHARE_MAX + THICKNESS_TOLERANCE;\n",
+  "replace": "    && share > INTERIOR_SHARE_MAX + THICKNESS_TOLERANCE;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/thickness-gate.test.ts"
+  ],
+  "why": "The gate's upper comparison flipped: it passes only boards whose interior share is OVER the shipped maximum and refuses every board inside the band, all 9 shipped boards included. Issue #1065's ruling gates the share to the band the shipped boards span; inverted, the sweep reports the most massed boards as the ones that pass."
+}

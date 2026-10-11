@@ -1,0 +1,11 @@
+{
+  "id": "mapgen-thin-test-counts-components-with-an-interior",
+  "file": "tools/mapgen/measure.ts",
+  "find": "    (cells) => !cells.some(([c, r]) => isInterior(wall, c, r)),\n",
+  "replace": "    (cells) => cells.some(([c, r]) => isInterior(wall, c, r)),\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "why": "The thin test inverted: the components counted thin are the ones WITH an interior cell, so a board of masses reads as all thin and a board of one-cell bars as none. The thin share issue #1065 reports against its ceiling would then measure the masses the ruling asks for, and the shipped table (thin cells on vs-duel-01 and vs-tri-01 only) would invert."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "mapgen-interior-test-reads-three-neighbours",
+  "file": "tools/mapgen/measure.ts",
+  "find": "  return wall(c, r) && wall(c + 1, r) && wall(c - 1, r) && wall(c, r + 1) && wall(c, r - 1);\n",
+  "replace": "  return wall(c, r) && wall(c + 1, r) && wall(c - 1, r) && wall(c, r + 1);\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "why": "The interior test forgets the neighbour above, so a wall cell with wall to its left, right and below counts as interior: the bottom row of every bar two cells thick and the top-middle cell of a 3x3 block read as interior, a 2x3 slab stops being thin, and every shipped board's interior share rises. Issue #1065's band is read off that share, so the gate would admit boards whose masses are only slabs."
+}
