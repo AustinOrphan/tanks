@@ -752,8 +752,8 @@ band, so none can redraw against it; and the band is a literal derived from the 
 `tools/mapgen/thickness-gate.mjs`, recomputed by its test over every board in `ARENA_DEFS`). Three
 limits travel with it: nine boards are not a sample of good boards; "thin" means no interior cell,
 not one cell thick (the literal one-cell-thick cells are 48 of the 1,410, on vs-duel-01 and
-vs-tri-01); and a crossing of two bars two cells thick counts as interior, as the ruling defines
-it. At default settings it passes none of the boards the shipped tier accepts from any of the five
+vs-tri-01); and a junction, bend or diagonal step of runs two cells thick counts as interior, as
+the ruling defines it. At default settings it passes none of the boards the shipped tier accepts from any of the five
 rulesets, at N=2, 3 and 4 in both of `sweep.mjs`'s 50-seed samples (seeds 1-50 and 51-100):
 `topology`'s interior share starts at 0.354, over the maximum, and the other four measure 0.000.
 No other quality measure becomes a gate without its own ruling.

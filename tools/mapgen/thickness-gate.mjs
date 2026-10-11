@@ -25,13 +25,17 @@ import { medianOf } from './sweep-report.mjs';
  *   - Nine boards are not a sample of good boards. The band describes what ships.
  *   - "Thin" means no interior cell, not one cell thick. The literal one-cell-thick cells, in no
  *     all-wall 2x2 square, are 48 of the 1,410 shipped wall cells (3.4%), all on vs-duel-01 (22)
- *     and vs-tri-01 (26); vs-tri-01's 8 thin components are slabs and rings 2 cells thick, of 5
- *     to 18 cells.
- *   - A crossing counts as interior. Two of vs-duel-01's 5 components are bars 2 cells thick
- *     crossing, with an interior cell and no all-wall 3x3 square, and 6 of the 11 interior cells
- *     behind its 0.0940 are theirs. Under the stricter test "the component contains a 3x3
- *     square" the thin cells would be 146 (10.4% of 1,410), vs-duel-01's thin share 0.7179, and
- *     the ceiling different. The ruling's own definition, no interior cell, is the one built here.
+ *     and vs-tri-01 (26). vs-tri-01's 8 thin components are four slabs two cells thick (6, 6, 6
+ *     and 18 cells) and four shapes one cell thick, two rings of 8 and two U-shapes of 5, which
+ *     hold all 26 of its one-cell-thick cells.
+ *   - Interior does not mean mass. Two of vs-duel-01's 5 components have interior cells and no
+ *     all-wall 3x3 square: 4 at two T-junctions of runs two cells thick and 2 at diagonal steps
+ *     of destructible runs two cells thick, 6 of the 11 interior cells behind its 0.0940. By the
+ *     same definition a closed ring, a T or a diagonal step built of runs two cells thick can
+ *     pass the band with no mass at all: a 6x6 ring two cells thick reads 4 of 32 (0.125).
+ *     Under the stricter test "the component contains a 3x3 square" the thin cells would be 146
+ *     (10.4% of 1,410), vs-duel-01's thin share 0.7179, and the ceiling different. The ruling's
+ *     own definition, no interior cell, is the one built here.
  *
  * Kept out of `measure.ts` (which stays numbers only) and out of `src/sim/` (the generator is
  * tooling), in an importable module so the comparison and the report are under test --

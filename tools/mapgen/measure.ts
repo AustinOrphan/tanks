@@ -1317,9 +1317,12 @@ export function smallWallComponents(board: GridBoard, connectivity: 4 | 8): numb
 
 /**
  * Whether cell (c, r) is INTERIOR (issue #1065): it and all four of its orthogonal neighbours
- * are wall. A bar one or two cells thick has none, since every cell in it faces floor; a mass
- * three cells across has them, and so does a crossing of two thinner bars. The one definition
- * both thickness figures below use.
+ * are wall. A STRAIGHT bar one or two cells thick has none, since every cell in it faces floor,
+ * and nor does a T, bend, ring or step built only of runs one cell thick. Anything that walls one
+ * cell in on all four sides has one, with or without an all-wall 3x3 square: a mass three cells
+ * across, a crossing of two bars of any thickness, and a T, the inside corner of a bend, a closed
+ * ring or a diagonal step built of runs two cells thick. The one definition both thickness
+ * figures below use.
  */
 function isInterior(wall: (c: number, r: number) => boolean, c: number, r: number): boolean {
   return wall(c, r) && wall(c + 1, r) && wall(c - 1, r) && wall(c, r + 1) && wall(c, r - 1);
@@ -1356,10 +1359,11 @@ export interface ThicknessCounts {
  * cell -- with the cells they hold. Exported beside the two shares because a sample's pooled thin
  * share is thin cells over wall cells summed over its boards, not a mean of per-board shares.
  *
- * "Thin" means no interior cell, not one cell thick: a slab or ring two cells thick is thin, and
- * two such bars crossing are not, because the crossing has an interior cell. That is the
- * thickness ruling's own definition (#821, 2026-10-09). Not part of `BoardMeasures`: like
- * `wallComponentSizes`, it takes no player count.
+ * "Thin" means no interior cell, not one cell thick: a straight slab two cells thick, or a ring
+ * one cell thick, is thin; two such slabs crossing, meeting at a T or bending at an L are not,
+ * and nor is a closed ring two cells thick, because each junction has an interior cell (see
+ * `isInterior`). That is the thickness ruling's own definition (#821, 2026-10-09). Not part of
+ * `BoardMeasures`: like `wallComponentSizes`, it takes no player count.
  */
 export function thicknessCounts(board: GridBoard, connectivity: 4 | 8): ThicknessCounts {
   const wall = wallCellTest(board);

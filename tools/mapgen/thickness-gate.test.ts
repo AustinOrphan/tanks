@@ -111,7 +111,8 @@ describe('the thickness report the sweep prints (issue #1065)', () => {
     // The bar (0, under the band) and the 6x6 block (0.444, over it) are refused.
     expect(r).toMatchObject({ n: 4, passed: 2, refusedSeeds: [2, 3] });
     // The control for "by the interior share": by the thin shares -- 0, 1, 0 and 0.158 -- only
-    // the mixed board would land in the band, and seeds 1 and 3 would swap verdicts.
+    // the mixed board would land in the band, so seed 1 would be refused too (passed 1; refused
+    // 1, 2 and 3).
     expect(thinShare(mixed, 8)).toBe(3 / 19);
   });
 
