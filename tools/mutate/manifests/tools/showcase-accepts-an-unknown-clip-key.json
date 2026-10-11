@@ -1,0 +1,14 @@
+{
+  "id": "showcase-accepts-an-unknown-clip-key",
+  "file": "tools/showcase/validate.mjs",
+  "find": "      if (!Object.hasOwn(CLIP_FIELDS, key)) messages.push(`${name}: unknown key '${key}'`);",
+  "replace": "      void key;",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 1: an unknown clip key"
+  ],
+  "why": "Rule 1: a clip holds publication metadata only. Without the unknown-key check a viewport, seed or encoder setting could ride along in the manifest, where it belongs to the capture recipe."
+}

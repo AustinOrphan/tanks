@@ -1,0 +1,14 @@
+{
+  "id": "clearance-adds-a-line-the-sweep-never-sees",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  const { chips, chipsStaged } = m.match;",
+  "replace": "  if (m.never) failures.push(`${inMatch}: a line no shape reaches`);\n  const { chips, chipsStaged } = m.match;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "killedBy": [
+    "clearance failure lines name their element and state (issue #1068) walks every failing shape and finds each line naming its selectors and its state"
+  ],
+  "why": "Adds a twelfth failure line that no fixture reaches. The sweep over every failing shape only walks the shapes it is given, so without its count of the `failures.push` sites a new line could ship naming no selector and no state while every test stayed green; that count is the only thing here that sees a site with no shape."
+}

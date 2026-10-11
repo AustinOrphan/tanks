@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { defaultSlots } from './versus-setup';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type GameplayOutcome, type GameplayStatus, type Hud } from './hud';
+import { createHud, type GameplayOutcome, type GameplayStatus, type Hud, type HudOptions } from './hud';
 import { devControls } from './dev-config';
 import { LITERALS } from './devtools-menu';
 import { browserHistoryHost, type HistoryHost } from './navigation';
 import { isMuteHotkey, isPauseHotkey } from './loop';
-import { resolveVersusConfig, versusMapChoices, type VersusConfig } from './versus-config';
+import { campaignBoardUnlock, resolveVersusConfig, versusMapChoices, type VersusConfig } from './versus-config';
 import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { versusCatalogEntryById, VERSUS_CATALOG } from '../sim/config/versus-catalog';
 import { createMemoryStorage } from './storage';
@@ -17,10 +17,10 @@ import { ZERO_STATS } from './stats';
 
 let hud: Hud | null = null;
 
-function mount(): { hud: Hud; root: HTMLElement } {
+function mount(opts: HudOptions = {}): { hud: Hud; root: HTMLElement } {
   const root = document.createElement('div');
   document.body.appendChild(root);
-  hud = createHud(root);
+  hud = createHud(root, opts);
   return { hud, root };
 }
 
@@ -354,6 +354,87 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.onVersusStart((config) => seen.push(config));
     startBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(() => resolveVersusConfig(seen[0], 0)).not.toThrow();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Issue #983: a campaign board is offered only once its campaign level is cleared. Each case
+  // hands the HUD a mutable save, `cleared` levels deep, through the same getter
+  // `createBrowserDeps` binds to the progress store.
+  // ---------------------------------------------------------------------------
+
+  it('shows only the boards this save has unlocked, re-read on every open (issue #983)', () => {
+    let cleared = 2;
+    const { hud: h, root } = mount({ versusUnlock: () => campaignBoardUnlock(cleared) });
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const maps = (): string[] => mapButtons(root).map((b) => b.dataset.map as string);
+    // Two players, FFA, levels 1 and 2 cleared: their two boards, the three dedicated
+    // two-player boards, and Random -- 6 cards, where every declared board would be 9.
+    expect(maps()).toEqual(['arena-01', 'arena-02', 'vs-duel-01', 'vs-tri-01', 'vs-quad-01', 'random']);
+    // Random counts the row it sits in, so it never claims a board the row hides.
+    expect(mapBtn(root, 'random').querySelector('.hud-versus-map-config')?.textContent).toBe('5 eligible boards');
+
+    // Level 3 cleared while the page lives: Arena 3 is on the next open, read live rather than
+    // fixed when the HUD was built.
+    cleared = 3;
+    h.showVersusSetup(false);
+    h.showVersusSetup(true);
+    expect(maps()).toEqual(['arena-01', 'arena-02', 'arena-03', 'vs-duel-01', 'vs-tri-01', 'vs-quad-01', 'random']);
+  });
+
+  it('drops a selected board that a progress reset locked, on the next open, seeded or not (issue #983)', () => {
+    // The pane's own selection and the retained config a finished match reopens it with
+    // (route-ui.ts) both outlive a reset. What Start EMITS is asserted, because a stale id
+    // with no card looks right in the row and only fails at the launch gate.
+    let cleared = 3;
+    const { hud: h, root } = mount({ versusUnlock: () => campaignBoardUnlock(cleared) });
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const seen: VersusConfig[] = [];
+    h.onVersusStart((config) => seen.push(config));
+    mapBtn(root, 'arena-03').dispatchEvent(new MouseEvent('click'));
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(seen.at(-1)?.arenaId, 'the negative control: kept while level 3 is cleared').toBe('arena-03');
+    const retained = seen.at(-1) as VersusConfig;
+
+    cleared = 0;
+    h.showVersusSetup(false);
+    h.showVersusSetup(true);
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(seen.at(-1)?.arenaId, 'reopened with no seed').toBe('random');
+    expect(mapBtn(root, 'random').getAttribute('aria-pressed'), 'and Random is what is selected').toBe('true');
+    expect(mapNote(root).textContent, 'silently: the player moved no control').toBe('');
+
+    h.showVersusSetup(false);
+    h.showVersusSetup(true, retained);
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(seen.at(-1)?.arenaId, 'reopened seeded with the retained Arena 3').toBe('random');
+    expect(
+      () => resolveVersusConfig(seen.at(-1) as VersusConfig, 0, VERSUS_CATALOG, campaignBoardUnlock(0)),
+      'the emitted config survives the launch gate on the reset save',
+    ).not.toThrow();
+  });
+
+  it('an axis change drops a held board the save no longer unlocks, and says only that it is gone (issue #983)', () => {
+    // Nothing in the shipped page changes progress while the pane is open -- Reset progress is
+    // in Settings, which replaces the pane, and the open re-check above catches it. This pins
+    // that Players and Mode re-check the map against the SAME unlock the row they rebuild
+    // reads, so the two cannot disagree about one board, and pins the sentence a locked board
+    // gets: no axis named, because no axis can bring it back.
+    let cleared = 3;
+    const { hud: h, root } = mount({ versusUnlock: () => campaignBoardUnlock(cleared) });
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    mapBtn(root, 'arena-03').dispatchEvent(new MouseEvent('click'));
+    cleared = 0;
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+
+    const name = versusCatalogEntryById('arena-03').displayName;
+    expect(mapNote(root).textContent).toBe(`${name} is no longer available. Random selected.`);
+    const seen: VersusConfig[] = [];
+    h.onVersusStart((config) => seen.push(config));
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(seen[0].arenaId).toBe('random');
   });
 
   it('stock defaults to VERSUS_STOCK, the same constant the sim boundary uses (constants.ts)', () => {

@@ -1,0 +1,19 @@
+{
+  "id": "versus-unlock-last-cleared-level-held-back",
+  "file": "src/game/versus-config.ts",
+  "find": "    levels.filter((_, i) => i < highestCleared).map((level) => level.arenaId),",
+  "replace": "    levels.filter((_, i) => i < highestCleared - 1).map((level) => level.arenaId),",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "killedBy": [
+    "the campaign board unlock (issue #983) unlocks exactly the boards of the levels cleared so far, and every board no level plays",
+    "the campaign board unlock (issue #983) pairs a board with its level through the level's arenaId -- not the board's id, and not arena numbering",
+    "the campaign board unlock (issue #983) offers a fresh save, and a save two levels in, exactly these boards at each startable option",
+    "the campaign board unlock (issue #983) unlocking a board offers it at exactly the counts and modes its entry declares",
+    "the campaign board unlock (issue #983) refuses to launch a board the save has not unlocked -- the launch gate's backstop",
+    "the campaign board unlock (issue #983) keeps a retained campaign board once its level is cleared"
+  ],
+  "why": "The opposite off-by-one to `versus-unlock-frontier-level-unlocked`: the board of the level just cleared stays locked until the NEXT clear, so a player who beats level 1 finds Arena 1 still missing from versus and a player who finishes the campaign never sees Arena 5. Both directions are pinned because the ordinal is 1-based and the index is not, and either slip reads as plausible. Proved before its tests existed, by hand: the pre-#983 test file passed 0 failed of 20 with this mutation applied; then KILLED by 6 of 29, measured."
+}

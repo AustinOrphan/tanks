@@ -279,7 +279,7 @@ import { consumesKey, keyToUiAction, type UiAction } from '../input/ui-actions';
 import { isDirection, spatialNext, type Direction, type Rect } from './spatial-focus';
 import { keyHint, type Modality } from './modality';
 import { teamOf } from '../sim/arena';
-import { versusCatalogEntryById } from '../sim/config/versus-catalog';
+import { VERSUS_CATALOG, versusCatalogEntryById } from '../sim/config/versus-catalog';
 import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
 import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
@@ -335,8 +335,10 @@ import type { RoundPhase } from '../sim/round';
 import { VERSUS_STOCK } from '../sim/constants';
 import { configFor } from '../sim/config';
 import {
+  EVERY_BOARD_UNLOCKED,
   retainArenaChoice,
   versusMapChoices,
+  type BoardUnlock,
   type RetainedArena,
   type VersusConfig,
 } from './versus-config';
@@ -1641,6 +1643,14 @@ export interface HudOptions {
    * (loop.ts) is the one production caller and always supplies it.
    */
   readonly versusSetup?: VersusSetupStore;
+  /**
+   * Which versus boards this player has unlocked (issue #983), read on every Map row build,
+   * axis change and pane open -- a getter rather than a value, because a campaign clear or a
+   * progress reset changes it while the page lives. Absent -- every injected HUD in a test --
+   * means every board the catalog declares. `createBrowserDeps` (loop.ts) binds it to the
+   * progress store.
+   */
+  readonly versusUnlock?: () => BoardUnlock;
   /**
    * The browser-history mirror's host (issue #318). Absent -- every existing test -- means
    * the in-app layer stack alone, with no History call ever made. `createBrowserDeps`
@@ -6613,8 +6623,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // Pane-local selection state, session-scoped (spec ruling 4: "no seventh store,
   // same posture as controller assignment"). Lives in THIS closure, never reset by
   // showVersusSetup(false) or by setState's close-all discipline below -- only
-  // showVersusSetup(true, initial) with a TRUTHY `initial` ever overwrites it -- so a
-  // trip through Back and back to Versus keeps whatever was last chosen.
+  // showVersusSetup(true, initial) with a TRUTHY `initial` ever overwrites it, and an open
+  // only ever changes the map, to Random, when it names a board no longer unlocked (issue
+  // #983) -- so a trip through Back and back to Versus keeps whatever was last chosen.
   //
   // Default map is 'random', which the Map row offers at every (players, mode) -- it is
   // appended after the filtered list, not drawn from it -- and which `retainArenaChoice`
@@ -6651,6 +6662,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     opts.versusSetup?.set({ ...next });
   }
 
+  /** The boards this player has unlocked RIGHT NOW (issue #983) -- see `versusUnlock`. */
+  const versusUnlock = (): BoardUnlock => opts.versusUnlock?.() ?? EVERY_BOARD_UNLOCKED;
+
   /**
    * A Players or Mode change, applied with the retained MAP re-checked against it.
    *
@@ -6667,7 +6681,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * the first time a choice is legal to make but not yet reflected in the state read here.
    */
   function setVersusAxis(next: VersusConfig): void {
-    const retained = retainArenaChoice(next.arenaId, next.players, next.mode);
+    const retained = retainArenaChoice(
+      next.arenaId, next.players, next.mode, VERSUS_CATALOG, versusUnlock(),
+    );
     setVersusConfig(retained.dropped === null ? next : { ...next, arenaId: retained.arenaId });
     renderVersusMapNote(retained.dropped);
   }
@@ -6698,7 +6714,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   function versusMapDropNotice(dropped: NonNullable<RetainedArena['dropped']>): string {
     const name = arenaLabel(dropped.id);
-    if (dropped.reason === 'gone') return `${name} is no longer available. Random selected.`;
+    // `'locked'` (issue #983) shares the `'gone'` sentence: the board is offered at no
+    // combination, and anything more specific would be the unlock hint #983 leaves out.
+    if (dropped.reason === 'gone' || dropped.reason === 'locked') {
+      return `${name} is no longer available. Random selected.`;
+    }
     if (dropped.reason === 'mode') {
       const label = VERSUS_MODE_OPTIONS.find((o) => o.id === versusConfigState.mode)?.label
         ?? versusConfigState.mode;
@@ -6817,7 +6837,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function renderVersusMapRow(): void {
     versusMapRow.replaceChildren();
     const choices: string[] = [
-      ...versusMapChoices(versusConfigState.players, versusConfigState.mode),
+      // Only the boards this player has unlocked (issue #983): a locked board is absent, and
+      // Random's "N eligible boards" below counts this same list.
+      ...versusMapChoices(
+        versusConfigState.players, versusConfigState.mode, VERSUS_CATALOG, versusUnlock(),
+      ),
       'random',
     ];
     const paint = schematicPaint();
@@ -7324,6 +7348,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   function seedAndRenderVersus(initial?: VersusConfig | null): void {
     if (initial) setVersusConfig({ ...initial });
+    // RE-CHECKED ON EVERY OPEN, seeded or not (issue #983). Both the retained `initial` and
+    // this closure's own state outlive a progress reset, so either can name a board this
+    // player no longer has unlocked, with no card in the row to show it. It falls back to
+    // Random through the same `retainArenaChoice` the Players and Mode controls use, and is
+    // written back so the store agrees. Silently: the player moved no control here, and
+    // naming a board they can no longer see would be the unlock hint #983 leaves out.
+    const retained = retainArenaChoice(
+      versusConfigState.arenaId, versusConfigState.players, versusConfigState.mode,
+      VERSUS_CATALOG, versusUnlock(),
+    );
+    if (retained.dropped !== null) setVersusConfig({ ...versusConfigState, arenaId: retained.arenaId });
     renderVersusMapNote(null); // a reopened pane carries no note from its last visit
     renderVersusModeSelection();
     renderVersusPlayersSelection();

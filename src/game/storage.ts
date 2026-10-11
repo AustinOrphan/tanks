@@ -9,6 +9,7 @@ import {
 import { createAchievementsStore, type AchievementsStore } from './achievements';
 import { createRunStore, type RunStore } from './run';
 import { createVersusSetupStore, type VersusSetupStore } from './versus-setup-store';
+import { campaignBoardUnlock } from './versus-config';
 import { parseDeveloperMode, parseDevFlags } from './devflags';
 
 /**
@@ -311,13 +312,19 @@ export function createStores(
   storage: Storage,
   availability: StorageAvailability = 'persistent',
 ): GameStores {
+  const progress = createProgressStore(storage);
   return {
-    progress: createProgressStore(storage),
+    progress,
     stats: createStatsStore(storage),
     customization: createCustomizationStore(storage),
     settings: createPlayerSettingsStore(storage, { availability }),
     achievements: createAchievementsStore(storage),
     run: createRunStore(storage),
-    versusSetup: createVersusSetupStore(storage),
+    // A stored board this save has not unlocked is dropped to Random (issue #983). A read of
+    // the progress store above, never a write and never a second key.
+    versusSetup: createVersusSetupStore(
+      storage,
+      () => campaignBoardUnlock(progress.highestCleared()),
+    ),
   };
 }

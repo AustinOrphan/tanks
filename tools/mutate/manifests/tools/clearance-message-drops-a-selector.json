@@ -1,0 +1,15 @@
+{
+  "id": "clearance-message-drops-a-selector",
+  "file": "tools/visual/clearance.mjs",
+  "find": "toast rail ${S.toasts} top ${toasts.top} overlaps topbar ${S.topbar}, whose bottom",
+  "replace": "toast rail top ${toasts.top} overlaps the topbar, whose bottom",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "killedBy": [
+    "clearance failure lines name their element and state (issue #1068) walks every failing shape and finds each line naming its selectors and its state",
+    "topbar clearance verdict (issue #687) fails the toast rail starting inside the bar -- the shipped 64px under a 77px bar"
+  ],
+  "why": "Puts the toast-rail line back to naming its two elements in prose, the wording issue #1068 replaced: a regression would again say 'toast rail' and 'the topbar' and leave the reader to find which elements those are. Besides the row's spelled-out line, the sweep over every failing shape must fail on it, which is the proof that the sweep reads real output rather than passing vacuously."
+}

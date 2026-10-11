@@ -1,0 +1,14 @@
+{
+  "id": "verify-clearance-trusts-an-unchecked-chip-selector",
+  "file": "tools/visual/verify.mjs",
+  "find": "        if (only(selector) !== el) throw",
+  "replace": "        if (false) throw",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance-measure.test.ts"
+  ],
+  "killedBy": [
+    "clearance measurement in the page (issue #1068) throws, naming the selector, rather than measure one that matches several elements or none"
+  ],
+  "why": "Drops the check that each chip's selector matches exactly one element, and that element is the chip. Issue #1068 requires it per chip measured: a chip is named by `:nth-child` under the bar, so a second element matching the bar's selector makes every chip line point at two elements, and without the check the first sign would be the bar's own box failing later with a message that names no chip."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "showcase-takes-a-whitespace-caption-or-alt-as-text",
+  "file": "tools/showcase/validate.mjs",
+  "find": "const blank = (text) => text.trim() === '';",
+  "replace": "const blank = (text) => text === '';",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 5: a caption that is only whitespace",
+    "showcase validator (issue #1062) negative controls rule 5: an alt that is only whitespace"
+  ],
+  "why": "Rule 5: caption and alt are non-empty after trimming. Without the trim, a caption or alt of spaces passes as text and a screen reader announces nothing."
+}

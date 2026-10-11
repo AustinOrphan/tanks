@@ -1,0 +1,15 @@
+{
+  "id": "versus-stored-arena-ignores-the-unlock",
+  "file": "src/game/versus-setup-store.ts",
+  "find": "    versusMapChoices(players, mode, VERSUS_CATALOG, unlocked()).includes(id);",
+  "replace": "    versusMapChoices(players, mode, VERSUS_CATALOG).includes(id);",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-setup-store.test.ts"
+  ],
+  "killedBy": [
+    "a stored board this save has not unlocked (issue #983) falls back to Random through the existing fallback after a progress reset, on the next page load",
+    "a stored board this save has not unlocked (issue #983) is refused on the way IN too, so get() and the stored bytes agree"
+  ],
+  "why": "The stored-setup place (issue #983): the setup store's arena check ignores the unlock, so a stored setup naming a campaign board -- saved before a progress reset, or imported from another save -- is read back intact and reopens the pane on a board the Map row does not show. Proved before its tests existed: SURVIVES at 0 of 11 in scope on the gate's own commit, then KILLED by 2 of 13, measured."
+}

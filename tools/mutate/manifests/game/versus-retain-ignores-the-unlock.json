@@ -1,0 +1,17 @@
+{
+  "id": "versus-retain-ignores-the-unlock",
+  "file": "src/game/versus-config.ts",
+  "find": "  if (versusMapChoices(players, mode, entries, unlocked).includes(arenaId)) {",
+  "replace": "  if (versusMapChoices(players, mode, entries).includes(arenaId)) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-config.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "killedBy": [
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) drops a selected board that a progress reset locked, on the next open, seeded or not (issue #983)",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) an axis change drops a held board the save no longer unlocks, and says only that it is gone (issue #983)",
+    "the campaign board unlock (issue #983) drops a retained board the save has not unlocked, and blames the lock rather than an axis"
+  ],
+  "why": "The retained-selection place (issue #983): `retainArenaChoice` checks the retained map against the DECLARED offer only, so a board that a progress reset has locked is kept, with no card in the Map row to show it, and Start then hands it to the launch gate, which throws, and the player gets the 'match failed' overlay instead of a match. Proved before its tests existed: SURVIVES at 0 of 154 in scope on the gate's own commit, then KILLED by 3 of 166, measured."
+}

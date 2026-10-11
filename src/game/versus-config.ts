@@ -11,6 +11,7 @@ import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalo
 // for a wall-clock or engine RNG that would make two "random" picks with the same seed
 // disagree.
 import { mulberry32 } from '../sim/ai/player-profile';
+import { CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { RANDOM_ARENA, type VersusSlotSetup } from './versus-setup';
 
 /**
@@ -74,6 +75,49 @@ export interface VersusConfig {
 }
 
 /**
+ * Whether this player may be offered a catalog entry at all (issue #983). Applied AFTER
+ * the entry's declared (players, mode) support, never instead of it, so an unlock can only
+ * take boards away from what the catalog declares: unlocking a board offers exactly the
+ * counts and modes its entry declares, and nothing it does not.
+ */
+export type BoardUnlock = (entry: VersusCatalogEntry) => boolean;
+
+/**
+ * No board withheld: the offer exactly as the catalog declares it. The default for every
+ * function below, so a caller that has no progress to read -- the catalog's own declaration
+ * tests, and every HUD built without a progress seam -- sees the declared offer unchanged.
+ * Every production caller passes `campaignBoardUnlock` instead.
+ */
+export const EVERY_BOARD_UNLOCKED: BoardUnlock = () => true;
+
+/**
+ * The ruling on #355: a campaign board is offered in versus only once its campaign level has
+ * been cleared, and a board no campaign level plays is always offered.
+ *
+ * `highestCleared` is `ProgressStore.highestCleared()` -- the 1-based count of `levels`
+ * cleared, the same permanent progression Continue and Level Select read. It is a maximum,
+ * so the cleared levels are always a prefix of `levels`.
+ *
+ * Both sets come from `levels`, each level's `arenaId`, and are keyed on the ENTRY'S
+ * `arenaId` rather than its id: the pairing is the campaign's own data, not a second table
+ * and not a naming convention, and an entry whose id differs from the arena it plays is
+ * still locked behind that arena's level. An arena two levels play unlocks with the first.
+ *
+ * `levels` is injectable for the reason `createProgressStore`'s is: a fixture can then
+ * order its levels unlike the arena numbering and prove nothing here reads a board id.
+ */
+export function campaignBoardUnlock(
+  highestCleared: number,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): BoardUnlock {
+  const campaignArenas = new Set(levels.map((level) => level.arenaId));
+  const clearedArenas = new Set(
+    levels.filter((_, i) => i < highestCleared).map((level) => level.arenaId),
+  );
+  return (entry) => !campaignArenas.has(entry.arenaId) || clearedArenas.has(entry.arenaId);
+}
+
+/**
  * Stable VS ids offerable at (`players`, `mode`): the dedicated catalog entries
  * (issue #270) whose DECLARED support covers the combination. Order follows the
  * catalog's own entry order -- the setup pane's offer order.
@@ -91,14 +135,19 @@ export interface VersusConfig {
  * every shipped entry declares all of {2,3,4} x both modes, so only a synthetic
  * narrower entry can prove the two predicates actually filter (see
  * versus-config.test.ts's fails-if-a-predicate-is-dropped cases).
+ *
+ * `unlocked` (issue #983) then removes what this player has not unlocked, as a separate
+ * step after the declaration filter so it can only subtract from it.
  */
 export function versusMapChoices(
   players: number,
   mode: VersusMode,
   entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
+  unlocked: BoardUnlock = EVERY_BOARD_UNLOCKED,
 ): string[] {
   return entries
     .filter((e) => e.players.includes(players) && e.modes.includes(mode))
+    .filter(unlocked)
     .map((e) => e.id);
 }
 
@@ -108,8 +157,11 @@ export function versusMapChoices(
  * new count at all, `'mode'` when it declares the count but not the mode, and `'gone'`
  * when the id names no entry -- reachable only from a stored setup written by an older
  * build, which `sanitizeSetup` already screens, but not this module's business to assume.
+ * `'locked'` (issue #983) when the entry exists but this player has not unlocked it, which
+ * outranks both axes: a locked board is offered at no (players, mode), so naming an axis
+ * would point the player at a control that cannot bring it back.
  */
-export type ArenaDropReason = 'players' | 'mode' | 'gone';
+export type ArenaDropReason = 'players' | 'mode' | 'gone' | 'locked';
 
 /** A retained map choice after a (players, mode) change -- see `retainArenaChoice`. */
 export interface RetainedArena {
@@ -145,18 +197,26 @@ export interface RetainedArena {
  * A pure function of its arguments, with the same injected `entries` seam as its
  * neighbours -- the shipped catalog cannot currently produce every `ArenaDropReason`, and
  * a fixture must be able to.
+ *
+ * `unlocked` (issue #983) is the same check the Map row applies, so a retained or stored
+ * choice naming a board this player has not unlocked -- a progress reset since it was
+ * chosen -- falls back to Random through this same path.
  */
 export function retainArenaChoice(
   arenaId: string,
   players: number,
   mode: VersusMode,
   entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
+  unlocked: BoardUnlock = EVERY_BOARD_UNLOCKED,
 ): RetainedArena {
   if (arenaId === RANDOM_ARENA) return { arenaId, dropped: null };
-  if (versusMapChoices(players, mode, entries).includes(arenaId)) {
+  if (versusMapChoices(players, mode, entries, unlocked).includes(arenaId)) {
     return { arenaId, dropped: null };
   }
   const entry = entries.find((e) => e.id === arenaId);
+  if (entry !== undefined && !unlocked(entry)) {
+    return { arenaId: RANDOM_ARENA, dropped: { id: arenaId, reason: 'locked' } };
+  }
   const reason: ArenaDropReason =
     entry === undefined ? 'gone' : entry.players.includes(players) ? 'mode' : 'players';
   return { arenaId: RANDOM_ARENA, dropped: { id: arenaId, reason } };
@@ -181,14 +241,18 @@ export function retainArenaChoice(
  * do NOT call this any more, having already been handed a resolved config. Direct
  * callers (this module's own tests) can still call it per-seed to characterize the
  * distribution itself.
+ *
+ * `'random'` draws from the boards this player has unlocked (issue #983) -- the same list
+ * the Map row shows and its Random card counts -- so it can never land on a locked board.
  */
 export function pickVersusArena(
   config: VersusConfig,
   seed: number,
   entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
+  unlocked: BoardUnlock = EVERY_BOARD_UNLOCKED,
 ): string {
   if (config.arenaId !== 'random') return config.arenaId;
-  const choices = versusMapChoices(config.players, config.mode, entries);
+  const choices = versusMapChoices(config.players, config.mode, entries, unlocked);
   const rnd = mulberry32(seed);
   const idx = Math.min(Math.floor(rnd() * choices.length), choices.length - 1);
   return choices[idx];
@@ -222,19 +286,27 @@ export function pickVersusArena(
  *   (levels.ts) and `replayMetaFor` actually need. The five migrated entries have
  *   id === arenaId, so identity pass-through still holds for every shipped concrete
  *   config; a purpose-built entry whose ids differ gets a translated copy.
+ * - The resolved entry must be one this player has unlocked (issue #983), or this throws.
+ *   The pane never offers a locked board and re-checks a retained one on every open, and a
+ *   Rematch re-checks its retained config the same way (loop.ts), so this is the same kind
+ *   of backstop as the support check above: fail at Start, never launch a locked board.
  */
 export function resolveVersusConfig(
   config: VersusConfig,
   seed: number,
   entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
+  unlocked: BoardUnlock = EVERY_BOARD_UNLOCKED,
 ): VersusConfig {
-  const id = pickVersusArena(config, seed, entries);
+  const id = pickVersusArena(config, seed, entries, unlocked);
   const entry = entries.find((e) => e.id === id);
   if (!entry) throw new Error(`versus-config: '${id}' names no versus catalog entry`);
   if (!entry.players.includes(config.players) || !entry.modes.includes(config.mode)) {
     throw new Error(
       `versus-config: map '${id}' does not support N=${config.players} mode=${config.mode}`,
     );
+  }
+  if (!unlocked(entry)) {
+    throw new Error(`versus-config: map '${id}' is locked until its campaign level is cleared`);
   }
   if (config.arenaId === entry.arenaId) return config;
   return { ...config, arenaId: entry.arenaId };

@@ -1,0 +1,16 @@
+{
+  "id": "clearance-names-the-menu-as-the-match",
+  "file": "tools/visual/clearance.mjs",
+  "find": "  const inMenu = `${where} state=menu`;",
+  "replace": "  const inMenu = `${where} state=match`;",
+  "expect": "killed",
+  "tests": [
+    "tools/visual/clearance.test.ts"
+  ],
+  "killedBy": [
+    "clearance failure lines name their element and state (issue #1068) walks every failing shape and finds each line naming its selectors and its state",
+    "topbar clearance verdict (issue #687) fails a menu measured with the topbar shown, which is not the no-topbar case",
+    "topbar clearance verdict (issue #687) fails a menu toast rail inside the inset once no topbar is there to clear it"
+  ],
+  "why": "Labels the two Main Menu lines as measured in the match. The menu is measured with the topbar hidden and the match with it shown, so the state is what tells a reader which page to open; issue #1068 puts it beside the viewport and inset. The sweep's state check must fail here as well as the two menu lines."
+}

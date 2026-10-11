@@ -122,7 +122,11 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // Menu with a menu, so it is swept like the other two. Its controls are the same controls
     // again -- what differs is that one of them is wearing a focus ring, which this sweep does
     // not read and its own baseline now does.
-    expect(hitSweepStates()).toHaveLength(37);
+    //
+    // 38 since issue #983's `screen.versus-setup.fresh`: the Versus Setup pane on a fresh save,
+    // which carries a menu and so is swept like its four siblings. Its controls are theirs,
+    // with fewer map cards, each wider than theirs at desktop width.
+    expect(hitSweepStates()).toHaveLength(38);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 

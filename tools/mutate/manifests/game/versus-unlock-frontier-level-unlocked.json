@@ -1,0 +1,21 @@
+{
+  "id": "versus-unlock-frontier-level-unlocked",
+  "file": "src/game/versus-config.ts",
+  "find": "    levels.filter((_, i) => i < highestCleared).map((level) => level.arenaId),",
+  "replace": "    levels.filter((_, i) => i <= highestCleared).map((level) => level.arenaId),",
+  "expect": "killed",
+  "tests": [
+    "src/game/versus-config.test.ts"
+  ],
+  "killedBy": [
+    "the campaign board unlock (issue #983) unlocks exactly the boards of the levels cleared so far, and every board no level plays",
+    "the campaign board unlock (issue #983) pairs a board with its level through the level's arenaId -- not the board's id, and not arena numbering",
+    "the campaign board unlock (issue #983) offers a fresh save, and a save two levels in, exactly these boards at each startable option",
+    "the campaign board unlock (issue #983) unlocking a board offers it at exactly the counts and modes its entry declares",
+    "the campaign board unlock (issue #983) leaves a fresh save at least two non-campaign boards at each startable option, and every one starts",
+    "the campaign board unlock (issue #983) Random draws only from the boards a save has unlocked",
+    "the campaign board unlock (issue #983) refuses to launch a board the save has not unlocked -- the launch gate's backstop",
+    "the campaign board unlock (issue #983) drops a retained board the save has not unlocked, and blames the lock rather than an axis"
+  ],
+  "why": "Off by one: `highestCleared` is a 1-based count, so `<=` also unlocks the level AFTER the last one cleared -- the board of the level the player is stuck on, and Arena 1 on a save that has cleared nothing. A plausible slip, because the ordinal and the index differ by one. Proved before its tests existed: SURVIVES at 0 of 20 in scope on the gate's own commit, then KILLED by 8 of 29, measured."
+}

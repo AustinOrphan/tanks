@@ -1,0 +1,14 @@
+{
+  "id": "showcase-allows-a-fifth-clip",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  clips: 4,",
+  "replace": "  clips: 5,",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 6: five clips"
+  ],
+  "why": "Rule 6: #258's publication policy allows at most 4 clips."
+}

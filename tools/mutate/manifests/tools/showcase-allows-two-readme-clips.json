@@ -1,0 +1,14 @@
+{
+  "id": "showcase-allows-two-readme-clips",
+  "file": "tools/showcase/validate.mjs",
+  "find": "  if (readmeClips > SHOWCASE_LIMITS.readmeClips) {",
+  "replace": "  if (readmeClips > SHOWCASE_LIMITS.readmeClips + 1) {",
+  "expect": "killed",
+  "tests": [
+    "tools/showcase/validate.test.ts"
+  ],
+  "killedBy": [
+    "showcase validator (issue #1062) negative controls rule 6: two clips placed in the README"
+  ],
+  "why": "Rule 6: at most 1 clip is placed in the root README. Rule 15 defers its README reference count to this rule when the manifest itself places too many, so losing it silences both."
+}
