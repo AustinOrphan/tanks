@@ -1,12 +1,16 @@
 import { evaluateVersusBoard } from '../../src/sim/versus-board';
 import { versusSpawnClearanceFailures } from '../../src/sim/versus-spawns';
 import { loadArena } from '../../src/sim/arena';
-import { measureBoard, smallWallComponents, MIN_WALL_BLOCK_CELLS } from './measure';
+import { measureBoard, MIN_WALL_BLOCK_CELLS } from './measure';
 import { RULESETS } from './rulesets.mjs';
 import { writeBoardPng } from './render.mjs';
 import { expressiveRange, renderExpressiveRange } from './expressive-range.mjs';
 import { seedRange } from './lib.mjs';
 import { THREE_PLAYER_SPREAD_CEILING, passesSpreadGate } from './spread-gate.mjs';
+import {
+  SHIPPED_BANDS, DESTRUCTIBLE_WALL_CEILING,
+  bandReport, destructibleReport, smallBlockReport, runLengthReport, seedList,
+} from './sweep-report.mjs';
 
 /**
  * Generate boards from every ruleset over a seed sample, filter them through the SHIPPED
@@ -41,7 +45,11 @@ import { THREE_PLAYER_SPREAD_CEILING, passesSpreadGate } from './spread-gate.mjs
  * THE TABLE IS MEANS, AND A MEAN HIDES A GENERATOR'S WHOLE PROBLEM: a ruleset that emits one
  * board twenty times and a ruleset that emits twenty different boards print the same row.
  * The expressive-range block after the table is the fix (issue #822) -- per-axis spread, and
- * how much of a fixed two-axis grid each ruleset's sample actually reaches.
+ * how much of a fixed two-axis grid each ruleset's sample actually reaches. The blocks before it
+ * (issue #1029) read the accepted boards one at a time: small wall components 8- and
+ * 4-connected by seed, each shipped band's median and the share of boards inside it,
+ * destructibles over wall mass by seed, and the run lengths read back off the board. Their
+ * logic is in `sweep-report.mjs`, where a mutation can reach it; this file only prints.
  */
 
 const arg = (flag, fallback) => {
@@ -101,13 +109,16 @@ for (const job of jobs) {
   const key = job.label;
   const boards = [];
   for (const s of seedRange(SEED_OFFSET, SEEDS)) boards.push({ seed: s, arena: job.generate(s) });
+  // Generation takes no player count, so this is the same for every N: every board drawn.
+  const drawnSmall = smallBlockReport(boards);
 
   for (const n of COUNTS) {
     const verdicts = boards.map((b) => ({ ...b, verdict: accepts(b.arena, n) }));
     const passed = verdicts.filter((b) => b.verdict.ok);
     const refusals = {};
     for (const b of verdicts) if (!b.verdict.ok) refusals[b.verdict.why] = (refusals[b.verdict.why] ?? 0) + 1;
-    const ms = passed.map((b) => measureBoard(b.arena, n, `${key}-${b.seed}`));
+    const measured = passed.map((b) => ({ ...b, m: measureBoard(b.arena, n, `${key}-${b.seed}`) }));
+    const ms = measured.map((b) => b.m);
     rows.push({
       ruleset: key,
       playerCount: n,
@@ -115,9 +126,12 @@ for (const job of jobs) {
       accepted: passed.length,
       refusals,
       m: ms,
-      // Issue #1028: accepted boards with no wall component (8-connected, wall cells only)
-      // below the block-size threshold. Reported, not gated.
-      noSmallBlocks: passed.filter((b) => smallWallComponents(b.arena, 8) === 0).length,
+      // Issue #1028, both connectivities since #1029: accepted boards with a wall component
+      // (wall cells only) below the block-size threshold, by seed. Reported, not gated.
+      small: smallBlockReport(passed),
+      drawnSmall,
+      destructible: destructibleReport(measured),
+      runLengths: runLengthReport(passed.map((b) => b.arena)),
       // Tier 4 (issue #820): of the shipped-tier accepted boards, those the spread gate passes.
       spreadPassed: ms.filter((m) => passesSpreadGate(m, n)).length,
     });
@@ -127,11 +141,13 @@ for (const job of jobs) {
   }
 }
 
-console.log(`ruleset            N  acc/drawn  wall  dstr  cov  legal  corr  open  neck  rout  pMin  sprd  pts  sight  bank  rot  blk${MIN_WALL_BLOCK_CELLS}`);
+const LABEL = Math.max(17, ...rows.map((r) => r.ruleset.length));
+console.log(`${'ruleset'.padEnd(LABEL)}  N  acc/drawn  wall  dstr  cov  legal  corr  open  neck  rout  pMin  sprd  pts  long  sight  bank  rot  blk${MIN_WALL_BLOCK_CELLS}  blk${MIN_WALL_BLOCK_CELLS}-4`);
 for (const r of rows) {
   const g = (field, d = 2) => f(mean(r.m.map((m) => m[field])), d);
+  const clear = (withSmall) => f(r.accepted ? (r.accepted - withSmall) / r.accepted : NaN);
   console.log([
-    r.ruleset.padEnd(17),
+    r.ruleset.padEnd(LABEL),
     String(r.playerCount),
     `${String(r.accepted).padStart(3)}/${String(r.drawn).padEnd(3)}`,
     g('wallFraction'), g('destructibleFraction'),
@@ -140,8 +156,9 @@ for (const r of rows) {
     g('bottleneckWidth').padStart(4), g('routeCount'),
     f(mean(r.m.map((m) => m.pathMin)), 1).padStart(4), g('pathSpread'),
     f(mean(r.m.map((m) => m.samplePoints)), 0).padStart(3),
-    g('openSightFraction'), g('bankGain'), g('asymmetryRotational'),
-    f(r.accepted ? r.noSmallBlocks / r.accepted : NaN),
+    g('longestSightlineRelative'),
+    g('openSightFraction').padStart(5), g('bankGain'), g('asymmetryRotational'),
+    clear(r.small.with8).padStart(4), clear(r.small.with4).padStart(6),
   ].join('  '));
 }
 console.log();
@@ -149,7 +166,8 @@ console.log('Every figure after acc/drawn is a MEAN over the ACCEPTED boards onl
 console.log('accept rate means a small denominator -- read the two together. Columns carry the');
 console.log('same meanings as tools/mapgen/calibrate.mjs prints for the shipped boards.');
 console.log(`blk${MIN_WALL_BLOCK_CELLS} = share of accepted boards with no wall component below ${MIN_WALL_BLOCK_CELLS} cells (8-connected,`);
-console.log('wall cells only); every shipped board has none (issue #1028).');
+console.log(`wall cells only); every shipped board has none (issue #1028). blk${MIN_WALL_BLOCK_CELLS}-4 is the same share`);
+console.log('4-connected. long = longest sightline over the board diagonal.');
 console.log();
 for (const r of rows) {
   const why = Object.entries(r.refusals).map(([k, v]) => `${k} ${v}`).join(', ');
@@ -174,6 +192,64 @@ if (threes.length > 0) {
       `${f(spreads[0])} / ${f(median)} / ${f(spreads[spreads.length - 1])}`,
     ].join('  '));
   }
+}
+
+// ---- per-board reporting (issue #1029): every function is in sweep-report.mjs ----
+const tag = (r) => `${r.ruleset} N=${r.playerCount}`;
+console.log();
+console.log(`SMALL WALL COMPONENTS: boards with a wall component below ${MIN_WALL_BLOCK_CELLS} cells, 8- and 4-connected, wall cells only`);
+console.log(`(seeds ${SEED_OFFSET + 1}-${SEED_OFFSET + SEEDS}; "drawn" counts every board the ruleset drew, before the shipped tier, and does not depend on N)`);
+for (const r of rows) {
+  const s = r.small;
+  console.log(`  ${tag(r).padEnd(LABEL + 4)}  accepted ${s.with8}/${s.n} (8-conn) ${s.with4}/${s.n} (4-conn);`
+    + ` drawn ${r.drawnSmall.with8}/${r.drawnSmall.n} (8-conn) ${r.drawnSmall.with4}/${r.drawnSmall.n} (4-conn);`
+    + ` accepted seeds with one: ${seedList(s.exceptions.map((e) => e.seed))}`);
+}
+
+const BAND_LABELS = {
+  wallFraction: 'wall', legalAreaFraction: 'legal', corridorAreaFraction: 'corr',
+  openGroundFraction: 'open', bottleneckWidth: 'neck', routeCount: 'rout',
+  longestSightlineRelative: 'long', openSightFraction: 'sight', bankGain: 'bank',
+};
+console.log();
+console.log('SHIPPED-BAND REPORT: per band, the MEDIAN over the accepted boards, then how many of them lie inside it');
+console.log(`bands: ${Object.entries(SHIPPED_BANDS).map(([k, b]) => `${BAND_LABELS[k] ?? k} ${f(b.min)}-${f(b.max)}`).join(', ')}`);
+console.log('(the spec\'s shipped band row, edges at two decimals; ! = MISS, median inside with most boards outside; x = median outside)');
+console.log(`${'ruleset'.padEnd(LABEL)}  N    n  ${Object.keys(SHIPPED_BANDS).map((k) => (BAND_LABELS[k] ?? k).padEnd(10)).join(' ')}`);
+const verdicts = [];
+for (const r of rows) {
+  const report = bandReport(r.m);
+  const cells = report.map((b) => {
+    const mark = b.verdict === 'miss' ? '!' : b.verdict === 'out' ? 'x' : ' ';
+    return `${f(b.median)} ${String(b.inside).padStart(3)}${mark}`.padEnd(10);
+  });
+  console.log(`${r.ruleset.padEnd(LABEL)}  ${r.playerCount}  ${String(r.m.length).padStart(3)}  ${cells.join(' ')}`);
+  for (const b of report) {
+    if (b.verdict === 'miss' || b.verdict === 'out') {
+      verdicts.push(`  ${b.verdict === 'miss' ? 'MISS' : 'OUT '} ${tag(r)} ${b.field}: median ${f(b.median, 3)} `
+        + `${b.medianInBand ? 'inside' : 'outside'} ${f(b.band.min)}-${f(b.band.max)}; ${b.inside} of ${b.n} accepted boards inside`);
+    }
+  }
+}
+for (const line of verdicts) console.log(line);
+
+console.log();
+console.log(`DESTRUCTIBLES OVER WALL MASS: destructible cells / wall cells per accepted board, ceiling ${f(DESTRUCTIBLE_WALL_CEILING)}`);
+for (const r of rows) {
+  const d = r.destructible;
+  const over = d.exceptions.map((e) => `${e.seed} (${f(e.share)})`).join(', ') || 'none';
+  console.log(`  ${tag(r).padEnd(LABEL + 4)}  max ${f(d.max)} over ${d.n} accepted; over the ceiling: ${over}`);
+}
+
+console.log();
+console.log('RUN LENGTHS: wall components (8-connected) read back as straight runs and L-bends, over the accepted boards.');
+console.log('run = a straight piece, or an L\'s straight leg with its corner; arm = an L\'s other leg without it. Every');
+console.log('piece appears twice under the 180-degree rotation. other = a component that is neither.');
+for (const r of rows) {
+  const L = r.runLengths;
+  const mmm = (s) => `${f(s.min, 0)} / ${f(s.median, 1)} / ${f(s.max, 0)}`;
+  console.log(`  ${tag(r).padEnd(LABEL + 4)}  ${L.boards} boards: ${L.straight + L.bent + L.other} components = `
+    + `${L.straight} straight + ${L.bent} L + ${L.other} other; run ${mmm(L.runs)}, arm ${mmm(L.arms)} (min / median / max)`);
 }
 
 // ---- expressive range (issue #822) ----
