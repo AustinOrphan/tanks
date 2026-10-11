@@ -28,9 +28,10 @@ import {
  *   acceptance (src/sim/versus-board.ts)  pass/fail, gates, already shipped, unchanged
  *   quality    (this file)                numbers, never gates, ranks passing boards
  *
- * NOTHING HERE GATES ANYTHING and nothing here is imported by the game. The one ruled gate a
- * quality measure feeds -- `pathSpread` at three players (issue #820) -- lives in
- * `spread-gate.mjs` and runs in `sweep.mjs`, not here: this file stays numbers. It lives under
+ * NOTHING HERE GATES ANYTHING and nothing here is imported by the game. Two quality measures
+ * feed a ruled gate, each by its own ruling -- `pathSpread` at three players (issue #820,
+ * `spread-gate.mjs`) and the interior share (issue #1065, `thickness-gate.mjs`) -- and both
+ * gates run in `sweep.mjs`, not here: this file stays numbers. It lives under
  * `tools/` rather than `src/sim/` for exactly that reason: a new field on an arena or a new
  * module under `src/sim/` is a determinism-surface change (`arena-types.ts` records that the
  * validator rejects unknown keys, and `versus-board.ts` records that it was kept unreachable
@@ -1312,6 +1313,84 @@ export function wallComponents(board: GridBoard, connectivity: 4 | 8): [number, 
 /** How many of a board's wall components are below `MIN_WALL_BLOCK_CELLS`. */
 export function smallWallComponents(board: GridBoard, connectivity: 4 | 8): number {
   return wallComponentSizes(board, connectivity).filter((size) => size < MIN_WALL_BLOCK_CELLS).length;
+}
+
+/**
+ * Whether cell (c, r) is INTERIOR (issue #1065): it and all four of its orthogonal neighbours
+ * are wall. A bar one or two cells thick has none, since every cell in it faces floor; a mass
+ * three cells across has them, and so does a crossing of two thinner bars. The one definition
+ * both thickness figures below use.
+ */
+function isInterior(wall: (c: number, r: number) => boolean, c: number, r: number): boolean {
+  return wall(c, r) && wall(c + 1, r) && wall(c - 1, r) && wall(c, r + 1) && wall(c, r - 1);
+}
+
+/** A board's wall cells and interior cells; connectivity does not enter either. */
+function interiorCounts(board: GridBoard): { wallCells: number; interiorCells: number } {
+  const wall = wallCellTest(board);
+  let wallCells = 0;
+  let interiorCells = 0;
+  for (let r = 0; r < board.rows; r++) {
+    for (let c = 0; c < board.cols; c++) {
+      if (!wall(c, r)) continue;
+      wallCells++;
+      if (isInterior(wall, c, r)) interiorCells++;
+    }
+  }
+  return { wallCells, interiorCells };
+}
+
+/** The counts behind `interiorShare` and `thinShare`. */
+export interface ThicknessCounts {
+  readonly wallCells: number;
+  readonly interiorCells: number;
+  /** Wall components, under the connectivity asked for, with no interior cell. */
+  readonly thinComponents: number;
+  /** The wall cells those components hold. */
+  readonly thinCells: number;
+}
+
+/**
+ * A board's thickness in cells, over wall cells only (issue #1065): its wall cells, its interior
+ * cells, and its THIN components -- `connectivity`-connected wall components with no interior
+ * cell -- with the cells they hold. Exported beside the two shares because a sample's pooled thin
+ * share is thin cells over wall cells summed over its boards, not a mean of per-board shares.
+ *
+ * "Thin" means no interior cell, not one cell thick: a slab or ring two cells thick is thin, and
+ * two such bars crossing are not, because the crossing has an interior cell. That is the
+ * thickness ruling's own definition (#821, 2026-10-09). Not part of `BoardMeasures`: like
+ * `wallComponentSizes`, it takes no player count.
+ */
+export function thicknessCounts(board: GridBoard, connectivity: 4 | 8): ThicknessCounts {
+  const wall = wallCellTest(board);
+  const thin = wallComponents(board, connectivity).filter(
+    (cells) => !cells.some(([c, r]) => isInterior(wall, c, r)),
+  );
+  return {
+    ...interiorCounts(board),
+    thinComponents: thin.length,
+    thinCells: thin.reduce((sum, cells) => sum + cells.length, 0),
+  };
+}
+
+/**
+ * Interior cells over wall cells (issue #1065), the figure the thickness gate reads. A board with
+ * no wall cells reads 0.
+ */
+export function interiorShare(board: GridBoard): number {
+  const { wallCells, interiorCells } = interiorCounts(board);
+  return wallCells > 0 ? interiorCells / wallCells : 0;
+}
+
+/**
+ * Wall cells in thin components over wall cells (issue #1065), for `connectivity` 8 -- the
+ * ruling's, and what the sweep reports against the thin ceiling -- or 4. A board with no wall
+ * cells reads 0. On every shipped board the thin CELLS are the same under both connectivities,
+ * so the share is too; only vs-duel-01's thin component count differs, 2 against 4.
+ */
+export function thinShare(board: GridBoard, connectivity: 4 | 8): number {
+  const { wallCells, thinCells } = thicknessCounts(board, connectivity);
+  return wallCells > 0 ? thinCells / wallCells : 0;
 }
 
 /**
