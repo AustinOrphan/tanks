@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RULESETS } from './rulesets.mjs';
 import { BOARD, seedRange } from './lib.mjs';
 import { MIN_WALL_BLOCK_CELLS, smallWallComponents, wallComponents } from './measure';
+import { destructibleReport } from './sweep-report.mjs';
 
 /**
  * Issue #1029: default `runs` boards have no wall component below `MIN_WALL_BLOCK_CELLS`, the
@@ -43,6 +44,22 @@ const touchesSeam = (cells: [number, number][]): boolean => cells.some(([c, r]) 
 const isStraight = (cells: [number, number][]): boolean =>
   new Set(cells.map(([c]) => c)).size === 1 || new Set(cells.map(([, r]) => r)).size === 1;
 
+/** A board's wall and destructible cells as fractions of the board, as `BoardMeasures` has them. */
+const fractions = (arena: { grid: string[]; legend: Record<string, string> }) => {
+  let wall = 0;
+  let destructible = 0;
+  let total = 0;
+  for (const row of arena.grid) {
+    for (const ch of row) {
+      total++;
+      const kind = arena.legend[ch];
+      if (kind === 'solid' || kind === 'destructible') wall++;
+      if (kind === 'destructible') destructible++;
+    }
+  }
+  return { wallFraction: wall / total, destructibleFraction: destructible / total };
+};
+
 describe('runs: no wall component below 5 cells (issue #1029)', () => {
   it('draws no wall component below 5 cells, 8- or 4-connected, on any default board for seeds 1-100', () => {
     const seeds = seedRange(0, 100);
@@ -76,5 +93,21 @@ describe('runs: no wall component below 5 cells (issue #1029)', () => {
         expect(touchesSeam(cells), `seed ${s}: a fragment away from the seam is not a cut piece`).toBe(true);
       }
     }
+  });
+});
+
+describe('runs: destructibles at most 30% of the wall mass (issue #1029)', () => {
+  it('keeps destructibles at or under 30% of the wall cells on every default board for seeds 1-100', () => {
+    const boards = seedRange(0, 100).map((seed) => ({ seed, m: fractions(generate(seed)) }));
+    // Not vacuous: the population carries destructibles to count (94 of the 100 boards, measured).
+    // Before the trim, 11 of seeds 1-50 and 15 of 51-100 drew over the ceiling.
+    expect(boards.filter((b) => b.m.destructibleFraction > 0).length).toBeGreaterThan(50);
+    expect(destructibleReport(boards).exceptions).toEqual([]);
+  });
+
+  it('THE CONTROL: a board 40% destructible by wall cells is reported over the ceiling', () => {
+    // Synthetic: 10 wall cells, 4 of them destructible -- 4% of this 100-cell board.
+    const over = { grid: ['#'.repeat(6) + 'xxxx' + '.'.repeat(90)], legend: { '#': 'solid', x: 'destructible' } };
+    expect(destructibleReport([{ seed: 1, m: fractions(over) }]).exceptions.map((e) => e.seed)).toEqual([1]);
   });
 });

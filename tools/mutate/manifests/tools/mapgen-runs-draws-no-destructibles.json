@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-runs-draws-no-destructibles",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "    destructibleShare = 0.22,\n",
+  "replace": "    destructibleShare = 0,\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "A board with no destructibles is trivially under any ceiling on them, so the 30% test would pass on a generator that had stopped drawing any. The population has to carry destructibles to count, or the assertion is vacuous.",
+  "killedBy": [
+    "runs: destructibles at most 30% of the wall mass (issue #1029) keeps destructibles at or under 30% of the wall cells on every default board for seeds 1-100"
+  ]
+}

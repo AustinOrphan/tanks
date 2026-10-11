@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-runs-destructible-trim-dropped",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "  for (let i = kept.length - 1; i >= 0 && destructibleCells * 10 > wallCells * 3; i--) {\n",
+  "replace": "  for (let i = kept.length - 1; i >= 0 && false; i--) {\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "The destructible trim never runs, so `runs` is back to a fixed per-piece chance with no ceiling: 11 of seeds 1-50 and 15 of 51-100 draw over 30% of their wall mass, up to 0.52, against the spec's proposal 4 and issue #1029's criterion. The draw's mean stays near 0.21, so only a per-board check sees it.",
+  "killedBy": [
+    "runs: destructibles at most 30% of the wall mass (issue #1029) keeps destructibles at or under 30% of the wall cells on every default board for seeds 1-100"
+  ]
+}

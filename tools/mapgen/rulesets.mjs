@@ -362,18 +362,44 @@ function runs(seed, opts = {}) {
     return true;
   };
 
-  let placed = 0;
+  const kept = [];
   for (const [cc, rr] of candidates) {
-    if (placed >= pieces) break;
+    if (kept.length >= pieces) break;
     const shape = shapeOf(cc, rr);
     if (!fits(shape)) continue;
     const ch = r.next() < destructibleShare ? 'x' : '#';
     for (const [sc, sr] of shape) cells[sr][sc] = ch;
     rotate180(cells);
     if (cellsConnected(cells)) {
-      placed++;
+      kept.push({ shape, ch });
     } else {
       for (const [sc, sr] of shape) cells[sr][sc] = '.';
+      rotate180(cells);
+    }
+  }
+
+  // ---- step 3: destructibles at most 30% of the wall mass (issue #1029) ----
+  // The spec's proposal 4, counted in cells. Each piece is destructible with a fixed chance, so
+  // a board with few pieces can draw well past it -- 11 of seeds 1-50 and 15 of 51-100 did.
+  // Only such a board changes: its destructible pieces turn solid, last placed first, until it
+  // is back under, skipping any whose solid wall would cut the floor (`cellsConnected` counts a
+  // destructible cell as open). A board already under keeps the draw exactly. The rotation
+  // copies every piece once, so the half's share is the board's.
+  let wallCells = 0;
+  let destructibleCells = 0;
+  for (const { shape, ch } of kept) {
+    wallCells += shape.length;
+    if (ch === 'x') destructibleCells += shape.length;
+  }
+  for (let i = kept.length - 1; i >= 0 && destructibleCells * 10 > wallCells * 3; i--) {
+    const { shape, ch } = kept[i];
+    if (ch !== 'x') continue;
+    for (const [sc, sr] of shape) cells[sr][sc] = '#';
+    rotate180(cells);
+    if (cellsConnected(cells)) {
+      destructibleCells -= shape.length;
+    } else {
+      for (const [sc, sr] of shape) cells[sr][sc] = 'x';
       rotate180(cells);
     }
   }
