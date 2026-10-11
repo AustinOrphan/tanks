@@ -1,12 +1,13 @@
 import { evaluateVersusBoard } from '../../src/sim/versus-board';
 import { versusSpawnClearanceFailures } from '../../src/sim/versus-spawns';
-import { loadArena } from '../../src/sim/arena';
+import { ARENA_DEFS, loadArena } from '../../src/sim/arena';
 import { measureBoard, MIN_WALL_BLOCK_CELLS } from './measure';
 import { RULESETS } from './rulesets.mjs';
 import { writeBoardPng } from './render.mjs';
 import { expressiveRange, renderExpressiveRange } from './expressive-range.mjs';
 import { seedRange } from './lib.mjs';
 import { THREE_PLAYER_SPREAD_CEILING, passesSpreadGate } from './spread-gate.mjs';
+import { INTERIOR_SHARE_MAX, INTERIOR_SHARE_MIN, THIN_SHARE_CEILING, thicknessReport } from './thickness-gate.mjs';
 import {
   SHIPPED_BANDS, DESTRUCTIBLE_WALL_CEILING,
   bandReport, destructibleReport, smallBlockReport, runLengthReport, seedList,
@@ -16,7 +17,7 @@ import {
  * Generate boards from every ruleset over a seed sample, filter them through the SHIPPED
  * acceptance rules, measure the survivors, and print one row per (ruleset, player count).
  *
- * THE THREE TIERS STAY SEPARATE, one ruled stage follows them, and the order matters:
+ * THE THREE TIERS STAY SEPARATE, two ruled stages follow them, and the order matters:
  *
  *   1. GENERATE -- the ruleset's own rules build a board from a seed.
  *   2. ACCEPT   -- `evaluateVersusBoard` and `versusSpawnClearanceFailures`, unchanged and
@@ -25,12 +26,18 @@ import {
  *                  proposition from one that lands 9 in 10, even if their boards measure
  *                  the same.
  *   3. MEASURE  -- the quality tier ranks the boards that passed.
- *   4. SPREAD   -- at three players only, the one ruled gate fed by a quality measure
+ *   4. SPREAD   -- at three players only, the first ruled gate fed by a quality measure
  *                  (issue #820): `passesSpreadGate` in `spread-gate.mjs` refuses a board whose
  *                  spawn-path spread is over the ceiling derived from the shipped boards. It
  *                  runs after the shipped tier, on boards that tier accepted, and a refused seed
- *                  is reported, not retried. Tiers 1-3 are unchanged by it, and no other quality
- *                  measure gates anything (see that module's header for why this one does).
+ *                  is reported, not retried. Tiers 1-3 are unchanged by it.
+ *   5. THICKNESS -- at every player count, the second (issue #1065): `passesThicknessGate` in
+ *                  `thickness-gate.mjs` refuses a board whose interior share is outside the band
+ *                  the shipped boards span, and the thin share is reported against its ceiling,
+ *                  not gated. It reads the boards the shipped tier accepted -- at three players
+ *                  the same boards stage 4 reads, not only those stage 4 passes -- and a refused
+ *                  seed is reported, not retried. No other quality measure gates anything (see
+ *                  each gate module's header for why these two do).
  *
  * Acceptance is never used as a score. `versus-board.ts` says of its own criteria that 0 of
  * 15 shipped (arena, N) combinations fail them; a generator tuned to maximise pass rate
@@ -134,6 +141,8 @@ for (const job of jobs) {
       runLengths: runLengthReport(passed.map((b) => b.arena)),
       // Tier 4 (issue #820): of the shipped-tier accepted boards, those the spread gate passes.
       spreadPassed: ms.filter((m) => passesSpreadGate(m, n)).length,
+      // Tier 5 (issue #1065): the same shipped-tier accepted boards through the thickness gate.
+      thick: thicknessReport(passed),
     });
     if (PNG_DIR && n === 4 && passed.length) {
       writeBoardPng(passed[0].arena, `${PNG_DIR}/${key}-seed${passed[0].seed}.png`, { playerCount: 4, scale: 20 });
@@ -191,6 +200,47 @@ if (threes.length > 0) {
       `${shippedWhy}; spread ${r.accepted - r.spreadPassed}`.padEnd(38),
       `${f(spreads[0])} / ${f(median)} / ${f(spreads[spreads.length - 1])}`,
     ].join('  '));
+  }
+}
+
+// ---- the thickness gate (issue #1065): every figure is thicknessReport's, in thickness-gate.mjs ----
+{
+  const mmm = (s) => `${f(s.min, 3)} / ${f(s.median, 3)} / ${f(s.max, 3)}`;
+  const pooled = (t) => `${t.wallCells ? `${(100 * t.pooledThin).toFixed(1)}%` : '  --'} (${t.thinCells}/${t.wallCells})`;
+  const shipped = thicknessReport(ARENA_DEFS.map((def) => ({ seed: def.id, arena: def })));
+  console.log();
+  console.log(`THICKNESS GATE: interior share in [${INTERIOR_SHARE_MIN}, ${INTERIOR_SHARE_MAX}], after the shipped tier, at every N (seeds ${SEED_OFFSET + 1}-${SEED_OFFSET + SEEDS})`);
+  console.log(`Thin share (8-connected) reported against its ceiling ${THIN_SHARE_CEILING}, not gated. Every figure is over the boards the shipped`);
+  console.log('tier accepted -- at N=3 the same boards the spread gate reads, not only those it passes. Medians interpolate (medianOf),');
+  console.log('unlike the spread block\'s lower median. pooled = thin cells / wall cells summed over the accepted boards.');
+  console.log([
+    'ruleset'.padEnd(LABEL), 'N', 'shipped', '+thick ', 'refused (shipped tier; thickness)'.padEnd(39),
+    'interior min / med / max'.padEnd(25), 'thin min / med / max'.padEnd(21), `>${THIN_SHARE_CEILING}`.padStart(6),
+    'pooled thin'.padEnd(19), 'any thin',
+  ].join('  '));
+  for (const r of rows) {
+    const t = r.thick;
+    const shippedWhy = Object.entries(r.refusals).map(([k, v]) => `${k} ${v}`).join(', ') || 'none';
+    console.log([
+      r.ruleset.padEnd(LABEL),
+      String(r.playerCount),
+      `${String(r.accepted).padStart(3)}/${String(r.drawn).padEnd(3)}`,
+      `${String(t.passed).padStart(3)}/${String(r.drawn).padEnd(3)}`,
+      `${shippedWhy}; thickness ${t.n - t.passed}`.padEnd(39),
+      mmm(t.interior).padEnd(25),
+      mmm(t.thin).padEnd(21),
+      `${t.overCeiling}/${t.n}`.padStart(6),
+      pooled(t).padEnd(19),
+      `${t.withThin}/${t.n}`,
+    ].join('  '));
+  }
+  console.log(`  shipped (${shipped.n} boards, ARENA_DEFS, the same report): ${shipped.passed}/${shipped.n} pass; `
+    + `interior ${mmm(shipped.interior)}; thin ${mmm(shipped.thin)}; over ${THIN_SHARE_CEILING} ${shipped.overCeiling}/${shipped.n}; `
+    + `pooled thin ${pooled(shipped)}; any thin ${shipped.withThin}/${shipped.n}`);
+  for (const r of rows) {
+    const t = r.thick;
+    const verdict = t.n === 0 ? 'no accepted board' : t.passed === 0 ? `none pass of ${t.n} accepted` : `${t.passed} of ${t.n} accepted pass`;
+    console.log(`  ${`${r.ruleset} N=${r.playerCount}`.padEnd(LABEL + 4)}  ${verdict}; refused by thickness: ${seedList(t.refusedSeeds)}`);
   }
 }
 

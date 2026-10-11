@@ -6,6 +6,7 @@ import { lineOfSight as losImpl } from '../../src/sim/ai/targeting';
 import {
   measureBoard, tankLattice, geodesic, nearestLegal, openingShots, wallAABBs,
   rotationalAsymmetry, wallComponentSizes, smallWallComponents, wallCellTest, MIN_WALL_BLOCK_CELLS,
+  thicknessCounts, interiorShare, thinShare,
 } from './measure';
 
 /**
@@ -881,5 +882,140 @@ describe('mapgen morphology: wall components over wall cells only (issue #1028)'
     expect(wallCellTest(b)(3, 1)).toBe(false);
     expect(wallCellTest(b)(1, 1)).toBe(true);
     expect(wallCellTest(b)(-1, 0), 'off the board is not wall').toBe(false);
+  });
+});
+
+describe('mapgen thickness: interior share and thin share over wall cells only (issue #1065)', () => {
+  /**
+   * Per board, counted for #1065 at c200cf62 and recounted on this tree (arena-01's re-authoring
+   * in #1071 moved only letters). thin8 and thin4 are the thin COMPONENTS under each
+   * connectivity; the thin cells are the same under both on every shipped board.
+   */
+  const SHIPPED: Record<string, {
+    wall: number; interior: number; thin8: number; thin4: number; thinCells: number;
+    interiorShare: number; thinShare: number;
+  }> = {
+    'arena-01': { wall: 117, interior: 27, thin8: 0, thin4: 0, thinCells: 0, interiorShare: 0.2308, thinShare: 0 },
+    'arena-02': { wall: 144, interior: 46, thin8: 0, thin4: 0, thinCells: 0, interiorShare: 0.3194, thinShare: 0 },
+    'arena-03': { wall: 99, interior: 15, thin8: 0, thin4: 0, thinCells: 0, interiorShare: 0.1515, thinShare: 0 },
+    'arena-04': { wall: 126, interior: 30, thin8: 0, thin4: 0, thinCells: 0, interiorShare: 0.2381, thinShare: 0 },
+    'arena-05': { wall: 126, interior: 32, thin8: 0, thin4: 0, thinCells: 0, interiorShare: 0.2540, thinShare: 0 },
+    'vs-duel-01': { wall: 117, interior: 11, thin8: 2, thin4: 4, thinCells: 34, interiorShare: 0.0940, thinShare: 0.2906 },
+    'vs-tri-01': { wall: 168, interior: 26, thin8: 8, thin4: 8, thinCells: 62, interiorShare: 0.1548, thinShare: 0.3690 },
+    'vs-quad-01': { wall: 279, interior: 95, thin8: 0, thin4: 0, thinCells: 0, interiorShare: 0.3405, thinShare: 0 },
+    'vs-quad-02': { wall: 234, interior: 70, thin8: 0, thin4: 0, thinCells: 0, interiorShare: 0.2991, thinShare: 0 },
+  };
+  const board = (grid: string[]) => ({
+    cols: grid[0].length, rows: grid.length, grid, legend: { '#': 'solid', x: 'destructible' },
+  }) as unknown as Arena;
+  const named = (id: string) => {
+    const def = ARENA_DEFS.find((d) => d.id === id);
+    if (def === undefined) throw new Error(`${id} is not shipped any more`);
+    return def;
+  };
+  /** Every figure for one board, so a fixture is asserted whole. */
+  const read = (b: Arena) => ({
+    c8: thicknessCounts(b, 8), c4: thicknessCounts(b, 4),
+    interior: interiorShare(b), thin8: thinShare(b, 8), thin4: thinShare(b, 4),
+  });
+
+  it('pins the per-board table, both connectivities for the thin figures, for the 9 boards it was counted on', () => {
+    // Per board id, not a count of ARENA_DEFS, as the #1028 table above: a board added later
+    // moves the band test in thickness-gate.test.ts, not this one.
+    for (const [id, want] of Object.entries(SHIPPED)) {
+      const got = read(named(id));
+      expect(got.c8, `${id} 8-connected`).toEqual({
+        wallCells: want.wall, interiorCells: want.interior, thinComponents: want.thin8, thinCells: want.thinCells,
+      });
+      expect(got.c4, `${id} 4-connected`).toEqual({
+        wallCells: want.wall, interiorCells: want.interior, thinComponents: want.thin4, thinCells: want.thinCells,
+      });
+      expect(got.interior, `${id} interior share`).toBeCloseTo(want.interiorShare, 4);
+      expect(got.thin8, `${id} thin share, 8-connected`).toBeCloseTo(want.thinShare, 4);
+      expect(got.thin4, `${id} thin share, 4-connected`).toBeCloseTo(want.thinShare, 4);
+    }
+    // The totals the issue quotes, summed from what production measured over the same 9 boards:
+    // 1,410 wall cells and 96 thin cells under both connectivities, in 10 thin components
+    // 8-connected and 12 4-connected.
+    const reads = Object.keys(SHIPPED).map((id) => read(named(id)));
+    expect(reads.reduce((s, r) => s + r.c8.wallCells, 0)).toBe(1410);
+    expect([reads.reduce((s, r) => s + r.c8.thinCells, 0), reads.reduce((s, r) => s + r.c4.thinCells, 0)])
+      .toEqual([96, 96]);
+    expect([reads.reduce((s, r) => s + r.c8.thinComponents, 0), reads.reduce((s, r) => s + r.c4.thinComponents, 0)])
+      .toEqual([10, 12]);
+  });
+
+  it('THE CONTROL: the two connectivities differ on vs-duel-01\'s thin component count and nowhere else', () => {
+    // Why the table pins both: the shares cannot tell 8 from 4 on any shipped board, so the
+    // component count on vs-duel-01 is the one shipped figure that sees the connectivity.
+    const differs = Object.keys(SHIPPED).filter((id) => {
+      const { c8, c4 } = read(named(id));
+      return c8.thinComponents !== c4.thinComponents;
+    });
+    expect(differs).toEqual(['vs-duel-01']);
+    for (const id of Object.keys(SHIPPED)) {
+      const { thin8, thin4 } = read(named(id));
+      expect(thin8, id).toBe(thin4);
+    }
+  });
+
+  it('reads a 3x3 block as interior 1 of 9 and thin 0', () => {
+    const got = read(board(['.....', '.###.', '.###.', '.###.', '.....']));
+    expect(got.c8).toEqual({ wallCells: 9, interiorCells: 1, thinComponents: 0, thinCells: 0 });
+    expect(got.interior).toBe(1 / 9);
+    expect([got.thin8, got.thin4]).toEqual([0, 0]);
+  });
+
+  it('reads a bar one cell thick as interior 0 and thin 1, the 3x3 block its control', () => {
+    const got = read(board(['.......', '.#####.', '.......']));
+    expect(got.c8).toEqual({ wallCells: 5, interiorCells: 0, thinComponents: 1, thinCells: 5 });
+    expect([got.interior, got.thin8, got.thin4]).toEqual([0, 1, 1]);
+  });
+
+  it('reads a 2x3 slab as interior 0 and thin 1: two cells thick is still thin', () => {
+    // Every cell faces floor on one side. The control is the 3x3 block above: one row more and
+    // the middle cell is interior.
+    const got = read(board(['.....', '.###.', '.###.', '.....']));
+    expect(got.c8).toEqual({ wallCells: 6, interiorCells: 0, thinComponents: 1, thinCells: 6 });
+    expect([got.interior, got.thin8]).toEqual([0, 1]);
+  });
+
+  it('reads a 5-cell plus as interior 1 of 5 and thin 0: a crossing counts as interior', () => {
+    // The ruling's definition, no interior cell. A "contains a 3x3 square" test would call this
+    // thin; that is the stricter definition the issue records and does not build.
+    const got = read(board(['.....', '..#..', '.###.', '..#..', '.....']));
+    expect(got.c8).toEqual({ wallCells: 5, interiorCells: 1, thinComponents: 0, thinCells: 0 });
+    expect([got.interior, got.thin8]).toEqual([1 / 5, 0]);
+  });
+
+  it('takes the thin share over ALL wall cells when one component is thin and one thick', () => {
+    // 9 cells of block and 3 of bar: thin 3 of 12, not 3 of 3 (the thin component alone) and
+    // not 1 of 2 (a share of components).
+    const got = read(board(['.........', '.###.....', '.###.###.', '.###.....', '.........']));
+    expect(got.c8).toEqual({ wallCells: 12, interiorCells: 1, thinComponents: 1, thinCells: 3 });
+    expect(got.thin8).toBe(3 / 12);
+    expect(got.interior).toBe(1 / 12);
+  });
+
+  it('joins a block and a cell touching only at a corner when 8-connected: thin 0, and 1 of 10 when 4-connected', () => {
+    const got = read(board(['###..', '###..', '###..', '...#.', '.....']));
+    expect(got.c8).toEqual({ wallCells: 10, interiorCells: 1, thinComponents: 0, thinCells: 0 });
+    expect(got.c4).toEqual({ wallCells: 10, interiorCells: 1, thinComponents: 1, thinCells: 1 });
+    expect([got.thin8, got.thin4]).toEqual([0, 1 / 10]);
+  });
+
+  it('counts a spawn letter beside a wall as no wall: a slab with a row of letters under it stays a slab', () => {
+    const lettered = read(board(['.....', '.###.', '.###.', '.PBG.', '.....']));
+    expect(lettered.c8).toEqual({ wallCells: 6, interiorCells: 0, thinComponents: 1, thinCells: 6 });
+    expect([lettered.interior, lettered.thin8]).toEqual([0, 1]);
+    // The control: the same row walled is the 3x3 block, with its interior cell.
+    const walled = read(board(['.....', '.###.', '.###.', '.###.', '.....']));
+    expect(walled.c8.interiorCells).toBe(1);
+  });
+
+  it('reads 0 for both shares on a board with no wall cells', () => {
+    const got = read(board(['.....', '..P..', '.....']));
+    expect(got.c8).toEqual({ wallCells: 0, interiorCells: 0, thinComponents: 0, thinCells: 0 });
+    expect([got.interior, got.thin8, got.thin4]).toEqual([0, 0, 0]);
   });
 });

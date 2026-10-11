@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-thin-share-of-no-wall-divides",
+  "file": "tools/mapgen/measure.ts",
+  "find": "  return wallCells > 0 ? thinCells / wallCells : 0;\n",
+  "replace": "  return thinCells / wallCells;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "why": "The thin share loses its empty-board guard, so a board with no wall cells reads 0/0 = NaN instead of the 0 issue #1065 requires, under either connectivity.",
+  "killedBy": [
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) reads 0 for both shares on a board with no wall cells"
+  ]
+}

@@ -11,9 +11,10 @@ import { spreadOf } from './expressive-range.mjs';
  * failing mutation. The sweep only calls these. NOTHING HERE GATES: every function reports,
  * and no ruleset reads any of it.
  *
- * Shared by design with issue #1065, which also reports medians and in-band shares: whichever
- * of the two lands second reuses `medianOf`, `inBand` and `bandReport` rather than adding
- * another.
+ * Shared by design with issue #1065, which also reports medians and in-band shares:
+ * `thicknessReport` in `thickness-gate.mjs` takes its medians from `medianOf`. Its in-band test
+ * is the gate's own rather than `inBand`, because the gate's edges are already rounded outward
+ * and take a float tolerance, not this file's half unit.
  */
 
 /**

@@ -1,6 +1,6 @@
 /**
- * THE ONE GATE THE QUALITY TIER FEEDS (issue #820): a generated 3-player board's spawn-path
- * spread.
+ * THE FIRST OF THE TWO GATES THE QUALITY TIER FEEDS (issue #820): a generated 3-player board's
+ * spawn-path spread. The second, on the interior share, is `thickness-gate.mjs` (issue #1065).
  *
  * Exact fairness for three seats needs 3-fold symmetry, which a rectangle cannot have. The
  * rulings on #820 chose approximate symmetry with a stated tolerance, and put the tolerance on
@@ -9,12 +9,13 @@
  * The 3-fold cell-symmetry figure `asymmetryC3` stays reported and is never gated.
  *
  * WHY THIS IS AN EXCEPTION AND NOT A PRECEDENT. Everything else the quality tier computes is a
- * number that gates nothing, and stays so. This one was RULED a gate, because the ruling asks for
- * a guarantee of comparable opportunity at three players, which a number that gates nothing
- * cannot give. It runs in `sweep.mjs` after generation and after the shipped acceptance tier; no
- * ruleset reads the ceiling or the player count (rulesets take none), so none can redraw against
- * it; and the ceiling is a literal derived from the shipped boards. No other quality measure
- * becomes a gate without its own ruling.
+ * number that gates nothing, and stays so, apart from the interior share, which a ruling of its
+ * own made the second gate (issue #1065; that module's header gives its reasons). This one was
+ * RULED a gate, because the ruling asks for a guarantee of comparable opportunity at three
+ * players, which a number that gates nothing cannot give. It runs in `sweep.mjs` after generation
+ * and after the shipped acceptance tier; no ruleset reads the ceiling or the player count
+ * (rulesets take none), so none can redraw against it; and the ceiling is a literal derived from
+ * the shipped boards. No other quality measure becomes a gate without its own ruling.
  *
  * Kept out of `measure.ts` (which stays numbers only) and out of `src/sim/` (the generator is
  * tooling), in an importable module so the count dispatch and the comparison are under test --

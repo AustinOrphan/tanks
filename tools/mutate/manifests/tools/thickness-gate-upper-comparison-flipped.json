@@ -1,0 +1,19 @@
+{
+  "id": "thickness-gate-upper-comparison-flipped",
+  "file": "tools/mapgen/thickness-gate.mjs",
+  "find": "    && share <= INTERIOR_SHARE_MAX + THICKNESS_TOLERANCE;\n",
+  "replace": "    && share > INTERIOR_SHARE_MAX + THICKNESS_TOLERANCE;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/thickness-gate.test.ts"
+  ],
+  "why": "The gate's upper comparison flipped: it passes only boards whose interior share is OVER the shipped maximum and refuses every board inside the band, all 9 shipped boards included. Issue #1065's ruling gates the share to the band the shipped boards span; inverted, the sweep reports the most massed boards as the ones that pass.",
+  "killedBy": [
+    "the thickness gate (issue #1065) passes a share well inside the band and refuses one well outside it on either side",
+    "the thickness gate (issue #1065) holds its tolerance at float noise on either side of both edges",
+    "the thickness gate (issue #1065) refuses a board with no wall cells, which reads 0, and passes a 3x3 block as its control",
+    "the thickness gate (issue #1065) passes every shipped board, each at or under the thin ceiling",
+    "the thickness report the sweep prints (issue #1065) counts the boards the gate passes, by the interior share, and names every refused seed",
+    "the thickness report the sweep prints (issue #1065) reports the shipped set as the sweep prints it beside the generated rows"
+  ]
+}

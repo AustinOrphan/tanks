@@ -1,0 +1,16 @@
+{
+  "id": "mapgen-thin-figure-reads-4-connected-for-8",
+  "file": "tools/mapgen/measure.ts",
+  "find": "  const thin = wallComponents(board, connectivity).filter(\n",
+  "replace": "  const thin = wallComponents(board, 4).filter(\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/measure.test.ts"
+  ],
+  "why": "The thin figure ignores its connectivity and always walks 4-connected components, so asking for the ruling's 8-connected thin share splits a block from a cell touching it only at a corner and reads the cell as a thin component of its own. Distinct from mapgen-components-ignore-diagonals, which breaks the neighbour set for every caller: this leaves wallComponents alone. The shipped thin CELLS are the same under both connectivities, so only vs-duel-01's thin component count (2 against 4) and a diagonal fixture can see it.",
+  "killedBy": [
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) pins the per-board table, both connectivities for the thin figures, for the 9 boards it was counted on",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) THE CONTROL: the two connectivities differ on vs-duel-01's thin component count and nowhere else",
+    "mapgen thickness: interior share and thin share over wall cells only (issue #1065) joins a block and a cell touching only at a corner when 8-connected: thin 0, and 1 of 10 when 4-connected"
+  ]
+}
