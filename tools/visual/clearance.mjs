@@ -41,10 +41,11 @@
  */
 
 /**
- * The elements measured, ONE copy (issue #1068). `verify.mjs` hands this object to the in-page
- * measurement as its argument, because a function run through `page.evaluate` cannot close over
- * a module constant, and the lines below print the same strings. A rename here is a rename
- * everywhere the tooling looks; `clearance-measure.test.ts` ties it to the HUD's own markup.
+ * The elements measured, one copy shared by the measurement and its lines (issue #1068).
+ * `verify.mjs` hands this object to the in-page measurement as its argument, because a function
+ * run through `page.evaluate` cannot close over a module constant, and the lines below print the
+ * same strings. A rename here reaches both; `verify.mjs`'s `settle()` and the hit sweep still
+ * spell `.hud-topbar` themselves. `clearance-measure.test.ts` ties it to the HUD's own markup.
  */
 export const CLEARANCE_SELECTORS = Object.freeze({
   topbar: '.hud-topbar',

@@ -76,16 +76,18 @@ with the sliver, **(30,33,38)** without, consistent across all four viewports.
 
 A second pass, after the board checks, asks a layout question rather than a pixel one. The
 verdict is `clearance.mjs`, which has its own unit tests and mutation entries. `verify.mjs`
-supplies the rects and each chip's selector, measuring through `CLEARANCE_SELECTORS`, the one
-copy of the three selectors: `clearance.mjs` exports it and `verify.mjs` hands it to the
-in-page measurement as its argument (issue #1068). Every selector the measurement uses must
+supplies the rects and each chip's selector, measuring through `CLEARANCE_SELECTORS`, the copy
+of the three selectors the measurement and its lines share: `clearance.mjs` exports it and
+`verify.mjs` hands it to the in-page measurement as its argument (issue #1068). Every selector the measurement uses must
 match exactly one element of the page, or the run throws naming it.
 
 Each failure line names the viewport, the inset, the state measured (`match` or `menu`) and
 the element by a selector that can be pasted into `document.querySelector`. This one was
-printed by a local run with the toast rail put back at the shipped `top: 64px`:
+printed by a local run with the toast rail moved into the topbar's row (`grid-row: 1`) at the
+shipped `top: 64px`:
 `390x844 inset=top 59 state=match: toast rail .hud-toasts top 64 overlaps topbar .hud-topbar,
-whose bottom is 88`. A chip has no class of its own, so it is named by its place among all of
+whose bottom is 88`. Chips share classes (several are `.hud-stat`), so a class does not name
+one; a chip is named by its place among all of
 the bar's children, as `.hud-topbar > :nth-child(2)`; that is exact for the build it was
 measured on and moves if the bar's markup is reordered. The board has no selector: it is found
 in a screenshot, so its lines name it by its rectangle. `clearance-measure.test.ts` runs the

@@ -127,8 +127,8 @@ export const MEASURE_CLEARANCE = ({ stage, selectors }) => {
       paddingRight: cs.paddingRight,
     };
   };
-  // A chip has no class of its own to be named by -- several share `.hud-stat` -- so it is
-  // named by its place among ALL of the bar's children, counted before the hidden ones are
+  // Chips share classes -- several are `.hud-stat` -- so a class does not name one, and a chip
+  // is named by its place among ALL of the bar's children, counted before the hidden ones are
   // dropped, because that is what `:nth-child` counts. A missing bar measures no chips here
   // and throws in `box` below.
   const chips = () =>
