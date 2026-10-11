@@ -3236,6 +3236,8 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
     '.hud-stock-count.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue::after',
+    // The one-pip fallback's pip, cued while the player still holds stock (issue #1055).
+    '.hud-stock-pip.hud-stock-cue:not(.hud-stock-pip--lost)',
     // Issue #230's `marks` arm, held to the same bar as the three above.
     '.hud-stock-mark.hud-stock-cue',
   ];
@@ -3269,6 +3271,60 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
 
   it('passes the resumed delay to the pip\'s burst ring, which does not inherit it by default', () => {
     expect(ruleBody('.hud-stock-pip.hud-stock-cue::after')).toMatch(/animation-delay:\s*inherit/);
+  });
+
+  /**
+   * Every border declaration in the keyframe set the cascade gives `el`. jsdom does not expand
+   * the `animation` shorthand into its longhands, so a rule that sets only `animation-name` --
+   * every reduced-motion form here -- shows in `animationName`, and a shorthand's name only in
+   * `animation`. Each reduced-motion rule outranks or follows the shorthand it overrides, so the
+   * longhand, when there is one, is the name a browser runs.
+   */
+  function cueKeyframeBorders(el: Element): string[] {
+    const style = getComputedStyle(el);
+    const name = style.animationName !== '' && style.animationName !== 'none'
+      ? style.animationName
+      : style.animation.trim().split(/\s+/)[0];
+    const at = src.indexOf(`@keyframes ${name} {`);
+    expect(at, `the cascade names "${name}", which is no keyframe set`).toBeGreaterThan(-1);
+    const open = src.indexOf('{', at);
+    let depth = 0;
+    let close = open;
+    for (; close < src.length; close++) {
+      if (src[close] === '{') depth++;
+      else if (src[close] === '}' && --depth === 0) break;
+    }
+    return [...src.slice(open + 1, close).matchAll(/\bborder[\w-]*\s*:[^;}]*/g)].map((m) => m[0].trim());
+  }
+
+  it('keeps a cued pip the player still holds filled once its cue ends, with motion and without (issue #1055)', () => {
+    // The one-pip fallback cues its single pip while the player still has stock, and `both` holds
+    // a cue's last frame until the strip next rebuilds, which no timer forces. Measured in
+    // Chromium at 390x844 before the fix: four teams players at five stocks, P1 down to 4, and
+    // 1.5s later that pip sat on a 2px border, the look of a player who is out, under motion and
+    // reduced motion alike. jsdom runs no animation, so this reads which keyframe set the cascade
+    // gives the pip and requires that set to leave the border alone.
+    const host = document.createElement('div');
+    host.className = 'hud';
+    const held = document.createElement('span');
+    held.className = 'hud-stock-pip hud-stock-cue';
+    // THE NEGATIVE CONTROL: a lost pip in the same cascade, whose cue does empty it. Its set steps
+    // `border-width`, so a reader that could not see a border step would fail here.
+    const lost = document.createElement('span');
+    lost.className = 'hud-stock-pip hud-stock-pip--lost hud-stock-cue';
+    host.append(held, lost);
+    document.body.appendChild(host);
+    try {
+      for (const reduced of [false, true]) {
+        host.classList.toggle('hud--reduced-motion', reduced);
+        const mode = reduced ? 'reduced motion' : 'motion';
+        expect(cueKeyframeBorders(held), `${mode}: the held pip's cue empties it`).toEqual([]);
+        expect(cueKeyframeBorders(lost), `${mode}: the lost pip's cue no longer empties it`)
+          .toContain('border-width: 2px');
+      }
+    } finally {
+      host.remove();
+    }
   });
 
   it('sizes the marks from the row\'s custom properties, defaulting to the full size (issue #1021)', () => {

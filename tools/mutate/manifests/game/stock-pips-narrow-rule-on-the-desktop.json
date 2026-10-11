@@ -1,0 +1,14 @@
+{
+  "id": "stock-pips-narrow-rule-on-the-desktop",
+  "file": "src/game/hud.ts",
+  "find": "      const layout: PipLayout = isNarrowViewport()\n        ? narrowPipLayout(slots, total)\n        : { kind: 'row', pip: 10, gap: 3 };",
+  "replace": "      const layout: PipLayout = narrowPipLayout(slots, total);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The phone rule applied at every width: a desktop strip at four players shrinks its pips to 9px at one to three stocks and falls back to one pip and a digit at four and five, with room to spare -- for an FFA entry and for a teams entry alike, since both take this one rule. Issues #835 and #1055 change only what a viewport of 480px or less draws. Before #1055 this survived (0 of 75 tests in hud.match.test.ts failed): every pips case at the desktop width ran at two players, where the rule's answer is the full size anyway, and the four-player one checked only the leading marker. The teams desktop control renders a crowded strip WITHOUT the narrow seam, so it is the case that has to catch this.",
+  "killedBy": [
+    "hud: stock-loss cue arms (issue #230) THE CONTROL for the teams cases: the desktop strip draws every teams pip at full size"
+  ]
+}
