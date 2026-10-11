@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-runs-confinement-ignores-its-switch",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "      if (confineToHalf && rr * board.cols",
+  "replace": "      if (rr * board.cols",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "The confinement always applies, so `{ confineToHalf: false }` no longer reproduces cause 2 and the cause-2 control measures a generator that cannot be cut. The default board is unchanged, so only the control sees it -- and the sweep's `confine=off` variants would report a cause that had silently disappeared.",
+  "killedBy": [
+    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 2: the half-board confinement removed, at minRun 5, leaves a piece cut at the seam"
+  ]
+}

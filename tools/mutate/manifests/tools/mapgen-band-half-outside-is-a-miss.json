@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-band-half-outside-is-a-miss",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    else if ((n - inside) * 2 > n) verdict = 'miss';\n",
+  "replace": "    else if ((n - inside) * 2 >= n) verdict = 'miss';\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "\"Most boards outside\" read as at least half: a sample split evenly across a band edge is reported as a miss, which issue #1029 reserves for a median inside with MORE than half outside.",
+  "killedBy": [
+    "the shipped bands and the in-band share (issue #1029) takes the median, not the mean, and reads \"most outside\" as more than half"
+  ]
+}

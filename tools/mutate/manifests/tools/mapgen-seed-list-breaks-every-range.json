@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-seed-list-breaks-every-range",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    if (s === prev + 1) { prev = s; continue; }\n",
+  "replace": "    if (s === prev) { prev = s; continue; }\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "Consecutive seeds are never joined, so the sweep lists exceptions as one seed per item -- 50 numbers where \"1-50\" was meant -- and a reader stops reading the list that names the exceptions issue #1029 requires by seed.",
+  "killedBy": [
+    "seed lists (issue #1029) compacts consecutive seeds into ranges, sorted and without repeats"
+  ]
+}

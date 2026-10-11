@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-band-report-defaults-to-no-bands",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "export function bandReport(measures, bands = SHIPPED_BANDS) {",
+  "replace": "export function bandReport(measures, bands = {}) {",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The report's default band set is empty, so the sweep, which calls it without bands, prints a SHIPPED-BAND block with no bands in it -- including the longest-sightline band the issue says the sweep never printed -- and no MISS or OUT line can ever appear.",
+  "killedBy": [
+    "the shipped bands and the in-band share (issue #1029) reports every band, in the order of the row"
+  ]
+}

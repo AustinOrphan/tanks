@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-run-legs-corner-less-l-reads-as-l",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "  if (cells.length !== w + h - 1) return null;\n",
+  "replace": "  if (cells.length < 0) return null;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "Without the cell count, a component whose cells all lie on one row and one column of its bounding box reads as an L even when its corner cell is missing and the two legs only touch diagonally -- a shape `runs` never draws, reported as one it does.",
+  "killedBy": [
+    "the run-length read-back (issue #1029) reads a block, a T and an L missing its corner cell as other"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-destructible-empty-wall-divides",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "  return m.wallFraction > 0 ? m.destructibleFraction / m.wallFraction : 0;\n",
+  "replace": "  return m.destructibleFraction / m.wallFraction;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "A board with no wall divides 0 by 0, and the NaN share passes every comparison silently and turns the row maximum into NaN. A board with no wall has no destructible share; it reads 0.",
+  "killedBy": [
+    "destructibles over wall mass (issue #1029) passes a board at exactly 30% and reads a board with no wall as 0, not 0/0"
+  ]
+}

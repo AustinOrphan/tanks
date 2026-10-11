@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   BAND_HALF_UNIT, DESTRUCTIBLE_WALL_CEILING, SHIPPED_BANDS,
@@ -22,7 +23,7 @@ const board = (rows: string[]) => ({
   grid: rows,
 });
 
-const SPEC = 'docs/superpowers/specs/2026-09-17-map-generation-rules-design.md';
+const SPEC = fileURLToPath(new URL('../../docs/superpowers/specs/2026-09-17-map-generation-rules-design.md', import.meta.url));
 
 describe('the shipped bands and the in-band share (issue #1029)', () => {
   it("carries the spec's shipped band row, column by column", () => {
