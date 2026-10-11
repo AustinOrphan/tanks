@@ -1,8 +1,9 @@
 ---
 status: proposed
 date: 2026-09-17
+last-reviewed: 2026-10-11
 scope: A three-tier rule set for generating versus maps -- generative rules, the shipped acceptance filter, and a new measured quality tier calibrated on shipped boards.
-implementation-issues: [819, 820, 821, 822, 1028]
+implementation-issues: [819, 820, 821, 822, 1028, 1029]
 implementation-prs: []
 supersedes: []
 superseded-by: []
@@ -518,7 +519,9 @@ rows -- and `reflector-faces-for-bank-shots`, since a bank shot needs a flat unb
 come off and a board of 2x2 blocks offers almost none.
 
 `runs` implements both literally: carve a protected 3-cell circuit plus one spur, then place
-cover as one-cell-thick runs of 4 to 8 cells with an L-bend on roughly half of them.
+cover as one-cell-thick runs of 4 to 8 cells, drawing an L-bend for 45% of them. (Since issue
+#1029 the runs are 5 to 8 cells and kept inside the half the rotation copies; the table below
+and its 20 seeds describe the generator before that. See the section after this one.)
 
 | ruleset | wall | legal | corr | open | neck | rout | long | sight | bank |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -552,6 +555,105 @@ of the interior is open too, so the drawn route does not read as a route -- it r
 open floor. Making a pathway legible needs the non-pathway space to be denser than the
 pathway, and the density knob is exactly the one that saturates. That is unresolved and is
 carried into issue #821.
+
+### `runs` without a block below 5 cells (issue #1029)
+
+Counted over wall cells (#1028), **every** default `runs` board had a wall component below 5
+cells, a shape no shipped board has: 50 of 50 drawn boards on seeds 1-50 and 50 of 50 on
+51-100. Two causes were visible in the code, and neither had been measured:
+
+1. A straight run drawn at `minRun` is a component of that size, and `minRun` was 4.
+2. `rotate180` copies the first half of the board, in row-major order, over the second. Start
+   cells came from the first half only, but a piece runs up to 8 cells plus an L-arm from its
+   start and `fits()` had no half-board check, so a bar crossing the midpoint index kept only
+   its first-half stretch: a fragment of any size.
+
+Each was measured alone. Boards with a wall component below 5 cells, 8-connected (the
+4-connected count was identical in every cell); population per sample: the 50 drawn boards
+(generation takes no player count), then the boards the shipped tier accepts at N=2 and N=4:
+
+| `runs` configuration | 1-50 drawn | N=2 | N=4 | 51-100 drawn | N=2 | N=4 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| neither fixed (`minRun` 4, confinement off) | 50/50 | 50/50 | 48/48 | 50/50 | 50/50 | 49/49 |
+| cause 1 fixed only (`minRun` 5) | 42/50 | 42/50 | 40/48 | 32/50 | 32/50 | 32/50 |
+| cause 2 fixed only (confinement on) | 49/50 | 49/50 | 48/49 | 48/50 | 48/50 | 48/50 |
+| **both fixed (the new default)** | **0/50** | **0/50** | **0/49** | **0/50** | **0/50** | **0/49** |
+| `run=6-12`, confinement off | 37/50 | 37/50 | 36/49 | 34/50 | 34/50 | 34/50 |
+| `run=6-12`, confinement on | 0/50 | 0/50 | 0/48 | 0/50 | 0/50 | 0/48 |
+
+**Both changes did the work, and neither alone came close**: components below 5 cells over
+the 50 drawn boards fell from 458 and 412 (neither fixed) to 162 and 104 with only `minRun` 5,
+to 336 and 300 with only the confinement, and to 0 and 0 with both. Longer bars alone are not a
+fix either: `run=6-12` without the confinement still leaves 37 and 34 boards with a fragment.
+So the default `minRun` is 5 (`maxRun` stays 8), and `fits()` rejects any piece cell at or past
+the midpoint index (`confineToHalf`, on by default; it is a switch only so each cause can be
+measured alone and controlled for in `tools/mapgen/runs.test.ts`). `run=6-12` with the
+confinement also reaches 0 but is a larger change than the criterion needs. `rotate180` is
+unchanged, and the other four rulesets are byte-identical for seeds 1-50 before and after: 200
+per-board SHA-256 digests (`scatter`, `rooms`, `topology`, `spines`, 50 each).
+
+**Destructibles, and a trim.** Each piece is destructible with a fixed chance of 0.22, so a
+board with few pieces can draw well past the 30%-of-wall-mass cap of proposal 4 below. It did
+before this issue (12 and 14 of the 50 drawn boards over 0.30 at the old defaults, up to 0.68)
+and after the block fix (11 and 15, up to 0.52). A lower chance does not bound a per-board figure: at
+0.10, 1 and 3 boards were still over. So a board that draws over the cap now turns its
+destructible pieces solid, last placed first, until it is at or under 30% of its wall cells,
+skipping any piece whose solid wall would cut the floor. It moves no wall cell (100 of 100
+boards), leaves the 39 and 35 boards already under byte-identical, and lowers the mean
+destructible share of wall from 0.207 and 0.234 to 0.175 and 0.186 (all 50 drawn boards per
+sample).
+
+**The result**, default `runs`, from `npx vite-node tools/mapgen/sweep.mjs --seeds 50` and the
+same with `--seed-offset 50`. Accepted of drawn, with every refusal named; N=3 is shown before
+and after the spread gate (#820):
+
+| N | seeds 1-50 | refused | seeds 51-100 | refused |
+| --- | ---: | --- | ---: | --- |
+| 2 | 50/50 | none | 50/50 | none |
+| 3, shipped tier (pre-gate) | 50/50 | none | 50/50 | none |
+| 3, after the spread gate | 47/50 | spread 3 (seeds 3, 4, 27; 0.757 each) | 49/50 | spread 1 (seed 94; 0.757) |
+| 4 | 49/50 | egress 1 (seed 28) | 49/50 | fatal-escape 1 (seed 74) |
+
+- **Wall components below 5 cells: none** on any accepted board, 8- or 4-connected, in either
+  sample at any N (populations: the accepted counts above). All 100 drawn boards are clean too.
+- **Destructibles: none over 30%** of wall mass; the largest share is 0.29 on the accepted
+  boards of both samples at every N.
+- **Shipped bands**: the median of the accepted boards, and how many of them lie inside the
+  band (the row above, carried; an edge counts at two decimals):
+
+| band | 1-50 N=2 | N=3 | N=4 | 51-100 N=2 | N=3 | N=4 |
+| --- | --- | --- | --- | --- | --- | --- |
+| wall 0.08-0.37 | 0.15, 50/50 | 0.15, 50/50 | 0.15, 49/49 | 0.15, 50/50 | 0.15, 50/50 | 0.15, 49/49 |
+| legal 0.28-0.78 | 0.51, 50/50 | 0.51, 50/50 | 0.51, 49/49 | 0.49, 50/50 | 0.49, 50/50 | 0.49, 49/49 |
+| corr 0.01-0.84 | 0.16, 50/50 | 0.16, 50/50 | 0.16, 49/49 | 0.18, 50/50 | 0.18, 50/50 | 0.19, 49/49 |
+| open 0.01-0.57 | 0.16, 50/50 | 0.16, 50/50 | 0.17, 49/49 | 0.14, 50/50 | 0.14, 50/50 | 0.14, 49/49 |
+| neck 1.33-6.00 | 2.00, 50/50 | 2.00, 50/50 | 2.00, 49/49 | 2.00, 50/50 | 2.00, 50/50 | 2.00, 49/49 |
+| rout 1.00-2.33 | 2.00, 50/50 | 2.00, 50/50 | 1.67, 49/49 | 2.00, 50/50 | 1.67, 50/50 | 1.67, 49/49 |
+| long 0.60-0.82 | 0.71, 49/50 | 0.71, 49/50 | 0.71, 48/49 | 0.71, 50/50 | 0.71, 50/50 | 0.71, 49/49 |
+| sight 0.17-0.43 | 0.24, 50/50 | 0.24, 50/50 | 0.24, 49/49 | 0.24, 50/50 | 0.24, 50/50 | 0.24, 49/49 |
+| bank 0.09-0.29 | 0.22, 50/50 | 0.22, 50/50 | 0.22, 49/49 | 0.22, 50/50 | 0.22, 50/50 | 0.22, 49/49 |
+
+  Every median is inside its band and no band is a miss. The only board outside any band is
+  seed 37, at a longest sightline of 0.854 of the diagonal, at all three counts.
+- **Run lengths**, read back off the accepted boards: straight runs 5 / 6 / 8 cells (min /
+  median / max) and L-arms 2 / 3 / 5, in both samples at every N. At N=2, seeds 1-50 carry 1022
+  components (856 straight, 166 L) and 51-100 carry 1056 (912 straight, 144 L), none of any
+  other shape; each piece appears twice under the rotation. A one-off trace of the generator
+  agreed with the read-back on 100 of 100 boards. An L is drawn for 45% of pieces, but only
+  16% and 14% of the placed ones carry it: an L needs more free cells to fit.
+- **Expressive range** on the default axes (wall fraction by open sight fraction): seeds 1-50
+  reach 8 of 64 cells (coverage 0.125, entropy 0.390 at N=2 and 3, 0.385 at N=4) with an axis
+  correlation of -0.684 (-0.674 at N=4); seeds 51-100 reach 7 of 64 (0.109, entropy 0.331 and
+  0.335) at -0.672. Read the correlation first, as the tool says: on the shipped boards every
+  candidate axis pair runs |r| 0.78-0.95, so a two-axis grid over them is close to
+  one-dimensional and coverage is bounded by a diagonal band rather than by the ruleset.
+
+The piece-count knob is still dead at 16: `pieces=16` and `pieces=24` print identical rows in
+the variant sweep (N=4) on both samples. Interior share is not reported here: the pieces are one
+cell thick, so it is 0.00 by construction, and its gate is issue #1065's. The tables are
+`sweep.mjs`'s own blocks, computed by `tools/mapgen/sweep-report.mjs`; the per-cause rows come
+from `sweep.mjs --variants`, which adds the four configurations above to `runs`. Nothing here
+has been played.
 
 ### Individual rules, swept one at a time
 

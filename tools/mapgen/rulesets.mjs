@@ -652,9 +652,10 @@ export const RULESETS = {
       { label: 'pieces=24', opts: { pieces: 24 } },
       { label: 'run=6-12', opts: { minRun: 6, maxRun: 12 } },
       { label: 'lane=5cell', opts: { laneHalfWidth: 2 } },
-      // Issue #1029's two causes of a wall component below 5 cells, one at a time: the
-      // pre-#1029 default (neither fixed), each fix alone, and the longer bars without the
-      // confinement. The default row above is both fixed.
+      // Issue #1029's two causes of a wall component below 5 cells, one at a time: neither
+      // fixed (the pre-#1029 walls), each fix alone, and the longer bars without the
+      // confinement. The default row above is both fixed. The destructible trim applies to
+      // every row; it never moves a wall.
       { label: 'minRun=4 confine=off', opts: { minRun: 4, confineToHalf: false } },
       { label: 'minRun=4', opts: { minRun: 4 } },
       { label: 'confine=off', opts: { confineToHalf: false } },
