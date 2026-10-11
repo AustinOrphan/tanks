@@ -383,22 +383,26 @@ function runs(seed, opts = {}) {
   // a board with few pieces can draw well past it -- 11 of seeds 1-50 and 15 of 51-100 did.
   // Only such a board changes: its destructible pieces turn solid, last placed first, until it
   // is back under, skipping any whose solid wall would cut the floor (`cellsConnected` counts a
-  // destructible cell as open). A board already under keeps the draw exactly. The rotation
-  // copies every piece once, so the half's share is the board's.
-  let wallCells = 0;
-  let destructibleCells = 0;
-  for (const { shape, ch } of kept) {
-    wallCells += shape.length;
-    if (ch === 'x') destructibleCells += shape.length;
-  }
-  for (let i = kept.length - 1; i >= 0 && destructibleCells * 10 > wallCells * 3; i--) {
+  // destructible cell as open). A board already under keeps the draw exactly. Counted off the
+  // board, not off the shapes, so a piece the rotation cut (possible only with the confinement
+  // off) counts as the cells it kept.
+  const overCeiling = () => {
+    let wall = 0;
+    let destructible = 0;
+    for (const row of cells) {
+      for (const ch of row) {
+        if (ch === '#' || ch === 'x') wall++;
+        if (ch === 'x') destructible++;
+      }
+    }
+    return destructible * 10 > wall * 3;
+  };
+  for (let i = kept.length - 1; i >= 0 && overCeiling(); i--) {
     const { shape, ch } = kept[i];
     if (ch !== 'x') continue;
     for (const [sc, sr] of shape) cells[sr][sc] = '#';
     rotate180(cells);
-    if (cellsConnected(cells)) {
-      destructibleCells -= shape.length;
-    } else {
+    if (!cellsConnected(cells)) {
       for (const [sc, sr] of shape) cells[sr][sc] = 'x';
       rotate180(cells);
     }
