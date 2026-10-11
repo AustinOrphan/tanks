@@ -7,8 +7,9 @@
   "tests": [
     "tools/visual/clearance.test.ts"
   ],
-  "why": "Lets a match whose topbar never showed be judged. A hidden bar's rect is 0 tall at the top edge, so every overlay 'clears' it: a match that failed to start, or a state that hides the bar, would pass issue #687's clearance check by measuring nothing.",
+  "why": "Lets a match whose topbar never showed be judged. A hidden bar's rect is 0 tall at the top edge, so every overlay 'clears' it: a match that failed to start, or a state that hides the bar, would pass issue #687's clearance check by measuring nothing. The sweep over every failing shape must fail too: the hidden bar's 0px padding then reaches the inset check's line, which names the same selector and state as the line it replaced, so only the marker each push site prints tells the sweep the shape left its row.",
   "killedBy": [
-    "topbar clearance verdict (issue #687) fails a match whose topbar never showed, instead of clearing nothing"
+    "topbar clearance verdict (issue #687) fails a match whose topbar never showed, instead of clearing nothing",
+    "clearance failure lines name their element and state (issue #1068) walks every failing shape and finds each line naming its selectors and its state"
   ]
 }
