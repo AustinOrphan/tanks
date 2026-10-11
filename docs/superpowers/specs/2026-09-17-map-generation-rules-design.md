@@ -726,7 +726,7 @@ acceptance tier's live edge is concealment at 3 and 4 players, not connectivity.
 the two ruled exceptions below. The moment a quality measure becomes a gate, a generator can be
 tuned against it and the measure stops describing the board and starts describing the generator.
 
-**The ruled exception: the 3-player spread gate** (issue #820, 2026-10-09). A generated
+**The first ruled exception: the 3-player spread gate** (issue #820, 2026-10-09). A generated
 3-player board must have `pathSpread` at or below 0.75, the maximum of the boards the catalog
 offers at three players (arena-04), so it refuses no board that ships. It is an exception and
 not a precedent, for four reasons: the ruling asks for a GUARANTEE of comparable opportunity at
