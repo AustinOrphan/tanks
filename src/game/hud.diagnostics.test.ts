@@ -125,11 +125,14 @@ describe('the diagnostics controls are offered only when the page half is wired'
     expect(q(root, '.hud-diag-pin').hidden).toBe(false);
   });
 
-  it('does nothing at all when Copy is pressed without one', () => {
+  it('does nothing at all when Copy is pressed without one', async () => {
     // Not merely hidden: the HANDLER refuses too. A hidden button is still clickable through
-    // the DOM, and a handler that ran anyway would have to invent a path and a build.
+    // the DOM, and a handler that ran anyway would have to invent a path and a build. Its write
+    // would wait on the developer modules (issue #1014), so the field is read once every load
+    // has settled. Negative control: a handler that answers without a page.
     const root = mountDev();
-    q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+    const escaped = await escapedDuring(() => q<HTMLButtonElement>(root, '.hud-diag-copy').click());
+    expect(escaped).toEqual([]);
     expect(out(root).value).toBe('');
     expect(shown(out(root))).toBe(false);
   });
@@ -911,8 +914,8 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
     }
 
     it('pressed before the load still selects its report when it lands, and the refusal escapes nowhere', async () => {
-      // Negative controls: a selection made only once the clipboard accepts, and a refusal left
-      // unhandled.
+      // Negative controls: a Copy that never tries the clipboard, a selection made only once the
+      // clipboard accepts, and a refusal left unhandled.
       const asked = refuseClipboard();
       const root = mountDev({ developerPage: PAGE });
       hud!.setDiagnosticsSource(() => SESSION);
@@ -939,6 +942,22 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
     q<HTMLButtonElement>(root, '.hud-diag-copy').click();
     q<HTMLButtonElement>(root, '.hud-devtools-back').click();
     await settled();
+    expect(out(root).value).toBe('');
+    expect(shown(out(root))).toBe(false);
+  });
+
+  it('a press answered after another pane replaced the pane writes nothing, and takes no focus', async () => {
+    // Configuration, the Self-Test and the Gallery open from buttons inside the pane, and they
+    // REPLACE it (the layer's `release`) rather than closing it. An answer landing there would
+    // fill and focus the field of the pane that is leaving, taking focus from the one arriving.
+    // Negative control: a replace that spends no generation.
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDiagnosticsSource(() => SESSION);
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+    q<HTMLButtonElement>(root, '.hud-devcfg-open').click();
+    await settled();
+    expect(document.activeElement).not.toBe(out(root));
     expect(out(root).value).toBe('');
     expect(shown(out(root))).toBe(false);
   });
@@ -1081,6 +1100,22 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
       await settled();
       q<HTMLButtonElement>(root, '.hud-diag-copy').click();
       expect(out(root).value).toContain('- Seed: 4242424242');
+    });
+
+    it('leaves no note behind when another pane replaces the pane', async () => {
+      // A replace is not a close, but the note is as stale after one: the next open tries the
+      // load again, and a request to reload the page beside the pane that load filled would be
+      // false. The field is cleared as the close clears it, a Copy or Pin report with it.
+      // Negative control: a replace that leaves the field as it was. The note shown first is
+      // the failure report's own (control: a load with no rejection handler).
+      const root = mountDev({ developerPage: PAGE });
+      await failLoads();
+      q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+      await settled();
+      expect(shown(out(root)), 'the failure was reported').toBe(true);
+      q<HTMLButtonElement>(root, '.hud-devcfg-open').click();
+      expect(out(root).value).toBe('');
+      expect(shown(out(root))).toBe(false);
     });
 
     it('after the pane closed reports nothing into it', async () => {
