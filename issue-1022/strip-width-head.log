@@ -1,0 +1,53 @@
+control: four-player three-stock teams strip at 320px, right edge 349.9px against 312px: overflows, as it must
+
+marks (the shipped FFA strip: one outline per stock, no leading mark)
+2p x 1     9.9/2   strip   76.7px   right  126.8px   fits, 253.2px spare
+2p x 2     9.9/2   strip  100.5px   right  150.7px   fits, 229.3px spare
+2p x 3     9.9/2   strip  124.3px   right  174.5px   fits, 205.5px spare
+2p x 4     9.9/2   strip  148.1px   right  198.3px   fits, 181.7px spare
+2p x 5     9.9/2   strip  171.9px   right  222.1px   fits, 157.9px spare
+3p x 1     9.9/2   strip    120px   right  170.2px   fits, 209.8px spare
+3p x 2     9.9/2   strip  155.7px   right  205.9px   fits, 174.1px spare
+3p x 3     9.9/2   strip  191.4px   right  241.6px   fits, 138.4px spare
+3p x 4     9.9/2   strip  227.1px   right  277.3px   fits, 102.7px spare
+3p x 5     9.9/2   strip  262.9px   right    313px   fits, 67.0px spare
+4p x 1     9.9/2   strip  163.3px   right  213.5px   fits, 166.5px spare
+4p x 2     9.9/2   strip  210.9px   right  261.1px   fits, 118.9px spare
+4p x 3     9.9/2   strip  258.6px   right  308.8px   fits, 71.2px spare
+4p x 4       8/2   strip  275.7px   right  325.9px   fits, 54.1px spare
+4p x 5     9.9+n   strip  217.8px   right  267.9px   fits, 112.1px spare
+marks: 15 of 15 configurations fit
+
+teams (`P1 A ` and its pips, the shipped teams strip)
+3p x 1      10/3   strip  163.2px   right  213.4px   fits, 166.6px spare
+3p x 2      10/3   strip  202.2px   right  252.4px   fits, 127.6px spare
+3p x 3      10/3   strip  241.2px   right  291.4px   fits, 88.6px spare
+3p x 4      10/3   strip  280.2px   right  330.4px   fits, 49.6px spare
+3p x 5       9/2   strip  292.2px   right  342.4px   fits, 37.6px spare
+4p x 1       9/2   strip    217px   right  267.2px   fits, 112.8px spare
+4p x 2       9/2   strip    261px   right  311.2px   fits, 68.8px spare
+4p x 3       9/2   strip    305px   right  355.2px   fits, 24.8px spare
+4p x 4      10+n   strip  275.4px   right  325.6px   fits, 54.4px spare
+4p x 5      10+n   strip  275.4px   right  325.6px   fits, 54.4px spare
+teams: 10 of 10 configurations fit
+
+reversal (FFA under ?dev=1&identityMarker=solid: pips, no mark)
+2p x 1      10/3   strip   76.8px   right    127px   fits, 253.0px spare
+2p x 2      10/3   strip  102.8px   right    153px   fits, 227.0px spare
+2p x 3      10/3   strip  128.8px   right    179px   fits, 201.0px spare
+2p x 4      10/3   strip  154.8px   right    205px   fits, 175.0px spare
+2p x 5      10/3   strip  180.8px   right    231px   fits, 149.0px spare
+3p x 1      10/3   strip  120.3px   right  170.5px   fits, 209.5px spare
+3p x 2      10/3   strip  159.3px   right  209.5px   fits, 170.5px spare
+3p x 3      10/3   strip  198.3px   right  248.5px   fits, 131.5px spare
+3p x 4      10/3   strip  237.3px   right  287.5px   fits, 92.5px spare
+3p x 5       9/2   strip  249.3px   right  299.5px   fits, 80.5px spare
+4p x 1       9/2   strip  159.7px   right  209.9px   fits, 170.1px spare
+4p x 2       9/2   strip  203.7px   right  253.9px   fits, 126.1px spare
+4p x 3       9/2   strip  247.7px   right  297.9px   fits, 82.1px spare
+4p x 4      10+n   strip  218.1px   right  268.3px   fits, 111.7px spare
+4p x 5      10+n   strip  218.1px   right  268.3px   fits, 111.7px spare
+reversal: 15 of 15 configurations fit
+
+every configuration fits
+exit=0

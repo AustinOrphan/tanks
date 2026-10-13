@@ -1,0 +1,2832 @@
+{
+ "cases": {
+  "ffa-2p": {
+   "main-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 186.6,
+      "width": 112.2,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.03902536505584,
+     "renderFps": 119.99799166541145,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 198.7,
+      "width": 124.3,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.04202942345945,
+     "renderFps": 120.04621025666782,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "main-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 162.3,
+      "width": 112.2,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.012002403342265,
+     "renderFps": 120.00401687085758,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 174.5,
+      "width": 124.3,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=2&bots=2&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=2&bots=2&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 59.98500374906273,
+     "renderFps": 120.01004268139593,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   }
+  },
+  "ffa-4p": {
+   "main-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 308.7,
+      "width": 234.3,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.009001355926294,
+     "renderFps": 119.99400029998502,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 333,
+      "width": 258.6,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.03902536505584,
+     "renderFps": 120.0582709599638,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "main-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 284.5,
+      "width": 234.3,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 1,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.03902536505584,
+     "renderFps": 119.99196706496636,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 308.8,
+      "width": 258.6,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 ",
+       "name": "3 of 3 stocks",
+       "marks": 3,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 59.5178553537681,
+     "renderFps": 120.00401687085758,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   }
+  },
+  "teams-4p": {
+   "main-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 293.8,
+      "width": 219.4,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 A 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P2 B 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      },
+      {
+       "text": "P3 A 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P4 B 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 59.97900735314644,
+     "renderFps": 119.94379203051288,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 399.4,
+      "width": 325,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 A ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P2 B ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      },
+      {
+       "text": "P3 A ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P4 B ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.04202942345945,
+     "renderFps": 120,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "main-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 269.6,
+      "width": 219.4,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 A 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P2 B 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      },
+      {
+       "text": "P3 A 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P4 B 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 59.98800240380991,
+     "renderFps": 119.99799166541145,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 355.2,
+      "width": 305,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 A ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P2 B ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      },
+      {
+       "text": "P3 A ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 59, 59)"
+      },
+      {
+       "text": "P4 B ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(252, 192, 252)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=teams&players=4&bots=4&autoplay=1",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=teams",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 59.99100135122762,
+     "renderFps": 119.94981179422832,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   }
+  },
+  "reversal-ffa-4p": {
+   "main-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 236.5,
+      "width": 162.1,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.00900134877159,
+     "renderFps": 119.99799166541145,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-1280x800": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": false,
+     "strip": {
+      "left": 74.4,
+      "right": 342.1,
+      "width": 267.7,
+      "top": 15.5,
+      "height": 20
+     },
+     "topbarContentRight": 1262,
+     "entries": [
+      {
+       "text": "P1 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 59.96102533496185,
+     "renderFps": 122.30576441102757,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "main-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 212.3,
+      "width": 162.1,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 3",
+       "name": null,
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 0,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.5,
+     "renderFps": 119.99799166541148,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   },
+   "head-390x844": {
+    "driver": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01"
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "font": "\"IBM Plex Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+     "narrow": true,
+     "strip": {
+      "left": 50.2,
+      "right": 297.9,
+      "width": 247.7,
+      "top": 8.5,
+      "height": 20
+     },
+     "topbarContentRight": 380,
+     "entries": [
+      {
+       "text": "P1 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(63, 208, 255)"
+      },
+      {
+       "text": "P2 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 138, 30)"
+      },
+      {
+       "text": "P3 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(255, 77, 46)"
+      },
+      {
+       "text": "P4 ",
+       "name": "3 of 3 stocks",
+       "marks": 0,
+       "marksLost": 0,
+       "pips": 3,
+       "pipsLost": 0,
+       "leadingMarker": 0,
+       "count": null,
+       "color": "rgb(157, 59, 255)"
+      }
+     ],
+     "pageErrors": []
+    },
+    "record": {
+     "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+     "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+     },
+     "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+       "commit": null,
+       "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+       "disarmed"
+      ],
+      "unknownParams": []
+     },
+     "ticksPerSecond": 60.02400960956816,
+     "renderFps": 120.00401687085758,
+     "frames": 4,
+     "surfaceAtEnd": "playing",
+     "pageErrors": [],
+     "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)"
+    }
+   }
+  }
+ },
+ "loss": {
+  "main-1280x800": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": false,
+   "startTicks": 211,
+   "firstChangeTicks": 1124,
+   "shots": 35,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 37,
+     "ticks": 1124,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-06.png",
+     "msSinceDetect": 233,
+     "ticks": 1136,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-11.png",
+     "msSinceDetect": 376,
+     "ticks": 1144,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-18.png",
+     "msSinceDetect": 570,
+     "ticks": 1156,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-23.png",
+     "msSinceDetect": 739,
+     "ticks": 1166,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    }
+   ],
+   "mid": "cue-11.png",
+   "settled": [
+    "P1 3",
+    "P2 2",
+    "P3 2",
+    "P4 2"
+   ],
+   "pageErrors": []
+  },
+  "head-1280x800": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": false,
+   "startTicks": 211,
+   "firstChangeTicks": 1124,
+   "shots": 39,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 27,
+     "ticks": 1124,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1, 0, 0, 1, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 0,
+         "progress": 0,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-06.png",
+     "msSinceDetect": 221,
+     "ticks": 1135,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1.38269, 0, 0, 1.38269, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 182.4,
+         "progress": 0.261,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-12.png",
+     "msSinceDetect": 384,
+     "ticks": 1145,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1.42845, 0, 0, 1.42845, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 349.1,
+         "progress": 0.499,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-18.png",
+     "msSinceDetect": 560,
+     "ticks": 1156,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1.1351, 0, 0, 1.1351, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 524.1,
+         "progress": 0.749,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-25.png",
+     "msSinceDetect": 752,
+     "ticks": 1167,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1, 0, 0, 1, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 700,
+         "progress": 1,
+         "duration": 700,
+         "playState": "finished"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    }
+   ],
+   "mid": "cue-12.png",
+   "settled": [
+    "3 of 3 stocks",
+    "2 of 3 stocks",
+    "2 of 3 stocks",
+    "2 of 3 stocks"
+   ],
+   "pageErrors": []
+  },
+  "head-1280x800-reduced": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": true,
+   "startTicks": 212,
+   "firstChangeTicks": 1124,
+   "shots": 37,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 29,
+     "ticks": 1124,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 0,
+         "progress": 0,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-06.png",
+     "msSinceDetect": 218,
+     "ticks": 1135,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 182.8,
+         "progress": 0.261,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-12.png",
+     "msSinceDetect": 370,
+     "ticks": 1144,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 333.3,
+         "progress": 0.476,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-19.png",
+     "msSinceDetect": 568,
+     "ticks": 1156,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 525.1,
+         "progress": 0.75,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-25.png",
+     "msSinceDetect": 756,
+     "ticks": 1167,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 700,
+         "progress": 1,
+         "duration": 700,
+         "playState": "finished"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    }
+   ],
+   "mid": "cue-12.png",
+   "settled": [
+    "3 of 3 stocks",
+    "2 of 3 stocks",
+    "2 of 3 stocks",
+    "2 of 3 stocks"
+   ],
+   "pageErrors": []
+  },
+  "main-1280x800-reduced": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": true,
+   "startTicks": 211,
+   "firstChangeTicks": 1124,
+   "shots": 34,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 38,
+     "ticks": 1124,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-06.png",
+     "msSinceDetect": 221,
+     "ticks": 1135,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-11.png",
+     "msSinceDetect": 383,
+     "ticks": 1145,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-17.png",
+     "msSinceDetect": 569,
+     "ticks": 1156,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-22.png",
+     "msSinceDetect": 737,
+     "ticks": 1166,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    }
+   ],
+   "mid": "cue-11.png",
+   "settled": [
+    "P1 3",
+    "P2 2",
+    "P3 2",
+    "P4 2"
+   ],
+   "pageErrors": []
+  },
+  "main-390x844": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": false,
+   "startTicks": 211,
+   "firstChangeTicks": 1125,
+   "shots": 39,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 37,
+     "ticks": 1125,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-07.png",
+     "msSinceDetect": 208,
+     "ticks": 1135,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-14.png",
+     "msSinceDetect": 384,
+     "ticks": 1146,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-21.png",
+     "msSinceDetect": 559,
+     "ticks": 1156,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-27.png",
+     "msSinceDetect": 742,
+     "ticks": 1167,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    }
+   ],
+   "mid": "cue-14.png",
+   "settled": [
+    "P1 3",
+    "P2 2",
+    "P3 2",
+    "P4 2"
+   ],
+   "pageErrors": []
+  },
+  "head-390x844": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": false,
+   "startTicks": 211,
+   "firstChangeTicks": 1124,
+   "shots": 40,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 32,
+     "ticks": 1124,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1, 0, 0, 1, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 0,
+         "progress": 0,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-07.png",
+     "msSinceDetect": 211,
+     "ticks": 1135,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1.38365, 0, 0, 1.38365, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 183.1,
+         "progress": 0.262,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-14.png",
+     "msSinceDetect": 389,
+     "ticks": 1146,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1.41065, 0, 0, 1.41065, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 358.1,
+         "progress": 0.512,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-21.png",
+     "msSinceDetect": 564,
+     "ticks": 1156,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1.12313, 0, 0, 1.12313, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 533.4,
+         "progress": 0.762,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-28.png",
+     "msSinceDetect": 745,
+     "ticks": 1167,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "matrix(1, 0, 0, 1, 0, 0)",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty",
+         "localTime": 700,
+         "progress": 1,
+         "duration": 700,
+         "playState": "finished"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    }
+   ],
+   "mid": "cue-14.png",
+   "settled": [
+    "3 of 3 stocks",
+    "3 of 3 stocks",
+    "2 of 3 stocks",
+    "2 of 3 stocks"
+   ],
+   "pageErrors": []
+  },
+  "head-390x844-reduced": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": true,
+   "startTicks": 211,
+   "firstChangeTicks": 1124,
+   "shots": 40,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 31,
+     "ticks": 1124,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 0,
+         "progress": 0,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-07.png",
+     "msSinceDetect": 211,
+     "ticks": 1135,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 183.3,
+         "progress": 0.262,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-14.png",
+     "msSinceDetect": 385,
+     "ticks": 1146,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 358.3,
+         "progress": 0.512,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-21.png",
+     "msSinceDetect": 560,
+     "ticks": 1156,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 533.3,
+         "progress": 0.762,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    },
+    {
+     "file": "cue-28.png",
+     "msSinceDetect": 735,
+     "ticks": 1166,
+     "cues": [
+      {
+       "cls": "hud-stock-mark hud-stock-mark--lost hud-stock-cue",
+       "delay": "0ms",
+       "transform": "none",
+       "scale": "none",
+       "anims": [
+        {
+         "name": "hud-stock-mark-empty--still",
+         "localTime": 699.9,
+         "progress": 1,
+         "duration": 700,
+         "playState": "running"
+        }
+       ]
+      }
+     ],
+     "entries": [
+      "3 of 3 stocks",
+      "3 of 3 stocks",
+      "2 of 3 stocks",
+      "3 of 3 stocks"
+     ]
+    }
+   ],
+   "mid": "cue-14.png",
+   "settled": [
+    "3 of 3 stocks",
+    "3 of 3 stocks",
+    "2 of 3 stocks",
+    "2 of 3 stocks"
+   ],
+   "pageErrors": []
+  },
+  "main-390x844-reduced": {
+   "found": true,
+   "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1",
+   "world": {
+    "seed": 7,
+    "arenaId": "arena-01"
+   },
+   "reducedMotion": true,
+   "startTicks": 211,
+   "firstChangeTicks": 1124,
+   "shots": 39,
+   "selected": [
+    {
+     "file": "cue-00.png",
+     "msSinceDetect": 32,
+     "ticks": 1124,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-07.png",
+     "msSinceDetect": 203,
+     "ticks": 1135,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-14.png",
+     "msSinceDetect": 378,
+     "ticks": 1145,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-21.png",
+     "msSinceDetect": 554,
+     "ticks": 1155,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    },
+    {
+     "file": "cue-27.png",
+     "msSinceDetect": 735,
+     "ticks": 1166,
+     "cues": [],
+     "entries": [
+      "P1 3",
+      "P2 3",
+      "P3 2",
+      "P4 3"
+     ]
+    }
+   ],
+   "mid": "cue-14.png",
+   "settled": [
+    "P1 3",
+    "P2 2",
+    "P3 2",
+    "P4 2"
+   ],
+   "pageErrors": []
+  }
+ },
+ "lossEveryCase": {
+  "ffa-2p-1280x800": {
+   "main": {
+    "run": "ffa-2p-1280x800",
+    "file": "cue-13.png",
+    "msSinceDetect": 378,
+    "firstChangeTicks": 1845,
+    "cueProgress": null,
+    "entries": [
+     "P1 3",
+     "P2 2"
+    ]
+   },
+   "head": {
+    "run": "ffa-2p-1280x800",
+    "file": "cue-13.png",
+    "msSinceDetect": 376,
+    "firstChangeTicks": 1844,
+    "cueProgress": 0.488,
+    "entries": [
+     "3 of 3 stocks",
+     "2 of 3 stocks"
+    ]
+   }
+  },
+  "ffa-2p-390x844": {
+   "main": {
+    "run": "ffa-2p-390x844",
+    "file": "cue-14.png",
+    "msSinceDetect": 372,
+    "firstChangeTicks": 1844,
+    "cueProgress": null,
+    "entries": [
+     "P1 3",
+     "P2 2"
+    ]
+   },
+   "head": {
+    "run": "ffa-2p-390x844",
+    "file": "cue-14.png",
+    "msSinceDetect": 381,
+    "firstChangeTicks": 1844,
+    "cueProgress": 0.512,
+    "entries": [
+     "3 of 3 stocks",
+     "2 of 3 stocks"
+    ]
+   }
+  },
+  "ffa-4p-1280x800": {
+   "main": {
+    "run": "ffa-4p-1280x800",
+    "file": "cue-11.png",
+    "msSinceDetect": 376,
+    "firstChangeTicks": 1124,
+    "cueProgress": null,
+    "entries": [
+     "P1 3",
+     "P2 3",
+     "P3 2",
+     "P4 3"
+    ]
+   },
+   "head": {
+    "run": "ffa-4p-1280x800",
+    "file": "cue-12.png",
+    "msSinceDetect": 384,
+    "firstChangeTicks": 1124,
+    "cueProgress": 0.499,
+    "entries": [
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "2 of 3 stocks",
+     "3 of 3 stocks"
+    ]
+   }
+  },
+  "ffa-4p-390x844": {
+   "main": {
+    "run": "ffa-4p-390x844",
+    "file": "cue-14.png",
+    "msSinceDetect": 384,
+    "firstChangeTicks": 1125,
+    "cueProgress": null,
+    "entries": [
+     "P1 3",
+     "P2 3",
+     "P3 2",
+     "P4 3"
+    ]
+   },
+   "head": {
+    "run": "ffa-4p-390x844",
+    "file": "cue-14.png",
+    "msSinceDetect": 389,
+    "firstChangeTicks": 1124,
+    "cueProgress": 0.512,
+    "entries": [
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "2 of 3 stocks",
+     "3 of 3 stocks"
+    ]
+   }
+  },
+  "teams-4p-1280x800": {
+   "main": {
+    "run": "teams-4p-1280x800",
+    "file": "cue-11.png",
+    "msSinceDetect": 384,
+    "firstChangeTicks": 884,
+    "cueProgress": null,
+    "entries": [
+     "P1 A 3",
+     "P2 B 3",
+     "P3 A 3",
+     "P4 B 2"
+    ]
+   },
+   "head": {
+    "run": "teams-4p-1280x800-take2",
+    "file": "cue-11.png",
+    "msSinceDetect": 386,
+    "firstChangeTicks": 884,
+    "cueProgress": 0.499,
+    "entries": [
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "2 of 3 stocks"
+    ]
+   }
+  },
+  "teams-4p-390x844": {
+   "main": {
+    "run": "teams-4p-390x844",
+    "file": "cue-13.png",
+    "msSinceDetect": 379,
+    "firstChangeTicks": 884,
+    "cueProgress": null,
+    "entries": [
+     "P1 A 3",
+     "P2 B 3",
+     "P3 A 3",
+     "P4 B 2"
+    ]
+   },
+   "head": {
+    "run": "teams-4p-390x844",
+    "file": "cue-14.png",
+    "msSinceDetect": 389,
+    "firstChangeTicks": 884,
+    "cueProgress": 0.512,
+    "entries": [
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "2 of 3 stocks"
+    ]
+   }
+  },
+  "reversal-ffa-4p-1280x800": {
+   "main": {
+    "run": "reversal-ffa-4p-1280x800",
+    "file": "cue-12.png",
+    "msSinceDetect": 388,
+    "firstChangeTicks": 1124,
+    "cueProgress": null,
+    "entries": [
+     "P1 3",
+     "P2 3",
+     "P3 2",
+     "P4 3"
+    ]
+   },
+   "head": {
+    "run": "reversal-ffa-4p-1280x800",
+    "file": "cue-12.png",
+    "msSinceDetect": 396,
+    "firstChangeTicks": 1124,
+    "cueProgress": 0.501,
+    "entries": [
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "2 of 3 stocks",
+     "3 of 3 stocks"
+    ]
+   }
+  },
+  "reversal-ffa-4p-390x844": {
+   "main": {
+    "run": "reversal-ffa-4p-390x844",
+    "file": "cue-14.png",
+    "msSinceDetect": 382,
+    "firstChangeTicks": 1124,
+    "cueProgress": null,
+    "entries": [
+     "P1 3",
+     "P2 3",
+     "P3 2",
+     "P4 3"
+    ]
+   },
+   "head": {
+    "run": "reversal-ffa-4p-390x844",
+    "file": "cue-14.png",
+    "msSinceDetect": 379,
+    "firstChangeTicks": 1124,
+    "cueProgress": 0.499,
+    "entries": [
+     "3 of 3 stocks",
+     "3 of 3 stocks",
+     "2 of 3 stocks",
+     "3 of 3 stocks"
+    ]
+   }
+  }
+ }
+}

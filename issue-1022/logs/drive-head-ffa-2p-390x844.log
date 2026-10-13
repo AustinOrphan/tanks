@@ -1,0 +1,2 @@
+head ffa-2p 390x844: arena arena-01 seed 7; strip right 174.5 of 380; entries [["P1 ","3 of 3 stocks",3,0,0],["P2 ","3 of 3 stocks",3,0,0]]; loss at tick ~1844 (40 shots); errors 0
+exit=0

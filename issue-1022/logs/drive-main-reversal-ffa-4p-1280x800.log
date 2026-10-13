@@ -1,0 +1,2 @@
+main reversal-ffa-4p 1280x800: arena arena-01 seed 7; strip right 236.5 of 1262; entries [["P1 3",null,0,0,0],["P2 3",null,0,0,0],["P3 3",null,0,0,0],["P4 3",null,0,0,0]]; loss at tick ~1124 (39 shots); errors 0
+exit=0

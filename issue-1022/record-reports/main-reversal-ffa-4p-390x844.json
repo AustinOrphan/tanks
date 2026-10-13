@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "capture": {
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "devicePixelRatio": 1
+    }
+  },
+  "producer": {
+    "kind": "flow",
+    "flowId": "versus-round",
+    "title": "A versus round at a chosen player count",
+    "inputs": {
+      "level": 1,
+      "seed": 7,
+      "driver": "autoplay",
+      "flags": {
+        "identityMarker": "solid"
+      },
+      "mode": "ffa",
+      "players": 4,
+      "bots": 4
+    },
+    "storage": [
+      "tanks.dev.tanks.progress.v1",
+      "tanks.dev.tanks.achievements.v1"
+    ],
+    "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=4&bots=4&autoplay=1&identityMarker=solid",
+    "dist": {
+      "indexSha256": "7229cee8f9e139e812f0f58f0ad42b8bc8a60f246254d5f1d767b9f1c6a341bc",
+      "assets": [
+        "atkinson-hyperlegible-latin-400-normal-BrHNak5F.woff2",
+        "atkinson-hyperlegible-latin-700-normal-GZI4o3u0.woff2",
+        "controller-selftest-DqPiGAgf.js",
+        "gallery-selection-DYfpGgt0.js",
+        "gallery-workbench-CWuqNE9S.js",
+        "ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2",
+        "ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2",
+        "ibm-plex-sans-latin-wght-normal-IvpUvPa2.woff2",
+        "index-CdPwHc0M.js",
+        "index-NkmvsewS.css",
+        "inter-latin-wght-normal-Dx4kXJAl.woff2",
+        "workbench-scene-bfVm7fq8.js"
+      ]
+    },
+    "diagnostics": {
+      "url": "/?dev=1&seed=7&level=1&autoplay=1&replay=1&players=4&bots=4&mode=ffa&identityMarker=solid",
+      "build": {
+        "commit": null,
+        "known": false
+      },
+      "developerMode": true,
+      "requestedNotInEffect": [],
+      "inEffectUnrequested": [
+        "disarmed"
+      ],
+      "unknownParams": []
+    },
+    "world": {
+      "seed": 7,
+      "arenaId": "arena-01",
+      "expectedArenaId": "arena-01",
+      "practice": true
+    },
+    "readiness": {
+      "readyAfterMs": 3419,
+      "countdownMs": 2884,
+      "surfaceAtStart": "playing",
+      "surfaceAtEnd": "playing",
+      "endedAs": null,
+      "endedWith": null
+    },
+    "timing": {
+      "policy": "real-time: the production game loop at wall-clock pace, recorded from the compositor screencast and resampled to a constant frame rate by holding the last frame",
+      "requestedSeconds": 2,
+      "stop": {
+        "requested": "window",
+        "reason": "window",
+        "cutAtMs": null,
+        "playingSeconds": 1.990947961807251,
+        "droppedFrames": 0
+      },
+      "fps": 2,
+      "frameCount": 4,
+      "recording": {
+        "startedAtMs": 1791927352263,
+        "stoppedAtMs": 1791927354265,
+        "wallMs": 2002
+      },
+      "simulation": {
+        "available": true,
+        "samples": 9,
+        "ticks": 121,
+        "seconds": 2,
+        "ticksPerSecond": 60.5,
+        "resets": 0,
+        "surfaces": [
+          "playing",
+          "playing",
+          "playing",
+          "playing",
+          "playing",
+          "playing",
+          "playing",
+          "playing",
+          "playing"
+        ]
+      },
+      "render": {
+        "frames": 240,
+        "spanMs": 1991.6999999999998,
+        "fps": 119.99799166541148,
+        "gapP50Ms": 8.300000000000182,
+        "gapP95Ms": 9,
+        "gapMaxMs": 9.300000000000182,
+        "clampMs": 250,
+        "clampedFrames": 0,
+        "simTimeLostMs": 0,
+        "measuredUnder": "cdp-screencast",
+        "note": "headless animation frames are not display-throttled; a rate above the display rate is a headless artefact"
+      },
+      "screencast": {
+        "format": "jpeg",
+        "quality": 90,
+        "framesReceived": 192,
+        "fps": 95.93420002129179,
+        "gapP50Ms": 8.361101150512695,
+        "gapP95Ms": 16.7539119720459,
+        "gapMaxMs": 17.126083374023438,
+        "bytes": 3674045,
+        "firstFrameEpochSeconds": 1791927352.271225
+      },
+      "resample": {
+        "method": "hold-last-frame",
+        "uniqueFramesUsed": 4,
+        "heldFrames": 0,
+        "maxConsecutiveHold": 0,
+        "sourceFrames": 192,
+        "coveredMs": 1990.947961807251,
+        "tailPadMs": 9.052038192749023
+      }
+    },
+    "frames": {
+      "expected": {
+        "width": 390,
+        "height": 844
+      },
+      "first": {
+        "width": 390,
+        "height": 844
+      },
+      "mismatched": []
+    },
+    "browser": {
+      "version": "151.0.7922.34",
+      "headless": true,
+      "visual": "host-gpu",
+      "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Max, Unspecified Version)",
+      "launchArgs": [
+        "--ignore-gpu-blocklist",
+        "--use-angle=metal"
+      ]
+    },
+    "pageErrors": []
+  },
+  "toolVersions": {
+    "chromium": "151.0.7922.34"
+  }
+}

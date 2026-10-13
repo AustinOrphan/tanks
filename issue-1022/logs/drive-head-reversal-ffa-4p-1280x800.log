@@ -1,0 +1,2 @@
+head reversal-ffa-4p 1280x800: arena arena-01 seed 7; strip right 342.1 of 1262; entries [["P1 ","3 of 3 stocks",0,3,0],["P2 ","3 of 3 stocks",0,3,0],["P3 ","3 of 3 stocks",0,3,0],["P4 ","3 of 3 stocks",0,3,0]]; loss at tick ~1124 (36 shots); errors 0
+exit=0

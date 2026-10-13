@@ -1,0 +1,25 @@
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 198 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/index.html                                                       12.87 kB │ gzip:   4.98 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2             14.70 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2             15.62 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/atkinson-hyperlegible-latin-400-normal-BrHNak5F.woff2     17.20 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/atkinson-hyperlegible-latin-700-normal-GZI4o3u0.woff2     17.52 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/ibm-plex-sans-latin-wght-normal-IvpUvPa2.woff2            45.71 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                    48.25 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/index-DaC6wMS4.css                                        44.85 kB │ gzip:   8.48 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/gallery-selection-DRalH1oM.js                              2.68 kB │ gzip:   1.18 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/controller-selftest-L79y3fjh.js                            2.82 kB │ gzip:   1.14 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/gallery-workbench-D9YGBJoN.js                              8.24 kB │ gzip:   3.06 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/workbench-scene-D_gmBB2m.js                               22.44 kB │ gzip:   5.63 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1022/ev/head-dist/assets/index-C7nLHkyl.js                                      1,163.56 kB │ gzip: 326.59 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 215ms

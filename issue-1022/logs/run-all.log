@@ -1,0 +1,109 @@
+=== record head ffa-2p 1280x800
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.1 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 119.9 fps; surface at end playing
+exit=0
+=== record head teams-4p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head reversal-ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.0 ticks/s; render 119.9 fps; surface at end playing
+exit=0
+=== record head ffa-2p 390x844
+versus-round: 4 frames at 2 fps from 194 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 195 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head teams-4p 390x844
+versus-round: 4 frames at 2 fps from 195 screencast frames; sim 60.0 ticks/s; render 119.9 fps; surface at end playing
+exit=0
+=== record head reversal-ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main ffa-2p 1280x800
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 59.6 ticks/s; render 120.1 fps; surface at end playing
+exit=0
+=== record main ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main teams-4p 1280x800
+versus-round: 4 frames at 2 fps from 194 screencast frames; sim 59.5 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main reversal-ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.0 ticks/s; render 120.1 fps; surface at end playing
+exit=0
+=== record main ffa-2p 390x844
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 59.5 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 194 screencast frames; sim 60.0 ticks/s; render 120.1 fps; surface at end playing
+exit=0
+=== record main teams-4p 390x844
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main reversal-ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== drive head ffa-2p 1280x800
+head ffa-2p 1280x800: arena arena-01 seed 7; strip right 198.7 of 1262; entries [["P1 ","3 of 3 stocks",3,0,0],["P2 ","3 of 3 stocks",3,0,0]]; loss at tick ~1844 (40 shots); errors 0
+exit=0
+=== drive head ffa-4p 1280x800
+head ffa-4p 1280x800: arena arena-01 seed 7; strip right 333 of 1262; entries [["P1 ","3 of 3 stocks",3,0,0],["P2 ","3 of 3 stocks",3,0,0],["P3 ","3 of 3 stocks",3,0,0],["P4 ","3 of 3 stocks",3,0,0]]; loss at tick ~1124 (39 shots); errors 0
+exit=0
+=== drive head teams-4p 1280x800
+head teams-4p 1280x800: arena arena-01 seed 7; strip right 399.4 of 1262; entries [["P1 A ","3 of 3 stocks",0,3,0],["P2 B ","3 of 3 stocks",0,3,0],["P3 A ","3 of 3 stocks",0,3,0],["P4 B ","3 of 3 stocks",0,3,0]]; loss at tick ~884 (28 shots); errors 0
+exit=0
+=== drive head reversal-ffa-4p 1280x800
+head reversal-ffa-4p 1280x800: arena arena-01 seed 7; strip right 342.1 of 1262; entries [["P1 ","3 of 3 stocks",0,3,0],["P2 ","3 of 3 stocks",0,3,0],["P3 ","3 of 3 stocks",0,3,0],["P4 ","3 of 3 stocks",0,3,0]]; loss at tick ~1124 (36 shots); errors 0
+exit=0
+=== drive head ffa-4p 1280x800 reduced
+head ffa-4p 1280x800 reduced: arena arena-01 seed 7; strip right 333 of 1262; entries [["P1 ","3 of 3 stocks",3,0,0],["P2 ","3 of 3 stocks",3,0,0],["P3 ","3 of 3 stocks",3,0,0],["P4 ","3 of 3 stocks",3,0,0]]; loss at tick ~1124 (37 shots); errors 0
+exit=0
+=== drive head ffa-2p 390x844
+head ffa-2p 390x844: arena arena-01 seed 7; strip right 174.5 of 380; entries [["P1 ","3 of 3 stocks",3,0,0],["P2 ","3 of 3 stocks",3,0,0]]; loss at tick ~1844 (40 shots); errors 0
+exit=0
+=== drive head ffa-4p 390x844
+head ffa-4p 390x844: arena arena-01 seed 7; strip right 308.8 of 380; entries [["P1 ","3 of 3 stocks",3,0,0],["P2 ","3 of 3 stocks",3,0,0],["P3 ","3 of 3 stocks",3,0,0],["P4 ","3 of 3 stocks",3,0,0]]; loss at tick ~1124 (40 shots); errors 0
+exit=0
+=== drive head teams-4p 390x844
+head teams-4p 390x844: arena arena-01 seed 7; strip right 355.2 of 380; entries [["P1 A ","3 of 3 stocks",0,3,0],["P2 B ","3 of 3 stocks",0,3,0],["P3 A ","3 of 3 stocks",0,3,0],["P4 B ","3 of 3 stocks",0,3,0]]; loss at tick ~884 (40 shots); errors 0
+exit=0
+=== drive head reversal-ffa-4p 390x844
+head reversal-ffa-4p 390x844: arena arena-01 seed 7; strip right 297.9 of 380; entries [["P1 ","3 of 3 stocks",0,3,0],["P2 ","3 of 3 stocks",0,3,0],["P3 ","3 of 3 stocks",0,3,0],["P4 ","3 of 3 stocks",0,3,0]]; loss at tick ~1124 (40 shots); errors 0
+exit=0
+=== drive head ffa-4p 390x844 reduced
+head ffa-4p 390x844 reduced: arena arena-01 seed 7; strip right 308.8 of 380; entries [["P1 ","3 of 3 stocks",3,0,0],["P2 ","3 of 3 stocks",3,0,0],["P3 ","3 of 3 stocks",3,0,0],["P4 ","3 of 3 stocks",3,0,0]]; loss at tick ~1124 (40 shots); errors 0
+exit=0
+=== drive main ffa-2p 1280x800
+main ffa-2p 1280x800: arena arena-01 seed 7; strip right 186.6 of 1262; entries [["P1 3",null,0,0,1],["P2 3",null,0,0,1]]; loss at tick ~1845 (40 shots); errors 0
+exit=0
+=== drive main ffa-4p 1280x800
+main ffa-4p 1280x800: arena arena-01 seed 7; strip right 308.7 of 1262; entries [["P1 3",null,0,0,1],["P2 3",null,0,0,1],["P3 3",null,0,0,1],["P4 3",null,0,0,1]]; loss at tick ~1124 (35 shots); errors 0
+exit=0
+=== drive main teams-4p 1280x800
+main teams-4p 1280x800: arena arena-01 seed 7; strip right 293.8 of 1262; entries [["P1 A 3",null,0,0,0],["P2 B 3",null,0,0,0],["P3 A 3",null,0,0,0],["P4 B 3",null,0,0,0]]; loss at tick ~884 (38 shots); errors 0
+exit=0
+=== drive main reversal-ffa-4p 1280x800
+main reversal-ffa-4p 1280x800: arena arena-01 seed 7; strip right 236.5 of 1262; entries [["P1 3",null,0,0,0],["P2 3",null,0,0,0],["P3 3",null,0,0,0],["P4 3",null,0,0,0]]; loss at tick ~1124 (39 shots); errors 0
+exit=0
+=== drive main ffa-4p 1280x800 reduced
+main ffa-4p 1280x800 reduced: arena arena-01 seed 7; strip right 308.7 of 1262; entries [["P1 3",null,0,0,1],["P2 3",null,0,0,1],["P3 3",null,0,0,1],["P4 3",null,0,0,1]]; loss at tick ~1124 (34 shots); errors 0
+exit=0
+=== drive main ffa-2p 390x844
+main ffa-2p 390x844: arena arena-01 seed 7; strip right 162.3 of 380; entries [["P1 3",null,0,0,1],["P2 3",null,0,0,1]]; loss at tick ~1844 (40 shots); errors 0
+exit=0
+=== drive main ffa-4p 390x844
+main ffa-4p 390x844: arena arena-01 seed 7; strip right 284.5 of 380; entries [["P1 3",null,0,0,1],["P2 3",null,0,0,1],["P3 3",null,0,0,1],["P4 3",null,0,0,1]]; loss at tick ~1125 (39 shots); errors 0
+exit=0
+=== drive main teams-4p 390x844
+main teams-4p 390x844: arena arena-01 seed 7; strip right 269.6 of 380; entries [["P1 A 3",null,0,0,0],["P2 B 3",null,0,0,0],["P3 A 3",null,0,0,0],["P4 B 3",null,0,0,0]]; loss at tick ~884 (39 shots); errors 0
+exit=0
+=== drive main reversal-ffa-4p 390x844
+main reversal-ffa-4p 390x844: arena arena-01 seed 7; strip right 212.3 of 380; entries [["P1 3",null,0,0,0],["P2 3",null,0,0,0],["P3 3",null,0,0,0],["P4 3",null,0,0,0]]; loss at tick ~1124 (39 shots); errors 0
+exit=0
+=== drive main ffa-4p 390x844 reduced
+main ffa-4p 390x844 reduced: arena arena-01 seed 7; strip right 284.5 of 380; entries [["P1 3",null,0,0,1],["P2 3",null,0,0,1],["P3 3",null,0,0,1],["P4 3",null,0,0,1]]; loss at tick ~1124 (39 shots); errors 0
+exit=0
+ALL-DONE

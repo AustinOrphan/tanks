@@ -1,0 +1,49 @@
+=== record head ffa-2p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 191 screencast frames; sim 60.0 ticks/s; render 120.1 fps; surface at end playing
+exit=0
+=== record head teams-4p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head reversal-ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 190 screencast frames; sim 60.0 ticks/s; render 122.3 fps; surface at end playing
+exit=0
+=== record head ffa-2p 390x844
+versus-round: 4 frames at 2 fps from 195 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 194 screencast frames; sim 59.5 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record head teams-4p 390x844
+versus-round: 4 frames at 2 fps from 194 screencast frames; sim 60.0 ticks/s; render 119.9 fps; surface at end playing
+exit=0
+=== record head reversal-ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 195 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main ffa-2p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main teams-4p 1280x800
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.0 ticks/s; render 119.9 fps; surface at end playing
+exit=0
+=== record main reversal-ffa-4p 1280x800
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main ffa-2p 390x844
+versus-round: 4 frames at 2 fps from 194 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 193 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main teams-4p 390x844
+versus-round: 4 frames at 2 fps from 194 screencast frames; sim 60.0 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+=== record main reversal-ffa-4p 390x844
+versus-round: 4 frames at 2 fps from 192 screencast frames; sim 60.5 ticks/s; render 120.0 fps; surface at end playing
+exit=0
+REC1-DONE
