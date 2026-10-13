@@ -3811,7 +3811,8 @@
  *
  * STATE LIVES IN BORDERS AND TEXT, NEVER `background`. Forced colours drops a background, which
  * in the #230 mockups made a filled pip identical to a hollow one. A filled pip here is a border
- * as wide as its radius; a hollow one is a thin border. */
+ * as wide as its radius, with an inset shadow over the hole a floored border leaves; a hollow
+ * one is a thin border. */
 
 /* Pips: one per starting stock, drawn for a teams entry and for an FFA entry under any marker
  * but `shape` (`stockRowFor` in `presentation/stock-cue.ts`). The pip just lost swells, bursts a
