@@ -423,7 +423,8 @@ export interface DevFlags {
    * death vignette and the stock-strip chips. `null` -- absent or unrecognised -- is the
    * shipped default, `classic`; `high-contrast` selects #586's palette. Read once, when a
    * session builds its renderer, so a value applies from the next match, as `quality` does.
-   * A single-player game draws no owner colour and is the same under either value.
+   * A single-player game keeps the shipped colours under either value: the palette applies
+   * only where identity does (`identityApplies`, two or more player tanks).
    *
    * End state, per the flag-lifecycle rule (`.claude/rules/game.md`): the flag is not the
    * feature. It exists so a capture can select the palette before the player setting can
@@ -1535,8 +1536,8 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       "palette; absent or 'classic' draws the shipped colours.",
     notes: [
       'Read once, when a session builds its renderer: a value set here applies from the next ' +
-        'match, as `quality` does. A single-player game draws no owner colour, so it is the ' +
-        'same under either value.',
+        'match, as `quality` does. A single-player game keeps the shipped colours under ' +
+        'either value: the palette applies only once two or more player tanks exist.',
       'Exists so a capture can select the palette before the player setting can. The ' +
         'Settings control is what survives; the flag goes once the capture tooling can seed ' +
         '`tanks.settings.v1`.',

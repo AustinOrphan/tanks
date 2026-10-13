@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import { makeSpawnRing } from './spawn-anim';
-import { resolveOwnerColor, type OwnerPalette } from '../presentation/identity';
+import { identityApplies, resolveOwnerColor, type OwnerPalette } from '../presentation/identity';
 
 /**
  * A detached, pooled, self-expiring world shockwave ring at a tank's death position,
@@ -95,7 +95,8 @@ export function createDeathPulseSystem(
    *  rebuilding a pooled mesh every death. */
   opposed = false,
   /** The session's owner palette (issue #1057); absent = the shipped default. Read per
-   *  death, so a pooled ring takes it from `acquire`'s recolour as a fresh one does. */
+   *  death, so a pooled ring takes it from `acquire`'s recolour as a fresh one does, and
+   *  only where identity applies -- see `spawn`. */
   ownerPalette?: OwnerPalette,
 ): DeathPulseSystem {
   let reducedMotion = false;
@@ -137,7 +138,10 @@ export function createDeathPulseSystem(
       if (!isPlayer && !opts.enemyEnabled) continue;
       const tank = world.tanks.find((t) => t.id === event.tankId);
       if (!tank) continue; // should be unreachable (tanks are never removed), but never throw
-      const color = resolveOwnerColor(world, tank, ownerPalette);
+      // A player death rings in single-player too, in slot 0's colour. The session's palette
+      // applies only where identity does (issue #1057), so single-player stays as shipped.
+      const palette = identityApplies(world) ? ownerPalette : undefined;
+      const color = resolveOwnerColor(world, tank, palette);
       const r = acquire(color);
       if (!r) continue; // pool exhausted; drop this ring, never the tick
       // The event's OWN position -- the place the sim recorded the death, on the tick

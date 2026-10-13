@@ -1505,7 +1505,10 @@ export function createEntityViews(
           // default is still deferred (#201's own brief), but the render seam reads the
           // stored variant now, so tooling (the gallery's --spawn-anim) can already reach it.
           const variant = styleFor(slot).spawnAnim;
-          const color = resolveOwnerColor(curr, t, ownerPalette);
+          // Unlike the identity ring, the entrance ring draws in single-player too, in slot
+          // 0's colour. The session's palette applies only where identity does (issue #1057),
+          // so a single-player game stays as shipped under either palette.
+          const color = resolveOwnerColor(curr, t, multiPlayer ? ownerPalette : undefined);
           const ring = makeSpawnRing(color);
           view.group.add(ring);
           view.spawn = { variant, elapsed: 0, ring, protectedFrom: null };

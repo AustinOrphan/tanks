@@ -123,7 +123,7 @@ Notes:
 - **outcome**: Evidence about the SCREEN, not about reaching it -- it does not play a match.
 - **outcome**: The session still decides which screen fits: pick the ending to match the session the URL starts, or the panel will describe a session nobody played.
 - **outcome**: Unrecognised or absent leaves the session to end on its own, as it always has.
-- **ownerPalette**: Read once, when a session builds its renderer: a value set here applies from the next match, as `quality` does. A single-player game draws no owner colour, so it is the same under either value.
+- **ownerPalette**: Read once, when a session builds its renderer: a value set here applies from the next match, as `quality` does. A single-player game keeps the shipped colours under either value: the palette applies only once two or more player tanks exist.
 - **ownerPalette**: Exists so a capture can select the palette before the player setting can. The Settings control is what survives; the flag goes once the capture tooling can seed `tanks.settings.v1`.
 - **pixelRatioCap**: Applied on top of the preset `quality` or the stored Settings choice resolves to, for the game renderer only: the Customize preview builds its own renderer and ignores it. Read once, when a session builds its renderer.
 - **pixelRatioCap**: An unrecognised value is rejected and leaves the preset's own setting. `__tanks.bench()` records every override in effect.
