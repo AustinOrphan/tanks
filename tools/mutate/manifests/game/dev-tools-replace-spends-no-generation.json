@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.diagnostics.test.ts"
   ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a press answered after another pane replaced the pane writes nothing, and takes no focus"
+  ],
   "why": "Issue #1014. Developer Tools replaced by one of its own buttons (Configuration, the Self-Test, the Gallery) stops spending the generation, so a press still waiting on the developer modules is answered into the pane that is leaving: the field is filled, shown and focused, taking focus from the incoming pane, and the clipboard is written after the developer has left."
 }
