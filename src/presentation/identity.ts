@@ -293,7 +293,17 @@ const MULTIPLAYER_THRESHOLD = 2;
  * this too, so there is one definition rather than one plus a re-derivation.
  */
 export function identityApplies(world: World): boolean {
-  return countPlayerTanks(world.tanks) >= MULTIPLAYER_THRESHOLD;
+  return identityAppliesAt(countPlayerTanks(world.tanks));
+}
+
+/**
+ * `identityApplies` for a reader that holds the player-tank count rather than the world: the
+ * HUD's stock strip, which carries one entry per player-kind tank, dead ones included, so its
+ * length is the count above (issue #1057). The threshold stays in this module, so the chips
+ * and the rings change palette at the same population.
+ */
+export function identityAppliesAt(playerTanks: number): boolean {
+  return playerTanks >= MULTIPLAYER_THRESHOLD;
 }
 function countPlayerTanks(tanks: readonly { kind: TankKind }[]): number {
   let n = 0;

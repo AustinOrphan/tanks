@@ -1,7 +1,7 @@
 {
   "id": "owner-palette-ignored-by-the-stock-chips",
   "file": "src/game/hud.ts",
-  "find": "        ? teamColor(entry.team, stockPalette)\n        : identityColor(entry.slot, stockPalette);",
+  "find": "        ? teamColor(entry.team, chipPalette)\n        : identityColor(entry.slot, chipPalette);",
   "replace": "        ? teamColor(entry.team)\n        : identityColor(entry.slot);",
   "expect": "killed",
   "tests": [

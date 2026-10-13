@@ -282,7 +282,9 @@ import { keyHint, type Modality } from './modality';
 import { teamOf } from '../sim/arena';
 import { VERSUS_CATALOG, versusCatalogEntryById } from '../sim/config/versus-catalog';
 import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
-import { TEAM_LABELS, identityColor, teamColor, type OwnerPalette } from '../presentation/identity';
+import {
+  TEAM_LABELS, identityAppliesAt, identityColor, teamColor, type OwnerPalette,
+} from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
 import { equalizeMenuRows } from './menu-row-width';
 import { hudFontClass, type HudFont } from '../presentation/hud-font';
@@ -624,9 +626,10 @@ export interface Hud {
    * The owner palette the versus stock chips are painted in (issue #1057): the same one the
    * session handed its renderer, so a chip and its slot's ring are one colour. A session
    * calls it once, when it is built and before its first `setStatus`; it repaints nothing by
-   * itself, and the chips read it the next time the strip is drawn. A HUD that is never
-   * told draws the shipped default. Named for what it paints, leaving `setOwnerPalette` and
-   * `onOwnerPaletteChange` free for the Settings control.
+   * itself, and the chips read it the next time the strip is drawn. A strip of one entry, or
+   * a HUD that is never told, draws the shipped default, as a single-player spawn ring does.
+   * Named for what it paints, leaving `setOwnerPalette` and `onOwnerPaletteChange` free for
+   * the Settings control.
    */
   setStockPalette(palette: OwnerPalette): void;
   /**
@@ -3408,6 +3411,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return;
     }
     const now = performance.now();
+    // The session's palette applies only where identity does (issue #1057). One entry per
+    // player-kind tank, so the strip's length is the population `identityApplies` counts: a
+    // one-slot versus world (`?dev=1&mode=ffa` without `players`) keeps the shipped chip
+    // beside the shipped spawn ring and death pulse, as every single-player game does.
+    const chipPalette = identityAppliesAt(stocks.length) ? stockPalette : undefined;
     for (const entry of stocks) {
       const span = document.createElement('span');
       span.className = 'hud-versus-stock-entry';
@@ -3425,9 +3433,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, running, now, stocks.length);
       }
       // teams: teamColor(team); ffa (no `team` on the entry): identityColor(slot) -- the
-      // SAME two lookups `resolveOwnerColor` dispatches between for the ring, read in the
-      // palette the session handed `setStockPalette`, so the chip and the ring agree under
-      // either palette (see `VersusStock`'s own doc comment). Their white fallback is
+      // SAME two lookups `resolveOwnerColor` dispatches between for the ring, read in
+      // `chipPalette` above, so the chip and the ring agree under either palette (see
+      // `VersusStock`'s own doc comment). Their white fallback is
       // unreached today -- both palettes cover every slot the n-player cap (4) allows and
       // all three teams issue #281 permits -- kept only so a future out-of-range slot
       // degrades to a colour rather than an NaN hex string. It was REACHABLE between #281's
@@ -3449,8 +3457,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));
       }
       const hex = entry.team !== undefined
-        ? teamColor(entry.team, stockPalette)
-        : identityColor(entry.slot, stockPalette);
+        ? teamColor(entry.team, chipPalette)
+        : identityColor(entry.slot, chipPalette);
       span.style.color = cssColor(hex);
       versusStocksEl.appendChild(span);
     }
@@ -3469,7 +3477,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * The palette the stock chips are painted in, as the live session last stated it through
    * `setStockPalette` (issue #1057). Undefined until then, which `identityColor`/`teamColor`
-   * read as the shipped default: the strip every injected HUD draws.
+   * read as the shipped default: the strip every injected HUD draws. A one-entry strip draws
+   * the default too (`renderVersusStocks`'s `chipPalette`).
    */
   let stockPalette: OwnerPalette | undefined;
   /**
