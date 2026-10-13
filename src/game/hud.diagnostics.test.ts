@@ -3,7 +3,7 @@
 // The developer diagnostics CONTROLS (issue #247) -- the half `dev-diagnostics.test.ts` does
 // not cover: whether the pane offers them at all, what they write, and what Pin is forbidden
 // from doing. The formatting is tested against the pure module; this file is about wiring.
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud } from './hud';
 import type { SessionDiagnostics } from './dev-diagnostics';
 import {
@@ -43,6 +43,23 @@ function mountDev(opts: Parameters<typeof createHud>[1] = {}): HTMLElement {
 
 const q = <T extends HTMLElement>(root: HTMLElement, sel: string): T =>
   root.querySelector<T>(sel) as T;
+
+/**
+ * `mountDev`, with the pane's modules loaded the way the page loads them: Developer Tools is
+ * opened, the REAL imports are awaited (issue #1014), and the pane is closed again, so a case
+ * starts where it always has -- at the main menu -- and every press after it is answered in
+ * its own task. Bounded by `vi.waitFor` on the action labels, which the load writes, so a load
+ * that never lands fails here rather than in every assertion after it.
+ */
+async function mountDevLoaded(opts: Parameters<typeof createHud>[1] = {}): Promise<HTMLElement> {
+  const root = mountDev(opts);
+  q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+  await vi.waitFor(() => {
+    expect(q(root, '.hud-devact').textContent, 'the developer modules never loaded').not.toBe('');
+  });
+  q<HTMLButtonElement>(root, '.hud-devtools-back').click();
+  return root;
+}
 const out = (root: HTMLElement): HTMLTextAreaElement => q(root, '.hud-diag-out');
 const shown = (el: HTMLElement): boolean => getComputedStyle(el).display !== 'none';
 
@@ -74,8 +91,8 @@ describe('the diagnostics controls are offered only when the page half is wired'
 });
 
 describe('Copy Diagnostics writes the session it was given', () => {
-  it('reports the live seed, and the field is only shown once there is something in it', () => {
-    const root = mountDev({ developerPage: PAGE });
+  it('reports the live seed, and the field is only shown once there is something in it', async () => {
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDiagnosticsSource(() => SESSION);
     expect(shown(out(root))).toBe(false);
     q<HTMLButtonElement>(root, '.hud-diag-copy').click();
@@ -85,12 +102,12 @@ describe('Copy Diagnostics writes the session it was given', () => {
     expect(out(root).value).toContain('- URL: /tanks/?dev=1');
   });
 
-  it('READS THE SOURCE AT PRESS TIME, not when it was registered', () => {
+  it('READS THE SOURCE AT PRESS TIME, not when it was registered', async () => {
     // The load-bearing one. `loop.ts` rebuilds the world on every level change and every
     // restart, and the seed changes with it -- so a HUD that had snapshotted the source's
     // value at registration would report the session's FIRST world for the rest of its life,
     // which is the one number this whole feature exists to get right.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     let live: SessionDiagnostics = SESSION;
     hud!.setDiagnosticsSource(() => live);
     q<HTMLButtonElement>(root, '.hud-diag-copy').click();
@@ -100,20 +117,20 @@ describe('Copy Diagnostics writes the session it was given', () => {
     expect(out(root).value).toContain('- Seed: 99');
   });
 
-  it('says there is no session when nothing is live, rather than reporting a seed', () => {
+  it('says there is no session when nothing is live, rather than reporting a seed', async () => {
     // `route-host.ts` returns `null` from the trampoline whenever no session holds the slot,
     // which is the state the developer pane is usually opened in -- from the main menu.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDiagnosticsSource(() => null);
     q<HTMLButtonElement>(root, '.hud-diag-copy').click();
     expect(out(root).value).toContain('none simulating');
     expect(out(root).value).not.toContain('- Seed:');
   });
 
-  it('selects the text it wrote, so the keyboard copy path works without a clipboard', () => {
+  it('selects the text it wrote, so the keyboard copy path works without a clipboard', async () => {
     // The async Clipboard API is origin- and permission-gated and absent on a file:// page.
     // Selecting is the path that always works, and the self-test's Copy already relies on it.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDiagnosticsSource(() => SESSION);
     q<HTMLButtonElement>(root, '.hud-diag-copy').click();
     expect(out(root).selectionStart).toBe(0);
@@ -122,14 +139,14 @@ describe('Copy Diagnostics writes the session it was given', () => {
 });
 
 describe('Pin Current Seed offers a URL and changes nothing', () => {
-  it('writes a URL carrying the live seed', () => {
-    const root = mountDev({ developerPage: PAGE });
+  it('writes a URL carrying the live seed', async () => {
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDiagnosticsSource(() => SESSION);
     q<HTMLButtonElement>(root, '.hud-diag-pin').click();
     expect(out(root).value).toBe('/tanks/?dev=1&seed=4242424242');
   });
 
-  it('DOES NOT NAVIGATE, and does not ask the page to apply anything', () => {
+  it('DOES NOT NAVIGATE, and does not ask the page to apply anything', async () => {
     // "Seed pinning does not change the current world before the user applies/reloads" is
     // this issue's sharpest criterion, and this is the assertion that can fail for it: the
     // HUD is given the very seam that WOULD navigate -- the configuration menu's
@@ -137,17 +154,17 @@ describe('Pin Current Seed offers a URL and changes nothing', () => {
     // "helpfully" applied the pinned URL would reload the page and destroy the world whose
     // seed was being pinned, which is the opposite of the point.
     const applied: string[] = [];
-    const root = mountDev({ developerPage: PAGE, applyDeveloperConfig: (s) => applied.push(s) });
+    const root = await mountDevLoaded({ developerPage: PAGE, applyDeveloperConfig: (s) => applied.push(s) });
     hud!.setDiagnosticsSource(() => SESSION);
     q<HTMLButtonElement>(root, '.hud-diag-pin').click();
     expect(applied).toEqual([]);
   });
 
-  it('does not disturb the snapshot the session handed it', () => {
+  it('does not disturb the snapshot the session handed it', async () => {
     // The same guarantee one layer up from `dev-diagnostics.test.ts`'s own version: the
     // record the getter returned is byte-identical after the press, so a future handler that
     // started writing back through the snapshot fails here.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     const session = { ...SESSION };
     const before = JSON.stringify(session);
     hud!.setDiagnosticsSource(() => session);
@@ -155,8 +172,8 @@ describe('Pin Current Seed offers a URL and changes nothing', () => {
     expect(JSON.stringify(session)).toBe(before);
   });
 
-  it('says why there is nothing to pin when no session is live', () => {
-    const root = mountDev({ developerPage: PAGE });
+  it('says why there is nothing to pin when no session is live', async () => {
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDiagnosticsSource(() => null);
     q<HTMLButtonElement>(root, '.hud-diag-pin').click();
     expect(out(root).value).toContain('no resolved seed to pin');
@@ -184,8 +201,8 @@ describe('the three developer actions (issue #252)', () => {
   const act = (root: HTMLElement, id: string): HTMLButtonElement =>
     q<HTMLButtonElement>(root, `.hud-devact[data-action="${id}"]`);
 
-  it('offers all three, labelled from the catalogue', () => {
-    const root = mountDev({ developerPage: PAGE });
+  it('offers all three, labelled from the catalogue', async () => {
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDevActionPort(() => fakePort().port);
     expect(Array.from(root.querySelectorAll('.hud-devact'), (b) => b.textContent)).toEqual([
       'Restart with Same Seed',
@@ -194,12 +211,12 @@ describe('the three developer actions (issue #252)', () => {
     ]);
   });
 
-  it('re-asks whether a round exists every time the pane opens, not only at registration', () => {
+  it('re-asks whether a round exists every time the pane opens, not only at registration', async () => {
     // THE LOAD-BEARING ONE. `route-host.ts` registers the port once, at construction, when
     // the session is still at its own title screen -- so a set-once availability would leave
     // all three controls hidden for the entire life of the page. Whether a round exists
     // changes underneath a pane that is shut.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     let roundStarted = false;
     hud!.setDevActionPort(() => ({
       currentSeed: () => 1,
@@ -212,11 +229,11 @@ describe('the three developer actions (issue #252)', () => {
     expect(act(root, 'reroll-seed').hidden).toBe(false);
   });
 
-  it('hides all three with no session, and shows them once one is live', () => {
+  it('hides all three with no session, and shows them once one is live', async () => {
     // Distinct from the `developerPage` gate: the pane exists either way, but there is no
     // round to restart from the main menu. A control the session cannot serve is not
     // rendered, the rule Exit and both diagnostics buttons already follow.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     expect(act(root, 'reroll-seed').hidden).toBe(true);
     hud!.setDevActionPort(() => null);
     expect(act(root, 'reroll-seed').hidden).toBe(true);
@@ -226,11 +243,11 @@ describe('the three developer actions (issue #252)', () => {
     expect(act(root, 'reroll-seed').hidden).toBe(false);
   });
 
-  it('ARMS before it fires, and the first press rebuilds nothing', () => {
+  it('ARMS before it fires, and the first press rebuilds nothing', async () => {
     // "Cancelled confirmations make no change." The first press only changes the label; the
     // port is untouched, so a handler that fired on one press fails here rather than in a
     // playtest with a lost round.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     const f = fakePort();
     hud!.setDevActionPort(() => f.port);
     act(root, 'reroll-seed').click();
@@ -240,12 +257,12 @@ describe('the three developer actions (issue #252)', () => {
     expect(f.calls).toEqual([{ seed: null, keepLives: false }]);
   });
 
-  it('arming one action DISARMS another, so a stray second press cannot fire the wrong one', () => {
+  it('arming one action DISARMS another, so a stray second press cannot fire the wrong one', async () => {
     // The mechanism is single-slot (`armedReset`), which is what makes this true -- and the
     // label restoration is what makes it visible. Before issue #252 that restoration was a
     // two-way ternary over the two reset buttons; an armed developer action would have been
     // relabelled "Reset progress".
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     const f = fakePort();
     hud!.setDevActionPort(() => f.port);
     act(root, 'reroll-seed').click();
@@ -255,8 +272,8 @@ describe('the three developer actions (issue #252)', () => {
     expect(f.calls).toEqual([]);
   });
 
-  it('asks for the CURRENT seed on a same-seed restart, and reports what came back', () => {
-    const root = mountDev({ developerPage: PAGE });
+  it('asks for the CURRENT seed on a same-seed restart, and reports what came back', async () => {
+    const root = await mountDevLoaded({ developerPage: PAGE });
     const f = fakePort({ seed: 4242, resolved: 4242 });
     hud!.setDevActionPort(() => f.port);
     act(root, 'restart-same-seed').click();
@@ -265,11 +282,11 @@ describe('the three developer actions (issue #252)', () => {
     expect(out(root).value).toContain('now running seed 4242');
   });
 
-  it('puts a REPRODUCTION URL beside a rerolled seed, not just the number', () => {
+  it('puts a REPRODUCTION URL beside a rerolled seed, not just the number', async () => {
     // "Reroll reports an exact seed that can immediately be copied into a reproduction URL."
     // A bare number leaves the developer to build the URL; this is the same `pinnedSeedUrl`
     // Pin Current Seed uses, so the two cannot produce different URLs for one session.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDiagnosticsSource(() => ({ ...SESSION, seed: 8888 }));
     hud!.setDevActionPort(() => fakePort({ resolved: 8888 }).port);
     act(root, 'reroll-seed').click();
@@ -278,8 +295,8 @@ describe('the three developer actions (issue #252)', () => {
     expect(out(root).value).toContain('/tanks/?dev=1&seed=8888');
   });
 
-  it('says so rather than appearing to work when the port refuses', () => {
-    const root = mountDev({ developerPage: PAGE });
+  it('says so rather than appearing to work when the port refuses', async () => {
+    const root = await mountDevLoaded({ developerPage: PAGE });
     // Available at arm time, gone by the time the second press lands -- the session detached
     // while the control sat armed, which a 4-second window makes reachable.
     let live = true;
@@ -292,11 +309,11 @@ describe('the three developer actions (issue #252)', () => {
 });
 
 describe('the field does not outlive the pane', () => {
-  it('is cleared and re-hidden when Developer Tools closes', () => {
+  it('is cleared and re-hidden when Developer Tools closes', async () => {
     // A URL or a report left in the field is a statement about a session that may since have
     // been restarted, and the next opener would read it as current. The self-test's report
     // field is cleared on close for the same reason.
-    const root = mountDev({ developerPage: PAGE });
+    const root = await mountDevLoaded({ developerPage: PAGE });
     hud!.setDiagnosticsSource(() => SESSION);
     // OPENED FIRST, through the badge the player uses. The clearing hangs off the pane's
     // close, so a test that only clicked Back on a pane that was never open would assert
@@ -470,7 +487,7 @@ describe('the exports (issue #254)', () => {
 
   it('Download Screenshot saves the frame the session copied, and says what it is', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDiagnosticsSource(() => SESSION);
     hud!.setDevExportPort(() => port());
     shotBtn(root).click();
@@ -482,18 +499,18 @@ describe('the exports (issue #254)', () => {
     expect(out(root).value).toContain('The HUD is not in it');
   });
 
-  it('Download Screenshot saves nothing with no session, and says so', () => {
+  it('Download Screenshot saves nothing with no session, and says so', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDevExportPort(() => null);
     shotBtn(root).click();
     expect(d.canvases).toEqual([]);
     expect(out(root).value).toBe(NO_SESSION_SCREENSHOT_NOTE);
   });
 
-  it('Download Screenshot reports a capture that throws, and saves nothing', () => {
+  it('Download Screenshot reports a capture that throws, and saves nothing', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDevExportPort(() =>
       port({
         captureFrame: () => {
@@ -510,7 +527,7 @@ describe('the exports (issue #254)', () => {
     // The PNG is encoded asynchronously, so this failure arrives in a later task. A handler that
     // only caught synchronous throws would leave the field empty, looking like it had worked.
     const d = downloads(() => Promise.reject(new Error('encode refused')));
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDevExportPort(() => port());
     shotBtn(root).click();
     await settle();
@@ -528,9 +545,9 @@ describe('the exports (issue #254)', () => {
     expect(q(root, '.hud-devtools-open').classList.contains('hud-devtools-open--hidden')).toBe(true);
   });
 
-  it('Download Diagnostics saves one JSON file of the live session and round, and says so', () => {
+  it('Download Diagnostics saves one JSON file of the live session and round, and says so', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDiagnosticsSource(() => SESSION);
     hud!.setDevExportPort(() => port());
     diagBtn(root).click();
@@ -544,9 +561,9 @@ describe('the exports (issue #254)', () => {
     expect(out(root).value).toContain(`Saved ${d.saved[0].fileName}`);
   });
 
-  it('reads the round at press time, not when the port was registered', () => {
+  it('reads the round at press time, not when the port was registered', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDiagnosticsSource(() => SESSION);
     let tick = 10;
     hud!.setDevExportPort(() => port({ round: () => ({ ...ROUND, tick }) }));
@@ -556,9 +573,9 @@ describe('the exports (issue #254)', () => {
     expect(d.saved.map((s) => JSON.parse(s.text).round.tick)).toEqual([10, 99]);
   });
 
-  it('saves a no-session file without a round when nothing is live', () => {
+  it('saves a no-session file without a round when nothing is live', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDiagnosticsSource(() => null);
     hud!.setDevExportPort(() => null);
     diagBtn(root).click();
@@ -566,27 +583,27 @@ describe('the exports (issue #254)', () => {
     expect(JSON.parse(d.saved[0].text).round).toBeNull();
   });
 
-  it('Download Replay saves NOTHING when recording is off, and says how to turn it on', () => {
+  it('Download Replay saves NOTHING when recording is off, and says how to turn it on', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDevExportPort(() => port({ replay: () => null }));
     replayBtn(root).click();
     expect(d.saved).toEqual([]);
     expect(out(root).value).toContain('replay=1');
   });
 
-  it('Download Replay saves nothing with no session, and says so', () => {
+  it('Download Replay saves nothing with no session, and says so', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDevExportPort(() => null);
     replayBtn(root).click();
     expect(d.saved).toEqual([]);
     expect(out(root).value).toBe(NO_SESSION_REPLAY_NOTE);
   });
 
-  it('Download Replay saves the recorded trace as it is', () => {
+  it('Download Replay saves the recorded trace as it is', async () => {
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     const world = createWorldFor(arenaById('arena-01'), 5, { lives: 3 });
     const rec = createRecordingInput(
       { sample: () => [{ move: { x: 1, y: 0 }, aim: { x: 0, y: 1 }, fire: true, mine: false }] },
@@ -600,12 +617,12 @@ describe('the exports (issue #254)', () => {
     expect(out(root).value).toContain('3 ticks');
   });
 
-  it('REPORTS a failure in the field instead of throwing, and saves nothing', () => {
+  it('REPORTS a failure in the field instead of throwing, and saves nothing', async () => {
     // Issue #254: "export failures are reported without mutating game or persistence state".
     // The port has no writer to call; what this pins is that the failure reaches the field and
     // the click handler does not throw out of the pane.
     const d = downloads();
-    const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+    const root = await mountDevLoaded({ developerPage: PAGE, developerDownloads: d.seam });
     hud!.setDiagnosticsSource(() => SESSION);
     hud!.setDevExportPort(() =>
       port({
@@ -619,8 +636,8 @@ describe('the exports (issue #254)', () => {
     expect(out(root).value).toContain('Download Diagnostics failed, so no file was saved: round unreadable');
   });
 
-  it('reports a download that throws, too', () => {
-    const root = mountDev({
+  it('reports a download that throws, too', async () => {
+    const root = await mountDevLoaded({
       developerPage: PAGE,
       developerDownloads: {
         saveText: () => {

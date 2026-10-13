@@ -876,11 +876,11 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 // only splittable if nothing on an ordinary path imports it for VALUE, so this counts those
 // imports and pins the count. The number must only ever go DOWN.
 //
-// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds six of them today, one edge
-// per module, and they are the developer surfaces it still renders inline -- the developer
-// menu (`devtools-menu`, `dev-config-menu`, `dev-config`), its actions, its diagnostics and
-// its exports. #946's route out is to load each pane's body-building module on demand, as the
-// gallery workbench's and the controller self-test's already are, while `hud.ts` keeps
+// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds three of them today, one edge
+// per module, and they are the developer surface it still renders inline -- the developer
+// menu (`devtools-menu`, `dev-config-menu`, `dev-config`). #946's route out is to load each
+// pane's body-building module on demand, as the gallery workbench's, the controller
+// self-test's and the Developer Tools pane's own controls' already are, while `hud.ts` keeps
 // the pane's container, its layer entry, its markup and its open/close order; the slices
 // under #946 take them one pane at a time. An inventory fails on a NEW edge while recording
 // what the remaining ones wait on, which `toBe(0)` could not do.
@@ -920,6 +920,10 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 //
 // Issue #1013 took it from 7 to 6: the controller self-test's body loads when its pane first
 // opens, so `hud.ts` names `controller-selftest` only through a leading `import type`.
+//
+// Issue #1014 took it from 6 to 3: the actions, diagnostics and exports behind the Developer
+// Tools pane's own controls load when the pane opens, so `hud.ts` names `dev-actions`,
+// `dev-diagnostics` and `dev-exports` only through leading `import type`s.
 // ---------------------------------------------------------------------------
 
 /** The developer-only modules #946 names, by basename: the developer surface, then gallery. */
@@ -937,7 +941,7 @@ const DEV_ONLY_MODULES: readonly string[] = [
  */
 const DEV_VALUE_EDGES: Readonly<Record<string, number>> = {
   // The developer surfaces hud.ts still renders inline; see the note above.
-  './game/hud.ts': 6,
+  './game/hud.ts': 3,
 };
 
 describe('developer modules stay off ordinary paths (issue #946)', () => {
