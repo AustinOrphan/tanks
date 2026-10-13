@@ -1,0 +1,10 @@
+{
+  "ring0 authored #3fd0ff vs #63d1fd": 2.15,
+  "ring0 overFelt": 1.92,
+  "ring0 measured #88c7cf vs #96c7ce": 2.6,
+  "ring1 measured #d8ad4a vs #b6da72": 22.18,
+  "ring2 measured #dd7847 vs #cdc5c4": 27.54,
+  "ring3 measured #b252d4 vs #ccd5c2": 51.8,
+  "teamA (slot 0) measured #db5f51 vs #96c7ce": 44.64,
+  "teamB (slot 1) measured #cecad4 vs #c5d976": 32.52
+}

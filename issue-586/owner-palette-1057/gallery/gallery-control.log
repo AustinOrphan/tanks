@@ -1,0 +1,6 @@
+
+> tanks@0.0.0 gallery
+> node tools/gallery/run.mjs --elements identity,coop --out gallery-out/media-1057-control
+
+pageerrors: none
+wrote 1 frame(s) to /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/w1057/ctl-src/gallery-out/media-1057-control

@@ -1,0 +1,161 @@
+[
+  {
+    "label": "gallery: main vs branch",
+    "a": "gallery/main/frame.png",
+    "b": "gallery/branch/frame.png",
+    "md5a": "ffdd9f247c641946d245a059c2fe0ce3",
+    "md5b": "ffdd9f247c641946d245a059c2fe0ce3",
+    "sizeA": [
+      640,
+      480
+    ],
+    "sizeB": [
+      640,
+      480
+    ],
+    "pixels": 307200,
+    "differingPixels": 0,
+    "bbox": null
+  },
+  {
+    "label": "gallery: main vs control (DEFAULT_OWNER_PALETTE=high-contrast)",
+    "a": "gallery/main/frame.png",
+    "b": "gallery/control-default-high-contrast/frame.png",
+    "md5a": "ffdd9f247c641946d245a059c2fe0ce3",
+    "md5b": "454a3d786a8405f02df7da56acc33f10",
+    "sizeA": [
+      640,
+      480
+    ],
+    "sizeB": [
+      640,
+      480
+    ],
+    "pixels": 307200,
+    "differingPixels": 2312,
+    "bbox": [
+      137,
+      219,
+      502,
+      263
+    ]
+  },
+  {
+    "label": "first-playing ffa: main vs branch (flag absent)",
+    "a": "pixels/supplementary/main-ffa-absent/first-playing.png",
+    "b": "pixels/ffa-classic/first-playing.png",
+    "md5a": "d031c1efa68130575222e2b1b2fab0ba",
+    "md5b": "d031c1efa68130575222e2b1b2fab0ba",
+    "sizeA": [
+      800,
+      500
+    ],
+    "sizeB": [
+      800,
+      500
+    ],
+    "pixels": 400000,
+    "differingPixels": 0,
+    "bbox": null
+  },
+  {
+    "label": "first-playing ffa: branch run 1 vs run 2 (flag absent)",
+    "a": "pixels/ffa-classic/first-playing.png",
+    "b": "pixels/supplementary/branch-ffa-absent-run2/first-playing.png",
+    "md5a": "d031c1efa68130575222e2b1b2fab0ba",
+    "md5b": "d031c1efa68130575222e2b1b2fab0ba",
+    "sizeA": [
+      800,
+      500
+    ],
+    "sizeB": [
+      800,
+      500
+    ],
+    "pixels": 400000,
+    "differingPixels": 0,
+    "bbox": null
+  },
+  {
+    "label": "first-playing teams: main vs branch (flag absent)",
+    "a": "pixels/supplementary/main-teams-absent/first-playing.png",
+    "b": "pixels/teams-classic/first-playing.png",
+    "md5a": "38485d7d8d6fdba299edc9abf980e952",
+    "md5b": "38485d7d8d6fdba299edc9abf980e952",
+    "sizeA": [
+      800,
+      500
+    ],
+    "sizeB": [
+      800,
+      500
+    ],
+    "pixels": 400000,
+    "differingPixels": 0,
+    "bbox": null
+  },
+  {
+    "label": "first-playing teams: branch run 1 vs run 2 (flag absent)",
+    "a": "pixels/teams-classic/first-playing.png",
+    "b": "pixels/supplementary/branch-teams-absent-run2/first-playing.png",
+    "md5a": "38485d7d8d6fdba299edc9abf980e952",
+    "md5b": "38485d7d8d6fdba299edc9abf980e952",
+    "sizeA": [
+      800,
+      500
+    ],
+    "sizeB": [
+      800,
+      500
+    ],
+    "pixels": 400000,
+    "differingPixels": 0,
+    "bbox": null
+  },
+  {
+    "label": "first-playing ffa: classic vs high-contrast (control: the flag changes the frame)",
+    "a": "pixels/ffa-classic/first-playing.png",
+    "b": "pixels/ffa-high-contrast/first-playing.png",
+    "md5a": "d031c1efa68130575222e2b1b2fab0ba",
+    "md5b": "778b0f08fd767d677bb184523f9c2d9b",
+    "sizeA": [
+      800,
+      500
+    ],
+    "sizeB": [
+      800,
+      500
+    ],
+    "pixels": 400000,
+    "differingPixels": 1698,
+    "bbox": [
+      75,
+      19,
+      757,
+      441
+    ]
+  },
+  {
+    "label": "first-playing teams: classic vs high-contrast (control: the flag changes the frame)",
+    "a": "pixels/teams-classic/first-playing.png",
+    "b": "pixels/teams-high-contrast/first-playing.png",
+    "md5a": "38485d7d8d6fdba299edc9abf980e952",
+    "md5b": "7ca0f8df55702dee18713eda0a971526",
+    "sizeA": [
+      800,
+      500
+    ],
+    "sizeB": [
+      800,
+      500
+    ],
+    "pixels": 400000,
+    "differingPixels": 1875,
+    "bbox": [
+      75,
+      19,
+      757,
+      447
+    ]
+  }
+]

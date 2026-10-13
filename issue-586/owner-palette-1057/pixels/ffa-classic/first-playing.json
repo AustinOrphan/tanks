@@ -1,0 +1,377 @@
+{
+  "dist": "/Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/w1057/dist-branch",
+  "mode": "ffa",
+  "palette": "absent",
+  "url": "?dev=1&replay=1&level=4&seed=20260921&mode=ffa&players=4&bots=4&autoplay=1",
+  "inputs": {
+    "level": 4,
+    "seed": 20260921,
+    "driver": "autoplay",
+    "flags": {},
+    "mode": "ffa",
+    "players": 4,
+    "bots": 4
+  },
+  "viewport": {
+    "width": 800,
+    "height": 500,
+    "devicePixelRatio": 1
+  },
+  "launchArgs": [
+    "--use-gl=swiftshader",
+    "--enable-unsafe-swiftshader",
+    "--disable-gpu-sandbox"
+  ],
+  "browser": "151.0.7922.34",
+  "diagnostics": {
+    "url": "/?dev=1&seed=20260921&level=4&autoplay=1&replay=1&players=4&bots=4&mode=ffa",
+    "build": {
+      "commit": null,
+      "known": false
+    },
+    "developerMode": true,
+    "requestedNotInEffect": [],
+    "inEffectUnrequested": [
+      "disarmed"
+    ],
+    "unknownParams": []
+  },
+  "before": {
+    "playing": true,
+    "panelHidden": true,
+    "canvas": true,
+    "countdown": true,
+    "practice": true,
+    "ticks": 35,
+    "meta": {
+      "arenaId": "arena-04",
+      "seed": 20260921,
+      "lives": 3,
+      "unarmedTrigger": "none",
+      "invincible": false,
+      "corpseBlocksShells": false,
+      "muzzleClearsTanks": true,
+      "coopAttempts": true,
+      "mode": "ffa",
+      "friendlyFire": false,
+      "aiTargetPerception": "full",
+      "pp1Roles": false
+    },
+    "countText": "3",
+    "now": 2476.5999999046326
+  },
+  "after": {
+    "playing": true,
+    "panelHidden": true,
+    "canvas": true,
+    "countdown": true,
+    "practice": true,
+    "ticks": 49,
+    "meta": {
+      "arenaId": "arena-04",
+      "seed": 20260921,
+      "lives": 3,
+      "unarmedTrigger": "none",
+      "invincible": false,
+      "corpseBlocksShells": false,
+      "muzzleClearsTanks": true,
+      "coopAttempts": true,
+      "mode": "ffa",
+      "friendlyFire": false,
+      "aiTargetPerception": "full",
+      "pp1Roles": false
+    },
+    "countText": "3",
+    "now": 2706
+  },
+  "chips": {
+    "stripClass": "hud-versus-stocks",
+    "chips": [
+      {
+        "index": 0,
+        "text": "P1 3",
+        "computedColor": "rgb(63, 208, 255)",
+        "inlineColor": "rgb(63, 208, 255)",
+        "glyph": {
+          "computedColor": "rgb(63, 208, 255)",
+          "strokes": [
+            "rgb(63, 208, 255)"
+          ]
+        },
+        "rect": {
+          "x": 74.40625,
+          "y": 15.5,
+          "w": 51.078125,
+          "h": 20
+        }
+      },
+      {
+        "index": 1,
+        "text": "P2 3",
+        "computedColor": "rgb(255, 138, 30)",
+        "inlineColor": "rgb(255, 138, 30)",
+        "glyph": {
+          "computedColor": "rgb(255, 138, 30)",
+          "strokes": [
+            "rgb(255, 138, 30)"
+          ]
+        },
+        "rect": {
+          "x": 135.484375,
+          "y": 15.5,
+          "w": 51.078125,
+          "h": 20
+        }
+      },
+      {
+        "index": 2,
+        "text": "P3 3",
+        "computedColor": "rgb(255, 77, 46)",
+        "inlineColor": "rgb(255, 77, 46)",
+        "glyph": {
+          "computedColor": "rgb(255, 77, 46)",
+          "strokes": [
+            "rgb(255, 77, 46)"
+          ]
+        },
+        "rect": {
+          "x": 196.5625,
+          "y": 15.5,
+          "w": 51.078125,
+          "h": 20
+        }
+      },
+      {
+        "index": 3,
+        "text": "P4 3",
+        "computedColor": "rgb(157, 59, 255)",
+        "inlineColor": "rgb(157, 59, 255)",
+        "glyph": {
+          "computedColor": "rgb(157, 59, 255)",
+          "strokes": [
+            "rgb(157, 59, 255)"
+          ]
+        },
+        "rect": {
+          "x": 257.640625,
+          "y": 15.5,
+          "w": 51.078125,
+          "h": 20
+        }
+      }
+    ]
+  },
+  "layout": {
+    "canvas": {
+      "x": 0,
+      "y": 0,
+      "w": 800,
+      "h": 500,
+      "width": 800,
+      "height": 500,
+      "clientWidth": 800,
+      "clientHeight": 500
+    },
+    "inner": {
+      "w": 800,
+      "h": 500
+    },
+    "dpr": 1,
+    "painted": [
+      {
+        "tag": "div",
+        "cls": "hud-stat hud-practice",
+        "x": 18,
+        "y": 12,
+        "w": 40.40625,
+        "h": 27,
+        "ownText": true,
+        "bg": true,
+        "border": false,
+        "media": false,
+        "textRects": [
+          {
+            "x": 26,
+            "y": 14,
+            "w": 24.40625,
+            "h": 23
+          }
+        ]
+      },
+      {
+        "tag": "span",
+        "cls": "hud-versus-stock-entry",
+        "x": 74.40625,
+        "y": 15.5,
+        "w": 51.078125,
+        "h": 20,
+        "ownText": true,
+        "bg": false,
+        "border": false,
+        "media": false,
+        "textRects": [
+          {
+            "x": 92.46875,
+            "y": 15.5,
+            "w": 33.015625,
+            "h": 20
+          }
+        ]
+      },
+      {
+        "tag": "svg",
+        "cls": "hud-stock-marker",
+        "x": 74.40625,
+        "y": 19.34375,
+        "w": 13.59375,
+        "h": 13.59375,
+        "ownText": false,
+        "bg": false,
+        "border": false,
+        "media": true,
+        "textRects": []
+      },
+      {
+        "tag": "span",
+        "cls": "hud-versus-stock-entry",
+        "x": 135.484375,
+        "y": 15.5,
+        "w": 51.078125,
+        "h": 20,
+        "ownText": true,
+        "bg": false,
+        "border": false,
+        "media": false,
+        "textRects": [
+          {
+            "x": 153.546875,
+            "y": 15.5,
+            "w": 33.015625,
+            "h": 20
+          }
+        ]
+      },
+      {
+        "tag": "svg",
+        "cls": "hud-stock-marker",
+        "x": 135.484375,
+        "y": 19.34375,
+        "w": 13.59375,
+        "h": 13.59375,
+        "ownText": false,
+        "bg": false,
+        "border": false,
+        "media": true,
+        "textRects": []
+      },
+      {
+        "tag": "span",
+        "cls": "hud-versus-stock-entry",
+        "x": 196.5625,
+        "y": 15.5,
+        "w": 51.078125,
+        "h": 20,
+        "ownText": true,
+        "bg": false,
+        "border": false,
+        "media": false,
+        "textRects": [
+          {
+            "x": 214.625,
+            "y": 15.5,
+            "w": 33.015625,
+            "h": 20
+          }
+        ]
+      },
+      {
+        "tag": "svg",
+        "cls": "hud-stock-marker",
+        "x": 196.5625,
+        "y": 19.34375,
+        "w": 13.59375,
+        "h": 13.59375,
+        "ownText": false,
+        "bg": false,
+        "border": false,
+        "media": true,
+        "textRects": []
+      },
+      {
+        "tag": "span",
+        "cls": "hud-versus-stock-entry",
+        "x": 257.640625,
+        "y": 15.5,
+        "w": 51.078125,
+        "h": 20,
+        "ownText": true,
+        "bg": false,
+        "border": false,
+        "media": false,
+        "textRects": [
+          {
+            "x": 275.703125,
+            "y": 15.5,
+            "w": 33.015625,
+            "h": 20
+          }
+        ]
+      },
+      {
+        "tag": "svg",
+        "cls": "hud-stock-marker",
+        "x": 257.640625,
+        "y": 19.34375,
+        "w": 13.59375,
+        "h": 13.59375,
+        "ownText": false,
+        "bg": false,
+        "border": false,
+        "media": true,
+        "textRects": []
+      },
+      {
+        "tag": "div",
+        "cls": "hud-count hud-count--pop",
+        "x": 0,
+        "y": 0,
+        "w": 800,
+        "h": 500,
+        "ownText": true,
+        "bg": false,
+        "border": false,
+        "media": false,
+        "textRects": [
+          {
+            "x": 370,
+            "y": 185.5,
+            "w": 60,
+            "h": 129
+          }
+        ]
+      },
+      {
+        "tag": "button",
+        "cls": "ui-btn ui-btn--sm ui-btn--danger hud-devbadge",
+        "x": 12,
+        "y": 444,
+        "w": 54.328125,
+        "h": 44,
+        "ownText": true,
+        "bg": true,
+        "border": false,
+        "media": false,
+        "textRects": [
+          {
+            "x": 26,
+            "y": 458.5,
+            "w": 26.328125,
+            "h": 15
+          }
+        ]
+      }
+    ]
+  },
+  "pageErrors": [],
+  "note": "before/after bracket the page.screenshot call; countdown true in both means the round was in its pre-round countdown (no fire) for the whole shot"
+}

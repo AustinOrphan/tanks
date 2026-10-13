@@ -1,0 +1,6 @@
+
+> tanks@0.0.0 gallery
+> node tools/gallery/run.mjs --elements identity,coop --out gallery-out/media-1057-branch
+
+pageerrors: none
+wrote 1 frame(s) to /Users/austinorphan/src/tanks/.claude/worktrees/imperative-waddling-willow/gallery-out/media-1057-branch

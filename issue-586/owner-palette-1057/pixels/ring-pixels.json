@@ -1,0 +1,1951 @@
+{
+  "method": {
+    "band": "projected identity-ring triangles (pixel centres), from createWorldFor + identityMarkerGeometry/RingGeometry + fitCameraToArea at the measured canvas size; pixels inside painted HUD boxes excluded",
+    "changedSubset": "band pixels whose RGB differs between the Classic and High contrast arms of the same mode",
+    "toneMapped": "per tank: F = (Classic measured median - 0.85 * T(authored Classic)) / 0.15, T = three r186 ACES (exposure 1.35) + sRGB OETF; references = 0.85 * T(candidate) + 0.15 * F; nearest under CIEDE2000",
+    "measuredOffset": "per tank: offset = median Classic-arm colour of its changed band pixels - its authored Classic colour (per sRGB channel); every candidate colour + that offset (clamped) is a reference; nearest reference under CIEDE2000 (colour-distance.ts distance)",
+    "overFelt": "references = overFelt(candidate) (alpha 0.85 over #2f6d4f), no measurement",
+    "candidates": "FFA: the 4 ring colours of each palette (8). Teams: the 3 team colours of each palette (6)."
+  },
+  "modes": {
+    "ffa": {
+      "tanks": [
+        {
+          "id": 1,
+          "slot": 0,
+          "pos": {
+            "x": 1,
+            "y": 1
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            145.28978211390643,
+            108.2478571267822
+          ]
+        },
+        {
+          "id": 2,
+          "slot": 1,
+          "pos": {
+            "x": 29,
+            "y": 21
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            737.536711771531,
+            436.93681814030174
+          ]
+        },
+        {
+          "id": 3,
+          "slot": 2,
+          "pos": {
+            "x": 22.333333333333332,
+            "y": 11
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            552.0785456909426,
+            249.60855092540717
+          ]
+        },
+        {
+          "id": 4,
+          "slot": 3,
+          "pos": {
+            "x": 8.333333333333332,
+            "y": 13
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            257.7685257695876,
+            282.76189207721586
+          ]
+        }
+      ],
+      "candidates": [
+        {
+          "palette": "classic",
+          "name": "ring0",
+          "colour": "#3fd0ff"
+        },
+        {
+          "palette": "classic",
+          "name": "ring1",
+          "colour": "#ff8a1e"
+        },
+        {
+          "palette": "classic",
+          "name": "ring2",
+          "colour": "#ff4d2e"
+        },
+        {
+          "palette": "classic",
+          "name": "ring3",
+          "colour": "#9d3bff"
+        },
+        {
+          "palette": "high-contrast",
+          "name": "ring0",
+          "colour": "#63d1fd"
+        },
+        {
+          "palette": "high-contrast",
+          "name": "ring1",
+          "colour": "#8ffd00"
+        },
+        {
+          "palette": "high-contrast",
+          "name": "ring2",
+          "colour": "#fdbbc6"
+        },
+        {
+          "palette": "high-contrast",
+          "name": "ring3",
+          "colour": "#fdfdbb"
+        }
+      ],
+      "canvas": {
+        "x": 0,
+        "y": 0,
+        "w": 800,
+        "h": 500,
+        "width": 800,
+        "height": 500,
+        "clientWidth": 800,
+        "clientHeight": 500
+      },
+      "identityMarker": "shape",
+      "changedPixelsTotal": 1698,
+      "changedPixelsUnderHudBoxes": 1174,
+      "changedPixelsOnCanvasOutsideBands": 140,
+      "changedOutsideBandsDistanceToNearestRingCentrePx": {
+        "min": 9.254530744779483,
+        "median": 14.970002272375424,
+        "max": 25.822800959632296
+      },
+      "bandPixelsTotal": 774,
+      "perTank": [
+        {
+          "slot": 0,
+          "screenCentre": [
+            145.3,
+            108.2
+          ],
+          "bandPixels": 124,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 124,
+          "bandPixelsChangedBetweenArms": 86,
+          "classicAuthored": "#3fd0ff",
+          "classicMeasuredMedian": "#88c7cf",
+          "offsetVsAuthored": [
+            73,
+            -9,
+            -48
+          ],
+          "classicMeasuredVsOverFelt": 9.48,
+          "highContrastAuthored": "#63d1fd",
+          "highContrastModelled": "#acc8cd",
+          "highContrastMeasuredMedian": "#96c7ce",
+          "highContrastModelVsMeasured": 5.23,
+          "highContrastOverFeltVsMeasured": 9.44,
+          "toneMapped": {
+            "classicShaderOutput": "#9edeea",
+            "feltSolvedFromClassic": [
+              10.5,
+              70.6,
+              56
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#22453c",
+              "pixels": 246
+            },
+            "feltSolvedVsMeasured": 4.74,
+            "highContrastModelled": "#95c7cf",
+            "highContrastModelVsMeasured": 0.4
+          }
+        },
+        {
+          "slot": 1,
+          "screenCentre": [
+            737.5,
+            436.9
+          ],
+          "bandPixels": 285,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 285,
+          "bandPixelsChangedBetweenArms": 74,
+          "classicAuthored": "#ff8a1e",
+          "classicMeasuredMedian": "#d8ad4a",
+          "offsetVsAuthored": [
+            -39,
+            35,
+            44
+          ],
+          "classicMeasuredVsOverFelt": 15.13,
+          "highContrastAuthored": "#8ffd00",
+          "highContrastModelled": "#68ff2c",
+          "highContrastMeasuredMedian": "#b6da72",
+          "highContrastModelVsMeasured": 13.68,
+          "highContrastOverFeltVsMeasured": 10.28,
+          "toneMapped": {
+            "classicShaderOutput": "#f7b646",
+            "feltSolvedFromClassic": [
+              41.3,
+              122.4,
+              95.7
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#2c5d5c",
+              "pixels": 381
+            },
+            "feltSolvedVsMeasured": 13.96,
+            "highContrastModelled": "#b6da73",
+            "highContrastModelVsMeasured": 0.15
+          }
+        },
+        {
+          "slot": 2,
+          "screenCentre": [
+            552.1,
+            249.6
+          ],
+          "bandPixels": 164,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 164,
+          "bandPixelsChangedBetweenArms": 72,
+          "classicAuthored": "#ff4d2e",
+          "classicMeasuredMedian": "#dd7847",
+          "offsetVsAuthored": [
+            -34,
+            43,
+            25
+          ],
+          "classicMeasuredVsOverFelt": 10,
+          "highContrastAuthored": "#fdbbc6",
+          "highContrastModelled": "#dbe6df",
+          "highContrastMeasuredMedian": "#cdc5c4",
+          "highContrastModelVsMeasured": 12.5,
+          "highContrastOverFeltVsMeasured": 13.78,
+          "toneMapped": {
+            "classicShaderOutput": "#ff7743",
+            "feltSolvedFromClassic": [
+              28.3,
+              124.2,
+              92.9
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#2d5e5d",
+              "pixels": 258
+            },
+            "feltSolvedVsMeasured": 15.34,
+            "highContrastModelled": "#cdc8c6",
+            "highContrastModelVsMeasured": 1.75
+          }
+        },
+        {
+          "slot": 3,
+          "screenCentre": [
+            257.8,
+            282.8
+          ],
+          "bandPixels": 201,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 201,
+          "bandPixelsChangedBetweenArms": 152,
+          "classicAuthored": "#9d3bff",
+          "classicMeasuredMedian": "#b252d4",
+          "offsetVsAuthored": [
+            21,
+            23,
+            -43.5
+          ],
+          "classicMeasuredVsOverFelt": 9.06,
+          "highContrastAuthored": "#fdfdbb",
+          "highContrastModelled": "#ffff90",
+          "highContrastMeasuredMedian": "#ccd5c2",
+          "highContrastModelVsMeasured": 20.78,
+          "highContrastOverFeltVsMeasured": 11.61,
+          "toneMapped": {
+            "classicShaderOutput": "#c94bed",
+            "feltSolvedFromClassic": [
+              45.5,
+              123.6,
+              67.5
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#2c7c5d",
+              "pixels": 294
+            },
+            "feltSolvedVsMeasured": 7.18,
+            "highContrastModelled": "#ced9c2",
+            "highContrastModelVsMeasured": 1.8
+          }
+        }
+      ],
+      "changedOutsideBandsRim": {
+        "changedOutsideBands": 140,
+        "within1px": 140,
+        "within2px": 140
+      }
+    },
+    "teams": {
+      "tanks": [
+        {
+          "id": 1,
+          "slot": 0,
+          "team": 0,
+          "pos": {
+            "x": 1,
+            "y": 1
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            145.28978211390643,
+            108.2478571267822
+          ]
+        },
+        {
+          "id": 2,
+          "slot": 1,
+          "team": 1,
+          "pos": {
+            "x": 29,
+            "y": 21
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            737.536711771531,
+            436.93681814030174
+          ]
+        },
+        {
+          "id": 3,
+          "slot": 2,
+          "team": 0,
+          "pos": {
+            "x": 22.333333333333332,
+            "y": 11
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            552.0785456909426,
+            249.60855092540717
+          ]
+        },
+        {
+          "id": 4,
+          "slot": 3,
+          "team": 1,
+          "pos": {
+            "x": 8.333333333333332,
+            "y": 13
+          },
+          "bodyAngle": 0,
+          "screenCentre": [
+            257.7685257695876,
+            282.76189207721586
+          ]
+        }
+      ],
+      "candidates": [
+        {
+          "palette": "classic",
+          "name": "teamA",
+          "colour": "#ff3b3b"
+        },
+        {
+          "palette": "classic",
+          "name": "teamB",
+          "colour": "#fcc0fc"
+        },
+        {
+          "palette": "classic",
+          "name": "teamC",
+          "colour": "#4eff3b"
+        },
+        {
+          "palette": "high-contrast",
+          "name": "teamA",
+          "colour": "#63d1fd"
+        },
+        {
+          "palette": "high-contrast",
+          "name": "teamB",
+          "colour": "#c6fd00"
+        },
+        {
+          "palette": "high-contrast",
+          "name": "teamC",
+          "colour": "#f2c6bb"
+        }
+      ],
+      "canvas": {
+        "x": 0,
+        "y": 0,
+        "w": 800,
+        "h": 500,
+        "width": 800,
+        "height": 500,
+        "clientWidth": 800,
+        "clientHeight": 500
+      },
+      "identityMarker": null,
+      "changedPixelsTotal": 1875,
+      "changedPixelsUnderHudBoxes": 1228,
+      "changedPixelsOnCanvasOutsideBands": 115,
+      "changedOutsideBandsDistanceToNearestRingCentrePx": {
+        "min": 7.930893715701838,
+        "median": 14.491671831039376,
+        "max": 21.23819078258908
+      },
+      "bandPixelsTotal": 986,
+      "perTank": [
+        {
+          "slot": 0,
+          "team": 0,
+          "screenCentre": [
+            145.3,
+            108.2
+          ],
+          "bandPixels": 152,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 152,
+          "bandPixelsChangedBetweenArms": 97,
+          "classicAuthored": "#ff3b3b",
+          "classicMeasuredMedian": "#db5f51",
+          "offsetVsAuthored": [
+            -36,
+            36,
+            22
+          ],
+          "classicMeasuredVsOverFelt": 5.23,
+          "highContrastAuthored": "#63d1fd",
+          "highContrastModelled": "#3ff5ff",
+          "highContrastMeasuredMedian": "#96c7ce",
+          "highContrastModelVsMeasured": 14.35,
+          "highContrastOverFeltVsMeasured": 9.44,
+          "toneMapped": {
+            "classicShaderOutput": "#ff6350",
+            "feltSolvedFromClassic": [
+              15,
+              72.7,
+              88.7
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#1e4b3e",
+              "pixels": 222
+            },
+            "feltSolvedVsMeasured": 14.76,
+            "highContrastModelled": "#96c7d4",
+            "highContrastModelVsMeasured": 2.56
+          }
+        },
+        {
+          "slot": 1,
+          "team": 1,
+          "screenCentre": [
+            737.5,
+            436.9
+          ],
+          "bandPixels": 352,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 352,
+          "bandPixelsChangedBetweenArms": 164,
+          "classicAuthored": "#fcc0fc",
+          "classicMeasuredMedian": "#cecad4",
+          "offsetVsAuthored": [
+            -46,
+            9.5,
+            -40
+          ],
+          "classicMeasuredVsOverFelt": 15.62,
+          "highContrastAuthored": "#c6fd00",
+          "highContrastModelled": "#98ff00",
+          "highContrastMeasuredMedian": "#c5d976",
+          "highContrastModelVsMeasured": 14.16,
+          "highContrastOverFeltVsMeasured": 9.94,
+          "toneMapped": {
+            "classicShaderOutput": "#ebd8e9",
+            "feltSolvedFromClassic": [
+              40.9,
+              121.3,
+              91.1
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#2c7a5d",
+              "pixels": 302
+            },
+            "feltSolvedVsMeasured": 0.58,
+            "highContrastModelled": "#c4d976",
+            "highContrastModelVsMeasured": 0.23
+          }
+        },
+        {
+          "slot": 2,
+          "team": 0,
+          "screenCentre": [
+            552.1,
+            249.6
+          ],
+          "bandPixels": 232,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 232,
+          "bandPixelsChangedBetweenArms": 109,
+          "classicAuthored": "#ff3b3b",
+          "classicMeasuredMedian": "#dd6752",
+          "offsetVsAuthored": [
+            -34,
+            44,
+            23
+          ],
+          "classicMeasuredVsOverFelt": 7.32,
+          "highContrastAuthored": "#63d1fd",
+          "highContrastModelled": "#41fdff",
+          "highContrastMeasuredMedian": "#99cdd2",
+          "highContrastModelVsMeasured": 14.62,
+          "highContrastOverFeltVsMeasured": 10.33,
+          "toneMapped": {
+            "classicShaderOutput": "#ff6350",
+            "feltSolvedFromClassic": [
+              28.3,
+              126,
+              95.4
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#2d5e5d",
+              "pixels": 249
+            },
+            "feltSolvedVsMeasured": 15.76,
+            "highContrastModelled": "#98cfd5",
+            "highContrastModelVsMeasured": 0.72
+          }
+        },
+        {
+          "slot": 3,
+          "team": 1,
+          "screenCentre": [
+            257.8,
+            282.8
+          ],
+          "bandPixels": 250,
+          "bandPixelsUnderHud": 0,
+          "bandPixelsUsable": 250,
+          "bandPixelsChangedBetweenArms": 162,
+          "classicAuthored": "#fcc0fc",
+          "classicMeasuredMedian": "#cbc4d0",
+          "offsetVsAuthored": [
+            -49,
+            3.5,
+            -44.5
+          ],
+          "classicMeasuredVsOverFelt": 13.97,
+          "highContrastAuthored": "#c6fd00",
+          "highContrastModelled": "#95ff00",
+          "highContrastMeasuredMedian": "#c2d473",
+          "highContrastModelVsMeasured": 15.06,
+          "highContrastOverFeltVsMeasured": 10.45,
+          "toneMapped": {
+            "classicShaderOutput": "#ebd8e9",
+            "feltSolvedFromClassic": [
+              20.9,
+              81.3,
+              61.1
+            ],
+            "feltMeasuredOutsideBand": {
+              "median": "#2c7c5d",
+              "pixels": 255
+            },
+            "feltSolvedVsMeasured": 14.52,
+            "highContrastModelled": "#c1d372",
+            "highContrastModelVsMeasured": 0.24
+          }
+        }
+      ],
+      "changedOutsideBandsRim": {
+        "changedOutsideBands": 115,
+        "within1px": 115,
+        "within2px": 115
+      }
+    }
+  },
+  "arms": {
+    "ffa-classic": {
+      "mode": "ffa",
+      "palette": "classic",
+      "flag": "absent",
+      "screenshot": "pixels/ffa-classic/first-playing.png",
+      "bracket": {
+        "ticksBefore": 35,
+        "ticksAfter": 49,
+        "countdownBefore": true,
+        "countdownAfter": true
+      },
+      "measuredOffset": {
+        "band": {
+          "population": 774,
+          "byPalette": {
+            "classic": 771,
+            "high-contrast": 3
+          },
+          "byCandidate": {
+            "classic:ring0": 114,
+            "high-contrast:ring0": 3,
+            "classic:ring3": 516,
+            "classic:ring1": 66,
+            "classic:ring2": 75
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 121,
+              "high-contrast": 3
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 285,
+              "high-contrast": 0
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 164,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 201,
+              "high-contrast": 0
+            }
+          ],
+          "medianDistanceToNearestClassic": 17.28,
+          "medianDistanceToNearestHighContrast": 41.91
+        },
+        "changed": {
+          "population": 384,
+          "byPalette": {
+            "classic": 384,
+            "high-contrast": 0
+          },
+          "byCandidate": {
+            "classic:ring0": 86,
+            "classic:ring1": 66,
+            "classic:ring2": 75,
+            "classic:ring3": 157
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 86,
+              "high-contrast": 0
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 74,
+              "high-contrast": 0
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 72,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 152,
+              "high-contrast": 0
+            }
+          ],
+          "medianDistanceToNearestClassic": 1.94,
+          "medianDistanceToNearestHighContrast": 36.91
+        }
+      },
+      "toneMapped": {
+        "band": {
+          "population": 774,
+          "byPalette": {
+            "classic": 742,
+            "high-contrast": 32
+          },
+          "byCandidate": {
+            "high-contrast:ring0": 25,
+            "classic:ring3": 525,
+            "classic:ring0": 84,
+            "classic:ring1": 63,
+            "classic:ring2": 70,
+            "high-contrast:ring1": 7
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 99,
+              "high-contrast": 25
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 278,
+              "high-contrast": 7
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 164,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 201,
+              "high-contrast": 0
+            }
+          ],
+          "medianDistanceToNearestClassic": 12.18,
+          "medianDistanceToNearestHighContrast": 36.01
+        },
+        "changed": {
+          "population": 384,
+          "byPalette": {
+            "classic": 375,
+            "high-contrast": 9
+          },
+          "byCandidate": {
+            "classic:ring0": 84,
+            "high-contrast:ring0": 2,
+            "classic:ring1": 63,
+            "classic:ring2": 70,
+            "high-contrast:ring1": 7,
+            "classic:ring3": 158
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 84,
+              "high-contrast": 2
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 67,
+              "high-contrast": 7
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 72,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 152,
+              "high-contrast": 0
+            }
+          ],
+          "medianDistanceToNearestClassic": 1.94,
+          "medianDistanceToNearestHighContrast": 28.14
+        }
+      },
+      "overFelt": {
+        "band": {
+          "population": 774,
+          "byPalette": {
+            "classic": 657,
+            "high-contrast": 117
+          },
+          "byCandidate": {
+            "high-contrast:ring0": 105,
+            "classic:ring3": 524,
+            "classic:ring0": 4,
+            "high-contrast:ring3": 12,
+            "classic:ring1": 72,
+            "classic:ring2": 57
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 19,
+              "high-contrast": 105
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 273,
+              "high-contrast": 12
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 164,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 201,
+              "high-contrast": 0
+            }
+          ],
+          "medianDistanceToNearestClassic": 17.41,
+          "medianDistanceToNearestHighContrast": 30.95
+        },
+        "changed": {
+          "population": 384,
+          "byPalette": {
+            "classic": 290,
+            "high-contrast": 94
+          },
+          "byCandidate": {
+            "high-contrast:ring0": 82,
+            "classic:ring0": 4,
+            "high-contrast:ring3": 12,
+            "classic:ring1": 72,
+            "classic:ring2": 57,
+            "classic:ring3": 157
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 4,
+              "high-contrast": 82
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 62,
+              "high-contrast": 12
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 72,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 152,
+              "high-contrast": 0
+            }
+          ],
+          "medianDistanceToNearestClassic": 10.67,
+          "medianDistanceToNearestHighContrast": 23.85
+        }
+      }
+    },
+    "ffa-high-contrast": {
+      "mode": "ffa",
+      "palette": "high-contrast",
+      "flag": "ownerPalette=high-contrast",
+      "screenshot": "pixels/ffa-high-contrast/first-playing.png",
+      "bracket": {
+        "ticksBefore": 35,
+        "ticksAfter": 49,
+        "countdownBefore": true,
+        "countdownAfter": true
+      },
+      "measuredOffset": {
+        "band": {
+          "population": 774,
+          "byPalette": {
+            "classic": 506,
+            "high-contrast": 268
+          },
+          "byCandidate": {
+            "classic:ring0": 115,
+            "high-contrast:ring0": 143,
+            "classic:ring3": 379,
+            "high-contrast:ring1": 63,
+            "classic:ring1": 3,
+            "classic:ring2": 9,
+            "high-contrast:ring2": 62
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 121,
+              "high-contrast": 3
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 222,
+              "high-contrast": 63
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 103,
+              "high-contrast": 61
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 60,
+              "high-contrast": 141
+            }
+          ],
+          "medianDistanceToNearestClassic": 22.18,
+          "medianDistanceToNearestHighContrast": 30.65
+        },
+        "changed": {
+          "population": 384,
+          "byPalette": {
+            "classic": 119,
+            "high-contrast": 265
+          },
+          "byCandidate": {
+            "classic:ring0": 87,
+            "high-contrast:ring1": 63,
+            "classic:ring1": 3,
+            "classic:ring2": 9,
+            "high-contrast:ring2": 62,
+            "classic:ring3": 20,
+            "high-contrast:ring0": 140
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 86,
+              "high-contrast": 0
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 11,
+              "high-contrast": 63
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 11,
+              "high-contrast": 61
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 11,
+              "high-contrast": 141
+            }
+          ],
+          "medianDistanceToNearestClassic": 19.86,
+          "medianDistanceToNearestHighContrast": 14.64
+        }
+      },
+      "toneMapped": {
+        "band": {
+          "population": 774,
+          "byPalette": {
+            "classic": 427,
+            "high-contrast": 347
+          },
+          "byCandidate": {
+            "high-contrast:ring0": 111,
+            "classic:ring3": 385,
+            "classic:ring0": 32,
+            "high-contrast:ring1": 64,
+            "classic:ring1": 2,
+            "classic:ring2": 8,
+            "high-contrast:ring3": 126,
+            "high-contrast:ring2": 46
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 46,
+              "high-contrast": 78
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 221,
+              "high-contrast": 64
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 100,
+              "high-contrast": 64
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 60,
+              "high-contrast": 141
+            }
+          ],
+          "medianDistanceToNearestClassic": 16.1,
+          "medianDistanceToNearestHighContrast": 27.54
+        },
+        "changed": {
+          "population": 384,
+          "byPalette": {
+            "classic": 60,
+            "high-contrast": 324
+          },
+          "byCandidate": {
+            "high-contrast:ring0": 88,
+            "classic:ring0": 32,
+            "high-contrast:ring1": 64,
+            "classic:ring1": 2,
+            "classic:ring2": 8,
+            "high-contrast:ring3": 126,
+            "classic:ring3": 18,
+            "high-contrast:ring2": 46
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 31,
+              "high-contrast": 55
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 10,
+              "high-contrast": 64
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 8,
+              "high-contrast": 64
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 11,
+              "high-contrast": 141
+            }
+          ],
+          "medianDistanceToNearestClassic": 16.1,
+          "medianDistanceToNearestHighContrast": 2.16
+        }
+      },
+      "overFelt": {
+        "band": {
+          "population": 774,
+          "byPalette": {
+            "classic": 385,
+            "high-contrast": 389
+          },
+          "byCandidate": {
+            "high-contrast:ring0": 124,
+            "classic:ring3": 379,
+            "classic:ring0": 4,
+            "high-contrast:ring1": 12,
+            "high-contrast:ring3": 197,
+            "high-contrast:ring2": 56,
+            "classic:ring2": 2
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 19,
+              "high-contrast": 105
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 213,
+              "high-contrast": 72
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 99,
+              "high-contrast": 65
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 54,
+              "high-contrast": 147
+            }
+          ],
+          "medianDistanceToNearestClassic": 21.26,
+          "medianDistanceToNearestHighContrast": 23.88
+        },
+        "changed": {
+          "population": 384,
+          "byPalette": {
+            "classic": 18,
+            "high-contrast": 366
+          },
+          "byCandidate": {
+            "high-contrast:ring0": 101,
+            "classic:ring0": 4,
+            "high-contrast:ring1": 12,
+            "high-contrast:ring3": 197,
+            "high-contrast:ring2": 56,
+            "classic:ring2": 2,
+            "classic:ring3": 12
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "expected": "ring0",
+              "classic": 4,
+              "high-contrast": 82
+            },
+            {
+              "slot": 1,
+              "expected": "ring1",
+              "classic": 2,
+              "high-contrast": 72
+            },
+            {
+              "slot": 2,
+              "expected": "ring2",
+              "classic": 7,
+              "high-contrast": 65
+            },
+            {
+              "slot": 3,
+              "expected": "ring3",
+              "classic": 5,
+              "high-contrast": 147
+            }
+          ],
+          "medianDistanceToNearestClassic": 26.35,
+          "medianDistanceToNearestHighContrast": 12.48
+        }
+      }
+    },
+    "teams-classic": {
+      "mode": "teams",
+      "palette": "classic",
+      "flag": "absent",
+      "screenshot": "pixels/teams-classic/first-playing.png",
+      "bracket": {
+        "ticksBefore": 34,
+        "ticksAfter": 47,
+        "countdownBefore": true,
+        "countdownAfter": true
+      },
+      "measuredOffset": {
+        "band": {
+          "population": 986,
+          "byPalette": {
+            "classic": 960,
+            "high-contrast": 26
+          },
+          "byCandidate": {
+            "classic:teamB": 415,
+            "classic:teamA": 545,
+            "high-contrast:teamA": 26
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 152,
+              "high-contrast": 0
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 342,
+              "high-contrast": 10
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 232,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 234,
+              "high-contrast": 16
+            }
+          ],
+          "medianDistanceToNearestClassic": 25.84,
+          "medianDistanceToNearestHighContrast": 47.98
+        },
+        "changed": {
+          "population": 532,
+          "byPalette": {
+            "classic": 506,
+            "high-contrast": 26
+          },
+          "byCandidate": {
+            "classic:teamA": 213,
+            "high-contrast:teamA": 26,
+            "classic:teamB": 293
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 97,
+              "high-contrast": 0
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 154,
+              "high-contrast": 10
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 109,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 146,
+              "high-contrast": 16
+            }
+          ],
+          "medianDistanceToNearestClassic": 2.13,
+          "medianDistanceToNearestHighContrast": 30.01
+        }
+      },
+      "toneMapped": {
+        "band": {
+          "population": 986,
+          "byPalette": {
+            "classic": 878,
+            "high-contrast": 108
+          },
+          "byCandidate": {
+            "high-contrast:teamA": 83,
+            "classic:teamA": 639,
+            "classic:teamB": 239,
+            "high-contrast:teamC": 25
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 107,
+              "high-contrast": 45
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 327,
+              "high-contrast": 25
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 232,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 212,
+              "high-contrast": 38
+            }
+          ],
+          "medianDistanceToNearestClassic": 26.71,
+          "medianDistanceToNearestHighContrast": 34.47
+        },
+        "changed": {
+          "population": 532,
+          "byPalette": {
+            "classic": 469,
+            "high-contrast": 63
+          },
+          "byCandidate": {
+            "classic:teamA": 232,
+            "high-contrast:teamA": 38,
+            "classic:teamB": 237,
+            "high-contrast:teamC": 25
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 97,
+              "high-contrast": 0
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 139,
+              "high-contrast": 25
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 109,
+              "high-contrast": 0
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 124,
+              "high-contrast": 38
+            }
+          ],
+          "medianDistanceToNearestClassic": 2.13,
+          "medianDistanceToNearestHighContrast": 13.89
+        }
+      },
+      "overFelt": {
+        "band": {
+          "population": 986,
+          "byPalette": {
+            "classic": 648,
+            "high-contrast": 338
+          },
+          "byCandidate": {
+            "high-contrast:teamA": 108,
+            "classic:teamA": 521,
+            "high-contrast:teamC": 230,
+            "classic:teamB": 127
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 104,
+              "high-contrast": 48
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 222,
+              "high-contrast": 130
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 217,
+              "high-contrast": 15
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 105,
+              "high-contrast": 145
+            }
+          ],
+          "medianDistanceToNearestClassic": 24,
+          "medianDistanceToNearestHighContrast": 28.55
+        },
+        "changed": {
+          "population": 532,
+          "byPalette": {
+            "classic": 239,
+            "high-contrast": 293
+          },
+          "byCandidate": {
+            "classic:teamA": 195,
+            "high-contrast:teamC": 230,
+            "high-contrast:teamA": 63,
+            "classic:teamB": 44
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 94,
+              "high-contrast": 3
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 34,
+              "high-contrast": 130
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 94,
+              "high-contrast": 15
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 17,
+              "high-contrast": 145
+            }
+          ],
+          "medianDistanceToNearestClassic": 15.34,
+          "medianDistanceToNearestHighContrast": 18.83
+        }
+      }
+    },
+    "teams-high-contrast": {
+      "mode": "teams",
+      "palette": "high-contrast",
+      "flag": "ownerPalette=high-contrast",
+      "screenshot": "pixels/teams-high-contrast/first-playing.png",
+      "bracket": {
+        "ticksBefore": 35,
+        "ticksAfter": 48,
+        "countdownBefore": true,
+        "countdownAfter": true
+      },
+      "measuredOffset": {
+        "band": {
+          "population": 986,
+          "byPalette": {
+            "classic": 521,
+            "high-contrast": 465
+          },
+          "byCandidate": {
+            "classic:teamB": 162,
+            "classic:teamA": 359,
+            "high-contrast:teamA": 166,
+            "high-contrast:teamC": 299
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 65,
+              "high-contrast": 87
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 214,
+              "high-contrast": 138
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 144,
+              "high-contrast": 88
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 98,
+              "high-contrast": 152
+            }
+          ],
+          "medianDistanceToNearestClassic": 28.43,
+          "medianDistanceToNearestHighContrast": 33.06
+        },
+        "changed": {
+          "population": 532,
+          "byPalette": {
+            "classic": 67,
+            "high-contrast": 465
+          },
+          "byCandidate": {
+            "classic:teamB": 40,
+            "high-contrast:teamA": 166,
+            "high-contrast:teamC": 299,
+            "classic:teamA": 27
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 10,
+              "high-contrast": 87
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 26,
+              "high-contrast": 138
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 21,
+              "high-contrast": 88
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 10,
+              "high-contrast": 152
+            }
+          ],
+          "medianDistanceToNearestClassic": 18.19,
+          "medianDistanceToNearestHighContrast": 12.87
+        }
+      },
+      "toneMapped": {
+        "band": {
+          "population": 986,
+          "byPalette": {
+            "classic": 515,
+            "high-contrast": 471
+          },
+          "byCandidate": {
+            "high-contrast:teamA": 244,
+            "classic:teamA": 449,
+            "classic:teamC": 63,
+            "high-contrast:teamB": 226,
+            "classic:teamB": 3,
+            "high-contrast:teamC": 1
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 10,
+              "high-contrast": 142
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 239,
+              "high-contrast": 113
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 130,
+              "high-contrast": 102
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 136,
+              "high-contrast": 114
+            }
+          ],
+          "medianDistanceToNearestClassic": 24.63,
+          "medianDistanceToNearestHighContrast": 21.95
+        },
+        "changed": {
+          "population": 532,
+          "byPalette": {
+            "classic": 106,
+            "high-contrast": 426
+          },
+          "byCandidate": {
+            "high-contrast:teamA": 199,
+            "classic:teamC": 63,
+            "high-contrast:teamB": 226,
+            "classic:teamA": 42,
+            "classic:teamB": 1,
+            "high-contrast:teamC": 1
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 0,
+              "high-contrast": 97
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 51,
+              "high-contrast": 113
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 7,
+              "high-contrast": 102
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 48,
+              "high-contrast": 114
+            }
+          ],
+          "medianDistanceToNearestClassic": 12.83,
+          "medianDistanceToNearestHighContrast": 1.94
+        }
+      },
+      "overFelt": {
+        "band": {
+          "population": 986,
+          "byPalette": {
+            "classic": 468,
+            "high-contrast": 518
+          },
+          "byCandidate": {
+            "high-contrast:teamA": 245,
+            "classic:teamA": 350,
+            "classic:teamC": 26,
+            "high-contrast:teamB": 250,
+            "high-contrast:teamC": 23,
+            "classic:teamB": 92
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 10,
+              "high-contrast": 142
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 217,
+              "high-contrast": 135
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 129,
+              "high-contrast": 103
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 112,
+              "high-contrast": 138
+            }
+          ],
+          "medianDistanceToNearestClassic": 27.87,
+          "medianDistanceToNearestHighContrast": 21.45
+        },
+        "changed": {
+          "population": 532,
+          "byPalette": {
+            "classic": 59,
+            "high-contrast": 473
+          },
+          "byCandidate": {
+            "high-contrast:teamA": 200,
+            "classic:teamC": 26,
+            "high-contrast:teamB": 250,
+            "high-contrast:teamC": 23,
+            "classic:teamB": 9,
+            "classic:teamA": 24
+          },
+          "perTank": [
+            {
+              "slot": 0,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 0,
+              "high-contrast": 97
+            },
+            {
+              "slot": 1,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 29,
+              "high-contrast": 135
+            },
+            {
+              "slot": 2,
+              "team": 0,
+              "expected": "teamA",
+              "classic": 6,
+              "high-contrast": 103
+            },
+            {
+              "slot": 3,
+              "team": 1,
+              "expected": "teamB",
+              "classic": 24,
+              "high-contrast": 138
+            }
+          ],
+          "medianDistanceToNearestClassic": 18.53,
+          "medianDistanceToNearestHighContrast": 10.46
+        }
+      }
+    }
+  },
+  "chips": {
+    "ffa-classic": {
+      "chips": 4,
+      "tanks": 4,
+      "allEqual": true,
+      "rows": [
+        {
+          "text": "P1 3",
+          "slot": 0,
+          "team": null,
+          "computedColor": "rgb(63, 208, 255)",
+          "expected": "rgb(63, 208, 255)",
+          "expectedHex": "#3fd0ff",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(63, 208, 255)",
+            "strokes": [
+              "rgb(63, 208, 255)"
+            ],
+            "allEqual": true
+          }
+        },
+        {
+          "text": "P2 3",
+          "slot": 1,
+          "team": null,
+          "computedColor": "rgb(255, 138, 30)",
+          "expected": "rgb(255, 138, 30)",
+          "expectedHex": "#ff8a1e",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(255, 138, 30)",
+            "strokes": [
+              "rgb(255, 138, 30)"
+            ],
+            "allEqual": true
+          }
+        },
+        {
+          "text": "P3 3",
+          "slot": 2,
+          "team": null,
+          "computedColor": "rgb(255, 77, 46)",
+          "expected": "rgb(255, 77, 46)",
+          "expectedHex": "#ff4d2e",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(255, 77, 46)",
+            "strokes": [
+              "rgb(255, 77, 46)"
+            ],
+            "allEqual": true
+          }
+        },
+        {
+          "text": "P4 3",
+          "slot": 3,
+          "team": null,
+          "computedColor": "rgb(157, 59, 255)",
+          "expected": "rgb(157, 59, 255)",
+          "expectedHex": "#9d3bff",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(157, 59, 255)",
+            "strokes": [
+              "rgb(157, 59, 255)"
+            ],
+            "allEqual": true
+          }
+        }
+      ]
+    },
+    "ffa-high-contrast": {
+      "chips": 4,
+      "tanks": 4,
+      "allEqual": true,
+      "rows": [
+        {
+          "text": "P1 3",
+          "slot": 0,
+          "team": null,
+          "computedColor": "rgb(99, 209, 253)",
+          "expected": "rgb(99, 209, 253)",
+          "expectedHex": "#63d1fd",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(99, 209, 253)",
+            "strokes": [
+              "rgb(99, 209, 253)"
+            ],
+            "allEqual": true
+          }
+        },
+        {
+          "text": "P2 3",
+          "slot": 1,
+          "team": null,
+          "computedColor": "rgb(143, 253, 0)",
+          "expected": "rgb(143, 253, 0)",
+          "expectedHex": "#8ffd00",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(143, 253, 0)",
+            "strokes": [
+              "rgb(143, 253, 0)"
+            ],
+            "allEqual": true
+          }
+        },
+        {
+          "text": "P3 3",
+          "slot": 2,
+          "team": null,
+          "computedColor": "rgb(253, 187, 198)",
+          "expected": "rgb(253, 187, 198)",
+          "expectedHex": "#fdbbc6",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(253, 187, 198)",
+            "strokes": [
+              "rgb(253, 187, 198)"
+            ],
+            "allEqual": true
+          }
+        },
+        {
+          "text": "P4 3",
+          "slot": 3,
+          "team": null,
+          "computedColor": "rgb(253, 253, 187)",
+          "expected": "rgb(253, 253, 187)",
+          "expectedHex": "#fdfdbb",
+          "equal": true,
+          "glyph": {
+            "computedColor": "rgb(253, 253, 187)",
+            "strokes": [
+              "rgb(253, 253, 187)"
+            ],
+            "allEqual": true
+          }
+        }
+      ]
+    },
+    "teams-classic": {
+      "chips": 4,
+      "tanks": 4,
+      "allEqual": true,
+      "rows": [
+        {
+          "text": "P1 A 3",
+          "slot": 0,
+          "team": "A",
+          "computedColor": "rgb(255, 59, 59)",
+          "expected": "rgb(255, 59, 59)",
+          "expectedHex": "#ff3b3b",
+          "equal": true,
+          "glyph": null
+        },
+        {
+          "text": "P2 B 3",
+          "slot": 1,
+          "team": "B",
+          "computedColor": "rgb(252, 192, 252)",
+          "expected": "rgb(252, 192, 252)",
+          "expectedHex": "#fcc0fc",
+          "equal": true,
+          "glyph": null
+        },
+        {
+          "text": "P3 A 3",
+          "slot": 2,
+          "team": "A",
+          "computedColor": "rgb(255, 59, 59)",
+          "expected": "rgb(255, 59, 59)",
+          "expectedHex": "#ff3b3b",
+          "equal": true,
+          "glyph": null
+        },
+        {
+          "text": "P4 B 3",
+          "slot": 3,
+          "team": "B",
+          "computedColor": "rgb(252, 192, 252)",
+          "expected": "rgb(252, 192, 252)",
+          "expectedHex": "#fcc0fc",
+          "equal": true,
+          "glyph": null
+        }
+      ]
+    },
+    "teams-high-contrast": {
+      "chips": 4,
+      "tanks": 4,
+      "allEqual": true,
+      "rows": [
+        {
+          "text": "P1 A 3",
+          "slot": 0,
+          "team": "A",
+          "computedColor": "rgb(99, 209, 253)",
+          "expected": "rgb(99, 209, 253)",
+          "expectedHex": "#63d1fd",
+          "equal": true,
+          "glyph": null
+        },
+        {
+          "text": "P2 B 3",
+          "slot": 1,
+          "team": "B",
+          "computedColor": "rgb(198, 253, 0)",
+          "expected": "rgb(198, 253, 0)",
+          "expectedHex": "#c6fd00",
+          "equal": true,
+          "glyph": null
+        },
+        {
+          "text": "P3 A 3",
+          "slot": 2,
+          "team": "A",
+          "computedColor": "rgb(99, 209, 253)",
+          "expected": "rgb(99, 209, 253)",
+          "expectedHex": "#63d1fd",
+          "equal": true,
+          "glyph": null
+        },
+        {
+          "text": "P4 B 3",
+          "slot": 3,
+          "team": "B",
+          "computedColor": "rgb(198, 253, 0)",
+          "expected": "rgb(198, 253, 0)",
+          "expectedHex": "#c6fd00",
+          "equal": true,
+          "glyph": null
+        }
+      ]
+    }
+  }
+}
