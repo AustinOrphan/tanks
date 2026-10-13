@@ -390,10 +390,8 @@ describe('canonicalDevSearch', () => {
   });
 
   it('drops deprecated parameters and names them', () => {
-    // DEPRECATED_DEV_PARAMS ships empty -- no developer parameter has been retired yet, and a
-    // populated list would be invented history -- so the MECHANISM is proven with an injected
-    // list instead. That is the whole reason the option exists.
-    expect(DEPRECATED_DEV_PARAMS, 'the shipped list is empty by design').toEqual([]);
+    // The MECHANISM, proven with an injected list so it does not lean on what the shipped list
+    // holds; the shipped list is the next case.
     const r = canonicalDevSearch('?dev=1&oldFlag=1&aimRay=1', { deprecated: ['oldFlag'] });
     expect(r.search).toBe('?dev=1&aimRay=1');
     expect(r.deprecated).toEqual(['oldFlag']);

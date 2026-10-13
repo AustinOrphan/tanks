@@ -1,0 +1,12 @@
+{
+  "id": "dev-params-forgets-the-retired-stock-cue",
+  "file": "src/game/dev-params.ts",
+  "find": "export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue'];",
+  "replace": "export const DEPRECATED_DEV_PARAMS: readonly string[] = [];",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-params.test.ts",
+    "src/game/dev-config.test.ts"
+  ],
+  "why": "Empties the retired-parameter list again, the state it shipped in until issue #1022 removed `stockCue`, the first developer parameter removed for good since the list was built (#413). Exit Developer Mode on an old #230 comparison URL then leaves `?stockCue=` behind -- a URL still carrying developer state, which `developerExitSearch`'s own doc forbids -- and `canonicalDevSearch` carries it into canonical URLs as an unrelated parameter. Every other case in both files injects its own list, so only the cases that read the shipped default can see it."
+}
