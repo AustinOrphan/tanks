@@ -1522,7 +1522,8 @@ describe('hud: identity-shaped stocks, the `marks` arm (issue #230)', () => {
  * 10 cells, four entries at three stocks each. The negative controls here are production
  * mutations, one per clause (tools/mutate/manifests): `stock-row-ignores-the-resolved-marker`
  * fails the four FFA cells that are not `shape`, `stock-marks-drawn-for-a-teams-entry` fails
- * teams x `shape`, `stock-strip-marker-shows-with-the-flag-absent` fails FFA x absent,
+ * teams x `shape`, `stock-strip-marker-shows-with-the-flag-absent` fails FFA x null and FFA x
+ * absent (`??` maps both to its default),
  * `stock-marks-leading-marker-survives` fails FFA x `shape`, and
  * `stock-strip-marker-drawn-for-a-teams-entry` fails teams x `arcs`/`roof`/`shape`.
  */

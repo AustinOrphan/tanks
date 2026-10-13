@@ -7,7 +7,7 @@
   "tests": [
     "src/game/hud.match.test.ts"
   ],
-  "why": "Re-attaches a running stock-loss cue at its first frame instead of at the time already spent (issue #230). The cue survives the rebuild but REPLAYS: a player whose stock dropped 300 ms ago sees the swell or the badge start over the moment someone else loses one, so two nearby losses read as three. The rebuild cases pin the resumed delay as exactly -300ms.",
+  "why": "Re-attaches a running stock-loss cue at its first frame instead of at the time already spent (issue #230). The cue survives the rebuild but REPLAYS: a player whose stock dropped 300 ms ago sees the emptied mark's or pip's swell start over the moment someone else loses one, so two nearby losses read as three. The rebuild cases pin the resumed delay as exactly -300ms.",
   "killedBy": [
     "hud: stock-loss cue arms (issue #230) marks: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
     "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time"

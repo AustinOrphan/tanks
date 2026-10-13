@@ -7,7 +7,7 @@
   "tests": [
     "src/game/hud.match.test.ts"
   ],
-  "why": "Records stock losses after `prevStatus` has already moved to the push being recorded (issue #230), so every comparison is a status against itself and no loss is ever found. Every arm then draws no cue at all, the same as the shipped strip, while the flag still reads as set.",
+  "why": "Records stock losses after `prevStatus` has already moved to the push being recorded (issue #230), so every comparison is a status against itself and no loss is ever found. Every strip then draws no cue at all, in the `marks` row and in pips alike, and since no starting stock is ever taken either, a lost stock drops out of its row instead of going hollow.",
   "killedBy": [
     "hud: identity-shaped stocks, the `marks` arm (issue #230) keeps the denominator: a lost stock goes hollow rather than disappearing",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) four players at five stocks: ONE full-size mark and the count, and the cue still has a target",

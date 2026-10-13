@@ -411,9 +411,9 @@ export interface DevFlags {
    * #630, #922). A KEPT ROLLBACK LEVER, not an open question: `shape` won on #234 and ships.
    * The ruled arm is `null` -- absent or unrecognised -- in an FFA session, which draws
    * `shape`; in teams, co-op and single-player `null` keeps the solid hue-only ring. `solid`
-   * restores the pre-ruling ring and strip, and `arcs`, `shape` and `roof` select themselves
-   * in any session. See `identity-marker-flag.ts` for the resolution and why `solid` is not
-   * a drawable style.
+   * restores the pre-ruling ring, and the strip draws pips with no mark (issue #1022); `arcs`,
+   * `shape` and `roof` select themselves in any session. See `identity-marker-flag.ts` for the
+   * resolution and why `solid` is not a drawable style.
    */
   identityMarker: IdentityMarkerFlag | null;
   /**
