@@ -3724,10 +3724,10 @@
 
 /* ---- Identity mark in the stock strip (issues #778, #922; `?dev=1&identityMarker=`) */
 
-/* SHIPPED in FFA: each FFA entry carries the mark that slot wears on the ground, the pair
- * #234 ruled on, and `shape` is drawn with the flag absent. Teams entries never get one
- * (they carry the A/B/C letter), and `?dev=1&identityMarker=solid` takes it off, which
- * leaves the strip as it was before the ruling: the element is not rendered at all.
+/* Ahead of an FFA entry's pips under an explicit `arcs` or `roof` marker only (issue #1022).
+ * Under the shipped `shape` the `marks` row below replaces it, the reversal
+ * `?dev=1&identityMarker=solid` draws pips with no mark, and teams entries never get one (they
+ * carry the A/B/C letter). Issue #1023 removes it with the two styles that still draw it.
  *
  * STROKE, NEVER `background`, for the same reason stated below and enforced by
  * hud.css.test.ts for every `hud-stock-` rule: forced colours drops a background outright,
@@ -3739,25 +3739,25 @@
   display: inline-block;
   width: 0.85em;
   height: 0.85em;
-  /* Sits on the digits' optical centre rather than their baseline: the label is
-   * `P1 3`, all cap-height and figures, so a mark aligned to the baseline reads low. */
+  /* Sits on the label's optical centre rather than its baseline: the label is `P1`,
+   * all cap-height and figures, so a mark aligned to the baseline reads low. */
   vertical-align: -0.09em;
   margin-right: 0.28em;
 }
 
-/* ---- Identity-shaped stocks (issue #230's `marks` arm, `?dev=1&stockCue=marks`) --- */
+/* ---- Identity-shaped stocks (issue #230's `marks` row, the FFA strip) ----------- */
 
-/* B. Marks: `pips`, with the dot replaced by this slot's own identity outline (#234's
+/* Marks: `pips`, with the dot replaced by this slot's own identity outline (#234's
  * `shape`). Held stocks are filled, lost ones hollow -- the same read the pip gets from its
  * border width, drawn in the fill so the silhouette does not change size between the two.
  *
- * NO `background` here either, and for the same reason as the arms below: forced colours
+ * NO `background` here either, and for the same reason as the pips below: forced colours
  * drops it, and a filled mark would become identical to a hollow one at exactly the moment
  * the count matters most. The fill is an SVG attribute on `currentColor`, not a CSS
  * background, so forced colours repaints it instead.
  *
- * The leading identity marker is suppressed by hud.ts while this arm runs, so `em` sizing
- * here is measured against an entry that has one fewer glyph than the `pips` arm does.
+ * The row replaces the leading identity marker (hud.ts draws that only beside pips), so `em`
+ * sizing here is measured against an entry with no glyph ahead of its label.
  *
  * `--hud-mark` and `--hud-mark-gap` default to the full size and are overridden per row on a
  * narrow viewport (issue #1021), where four players at four stocks overflowed a 390px phone.
@@ -3791,7 +3791,7 @@
 }
 
 /* Reduced motion keeps the INFORMATION -- this one just emptied -- and drops the movement,
- * the same trade every arm below makes. A hold-then-settle on opacity marks the same mark
+ * the same trade the pips below make. A hold-then-settle on opacity marks the same mark
  * for the same duration with no transform at all. */
 @keyframes hud-stock-mark-empty--still {
   0%, 70% { opacity: 0.4; transform: none; }
@@ -3802,85 +3802,27 @@
   animation-name: hud-stock-mark-empty--still;
 }
 
-/* ---- Stock-loss cue arms (issue #230, `?dev=1&stockCue=`) ------------------------- */
+/* ---- The stock-loss cue and pips (issues #230, #1022) ---------------------------- */
 
-/* A TEMPORARY OPEN-QUESTION ARM SET: one of these three ships unconditionally once chosen, and
- * the other two and this banner are deleted. With no flag none of the classes below is ever
- * rendered, so the shipped strip is untouched by construction.
- *
- * Every cue runs for `--hud-duration-slow`, the life-loss pulse's length, and hud.ts re-attaches
- * a cue still running after the strip is rebuilt with a negative `animation-delay`. Fill mode
- * `both` is what makes that resume land on the right frame instead of replaying from 0%.
+/* Every cue -- the mark above and the pip below -- runs for `--hud-duration-slow`, the life-loss
+ * pulse's length, and hud.ts re-attaches a cue still running after the strip is rebuilt with a
+ * negative `animation-delay`. Fill mode `both` is what makes that resume land on the right frame
+ * instead of replaying from 0%.
  *
  * STATE LIVES IN BORDERS AND TEXT, NEVER `background`. Forced colours drops a background, which
- * in the #230 mockups made a filled pip identical to a hollow one and erased a strike line drawn
- * as a fill. A filled pip here is a border as wide as its radius; a hollow one is a thin border. */
-.hud-versus-stock-entry {
-  /* The positioned ancestor the badge and the struck digit hang from. */
-  position: relative;
-}
+ * in the #230 mockups made a filled pip identical to a hollow one. A filled pip here is a border
+ * as wide as its radius, with an inset shadow over the hole a floored border leaves; a hollow
+ * one is a thin border. */
 
-.hud-stock-count {
-  display: inline-block;
-}
-
-/* D. The "−1" badge: an outlined pill under the entry, drifting down as it fades. */
-.hud-stock-cue--badge {
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  padding: 0 6px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: var(--hud-type-2);
-  line-height: 16px;
-  pointer-events: none;
-  animation: hud-stock-badge var(--hud-duration-slow) ease-out 1 both;
-}
-
-@keyframes hud-stock-badge {
-  0% { opacity: 0; transform: translate(-50%, 0); }
-  15% { opacity: 1; transform: translate(-50%, 2px); }
-  100% { opacity: 0; transform: translate(-50%, 14px); }
-}
-
-/* B. The struck-out digit. The old number, struck through, stands alone in the digit's place, then
- * slides DOWN and fades as the new number drops in behind it.
+/* Pips: one per starting stock, drawn for a teams entry and for an FFA entry under any marker
+ * but `shape` (`stockRowFor` in `presentation/stock-cue.ts`). The pip just lost swells, bursts a
+ * ring, and empties.
  *
- * Down, not up as the #230 mockup drew it: the stock strip is the top row of the screen, so a number
- * lifting away left the viewport part-way through its fade (measured in Chromium at 1280x800 and
- * 390x844 -- clipped at 300 ms in both). And the new number waits out the first third, because
- * drawing both at full opacity in one place garbled the two digits into one glyph. */
-.hud-stock-cue--struck {
-  position: absolute;
-  right: 0;
-  top: 0;
-  text-decoration: line-through;
-  text-decoration-thickness: 2px;
-  pointer-events: none;
-  animation: hud-stock-struck var(--hud-duration-slow) ease-in 1 both;
-}
-
-@keyframes hud-stock-struck {
-  0%, 35% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(14px); }
-}
-
-.hud-stock-count.hud-stock-cue {
-  animation: hud-stock-count-in var(--hud-duration-slow) ease-out 1 both;
-}
-
-@keyframes hud-stock-count-in {
-  0%, 35% { opacity: 0; transform: translateY(-6px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-/* A. Pips: one per starting stock. The pip just lost swells, bursts a ring, and empties. */
-/* `--hud-pip` and `--hud-pip-gap` default to the shipped size and are overridden per strip on
- * a narrow viewport (issue #835), where four players at three stocks overflowed a 390px phone
- * and clipped the last pip silently. The sizes come from the measured table in
- * `presentation/stock-cue.ts`; below 8px the arm falls back to the digit instead, in the
- * builder, because CSS cannot swap the content. */
+ * `--hud-pip` and `--hud-pip-gap` default to the full size and are overridden per strip on a
+ * narrow viewport (issue #835), where four players at three stocks overflowed a 390px phone and
+ * clipped the last pip silently. The sizes come from the measured table in
+ * `presentation/stock-cue.ts`; below 8px the builder draws one pip and the count instead,
+ * because CSS cannot swap the content. */
 .hud-stock-pips {
   display: inline-flex;
   align-items: center;
@@ -3893,14 +3835,24 @@
   box-sizing: border-box;
   width: var(--hud-pip, 10px);
   height: var(--hud-pip, 10px);
-  /* A FILLED pip is a border as wide as its own radius, so it scales with the pip rather than
-   * leaving a hole when the pip shrinks. */
+  /* A FILLED pip is a border as wide as its own radius, so it scales with the pip. Alone that
+   * leaves a hole at an odd size; the rule below fills it. */
   border: calc(var(--hud-pip, 10px) / 2) solid currentColor;
   border-radius: 50%;
 }
 
 .hud-stock-pip--lost {
   border-width: 2px;
+}
+
+/* Chromium floors a border width to whole pixels (measured at DPR 1, 2 and 3), so the 9px rung's
+ * 4.5px border draws 4px and leaves a 1px hole in the middle: a held pip read as a thick ring,
+ * not a dot (issue #1022, which made that rung the teams strip on a phone). The inset shadow
+ * fills what the floor leaves, without changing the box, and without `background`, which forced
+ * colours would drop. Forced colours drops the shadow too, leaving a 1px pinhole that still
+ * reads apart from the lost pip's 2px ring. At 10px the border already meets in the middle. */
+.hud-stock-pip:not(.hud-stock-pip--lost) {
+  box-shadow: inset 0 0 0 1px currentColor;
 }
 
 /* The count beside a single pip or mark, where a full row will not fit (issues #835, #1021).
@@ -3948,9 +3900,21 @@
   animation-delay: inherit;
 }
 
+/* The pip starts as a held one, at its own size's border and fill, and empties to the lost
+ * pip's 2px border. A literal 5px start was wider than a 9px pip's radius, so the cued pip's box
+ * grew to 10px and pushed the rest of the strip 1px right for the length of the cue (measured in
+ * Chromium); a literal start also skips the fill a 9px pip needs (see `.hud-stock-pip`). */
 @keyframes hud-stock-pip-empty {
-  0% { border-width: 5px; transform: scale(1); }
-  30% { border-width: 5px; transform: scale(1.6); }
+  0% {
+    border-width: calc(var(--hud-pip, 10px) / 2);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transform: scale(1);
+  }
+  30% {
+    border-width: calc(var(--hud-pip, 10px) / 2);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transform: scale(1.6);
+  }
   100% { border-width: 2px; transform: scale(1); }
 }
 
@@ -4240,43 +4204,18 @@
 }
 
 /*
- * Issue #230's stock-loss cue arms: the information stays and the movement goes. The badge holds
- * in place and fades; the struck number sits above the new one and fades; the pip still empties
+ * Issue #230's stock-loss cue: the information stays and the movement goes. The pip still empties
  * and its ring still shows, but neither swells. The one-pip fallback's pip, cued while the player
- * still holds stock, dims and settles instead of emptying. None of them depends on a hue, so
- * unlike the life-loss pulse above, reduced motion plus forced colours still leaves a cue.
+ * still holds stock, dims and settles instead of emptying. (The mark's form sits beside its own
+ * rule above.) Neither depends on a hue, so unlike the life-loss pulse above, reduced motion plus
+ * forced colours still leaves a cue.
  */
-@keyframes hud-stock-badge--still {
-  0%, 70% { opacity: 1; transform: translate(-50%, 2px); }
-  100% { opacity: 0; transform: translate(-50%, 2px); }
-}
-
-.hud--reduced-motion .hud-stock-cue--badge {
-  animation-name: hud-stock-badge--still;
-}
-
-/* The struck number and the new one cross-fade in place: the old holds for the first half, then
- * the two swap with nothing moving. */
-@keyframes hud-stock-struck--still {
-  0%, 50% { opacity: 1; transform: none; }
-  100% { opacity: 0; transform: none; }
-}
-
-.hud--reduced-motion .hud-stock-cue--struck {
-  animation-name: hud-stock-struck--still;
-}
-
-@keyframes hud-stock-count-in--still {
-  0%, 50% { opacity: 0; transform: none; }
-  100% { opacity: 1; transform: none; }
-}
-
-.hud--reduced-motion .hud-stock-count.hud-stock-cue {
-  animation-name: hud-stock-count-in--still;
-}
-
 @keyframes hud-stock-pip-empty--still {
-  0%, 50% { border-width: 5px; transform: none; }
+  0%, 50% {
+    border-width: calc(var(--hud-pip, 10px) / 2);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transform: none;
+  }
   100% { border-width: 2px; transform: none; }
 }
 

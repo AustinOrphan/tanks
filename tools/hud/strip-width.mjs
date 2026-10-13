@@ -1,7 +1,8 @@
 /**
  * Measure the versus stock strip at a 390px viewport, for every player count and stock setting
- * the game allows, and say whether each fits -- for the `pips` arm (issue #835), the `marks` arm
- * (issue #1021), and a teams entry, which draws its A/B/C letter before its pips (issue #1055).
+ * the game allows, and say whether each fits: the shipped FFA strip, the `marks` row (issue
+ * #1021); a teams entry, which draws its A/B/C letter before its pips (issue #1055); and the FFA
+ * strip under the reversed marker, which draws pips with no mark (issue #1022).
  *
  * WHY A TOOL AND NOT A UNIT TEST. The unit suite runs in jsdom, which reads declared values but
  * lays nothing out, so it can pin the sizing TABLE and cannot prove a width. This drives real
@@ -13,19 +14,22 @@
  * calibrated once against #835's page measurement. Every part of that drifted without a sound:
  * #987 moved the spacing tokens onto `.hud`, so the bare strip lost the 10px between entries; the
  * bundled face never loaded on that page, which fell back to the browser's serif; and the
- * hand-built FFA entry had no identity mark, which the page has drawn ahead of each FFA entry,
- * under every arm but `marks`, since #922. At four players and three stocks the bare strip read
- * 207.6px where the page's strip is 247.7px wide without the mark (both in a 390px viewport).
+ * hand-built FFA entry had no identity mark, which the page drew ahead of each FFA entry, under
+ * every stock-cue arm but `marks`, from #922 until #1022 shipped the `marks` row. At four players
+ * and three stocks the bare strip read 207.6px where the page's strip is 247.7px wide without
+ * the mark (both in a 390px viewport).
  * So `strip-width-page.ts` now mounts `createHud` itself, in a page Vite serves with the
  * stylesheet and face the game ships, pushes a versus status, and measures the strip where the
  * page draws it: after the topbar's session chip, inside the topbar's padding. Nothing here
  * mirrors a layout rule; the HUD applies `narrowPipLayout` and `narrowMarkLayout` itself, under
  * the real `NARROW_STRIP_QUERY`. Checked against the game page itself, booted at 390x844 as a
- * four-player teams session under `?dev=1&stockCue=pips`: its strip's right edge read 355.16px,
- * and this tool reads 355.2px.
+ * four-player teams session under `?dev=1&stockCue=pips` (the flag #1022 removed; a teams
+ * session has drawn those pips with no flag since): its strip's right edge read 355.16px, and
+ * this tool reads 355.2px.
  *
  * Every row also checks that the shipped face really loaded (a run with the font files blocked
- * flags all 40 rows), and every teams row that `marks` and `pips` drew the same markup.
+ * flagged every row), and every teams row that the reversed marker drew the same markup as the
+ * shipped one: a teams entry's strip does not depend on the marker.
  *
  * FITS means the strip's right edge is inside the topbar's content box -- 380px at 390px, where
  * the topbar's narrow padding is 10px -- so the strip keeps the margin the bar gives every other
@@ -78,21 +82,24 @@ const ffa = (players, total) => Array.from({ length: players }, (_, slot) => ({ 
 const teams = (players, total) =>
   Array.from({ length: players }, (_, slot) => ({ slot, stock: total, team: slot % 2 }));
 
+/**
+ * `flag` is the `identityMarker` flag value the page would be loaded with, `null` for absent.
+ * Each report is the strip a player sees: no flag is the shipped strip.
+ */
 const REPORTS = [
   {
-    name: 'pips', note: 'FFA, with the identity mark the page draws ahead of each entry',
-    cue: 'pips', players: [2, 3, 4], stocks: ffa,
+    name: 'marks', note: 'the shipped FFA strip: one outline per stock, no leading mark',
+    flag: null, players: [2, 3, 4], stocks: ffa,
   },
   {
-    name: 'marks', note: 'FFA; the arm suppresses the leading mark',
-    cue: 'marks', players: [2, 3, 4], stocks: ffa,
+    // Teams is offered at three and four players only. Required to draw exactly what the
+    // reversed marker draws, since a teams entry's strip does not depend on the marker.
+    name: 'teams', note: '`P1 A ` and its pips, the shipped teams strip',
+    flag: null, same: 'solid', players: [3, 4], stocks: teams,
   },
   {
-    // Teams is offered at three and four players only. Measured under `marks`, which hands a
-    // teams entry to `pips` (issue #1022 ships it), and required to draw exactly what `pips`
-    // draws.
-    name: 'teams', note: '`P1 A ` and its pips, under `marks` and `pips` alike',
-    cue: 'marks', same: 'pips', players: [3, 4], stocks: teams,
+    name: 'reversal', note: 'FFA under ?dev=1&identityMarker=solid: pips, no mark',
+    flag: 'solid', players: [2, 3, 4], stocks: ffa,
   },
 ];
 
@@ -126,11 +133,11 @@ try {
     await page.waitForFunction(() => window.stripReady === true, undefined, { timeout: 60000 });
     return page;
   }
-  const read = (page, cue, stocks) =>
-    page.evaluate(([c, s]) => window.measureStrip(c, s), [cue, stocks]);
+  const read = (page, flag, stocks) =>
+    page.evaluate(([f, s]) => window.measureStrip(f, s), [flag, stocks]);
 
   let ok = true;
-  const control = await read(await open(320), 'marks', teams(4, 3));
+  const control = await read(await open(320), null, teams(4, 3));
   const controlFits = control.right <= control.edge;
   console.log(
     'control: four-player three-stock teams strip at 320px, '
@@ -146,7 +153,7 @@ try {
     let total = 0;
     for (const players of report.players) {
       for (let stocks = 1; stocks <= 5; stocks++) {
-        const r = await read(page, report.cue, report.stocks(players, stocks));
+        const r = await read(page, report.flag, report.stocks(players, stocks));
         total += 1;
         const fits = r.right <= r.edge;
         if (fits) fit += 1;

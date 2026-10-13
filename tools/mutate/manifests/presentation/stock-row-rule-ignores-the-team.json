@@ -1,0 +1,23 @@
+{
+  "id": "stock-row-rule-ignores-the-team",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "  return team === undefined && marker === 'shape' ? 'marks' : 'pips';",
+  "replace": "  return marker === 'shape' ? 'marks' : 'pips';",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/stock-cue.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The strip's rule stops reading the team, so a teams entry under `shape` draws the slot's outline (issue #1022). Two teammates in one colour would be drawn with two outlines, claiming to be different sides, while the A/B/C letter already answers that question.",
+  "killedBy": [
+    "hud: identity mark in the stock strip (issue #778) leaves TEAMS untouched -- the letter is already that entry second channel",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for a teams entry, and for the reversed marker (issue #1022)",
+    "hud: stock-loss cue arms (issue #230) THE CONTROL for the teams cases: the desktop strip draws every teams pip at full size",
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
+    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) four players at three stocks keep the letter and take the 9px row",
+    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn, the leading marks counted",
+    "stock cue: the strip's one row rule (issue #1022) THE NEGATIVE CONTROLS, one per cell: a rule wrong in that cell alone is caught there",
+    "stock cue: the strip's one row rule (issue #1022) draws the row the table names in every one of the 8 cells",
+    "stock cue: the strip's one row rule (issue #1022) every team takes the teams branch, not only the one the table uses"
+  ]
+}

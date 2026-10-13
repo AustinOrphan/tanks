@@ -1,10 +1,70 @@
 import { describe, it, expect } from 'vitest';
 import {
-  narrowMarkLayout, narrowPipLayout, NARROW_STRIP_QUERY, STOCK_CUES, type MarkLayout, type PipLayout,
+  narrowMarkLayout, narrowPipLayout, NARROW_STRIP_QUERY, stockRowFor, type MarkLayout, type PipLayout,
+  type StockRow,
 } from './stock-cue';
+import type { IdentityMarkerStyle } from './identity-marker';
 
 /**
- * Issue #835: the `pips` arm overflowed a 390px viewport and clipped its last entry silently,
+ * Issue #1022: which row draws a stock entry is ONE rule -- `marks` for an entry with no team
+ * whose resolved marker is `shape`, `pips` for every other combination -- and this is the table.
+ *
+ * Population: entry (FFA, teams) x resolved marker (`shape`, `null`, `arcs`, `roof`) = 8 cells.
+ * `null` is both the reversal value `solid` and a HUD built without the option; the absent flag
+ * resolves to `shape` before this rule sees it, so "absent" is a cell only at the HUD seam
+ * (`hud.match.test.ts`, which mounts it).
+ */
+describe('stock cue: the strip\'s one row rule (issue #1022)', () => {
+  /** A teams entry's team; any team takes the same branch, so one stands for all three. */
+  const TEAM = 1;
+  const EXPECTED: Record<string, StockRow> = {
+    'ffa x shape': 'marks',
+    'ffa x null': 'pips',
+    'ffa x arcs': 'pips',
+    'ffa x roof': 'pips',
+    'teams x shape': 'pips',
+    'teams x null': 'pips',
+    'teams x arcs': 'pips',
+    'teams x roof': 'pips',
+  };
+  type Rule = (team: number | undefined, marker: IdentityMarkerStyle | null) => StockRow;
+  const args = (cell: string): [number | undefined, IdentityMarkerStyle | null] => {
+    const [kind, marker] = cell.split(' x ');
+    return [kind === 'teams' ? TEAM : undefined, marker === 'null' ? null : (marker as IdentityMarkerStyle)];
+  };
+  /** The cells where `rule` disagrees with the table. */
+  const mismatches = (rule: Rule): string[] =>
+    Object.entries(EXPECTED).filter(([cell, want]) => rule(...args(cell)) !== want).map(([cell]) => cell);
+
+  it('draws the row the table names in every one of the 8 cells', () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(8);
+    expect(mismatches(stockRowFor)).toEqual([]);
+  });
+
+  it('THE NEGATIVE CONTROLS, one per cell: a rule wrong in that cell alone is caught there', () => {
+    // Without these the table check could be comparing nothing -- a `mismatches` that never
+    // reported a cell would pass the case above for any rule at all.
+    const other = (row: StockRow): StockRow => (row === 'marks' ? 'pips' : 'marks');
+    for (const cell of Object.keys(EXPECTED)) {
+      const [t, m] = args(cell);
+      const wrongHere: Rule = (team, marker) =>
+        team === t && marker === m ? other(stockRowFor(team, marker)) : stockRowFor(team, marker);
+      expect(mismatches(wrongHere), cell).toEqual([cell]);
+    }
+  });
+
+  it('every team takes the teams branch, not only the one the table uses', () => {
+    // Teams has three sides (A, B, C); a rule that tested `team === 1` would pass the table.
+    for (const team of [0, 1, 2]) {
+      expect(stockRowFor(team, 'shape'), `team ${team}`).toBe('pips');
+    }
+    // NEGATIVE CONTROL: the same marker with no team is the shipped row.
+    expect(stockRowFor(undefined, 'shape')).toBe('marks');
+  });
+});
+
+/**
+ * Issue #835: the `pips` row overflowed a 390px viewport and clipped its last entry silently,
  * because the strip is a nowrap flex row with no wrapping or scrolling.
  *
  * Every number here came from real Chromium layout at 390px against the real stylesheet
@@ -65,15 +125,10 @@ describe('stock cue: pip sizing on a narrow viewport (issue #835)', () => {
     expect(NARROW_STRIP_QUERY).toBe('(max-width: 480px)');
   });
 
-  it('leaves the other arms alone -- this is a pips fix, not a strip redesign', () => {
-    // #230's ruling is between the arms, so a change that quietly reshaped a sibling would
-    // corrupt the comparison it exists to serve.
-    expect([...STOCK_CUES]).toEqual(['pips', 'marks', 'strike', 'badge']);
-  });
 });
 
 /**
- * Issue #1021: the `marks` arm had no narrow-viewport handling at all, so four players at four
+ * Issue #1021: the `marks` row had no narrow-viewport handling at all, so four players at four
  * or five stocks drew a strip wider than a 390px phone and clipped the last entry silently.
  *
  * The table is measured, by `tools/hud/strip-width.mjs` at 390px against the real stylesheet;
@@ -146,9 +201,9 @@ describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
 });
 
 /**
- * Issue #1055: a teams entry draws `P1 A ` before its pips -- under `pips`, and under `marks`,
- * which hands a teams entry to pips -- so it is wider than the FFA entry the pips table was
- * chosen from, by a space and a letter.
+ * Issue #1055: a teams entry draws `P1 A ` before its pips -- every teams entry draws pips
+ * (`stockRowFor`) -- so it is wider than the FFA entry the pips table was chosen from, by a space
+ * and a letter.
  *
  * Measured on the real HUD at 390px by `tools/hud/strip-width.mjs`, the letter fits at every rung
  * `narrowPipLayout` already takes, so a teams entry is laid out by that same rule, and these cases

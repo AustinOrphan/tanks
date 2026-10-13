@@ -1,0 +1,30 @@
+{
+  "id": "stock-row-ignores-the-resolved-marker",
+  "file": "src/game/hud.ts",
+  "find": "const row = stockRowFor(entry.team, identityMarker);",
+  "replace": "const row = stockRowFor(entry.team, 'shape');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The HUD stops handing the strip's rule its resolved marker, so every FFA entry draws the `marks` row whatever the marker says (issue #1022). The reversal `?dev=1&identityMarker=solid`, `arcs`, `roof` and every injected HUD would then draw the slot's outline in the strip with no `shape` outline on the ground to pair with, which is the one thing the ruling on #230 reserved `marks` against.",
+  "killedBy": [
+    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)",
+    "hud: identity mark in the stock strip (issue #778) adds no second name for the player, and nothing focusable",
+    "hud: identity mark in the stock strip (issue #778) counts the arcs and the blades the table counts, for the two counting styles",
+    "hud: identity mark in the stock strip (issue #778) draws nothing at all without the flag, and leaves the strip byte-identical",
+    "hud: identity mark in the stock strip (issue #778) draws the leading mark under arcs and roof, and none under shape, whose row replaces it (issue #1022)",
+    "hud: identity mark in the stock strip (issue #778) paints on currentColor, so forced colours repaints it instead of dropping it",
+    "hud: identity mark in the stock strip (issue #778) puts the mark AHEAD of the label, and keeps one per entry across a rebuild",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for a teams entry, and for the reversed marker (issue #1022)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) still shows the leading marker beside the pips `arcs` and `roof` draw",
+    "hud: stock chips in the session's owner palette (issue #1057) the identity-mark glyph takes its hue from the chip, so it follows the palette too (#778)",
+    "hud: stock-loss cue arms (issue #230) a rematch that resets stocks upward is not a loss, and starts a new pip count",
+    "hud: stock-loss cue arms (issue #230) pips: a cue is gone once STOCK_CUE_MS has passed",
+    "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
+    "hud: stock-loss cue arms (issue #230) pips: a narrow viewport shrinks the pip, and hands back the digit when none fits (#835)",
+    "hud: stock-loss cue arms (issue #230) pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue",
+    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn, the leading marks counted"
+  ]
+}

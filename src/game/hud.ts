@@ -292,7 +292,8 @@ import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
 import {
-  STOCK_CUE_MS, type StockCue, narrowPipLayout, narrowMarkLayout, NARROW_STRIP_QUERY, type PipLayout, type MarkLayout,
+  STOCK_CUE_MS, stockRowFor, type StockRow, narrowPipLayout, narrowMarkLayout, NARROW_STRIP_QUERY, type PipLayout,
+  type MarkLayout,
 } from '../presentation/stock-cue';
 import {
   type IdentityMarkerStyle,
@@ -1511,13 +1512,13 @@ interface MarkerRadii {
 }
 
 /**
- * The same four outlines sized for FILL rather than for stroke (issue #230's `marks` arm).
+ * The same four outlines sized for FILL rather than for stroke (issue #230's `marks` row).
  *
  * A separate table, and not a tidy-up waiting to happen. The set above is tuned so the
  * outlines' CORNERS sit level, which is the right axis when the shape is a thin line: what
  * the eye measures on a hollow mark is how far it reaches. Filled, the eye measures ink as
  * well, and corner-level shapes are not area-level -- a square whose corners match a
- * circle's radius encloses a third less ink, which is how the first build of this arm
+ * circle's radius encloses a third less ink, which is how the first build of this row
  * rendered: P3's squares read visibly smaller than P1's circles at the same nominal size.
  *
  * NEITHER AXIS ALONE WORKS, which is the same finding #660 recorded for the outlines --
@@ -1551,9 +1552,11 @@ const markerXY = (angle: number, r: number): string =>
 /**
  * The `shape` outline for one slot as SVG body, with the caller's presentation attributes.
  *
- * Extracted so the leading identity marker (issue #778) and the `marks` stock arm (issue #230)
+ * Extracted so the leading identity marker (issue #778) and the `marks` stock row (issue #230)
  * draw the SAME outline from the same code rather than from the same table twice. They
  * differ only in their attributes: the marker is always stroked hollow, a held stock mark is filled.
+ * Since issue #1022 the row replaces the leading marker wherever the marker is `shape`, so in
+ * play only the row reaches this.
  */
 function shapeOutlineBody(
   slot: number, attrs: string, radii: MarkerRadii = MARKER_GLYPH_R,
@@ -1578,10 +1581,10 @@ function shapeOutlineBody(
 }
 
 /**
- * One stock, drawn as the slot's identity outline (issue #230's `marks` arm).
+ * One stock, drawn as the slot's identity outline (issue #230's `marks` row).
  *
  * HELD IS FILLED, LOST IS HOLLOW -- the same read `pips` gets from its border width, and the
- * reason this arm suppresses the separate leading marker: an outlined mark beside an outlined
+ * reason the row replaces the separate leading marker: an outlined mark beside an outlined
  * lost stock is two hollow copies of one shape, and slot 1's circle made them identical.
  *
  * Fill AND stroke, not fill alone, so a held mark keeps the same silhouette as a lost one at
@@ -1627,6 +1630,8 @@ function identityMarkerIcon(style: IdentityMarkerStyle, slot: number): string {
         + `${MARKER_GLYPH_STROKE}/>`;
     }).join('');
   } else {
+    // Unreached in play since issue #1022: an FFA entry under `shape` draws the `marks` row,
+    // which replaces this glyph (`stockRowFor`). Issue #1023 removes the leading mark entirely.
     body = shapeOutlineBody(slot, MARKER_GLYPH_STROKE);
   }
   // No accessible name and not focusable: the entry's own text already says which player
@@ -1713,22 +1718,18 @@ export interface HudOptions {
    */
   readonly versusActions?: VersusActionLayout | null;
   /**
-   * Issue #230's stock-loss cue arms: how the versus stock strip marks a stock just lost. `null`
-   * (and absent, which is every injected HUD) is the shipped strip, where only the digit changes.
-   * See presentation/stock-cue.ts.
-   */
-  readonly stockCue?: StockCue | null;
-  /**
-   * Issue #778's identity marker in the stock strip: the same mark that slot wears in the
-   * arena, which #234 ruled on as a pair. `null` (and absent, which is every injected HUD)
-   * draws no mark, the strip with identity in hue alone. The page's HUD is handed the
-   * shipped `shape` here unless the flag says otherwise (issue #922): `loop.ts` resolves the
-   * flag before this option sees it, so the default lives in `identity-marker-flag.ts`, not
-   * in this file.
+   * The identity marker the stock strip pairs with the arena's (issues #778, #922, #1022): the
+   * RESOLVED style, which picks each entry's row through `stockRowFor`. `shape` draws an FFA
+   * entry as the `marks` row, one copy of the slot's own outline per stock; `null` (and absent,
+   * which is every injected HUD) draws pips, with identity in hue alone; `arcs` and `roof` draw
+   * pips with that style's glyph ahead of the label. The page's HUD is handed the shipped
+   * `shape` here unless the flag says otherwise: `loop.ts` resolves the flag before this option
+   * sees it, so the default lives in `identity-marker-flag.ts`, not in this file.
    *
-   * FFA ONLY, which is the owner's direction on #234. A teams entry already carries a second
-   * non-colour channel -- the A/B/C letter beside the player number -- so a mark there would
-   * be a third name for a side the reader has already been told twice.
+   * FFA ONLY, which is the owner's direction on #234: a teams entry draws pips and no mark
+   * whatever this says. It already carries a second non-colour channel -- the A/B/C letter
+   * beside the player number -- so a mark there would be a third name for a side the reader has
+   * already been told twice.
    */
   readonly identityMarker?: IdentityMarkerStyle | null;
   /**
@@ -3430,13 +3431,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // screenshot all lose the hue and keep the letter. Same A/B/C the setup pane's team
       // selector shows, so the readout and the control that set it agree.
       const teamMark = entry.team !== undefined ? ` ${TEAM_LABELS[entry.team] ?? '?'}` : '';
-      if (stockCue === null) {
-        span.textContent = `P${entry.slot + 1}${teamMark} ${entry.stock}`;
-      } else {
-        const started = stockCueStarts.get(entry.slot);
-        const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
-        fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, running, now, stocks.length);
-      }
+      // The strip's one rule (issue #1022): the `marks` row for an FFA entry under `shape`, pips
+      // for every other entry. See `stockRowFor`.
+      const row = stockRowFor(entry.team, identityMarker);
+      const started = stockCueStarts.get(entry.slot);
+      const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
+      fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, row, running, now, stocks.length);
       // teams: teamColor(team); ffa (no `team` on the entry): identityColor(slot) -- the
       // SAME two lookups `resolveOwnerColor` dispatches between for the ring, read in
       // `chipPalette` above, so the chip and the ring agree under either palette (see
@@ -3447,18 +3447,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // descriptor landing and TEAM_COLORS gaining its third entry: a 2v1v1 rendered team
       // 2's stock white, which is also the unstyled-slot placeholder.
       // Issue #778: the mark this slot wears in the arena, ahead of its label, so the
-      // strip and the ground ring read as one channel (#234's pair). AFTER the two branches
-      // above, because `textContent =` would drop a child written before it.
+      // strip and the ground ring read as one channel (#234's pair).
+      //
+      // BESIDE PIPS ONLY (issue #1022). The `marks` row already draws this slot's outline once
+      // per stock and replaces it: a leading copy would state the identity twice and, worse,
+      // sit beside a hollow LOST mark of the same shape -- which for slot 1 is the same
+      // circle drawn the same way, and reads as a second identity mark rather than as a
+      // spent stock (measured on a real frame, issue #230). So it is left beside the pips an
+      // explicit `arcs` or `roof` marker draws, until issue #1023 removes those styles.
       //
       // FFA ONLY, by `entry.team === undefined` -- the same test the label and the colour
       // below already branch on. A teams entry carries the A/B/C letter as its non-colour
       // channel, so a mark there would be a third name for a side already stated twice.
-      // NOT while the `marks` arm runs (issue #230): that arm already draws this slot's
-      // outline once per stock, so a leading copy would state the identity twice and, worse,
-      // sit beside a hollow LOST mark of the same shape -- which for slot 1 is the same
-      // circle drawn the same way, and reads as a second identity mark rather than as a
-      // spent stock. Measured on a real frame before this guard existed.
-      if (identityMarker !== null && entry.team === undefined && stockCue !== 'marks') {
+      if (row === 'pips' && entry.team === undefined && identityMarker !== null) {
         span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));
       }
       const hex = entry.team !== undefined
@@ -3470,12 +3471,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     versusStocksEl.classList.remove('hud-versus-stocks--hidden');
   }
 
-  /** Issue #230's stock-loss cue arm, or `null` for the shipped strip -- see presentation/stock-cue.ts. */
-  const stockCue: StockCue | null = opts.stockCue ?? null;
   /**
-   * Issue #778's identity mark in the stock strip, or `null` for none -- the strip with
-   * identity in hue alone, which is what every injected HUD draws. The page's HUD is handed
-   * the shipped `shape` (issue #922; see `identity-marker-flag.ts`). See
+   * The resolved identity marker each stock entry's row is chosen by (issues #778, #1022), or
+   * `null` for none -- pips, with identity in hue alone, which is what every injected HUD
+   * draws. The page's HUD is handed the shipped `shape` (issue #922; see
+   * `identity-marker-flag.ts`), which draws the `marks` row. See
    * presentation/identity-marker.ts for the shared table this and the arena ring both read.
    */
   const identityMarker: IdentityMarkerStyle | null = opts.identityMarker ?? null;
@@ -3507,7 +3507,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     : null;
   const isNarrowViewport = (): boolean => narrowStrip?.matches ?? false;
   /**
-   * The pips arm's denominator: each slot's stock when this match's strip began. `VersusStock`
+   * The rows' denominator: each slot's stock when this match's strip began. `VersusStock`
    * carries no starting stock, so it is remembered from the first push of a match, and taken
    * again whenever a push is not a loss within the same match -- different slots, or any stock
    * going up, which is a rematch.
@@ -3523,7 +3523,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * recorded: two entries can each be running a cue.
    */
   function recordStockLosses(next: GameplayStatus): void {
-    if (stockCue === null) return;
     // No expiry sweep here: `renderVersusStocks` already skips a cue past STOCK_CUE_MS, and the
     // map holds at most one entry per slot -- overwritten by that slot's next loss and cleared
     // when a different match starts -- so an expired entry is inert and bounded.
@@ -3547,16 +3546,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * One stock entry under a cue arm: the label, then the arm's own count, then the cue if one is
-   * running. Every cue element carries `hud-stock-cue` and a negative `animation-delay` for the
-   * time already spent, so a cue re-attached by a rebuild resumes where it was instead of
-   * replaying. Cue elements are `aria-hidden`: the loss is already spoken (issue #629), and the
-   * count stays available as text.
+   * One stock entry: the label, then its row -- `marks` or `pips`, as `stockRowFor` chose --
+   * with the unit a running loss emptied carrying the cue. Every cue element carries
+   * `hud-stock-cue` and a negative `animation-delay` for the time already spent, so a cue
+   * re-attached by a rebuild resumes where it was instead of replaying. The row is one
+   * `role="img"` named "N of M stocks", so the count is in its accessible name rather than its
+   * text (issue #1022), except for the digit beside the single unit of a narrow fallback; the
+   * loss itself is already spoken (issue #629).
    */
   function fillStockCueEntry(
     span: HTMLElement,
     label: string,
     entry: VersusStock,
+    row: StockRow,
     running: { at: number; from: number } | null,
     now: number,
     slots: number,
@@ -3568,20 +3570,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return el;
     };
     span.append(label);
-    // `marks` is an FFA proposition: it spends the SLOT's identity outline, and in teams the
-    // identity a player shares is their TEAM. Two teammates drawn with different outlines
-    // would claim they are different sides while wearing one colour, and the A/B/C letter
-    // beside the number already answers the question the outline would be asking. So teams
-    // falls back to `pips` -- the same count, drawn in the neutral dot -- which keeps the arm
-    // a complete stock-loss cue in both modes instead of silently having none in one.
-    const arm = stockCue === 'marks' && entry.team !== undefined ? 'pips' : stockCue;
-    if (arm === 'pips') {
+    if (row === 'pips') {
       const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
       // ISSUE #835: the strip is a nowrap flex row with no scrolling, so a strip too wide for
       // the viewport clips its last entry silently. On a narrow viewport the pip is sized from
       // the measured table in `stock-cue.ts`, and where no legible size fits -- four players at
-      // four or five stocks -- the arm hands this entry back to the shipped digit rather than
-      // drawing dots too small to count. The digit is the same text the no-cue strip writes.
+      // four or five stocks -- the entry keeps one full-size pip and states the count as a
+      // digit (`PipLayout`) rather than drawing dots too small to count.
       const layout: PipLayout = isNarrowViewport()
         ? narrowPipLayout(slots, total)
         : { kind: 'row', pip: 10, gap: 3 };
@@ -3596,7 +3591,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       if (layout.kind === 'one') {
         // ONE pip and the count as a digit. The pip is hollow once the player is out, the same
         // read a lost pip carries in the row, and it is what the cue animates -- a bare digit
-        // would leave the loss with nothing to swell or burst, which is the arm's whole cue.
+        // would leave the loss with nothing to swell or burst, which is the whole cue.
         const pip = document.createElement('span');
         pip.className = 'hud-stock-pip';
         if (entry.stock <= 0) pip.classList.add('hud-stock-pip--lost');
@@ -3620,70 +3615,50 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       span.appendChild(pips);
       return;
     }
-    if (arm === 'marks') {
-      // The same contract `pips` keeps -- one unit per stock the match STARTED with, held
-      // ones solid and lost ones hollow, so the denominator survives -- with the unit
-      // replaced by this slot's identity outline. One channel carries both facts.
-      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
-      // ISSUE #1021, the `marks` half of #835: on a narrow viewport the row is sized from the
-      // measured table in `stock-cue.ts`, and where no row of legible marks fits -- four
-      // players at five stocks -- the entry keeps ONE mark and states the count as a digit.
-      const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };
-      const row = document.createElement('span');
-      row.className = 'hud-stock-marks';
-      if (layout.kind === 'row') {
-        row.style.setProperty('--hud-mark', `${layout.mark}px`);
-        row.style.setProperty('--hud-mark-gap', `${layout.gap}px`);
-      }
-      // ONE name for the row, not one per mark: the marks are a single quantity, and naming
-      // each of five would read the player's stock count out five times.
-      row.setAttribute('role', 'img');
-      row.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
-      if (layout.kind === 'one') {
-        // ONE full-size mark in the slot's outline, filled while the player has stock, then the
-        // count. The mark is what the cue swells, so a loss still has a target.
-        row.innerHTML = identityStockMark(entry.slot, entry.stock > 0);
-        const mark = row.firstElementChild;
-        if (running !== null && mark !== null) cueEl(mark as SVGElement);
-        span.appendChild(row);
-        const count = document.createElement('span');
-        count.className = 'hud-stock-mark-count';
-        count.textContent = `${entry.stock}`;
-        span.appendChild(count);
-        return;
-      }
-      row.innerHTML = Array.from(
-        { length: total }, (_, i) => identityStockMark(entry.slot, i < entry.stock),
-      ).join('');
-      if (running !== null) {
-        // The marks that emptied on THIS loss: from the stock now held up to the stock held
-        // before it. Bounded by `total` because a rematch can raise the count above the
-        // baseline this cue was armed against.
-        for (let i = entry.stock; i < Math.min(running.from, total); i++) {
-          const mark = row.children[i];
-          if (mark !== undefined) cueEl(mark as SVGElement);
-        }
-      }
-      span.appendChild(row);
+    // The same contract `pips` keeps -- one unit per stock the match STARTED with, held
+    // ones solid and lost ones hollow, so the denominator survives -- with the unit
+    // replaced by this slot's identity outline. One channel carries both facts.
+    const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
+    // ISSUE #1021, the `marks` half of #835: on a narrow viewport the row is sized from the
+    // measured table in `stock-cue.ts`, and where no row of legible marks fits -- four
+    // players at five stocks -- the entry keeps ONE mark and states the count as a digit.
+    const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };
+    const marks = document.createElement('span');
+    marks.className = 'hud-stock-marks';
+    if (layout.kind === 'row') {
+      marks.style.setProperty('--hud-mark', `${layout.mark}px`);
+      marks.style.setProperty('--hud-mark-gap', `${layout.gap}px`);
+    }
+    // ONE name for the row, not one per mark: the marks are a single quantity, and naming
+    // each of five would read the player's stock count out five times.
+    marks.setAttribute('role', 'img');
+    marks.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
+    if (layout.kind === 'one') {
+      // ONE full-size mark in the slot's outline, filled while the player has stock, then the
+      // count. The mark is what the cue swells, so a loss still has a target.
+      marks.innerHTML = identityStockMark(entry.slot, entry.stock > 0);
+      const mark = marks.firstElementChild;
+      if (running !== null && mark !== null) cueEl(mark as SVGElement);
+      span.appendChild(marks);
+      const count = document.createElement('span');
+      count.className = 'hud-stock-mark-count';
+      count.textContent = `${entry.stock}`;
+      span.appendChild(count);
       return;
     }
-    const count = document.createElement('span');
-    count.className = 'hud-stock-count';
-    count.textContent = String(entry.stock);
-    span.appendChild(count);
-    if (running === null) return;
-    const cue = document.createElement('span');
-    cue.setAttribute('aria-hidden', 'true');
-    if (arm === 'strike') {
-      cue.className = 'hud-stock-cue--struck';
-      cue.textContent = String(running.from);
-      // The new number drops in behind the struck one, so it animates too, on the same clock.
-      cueEl(count);
-    } else {
-      cue.className = 'hud-stock-cue--badge';
-      cue.textContent = `−${running.from - entry.stock}`;
+    marks.innerHTML = Array.from(
+      { length: total }, (_, i) => identityStockMark(entry.slot, i < entry.stock),
+    ).join('');
+    if (running !== null) {
+      // The marks that emptied on THIS loss: from the stock now held up to the stock held
+      // before it. Bounded by `total` because a rematch can raise the count above the
+      // baseline this cue was armed against.
+      for (let i = entry.stock; i < Math.min(running.from, total); i++) {
+        const mark = marks.children[i];
+        if (mark !== undefined) cueEl(mark as SVGElement);
+      }
     }
-    span.appendChild(cueEl(cue));
+    span.appendChild(marks);
   }
 
   /**

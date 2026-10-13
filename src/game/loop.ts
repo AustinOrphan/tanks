@@ -1346,15 +1346,12 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // developer flag no injected HUD in a test has an opinion about. `null` is the
         // shipped bar, so every one of them keeps rendering it.
         versusActions: devFlags.versusActions,
-        // Issue #230's stock-loss cue arms, bound for the same reason as the three above: a
-        // developer flag no injected HUD in a test has an opinion about. `null` is the shipped
-        // strip, with no cue.
-        stockCue: devFlags.stockCue,
-        // Issue #778's identity mark in the stock strip, bound here rather than defaulted
-        // inside the HUD: every injected HUD in a test keeps `null`, the unmarked strip.
-        // RESOLVED, not passed through (issue #922): the page's HUD draws the shipped `shape`
-        // mark with the flag absent, and none for `solid`. It resolves with no session mode
-        // because its own per-entry test already keeps teams entries unmarked; the renderer
+        // Issue #778's identity marker, which picks each stock-strip entry's row (issue
+        // #1022), bound here rather than defaulted inside the HUD: every injected HUD in a test
+        // keeps `null`, which draws pips with no mark. RESOLVED, not passed through (issue
+        // #922): the page's HUD gets the shipped `shape`, and so the `marks` row, with the flag
+        // absent, and pips with no mark for `solid`. It resolves with no session mode because
+        // its own per-entry rule already gives teams entries pips and no mark; the renderer
         // resolves per session in `startGameWith`. See identity-marker-flag.ts.
         identityMarker: stripIdentityMarker(devFlags.identityMarker),
         // Issue #243's developer shell. The EFFECTIVE GATE, read from the same `search`

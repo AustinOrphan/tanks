@@ -27,16 +27,19 @@ export function toParams(search: string): URLSearchParams {
 /**
  * Developer parameters that were once accepted and no longer are.
  *
- * EMPTY, and deliberately so rather than omitted: no developer parameter has been removed
- * yet, so a populated list would be invented history. The mechanism is real and injectable
- * (`canonicalDevSearch`'s `deprecated` option) and `dev-config.test.ts` proves it with an
- * injected list, so the first real removal is a one-line edit here rather than a new feature.
+ * `stockCue` is the first: issue #1022 shipped the `marks` stock strip it compared and removed
+ * the flag, so an old #230 comparison URL still carries `?stockCue=`. Listing it here is what
+ * makes Exit Developer Mode drop it and canonical URLs report it as retired rather than carry
+ * it as an unrelated parameter. A parameter only belongs here once it has been removed for good:
+ * `menuTransition`, taken out by the revert in #547 and accepted again by #548 the same day,
+ * never was.
  *
- * Without such a list the configuration model CANNOT tell a deprecated developer parameter
- * from an unrelated application one -- both are simply "not known" -- and `unknownParams`
- * reports them together. That is a stated limit, not an oversight.
+ * Without this list the configuration model CANNOT tell a deprecated developer parameter
+ * from an unrelated application one -- both are simply "not known". `unknownParams` still
+ * reports them together, since the menu has no deprecated category (`dev-config-menu.ts`);
+ * that is a stated limit, not an oversight.
  */
-export const DEPRECATED_DEV_PARAMS: readonly string[] = [];
+export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue'];
 
 /**
  * The query string to leave developer mode with (issue #243).

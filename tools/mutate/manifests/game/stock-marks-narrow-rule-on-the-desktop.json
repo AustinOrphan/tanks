@@ -1,8 +1,8 @@
 {
   "id": "stock-marks-narrow-rule-on-the-desktop",
   "file": "src/game/hud.ts",
-  "find": "      const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };",
-  "replace": "      const layout: MarkLayout = narrowMarkLayout(slots, total);",
+  "find": "    const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };",
+  "replace": "    const layout: MarkLayout = narrowMarkLayout(slots, total);",
   "expect": "killed",
   "tests": [
     "src/game/hud.match.test.ts"
