@@ -8,7 +8,8 @@
     "src/game/hud.diagnostics.test.ts"
   ],
   "killedBy": [
-    "the developer modules load when the pane opens (issue #1014) a load that fails is reported in the output field when the pane opens, and the next open loads them"
+    "the developer modules load when the pane opens (issue #1014) a load that fails is reported in the output field when the pane opens, and the next open loads them",
+    "the developer modules load when the pane opens (issue #1014) a load that fails leaves no note behind when another pane replaces the pane"
   ],
   "why": "Issue #1014. A failed load of the pane's modules (offline, or a chunk name a deploy made stale) is left as an unhandled rejection, which `boot.ts` treats as the match failing, and the output field says nothing."
 }
