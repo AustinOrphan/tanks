@@ -1,0 +1,14 @@
+{
+  "id": "screen-baseline-role-button-loses-its-pressed-state",
+  "file": "tools/screens/baseline/screen.versus-setup.json",
+  "find": "\"aria-label\": \"Player 1 Human\",\n        \"aria-pressed\": \"true\"",
+  "replace": "\"aria-label\": \"Player 1 Human\"",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the committed baselines carry roles and accessible names (issue #937) records the versus player-role button with its name and its pressed state"
+  ],
+  "why": "The committed versus-setup baseline records the Player 1 role button with no aria-pressed, the shape a whole-baseline accept would write if the capture stopped recording the attribute or the button stopped exposing its state. A screen-reader user picking human or bot for each slot hears which one is selected only through aria-pressed, and the gate alone would accept the loss as the new expectation."
+}
