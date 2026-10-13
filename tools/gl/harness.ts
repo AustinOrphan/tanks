@@ -20,6 +20,8 @@ import { STANDARD_ARENA, WIDE_ARENA, createArenaWorld } from '../../src/sim/conf
 import { createWorld } from '../../src/sim/world';
 import { configFor } from '../../src/sim/config';
 import type { Tank, Spawn, Wall } from '../../src/sim/types';
+import type { SimEvent } from '../../src/sim/events';
+import { OWNER_PALETTES } from '../../src/presentation/identity';
 import { framedBounds } from '../../src/render/framing';
 import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
@@ -971,6 +973,73 @@ check('tread trails (#231) reach the framebuffer through the real renderer.ts wi
   const moved = bytesDiffering(stillFrame, drivenFrame);
   if (moved === 0) {
     return 'a driven tank and a stationary tank at the SAME final pose rendered IDENTICAL frames -- tread-trails did not reach the framebuffer through renderer.ts';
+  }
+  return null;
+});
+
+check('createRenderer forwards its ownerPalette option to the rings, the death pulse and the trails (issue #1057)', () => {
+  // renderer.ts's own seam, three times over. createEntityViews, createDeathPulseSystem and
+  // createTreadTrailSystem each take the palette as an optional trailing argument that
+  // defaults to Classic, so dropping any one of the three compiles, draws Classic, and fails
+  // no Vitest test: renderer.ts builds a real WebGLRenderer, which jsdom cannot.
+  //
+  // Each scene puts exactly ONE system's owner colour on screen, so a forwarding dropped
+  // from one system cannot hide behind another's: two FFA players standing (rings and
+  // entrance rings), the same two dead with a death event for one (only the death ring), and
+  // the two driving and then dying with no event (their views are gone, so only their tread
+  // decals remain). In each, High contrast must change the frame and an unflagged renderer
+  // must equal an explicit Classic one byte for byte.
+  const duo = (alive: boolean, dx = 0): ReturnType<typeof createWorld> => {
+    const tanks: Tank[] = [0, 1].map((slot) => ({
+      id: slot + 1, kind: 'player', pos: { x: W / 2 + (slot === 0 ? -2 : 2) + dx, y: H / 2 },
+      bodyAngle: 0, turretAngle: 0, alive, desiredMove: { x: 0, y: 0 }, activeMineIds: [],
+      fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0, controlledBy: slot,
+    }));
+    const spawns: Spawn[] = tanks.map((t) => ({ kind: 'player', pos: { ...t.pos }, angle: 0 }));
+    return createWorld({ walls: [], tanks, spawns, lives: 3, mode: 'ffa' });
+  };
+  type Options = Parameters<typeof createRenderer>[4];
+  const frameOf = (options: Options, frames: (r: ReturnType<typeof createRenderer>) => void): Uint8Array => {
+    const c = placedCanvas(800, 500, 0, 0, 800, 500);
+    const r = createRenderer(c, W, H, BOUNDARY, options);
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    frames(r);
+    const px = grab(gl, c.width, c.height);
+    r.dispose();
+    c.remove();
+    return px;
+  };
+  const scenes: Record<string, (r: ReturnType<typeof createRenderer>) => void> = {
+    rings: (r) => {
+      const w = duo(true);
+      r.render(w, w, 1, [], 1 / 60);
+    },
+    'death pulse': (r) => {
+      const w = duo(false);
+      const died = w.tanks[0];
+      const event = {
+        type: 'tank-destroyed', tankId: died.id, kind: 'player',
+        by: { source: 'shell', ownerId: 2 }, pos: { ...died.pos },
+      } as SimEvent;
+      r.render(w, w, 1, [event], 1 / 60);
+    },
+    trails: (r) => {
+      const before = duo(true);
+      const after = duo(true, 1.0); // 4 x EMIT_SPACING: four decal pairs per tank
+      r.render(before, before, 1, [], 1 / 60);
+      r.render(before, after, 1, [], 1 / 60);
+      r.render(after, duo(false, 1.0), 1, [], 1 / 60);
+    },
+  };
+  for (const [name, frames] of Object.entries(scenes)) {
+    const shipped = frameOf(undefined, frames);
+    const classic = frameOf({ ownerPalette: OWNER_PALETTES.classic }, frames);
+    const high = frameOf({ ownerPalette: OWNER_PALETTES['high-contrast'] }, frames);
+    const drift = bytesDiffering(shipped, classic);
+    if (drift !== 0) return `${name}: an unflagged renderer and an explicit Classic one differ in ${drift} bytes`;
+    if (bytesDiffering(classic, high) === 0) {
+      return `${name}: High contrast drew the same frame as Classic -- ownerPalette did not reach this system`;
+    }
   }
   return null;
 });
