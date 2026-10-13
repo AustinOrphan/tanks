@@ -10,6 +10,7 @@
   "why": "A winning end screen arrives on its action -- Next Level, Play Again, Rematch (issue #919; the spec's \"one Confirm on Next Mission\" and \"Rematch is focused\").",
   "expect": "killed",
   "killedBy": [
-    "(measured below)"
+    "createHud roving-tabindex focus navigation (issue #115) auto-focuses the action button, the outcome's primary action, on win and lose (issue #919)",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at outcome-win, whose control set is its own"
   ]
 }

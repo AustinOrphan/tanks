@@ -9,6 +9,6 @@
   "why": "An extracted pane arrives through its host (issue #919), which stamps the carried-Confirm guard and announces the arrival the gamepad route drops a first-seen Confirm on. Focusing its own root lands in the same place and does neither.",
   "expect": "killed",
   "killedBy": [
-    "(measured below)"
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside customize"
   ]
 }

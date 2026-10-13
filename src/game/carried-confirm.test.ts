@@ -42,9 +42,9 @@ afterEach(() => {
 
 describe('createCarriedConfirmGuard (issue #919)', () => {
   for (const name of ['Enter', ' ']) {
-    const label = name === ' ' ? 'Space' : name;
+    const label = name === ' ' ? 'a Space' : 'an Enter';
 
-    it(`cancels every event of a ${label} held across an arrival: repeats, keypress and keyup`, () => {
+    it(`cancels every event of ${label} held across an arrival: repeats, keypress and keyup`, () => {
       const g = guard();
       expect(key(g, 'keydown', name, 5), 'the press itself, before any arrival, was cancelled').toBe(false);
       clock = 10;
@@ -61,7 +61,7 @@ describe('createCarriedConfirmGuard (issue #919)', () => {
       expect(key(quiet, 'keyup', name, 14)).toBe(false);
     });
 
-    it(`leaves a ${label} pressed after the arrival alone, repeats and all`, () => {
+    it(`leaves ${label} pressed after the arrival alone, repeats and all`, () => {
       const g = guard();
       clock = 10;
       g.arrive();

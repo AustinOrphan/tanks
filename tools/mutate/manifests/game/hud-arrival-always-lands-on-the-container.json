@@ -10,6 +10,13 @@
   "why": "Issue #919's ruling: an arrival lands on the surface's primary action, so a screen takes one press. Focusing the container everywhere is the pre-#919 behaviour, under which a pad needed two presses wherever the direction spec promised one.",
   "expect": "killed",
   "killedBy": [
-    "(measured below)"
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside levelselect",
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside versus-setup",
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside confirm-new-campaign",
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside match-failed",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at main-menu, whose control set is its own",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at paused, whose control set is its own",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at outcome-win, whose control set is its own",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at outcome-lose, whose control set is its own"
   ]
 }

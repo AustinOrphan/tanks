@@ -9,6 +9,6 @@
   "why": "`route-host.ts` repaints whether a run exists after the Main Menu has arrived, so the arrival must follow the menu's shape until the player moves (issue #919). Without it a returning player who arrived before the run was reported sits on what has just become Start New Campaign.",
   "expect": "killed",
   "killedBy": [
-    "(measured below)"
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) the Main Menu arrival follows Continue when the run is reported after the surface, until the player moves"
   ]
 }

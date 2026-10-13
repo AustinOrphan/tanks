@@ -10,6 +10,9 @@
   "why": "Every arrival stamps the carried-Confirm guard before it moves focus (issue #919). Without the stamp the guard never learns a screen changed, so a held or same-keystroke Enter presses the primary the arrival just focused.",
   "expect": "killed",
   "killedBy": [
-    "(measured below)"
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space held through the end of a match cannot press Retry with its repeats or its release",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a keydown queued behind an arrival cannot press the new primary",
+    "createRouteHost: the keystroke that leaves Launch cannot press the Main Menu (issue #919) cancels the keypress of the Enter that dismissed the splash, so Start Campaign is not pressed"
   ]
 }
