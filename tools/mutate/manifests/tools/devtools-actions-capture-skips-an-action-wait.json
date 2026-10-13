@@ -2,7 +2,7 @@
   "id": "devtools-actions-capture-skips-an-action-wait",
   "file": "tools/screens/states.mjs",
   "find": "      { waitVisible: '.hud-devact[data-action=\"restart-round\"]' },\n",
-  "replace": "",
+  "replace": "\n",
   "expect": "killed",
   "tests": [
     "tools/screens/states.test.ts"
