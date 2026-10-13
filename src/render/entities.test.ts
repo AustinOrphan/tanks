@@ -2391,6 +2391,135 @@ describe('player identity: ring and shell tint', () => {
     expect(shellEmissiveAt(scene, 4)).toBe(IDENTITY_RING_COLORS[0]);
     views.dispose();
   });
+
+  /**
+   * THE OWNER PALETTE (issue #1057): sites 1 to 3 of the 7 that turn a tank into an owner
+   * colour, each drawn in the palette `createEntityViews` was handed. Population: 4 FFA slots
+   * and 3 teams, under High contrast, with Classic (no palette passed) as the control. The
+   * expected colours are written out so a site that read the wrong array cannot take its own
+   * expectation with it.
+   */
+  describe('the owner palette (issue #1057)', () => {
+    const CLASSIC_RINGS = [0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bff];
+    const HIGH_CONTRAST_RINGS = [0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb];
+    // Per tank, for the teams world below: teams A, B, C, A.
+    const CLASSIC_TEAMS_BY_TANK = [0xff3b3b, 0xfcc0fc, 0x4eff3b, 0xff3b3b];
+    const HIGH_CONTRAST_TEAMS_BY_TANK = [0x63d1fd, 0xc6fd00, 0xf2c6bb, 0x63d1fd];
+    const XS = [3, 9, 15, 21];
+
+    /** Four players at XS: FFA by slot, or teams A, B, C, A (2v1v1, so all 3 teams appear). */
+    function fourPlayers(mode: 'ffa' | 'teams', roundStartTick = 1): World {
+      const teams = [0, 1, 2, 0];
+      const tanks: Tank[] = XS.map((x, slot) => ({
+        ...makeTank(slot + 1, 'player', x, slot % 2 === 0 ? 3 : 9),
+        controlledBy: slot,
+        ...(mode === 'teams' ? { team: teams[slot] } : {}),
+      }));
+      const spawns: Spawn[] = tanks.map((t) => ({ kind: 'player', pos: { ...t.pos }, angle: 0 }));
+      const w = createWorld({ walls: [], tanks, spawns, lives: 3, mode });
+      w.roundStartTick = roundStartTick;
+      return w;
+    }
+
+    function views(palette?: 'high-contrast'): { scene: THREE.Scene; v: ReturnType<typeof createEntityViews> } {
+      const scene = new THREE.Scene();
+      const p = palette === undefined ? undefined : OWNER_PALETTES[palette];
+      return { scene, v: createEntityViews(scene, undefined, null, null, null, null, p) };
+    }
+
+    /** The spawn ring's colour, by walking up to the tank group sitting at world x. */
+    function spawnRingColorAt(scene: THREE.Scene, x: number): number {
+      let c = -1;
+      scene.traverse((o) => {
+        if (o.name !== 'spawn-ring') return;
+        let g: THREE.Object3D | null = o;
+        while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+        if ((g as THREE.Group).position.x === x) {
+          c = ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).color.getHex();
+        }
+      });
+      return c;
+    }
+
+    it('site 1 of 7, the identity ring: all 4 FFA slots and all 3 teams follow the palette', () => {
+      for (const [mode, high, classic] of [
+        ['ffa', HIGH_CONTRAST_RINGS, CLASSIC_RINGS],
+        ['teams', HIGH_CONTRAST_TEAMS_BY_TANK, CLASSIC_TEAMS_BY_TANK],
+      ] as const) {
+        const w = fourPlayers(mode);
+        const hc = views('high-contrast');
+        hc.v.sync(w, w, 0);
+        expect(identityRings(hc.scene), `${mode}: one ring per player`).toHaveLength(4);
+        expect(XS.map((x) => ringColorAt(hc.scene, x)), mode).toEqual([...high]);
+        hc.v.dispose();
+        // NEGATIVE CONTROL: the same world with no palette is Classic, so the line above is
+        // the palette's doing and not something that recolours every ring.
+        const shipped = views();
+        shipped.v.sync(w, w, 0);
+        expect(XS.map((x) => ringColorAt(shipped.scene, x)), `${mode}, no palette`).toEqual([...classic]);
+        shipped.v.dispose();
+      }
+    });
+
+    it('site 2 of 7, the spawn ring: a round entrance in all 4 FFA slots and all 3 teams follows the palette', () => {
+      // A roundStartTick bump is a round entry for every player at once (`snap`), which is
+      // the entrance ring this site draws; the respawn edge reaches the same line.
+      for (const [mode, high, classic] of [
+        ['ffa', HIGH_CONTRAST_RINGS, CLASSIC_RINGS],
+        ['teams', HIGH_CONTRAST_TEAMS_BY_TANK, CLASSIC_TEAMS_BY_TANK],
+      ] as const) {
+        const prev = fourPlayers(mode, 1);
+        const curr = fourPlayers(mode, 5);
+        const hc = views('high-contrast');
+        hc.v.sync(prev, curr, 1, 0.016);
+        expect(XS.map((x) => spawnRingColorAt(hc.scene, x)), mode).toEqual([...high]);
+        hc.v.dispose();
+        const shipped = views();
+        shipped.v.sync(prev, curr, 1, 0.016);
+        expect(XS.map((x) => spawnRingColorAt(shipped.scene, x)), `${mode}, no palette`).toEqual([...classic]);
+        shipped.v.dispose();
+      }
+    });
+
+    it('site 3 of 7, the shell tint: a shell from each of the 4 FFA slots and 3 teams follows the palette', () => {
+      const SHELL_XS = [30, 32, 34, 36]; // clear of every tank's x
+      for (const [mode, high, classic] of [
+        ['ffa', HIGH_CONTRAST_RINGS, CLASSIC_RINGS],
+        ['teams', HIGH_CONTRAST_TEAMS_BY_TANK, CLASSIC_TEAMS_BY_TANK],
+      ] as const) {
+        const w = fourPlayers(mode);
+        SHELL_XS.forEach((x, i) => w.bullets.push(playerBullet(70 + i, i + 1, x)));
+        const hc = views('high-contrast');
+        hc.v.sync(w, w, 0);
+        expect(SHELL_XS.map((x) => shellEmissiveAt(hc.scene, x)), mode).toEqual([...high]);
+        hc.v.dispose();
+        const shipped = views();
+        shipped.v.sync(w, w, 0);
+        expect(SHELL_XS.map((x) => shellEmissiveAt(shipped.scene, x)), `${mode}, no palette`).toEqual([...classic]);
+        shipped.v.dispose();
+      }
+    });
+
+    it('single-player is untouched under High contrast: no identity ring or tint, and a Classic spawn ring', () => {
+      // The identity ring and the tint are gated off at one player, as they always were. The
+      // spawn ring is NOT: it draws at one player in slot 0's colour, so without the identity
+      // gate on its palette a High contrast session would recolour it (#3fd0ff -> #63d1fd).
+      const prev = makeWorld();
+      const curr = makeWorld();
+      curr.roundStartTick = prev.roundStartTick + 4;
+      curr.bullets.push(playerBullet(80, 1, 4));
+      const hc = views('high-contrast');
+      hc.v.sync(prev, curr, 1, 0.016);
+      expect(identityRings(hc.scene)).toHaveLength(0);
+      expect(shellEmissiveAt(hc.scene, 4), 'a single-player shell stays brass').toBe(0x444422);
+      let spawn: number | null = null;
+      hc.scene.traverse((o) => {
+        if (o.name === 'spawn-ring') spawn = ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).color.getHex();
+      });
+      expect(spawn, 'the single-player entrance ring is Classic slot 0').toBe(0x3fd0ff);
+      hc.v.dispose();
+    });
+  });
 });
 
 describe('spawn animation (#199)', () => {

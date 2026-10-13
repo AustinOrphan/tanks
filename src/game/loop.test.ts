@@ -3889,6 +3889,38 @@ describe('deathVignetteColor', () => {
     const world = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player', undefined)] } as World;
     expect(deathVignetteColor(world, 1, 2)).toBe(IDENTITY_RING_COLORS[0]);
   });
+
+  /**
+   * Site 6 of issue #1057's 7: the vignette in the session's owner palette, so it matches the
+   * ring under High contrast too. Population: 4 FFA slots and 3 teams, at playerCount 4, with
+   * no palette (Classic) as the control. Colours written out.
+   */
+  it('follows the owner palette at playerCount >= 2, for all 4 FFA slots and all 3 teams', () => {
+    const high = OWNER_PALETTES['high-contrast'];
+    const ffa = {
+      rules: resolveWorldRules({ mode: 'ffa' }),
+      tanks: [0, 1, 2, 3].map((slot) => mkTank(slot + 1, 'player', slot)),
+    } as World;
+    expect([1, 2, 3, 4].map((id) => deathVignetteColor(ffa, id, 4, high)), 'ffa')
+      .toEqual([0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb]);
+    expect([1, 2, 3, 4].map((id) => deathVignetteColor(ffa, id, 4)), 'ffa, no palette')
+      .toEqual([0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bff]);
+    const teams = {
+      rules: resolveWorldRules({ mode: 'teams' }),
+      tanks: [0, 1, 2].map((team) => mkTank(team + 1, 'player', 3, team)),
+    } as World;
+    expect([1, 2, 3].map((id) => deathVignetteColor(teams, id, 4, high)), 'teams')
+      .toEqual([0x63d1fd, 0xc6fd00, 0xf2c6bb]);
+    expect([1, 2, 3].map((id) => deathVignetteColor(teams, id, 4)), 'teams, no palette')
+      .toEqual([0xff3b3b, 0xfcc0fc, 0x4eff3b]);
+  });
+
+  it('NEGATIVE CONTROL: is still the single-player red at playerCount 1 under High contrast', () => {
+    // Single-player has no ring to match; the red is what it has always shown, under either
+    // palette (issue #1057).
+    const world = { rules: resolveWorldRules(), tanks: [mkTank(1, 'player', 0)] } as World;
+    expect(deathVignetteColor(world, 1, 1, OWNER_PALETTES['high-contrast'])).toBe(SINGLE_PLAYER_DEATH_VIGNETTE);
+  });
 });
 
 describe('tallyCoopKills', () => {
@@ -4163,6 +4195,25 @@ describe('startGameWith: a real player death reaches the HUD', () => {
     h.fireFrame(20);
     expect(h.rec.deathSignals).toBe(0);
     h.handle.dispose();
+  });
+
+  it('flashes a two-player FFA death in the session\'s owner palette (issue #1057)', () => {
+    // deathVignetteColor's own tests pass the palette themselves; this is the frame handler
+    // handing it on. P2's shell on the tracked player (slot 0), one real driven frame, under
+    // High contrast and, as the control, with no flag.
+    for (const [ownerPalette, want] of [['high-contrast', 0x63d1fd], [null, 0x3fd0ff]] as const) {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa', ownerPalette } }));
+      const world = h.rec.builtWorlds[0];
+      const [p0, p1] = world.tanks.filter((t: Tank) => t.kind === 'player');
+      world.bullets.push({
+        id: 900, ownerId: p1.id, type: 'normal', pos: { x: p0.pos.x, y: p0.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      expect(h.rec.deathColors, `ownerPalette=${ownerPalette}`).toEqual([want]);
+      h.handle.dispose();
+    }
   });
 });
 
@@ -5206,6 +5257,38 @@ describe('startGameWith: dev flags stay off by default', () => {
     const off = boot();
     expect((off.rec.rendererArgs[0][4] as { identityMarker?: string | null }).identityMarker).toBeNull();
     off.handle.dispose();
+  });
+
+  describe('threads the ownerPalette dev flag to every reader, once per session (issue #1057)', () => {
+    const paletteOf = (h: ReturnType<typeof boot>): unknown =>
+      (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
+
+    it('hands the renderer and the stock HUD the SAME palette the flag names, before any status', () => {
+      // Both readers, from one resolution: a renderer in High contrast beside chips in
+      // Classic is the disagreement the issue rules out. Identity (toBe), not equality, so a
+      // copy of the palette passes nothing.
+      const h = boot(makeDeps({ devFlags: { ownerPalette: 'high-contrast' } }));
+      expect(paletteOf(h)).toBe(OWNER_PALETTES['high-contrast']);
+      expect(h.rec.stockPalettes, 'handed to the HUD exactly once').toEqual([OWNER_PALETTES['high-contrast']]);
+      expect(h.rec.stockPalettes[0]).toBe(OWNER_PALETTES['high-contrast']);
+      // Before the first status push, which is what draws a chip.
+      const log = h.rec.hudCallLog;
+      const firstStatus = log.findIndex((e) => e.startsWith('status:') && e !== 'status:none');
+      expect(firstStatus, 'the session pushed a status').toBeGreaterThan(-1);
+      expect(log.indexOf('stockPalette'), 'before the first status').toBeLessThan(firstStatus);
+      expect(log.indexOf('stockPalette')).toBeGreaterThan(-1);
+      h.handle.dispose();
+    });
+
+    it('NEGATIVE CONTROLS: absent and `classic` both hand every reader Classic', () => {
+      for (const devFlags of [{}, { ownerPalette: 'classic' as const }]) {
+        const h = boot(makeDeps({ devFlags }));
+        const label = JSON.stringify(devFlags);
+        expect(paletteOf(h), label).toBe(OWNER_PALETTES.classic);
+        expect(h.rec.stockPalettes, label).toEqual([OWNER_PALETTES.classic]);
+        h.handle.dispose();
+      }
+    });
   });
 
   describe('the shipped FFA identity marker reaches FFA sessions only (issue #922)', () => {

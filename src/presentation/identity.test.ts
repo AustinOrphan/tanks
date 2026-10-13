@@ -17,8 +17,14 @@ import {
   DEFAULT_OWNER_PALETTE,
   OWNER_PALETTE_LABELS,
   OWNER_PALETTES,
+  identityColor,
+  resolveOwnerColor,
+  teamColor,
   type OwnerPaletteId,
 } from './identity';
+import { resolveWorldRules } from '../sim/rules';
+import type { World } from '../sim/world';
+import type { Tank } from '../sim/types';
 import { PALETTE } from './customization';
 import {
   ARENA_FELT,
@@ -87,6 +93,60 @@ describe('owner palettes: the catalogue (issue #1056)', () => {
     const remeasure = 're-measure the table in identity.ts before moving a High contrast colour';
     expect(OWNER_PALETTES['high-contrast'].rings, remeasure).toEqual([0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb]);
     expect(OWNER_PALETTES['high-contrast'].teams, remeasure).toEqual([0x63d1fd, 0xc6fd00, 0xf2c6bb]);
+  });
+});
+
+describe('owner palettes: every owner colour follows the palette it is handed (issue #1057)', () => {
+  // Written out, not read from OWNER_PALETTES, so a lookup that read the wrong array cannot
+  // take its own expectation with it. Population: 7 owner colours per palette, 4 FFA slots
+  // and 3 teams; 2 palettes.
+  const CLASSIC_RINGS = [0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bff];
+  const CLASSIC_TEAMS = [0xff3b3b, 0xfcc0fc, 0x4eff3b];
+  const HIGH_CONTRAST_RINGS = [0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb];
+  const HIGH_CONTRAST_TEAMS = [0x63d1fd, 0xc6fd00, 0xf2c6bb];
+  const worldIn = (mode: 'ffa' | 'teams'): World =>
+    ({ rules: resolveWorldRules({ mode }) }) as unknown as World;
+  const player = (slot: number, team?: number): Tank =>
+    ({ kind: 'player', controlledBy: slot, team }) as unknown as Tank;
+
+  it('the premise: the two palettes differ in all 7 colours, so each assertion below discriminates', () => {
+    for (const slot of [0, 1, 2, 3]) expect(HIGH_CONTRAST_RINGS[slot], `ring ${slot}`).not.toBe(CLASSIC_RINGS[slot]);
+    for (const team of [0, 1, 2]) expect(HIGH_CONTRAST_TEAMS[team], `team ${team}`).not.toBe(CLASSIC_TEAMS[team]);
+  });
+
+  it('resolveOwnerColor: all 7 owner colours from the palette passed, and Classic when none is', () => {
+    const high = OWNER_PALETTES['high-contrast'];
+    for (const slot of [0, 1, 2, 3]) {
+      const tank = player(slot);
+      expect(resolveOwnerColor(worldIn('ffa'), tank, high), `ffa slot ${slot}`).toBe(HIGH_CONTRAST_RINGS[slot]);
+      // NEGATIVE CONTROLS: Classic, named and defaulted. A resolver that always read High
+      // contrast passes the line above and fails these two.
+      expect(resolveOwnerColor(worldIn('ffa'), tank, OWNER_PALETTES.classic)).toBe(CLASSIC_RINGS[slot]);
+      expect(resolveOwnerColor(worldIn('ffa'), tank), `ffa slot ${slot}, no palette`).toBe(CLASSIC_RINGS[slot]);
+    }
+    for (const team of [0, 1, 2]) {
+      // Slot 3 on every team, so a teams colour read from the slot table would be ring 3.
+      const tank = player(3, team);
+      expect(resolveOwnerColor(worldIn('teams'), tank, high), `team ${team}`).toBe(HIGH_CONTRAST_TEAMS[team]);
+      expect(resolveOwnerColor(worldIn('teams'), tank, OWNER_PALETTES.classic)).toBe(CLASSIC_TEAMS[team]);
+      expect(resolveOwnerColor(worldIn('teams'), tank), `team ${team}, no palette`).toBe(CLASSIC_TEAMS[team]);
+    }
+  });
+
+  it('the HUD\'s two lookups take the palette too, and default to Classic', () => {
+    // The stock chips call these directly rather than the resolver, so they are pinned on
+    // their own: 4 slots and 3 teams, each under both palettes and with none.
+    const high = OWNER_PALETTES['high-contrast'];
+    for (const slot of [0, 1, 2, 3]) {
+      expect(identityColor(slot, high), `slot ${slot}`).toBe(HIGH_CONTRAST_RINGS[slot]);
+      expect(identityColor(slot, OWNER_PALETTES.classic)).toBe(CLASSIC_RINGS[slot]);
+      expect(identityColor(slot)).toBe(CLASSIC_RINGS[slot]);
+    }
+    for (const team of [0, 1, 2]) {
+      expect(teamColor(team, high), `team ${team}`).toBe(HIGH_CONTRAST_TEAMS[team]);
+      expect(teamColor(team, OWNER_PALETTES.classic)).toBe(CLASSIC_TEAMS[team]);
+      expect(teamColor(team)).toBe(CLASSIC_TEAMS[team]);
+    }
   });
 });
 

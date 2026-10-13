@@ -11,7 +11,9 @@ import {
   TREAD_COLOR, TREAD_IDENTITY_BLEND, blendHex, treadColorFor,
 } from './tread-trails';
 import { HULL_WIDTH, TRACK_W } from './entities';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
+import {
+  IDENTITY_RING_COLORS, OWNER_PALETTES, TEAM_COLORS, type OwnerPalette,
+} from '../presentation/identity';
 
 // Imported from the module rather than re-declared: a re-declared literal here
 // would silently stop matching the module's own constant the moment either one
@@ -485,9 +487,9 @@ function printedColors(scene: THREE.Scene): number[] {
   return out;
 }
 /** Drive one tank far enough to print marks, and report the colours. */
-function driveAndRead(world: World, moved: Tank[]): number[] {
+function driveAndRead(world: World, moved: Tank[], ownerPalette?: OwnerPalette): number[] {
   const scene = new THREE.Scene();
-  const sys = createTreadTrailSystem(scene);
+  const sys = createTreadTrailSystem(scene, ownerPalette);
   sys.sync(world, world); // first sighting: anchors only
   const after = { ...world, tanks: world.tanks.map((t) => {
     const m = moved.find((x) => x.id === t.id);
@@ -618,5 +620,68 @@ describe('tread trails carry their owner identity in VS (issue #284)', () => {
     // Channels do not bleed into each other, which a naive numeric lerp on the packed
     // value would do the moment one channel carried.
     expect(blendHex(0x0000ff, 0xff0000, 0.5)).toBe(0x800080);
+  });
+});
+
+/**
+ * Site 5 of issue #1057's 7: a VS trail leans toward its owner's colour in the session's
+ * owner palette. Population: 4 FFA slots and 3 teams, under High contrast, with Classic (no
+ * palette) as the control. The owner colours are written out; the blend is the module's own.
+ */
+describe('tread trails: the owner palette (issue #1057)', () => {
+  const CLASSIC_RINGS = [0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bff];
+  const HIGH_CONTRAST_RINGS = [0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb];
+  const CLASSIC_TEAMS = [0xff3b3b, 0xfcc0fc, 0x4eff3b];
+  const HIGH_CONTRAST_TEAMS = [0x63d1fd, 0xc6fd00, 0xf2c6bb];
+  const tint = (owner: number): number => blendHex(TREAD_COLOR, owner, TREAD_IDENTITY_BLEND);
+  const high = OWNER_PALETTES['high-contrast'];
+
+  /** Four players 10 apart: by slot in FFA, or teams A, B, C, A. */
+  function fourPlayers(mode: 'ffa' | 'teams'): Tank[] {
+    const teams = [0, 1, 2, 0];
+    return [0, 1, 2, 3].map((slot) => makeTank(slot + 1, 5 + slot * 10, 5, 0, {
+      controlledBy: slot, ...(mode === 'teams' ? { team: teams[slot] } : {}),
+    }));
+  }
+
+  it('treadColorFor leans toward the palette it is handed, for all 4 FFA slots and all 3 teams', () => {
+    const ffa = fourPlayers('ffa');
+    const ffaWorld = multiWorld(ffa, 'ffa');
+    for (const slot of [0, 1, 2, 3]) {
+      expect(treadColorFor(ffaWorld, ffa[slot], high), `ffa slot ${slot}`).toBe(tint(HIGH_CONTRAST_RINGS[slot]));
+      // NEGATIVE CONTROL: no palette leans toward Classic.
+      expect(treadColorFor(ffaWorld, ffa[slot]), `ffa slot ${slot}, no palette`).toBe(tint(CLASSIC_RINGS[slot]));
+    }
+    const teams = fourPlayers('teams');
+    const teamsWorld = multiWorld(teams, 'teams');
+    for (const team of [0, 1, 2]) {
+      expect(treadColorFor(teamsWorld, teams[team], high), `team ${team}`).toBe(tint(HIGH_CONTRAST_TEAMS[team]));
+      expect(treadColorFor(teamsWorld, teams[team]), `team ${team}, no palette`).toBe(tint(CLASSIC_TEAMS[team]));
+    }
+  });
+
+  it('a system built with the palette prints it through the real emit path, in FFA and teams', () => {
+    // Not treadColorFor in isolation: the system has to hand its palette on, and the colour
+    // has to reach the material a decal renders with.
+    for (const [mode, ownerColours, classicColours] of [
+      ['ffa', HIGH_CONTRAST_RINGS, CLASSIC_RINGS],
+      ['teams', HIGH_CONTRAST_TEAMS, CLASSIC_TEAMS],
+    ] as const) {
+      const tanks = fourPlayers(mode);
+      const w = multiWorld(tanks, mode);
+      const printed = new Set(driveAndRead(w, tanks, high));
+      expect([...printed].sort(), mode).toEqual(ownerColours.map(tint).sort());
+      const shipped = new Set(driveAndRead(w, tanks));
+      expect([...shipped].sort(), `${mode}, no palette`).toEqual(classicColours.map(tint).sort());
+    }
+  });
+
+  it('single-player and campaign trails stay neutral under High contrast', () => {
+    // The trail is gated on identity and on VS, before any palette is read.
+    const solo = makeTank(1, 5, 5, 0, { controlledBy: 0 });
+    expect(treadColorFor(worldWith(solo), solo, high)).toBe(TREAD_COLOR);
+    const coop = fourPlayers('ffa');
+    const coopWorld = multiWorld(coop); // campaign-coop
+    for (const t of coop) expect(treadColorFor(coopWorld, t, high), `co-op slot ${t.controlledBy}`).toBe(TREAD_COLOR);
   });
 });
