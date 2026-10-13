@@ -13,6 +13,8 @@ import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
 import settingsBaseline from './baseline/screen.settings.json';
 import uiScaleBaseline from './baseline/screen.settings.ui-scale.json';
+import confirmBaseline from './baseline/screen.confirm.new-campaign.json';
+import versusBaseline from './baseline/screen.versus-setup.json';
 
 const m = (over: Record<string, unknown> = {}) => ({
   selector: '.a', present: true, visible: true, text: 'x',
@@ -470,6 +472,35 @@ describe('the screen baseline: role and aria attributes are compared exactly (is
       report: { measurements: [m({ aria: { role: 'dialog', 'aria-modal': 'true' } })], pageErrors: [] },
     });
     expect(same.status).toBe('match');
+  });
+});
+
+/**
+ * THE COMMITTED BASELINES CARRY THE SEMANTICS (issue #937).
+ *
+ * The gate compares a capture with whatever was last accepted, so an accept can bless a lost
+ * role as easily as a moved box. These pin two contracts in the shipped files themselves, so
+ * losing one takes a test edit and not only a re-accept -- and a whole-baseline accept made by
+ * a capture that records no aria fails here instead of quietly emptying the comparison.
+ *
+ * Imported, like the UI-scale pair below, so a manifest entry can mutate the files. The
+ * known-bad cases are those entries, applied at run time; no committed file is ever bad.
+ */
+describe('the committed baselines carry roles and accessible names (issue #937)', () => {
+  type Entry = { selector: string, aria?: Record<string, string> };
+  const ariaOf = (baseline: { measurements: Entry[] }, selector: string) =>
+    baseline.measurements.find((e) => e.selector === selector)?.aria;
+
+  it('records the new-campaign confirm as a modal alertdialog, named and described by its own text', () => {
+    expect(ariaOf(confirmBaseline, '.hud-confirm')).toEqual({
+      role: 'alertdialog', 'aria-labelledby': 'hud-confirm-title',
+      'aria-describedby': 'hud-confirm-body', 'aria-modal': 'true',
+    });
+  });
+
+  it('records the versus player-role button with its name and its pressed state', () => {
+    expect(ariaOf(versusBaseline, '.hud-versus-role-btn'))
+      .toEqual({ 'aria-label': 'Player 1 Human', 'aria-pressed': 'true' });
   });
 });
 
