@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "The emptied mark's cue loses fill mode `both` (issue #1022 made the `marks` row the shipped FFA strip). The HUD resumes a cue re-attached after a rebuild with a negative delay, and without backwards fill the mark paints unstyled for a frame before the animation takes hold. jsdom cannot show it, so the stylesheet test pins the declaration. Replaces the badge arm's entry of the same shape, deleted with the badge."
+  "why": "The emptied mark's cue loses fill mode `both` (issue #1022 made the `marks` row the shipped FFA strip). The HUD resumes a cue re-attached after a rebuild with a negative delay, and without backwards fill the mark paints unstyled for a frame before the animation takes hold. jsdom cannot show it, so the stylesheet test pins the declaration. Replaces the badge arm's entry of the same shape, deleted with the badge.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) fills both ways, so a cue resumed with a negative delay lands on its elapsed frame"
+  ]
 }

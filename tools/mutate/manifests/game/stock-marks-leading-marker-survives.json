@@ -7,5 +7,10 @@
   "tests": [
     "src/game/hud.match.test.ts"
   ],
-  "why": "The clause that makes the `marks` row replace the leading mark (issue #1022). The row draws this slot's outline once per stock, so a leading copy states the identity a second time -- and lands next to a hollow LOST mark of the same shape. For slot 1 those are the same circle drawn the same way, so an entry that has lost a stock appears to carry two identity marks instead of one and a spent stock. Measured on a real frame before the guard existed (issue #230). Rewritten by #1022 from the `stockCue !== 'marks'` clause it used to drop; the row is now the shipped FFA strip."
+  "why": "The clause that makes the `marks` row replace the leading mark (issue #1022). The row draws this slot's outline once per stock, so a leading copy states the identity a second time -- and lands next to a hollow LOST mark of the same shape. For slot 1 those are the same circle drawn the same way, so an entry that has lost a stock appears to carry two identity marks instead of one and a spent stock. Measured on a real frame before the guard existed (issue #230). Rewritten by #1022 from the `stockCue !== 'marks'` clause it used to drop; the row is now the shipped FFA strip.",
+  "killedBy": [
+    "hud: identity mark in the stock strip (issue #778) draws the leading mark under arcs and roof, and none under shape, whose row replaces it (issue #1022)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) suppresses the leading marker, which is the whole point of the arm",
+    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn, the leading marks counted"
+  ]
 }

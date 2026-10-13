@@ -4,7 +4,8 @@
  *
  * THE RULING, recorded on #234: `shape` -- a circle, triangle, square or starburst per slot,
  * on the arena ring and beside the slot in the HUD stock strip -- ships as the FFA default,
- * decided on still evidence. The `identityMarker` flag STAYS as a KEPT ROLLBACK LEVER, the
+ * decided on still evidence. (Since issue #1022 the strip draws it as the stocks themselves,
+ * the `marks` row, rather than beside them.) The `identityMarker` flag STAYS as a KEPT ROLLBACK LEVER, the
  * exemption `.claude/rules/game.md` gives `topbar` and `menuTransition`: a later real-device
  * sitting may reverse the default, and a regression report about the marker has to be
  * checkable rather than remembered.

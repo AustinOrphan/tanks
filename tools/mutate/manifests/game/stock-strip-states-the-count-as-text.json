@@ -1,0 +1,12 @@
+{
+  "id": "stock-strip-states-the-count-as-text",
+  "file": "src/game/hud.ts",
+  "find": "    span.append(label);",
+  "replace": "    span.append(label, String(entry.stock));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "src/game/topbar-treatment.test.ts"
+  ],
+  "why": "Every entry writes its count as text beside the label again, the digit strip #1022 retired, now ahead of the row that already names the count. Assistive technology reads the count twice, and a `textContent` watcher sees digits change while the row it should be reading stays invisible to it -- the false comparison that nearly happened on #230. The count belongs in the row's one name, except beside the single unit of a narrow fallback."
+}

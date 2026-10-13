@@ -7,5 +7,9 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "Issue #930's second half: the stock pip's burst ring has NO `opacity: 0` in its own rule -- it rests invisible because `animation: ... both` holds a keyframe set opening at `opacity: 0`, which is why a population derived from base rules alone would miss it. Cancelling its animation under reduced motion deletes the ring instead of calming it. Retargeted by issue #1022, which deleted the `badge` arm this entry first guarded and left the ring as the only fill-held stock cue. Killed by the derived #631 rule and by the stock-loss cue block's own reduced-motion case."
+  "why": "Issue #930's second half: the stock pip's burst ring has NO `opacity: 0` in its own rule -- it rests invisible because `animation: ... both` holds a keyframe set opening at `opacity: 0`, which is why a population derived from base rules alone would miss it. Cancelling its animation under reduced motion deletes the ring instead of calming it. Retargeted by issue #1022, which deleted the `badge` arm this entry first guarded and left the ring as the only fill-held stock cue. Killed by the derived #631 rule and by the stock-loss cue block's own reduced-motion case.",
+  "killedBy": [
+    "hud.css: every animation answers to the resolved motion policy (issue #631) never answers an animation by cancelling a cue that rests invisible",
+    "hud.css: the stock-loss cue arms (issue #230) gives every cue a reduced-motion form, keyed off the resolved policy class"
+  ]
 }

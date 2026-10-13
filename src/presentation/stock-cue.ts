@@ -40,8 +40,9 @@ export type StockRow = 'marks' | 'pips';
  *  - ANY MARKER BUT `shape` DRAWS PIPS. The ruling reserved `marks` for a `shape` marker that is
  *    on by default, so that the strip's outlines never appear without the ground ring's. With
  *    the marker reversed (`?dev=1&identityMarker=solid`) there is no outline on the ground to
- *    pair with, and `arcs` and `roof` mark the ring in another vocabulary; both keep the leading
- *    mark beside their pips until issue #1023 removes them.
+ *    pair with, and `arcs` and `roof` state identity in another vocabulary (the ring's arcs, the
+ *    crown's blades); those two keep the leading mark beside their pips until issue #1023
+ *    removes them.
  *
  * Both readings are derived from the code and the ruling's own condition rather than ruled on
  * directly, and a later ruling can reverse either.
