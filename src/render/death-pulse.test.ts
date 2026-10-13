@@ -6,7 +6,7 @@ import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import { createDeathPulseSystem } from './death-pulse';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
+import { IDENTITY_RING_COLORS, OWNER_PALETTES, TEAM_COLORS } from '../presentation/identity';
 import { makeSpawnRing } from './spawn-anim';
 
 function makeTank(
@@ -125,6 +125,81 @@ describe('death pulse: where and what colour a ring spawns', () => {
 
     expect(() => dp.spawn(events, world, { enemyEnabled: false })).not.toThrow();
     expect(deathRings(scene).length).toBe(0);
+  });
+});
+
+/**
+ * Site 4 of issue #1057's 7: the death ring in the session's owner palette. Population: 4 FFA
+ * slots and 3 teams, under High contrast, with Classic (no palette) as the control, and the
+ * single-player ring as the negative control the gate exists for. Expected colours are
+ * written out.
+ */
+describe('death pulse: the owner palette (issue #1057)', () => {
+  const CLASSIC_RINGS = [0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bff];
+  const HIGH_CONTRAST_RINGS = [0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb];
+  const HIGH_CONTRAST_TEAMS = [0x63d1fd, 0xc6fd00, 0xf2c6bb];
+  const CLASSIC_TEAMS = [0xff3b3b, 0xfcc0fc, 0x4eff3b];
+
+  /** Four dead players, at x = 2, 4, 6, 8: by slot in FFA, or teams A, B, C, A. */
+  function fourDead(mode: 'ffa' | 'teams'): World {
+    const teams = [0, 1, 2, 0];
+    const tanks = [0, 1, 2, 3].map((slot) => makeTank(slot + 1, 'player', 2 + slot * 2, 3, {
+      controlledBy: slot, alive: false, ...(mode === 'teams' ? { team: teams[slot] } : {}),
+    }));
+    const spawns: Spawn[] = tanks.map((t) => ({ kind: 'player', pos: { ...t.pos }, angle: 0 }));
+    return createWorld({ walls: [], tanks, spawns, lives: 3, mode });
+  }
+
+  /** The colour of the visible death ring at world x. */
+  const ringAt = (scene: THREE.Scene, x: number): number =>
+    deathRings(scene).find((r) => r.position.x === x)?.material.color.getHex() ?? -1;
+
+  it('a fresh ring for each of the 4 FFA slots and 3 teams follows the palette', () => {
+    for (const [mode, ids, high, classic] of [
+      ['ffa', [1, 2, 3, 4], HIGH_CONTRAST_RINGS, CLASSIC_RINGS],
+      ['teams', [1, 2, 3], HIGH_CONTRAST_TEAMS, CLASSIC_TEAMS],
+    ] as const) {
+      const world = fourDead(mode);
+      const events = ids.map((id) => destroyedEvent(id, 'player', id * 2, 3));
+      const hcScene = new THREE.Scene();
+      const hc = createDeathPulseSystem(hcScene, false, OWNER_PALETTES['high-contrast']);
+      hc.spawn(events, world, { enemyEnabled: false });
+      expect(ids.map((id) => ringAt(hcScene, id * 2)), mode).toEqual([...high]);
+      // NEGATIVE CONTROL: no palette is Classic.
+      const { scene, dp } = setup();
+      dp.spawn(events, world, { enemyEnabled: false });
+      expect(ids.map((id) => ringAt(scene, id * 2)), `${mode}, no palette`).toEqual([...classic]);
+    }
+  });
+
+  it('a POOLED ring is recoloured in the palette too, not left in the last owner\'s colour', () => {
+    // `acquire` has two colour paths: a fresh ring is built in its colour, a pooled one is
+    // recoloured with setHex. Slot 0 dies, its ring expires into the pool, then slot 1 dies
+    // and is handed that same mesh.
+    const scene = new THREE.Scene();
+    const dp = createDeathPulseSystem(scene, false, OWNER_PALETTES['high-contrast']);
+    const world = fourDead('ffa');
+    dp.spawn([destroyedEvent(1, 'player', 2, 3)], world, { enemyEnabled: false });
+    const first = deathRings(scene)[0];
+    dp.update(10); // past the ring's whole life: recycled into the pool
+    expect(deathRings(scene), 'the first ring expired').toHaveLength(0);
+    dp.spawn([destroyedEvent(2, 'player', 4, 3)], world, { enemyEnabled: false });
+    const reused = deathRings(scene);
+    expect(reused).toHaveLength(1);
+    expect(reused[0], 'the pool handed back the same mesh').toBe(first);
+    expect(reused[0].material.color.getHex(), 'slot 1, High contrast').toBe(HIGH_CONTRAST_RINGS[1]);
+  });
+
+  it('single-player is untouched: one player\'s death ring stays Classic under High contrast', () => {
+    // A player death rings at one player too, in slot 0's colour -- the one owner colour a
+    // single-player game draws. The palette applies only where identity does.
+    const scene = new THREE.Scene();
+    const dp = createDeathPulseSystem(scene, false, OWNER_PALETTES['high-contrast']);
+    const solo = makeTank(1, 'player', 5, 5, { controlledBy: 0, alive: false });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [solo], spawns, lives: 3 });
+    dp.spawn([destroyedEvent(1, 'player', 5, 5)], world, { enemyEnabled: false });
+    expect(deathRings(scene)[0].material.color.getHex()).toBe(0x3fd0ff);
   });
 });
 

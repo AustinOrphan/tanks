@@ -6,7 +6,7 @@ import { BULLET_RADIUS, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constan
 import { configFor, hasAbility, TankAbility, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
-import { identityApplies, resolveOwnerColor } from '../presentation/identity';
+import { identityApplies, resolveOwnerColor, type OwnerPalette } from '../presentation/identity';
 import { identityMarkerGeometry, identityRoofGeometry } from './identity-marker';
 import type { ArrivalLanguage } from '../presentation/arrival-language';
 import {
@@ -476,6 +476,12 @@ export function createEntityViews(
    * and is separated by hue alone. See presentation/enemy-role.ts.
    */
   enemyRole: EnemyRoleCue | null = null,
+  /**
+   * The session's owner palette (issue #1057): what the identity ring, the spawn ring and a
+   * player's shell tint are drawn in. Absent = the shipped default, which `resolveOwnerColor`
+   * supplies, so a bare `createEntityViews(scene)` (the preview, the gallery) stays on Classic.
+   */
+  ownerPalette?: OwnerPalette,
 ): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
@@ -1360,7 +1366,7 @@ export function createEntityViews(
       // defensive fallback for a hand-built fixture, not a reachable campaign state.
       if (t.kind === 'player') {
         if (multiPlayer && !view.ring) {
-          const color = resolveOwnerColor(curr, t);
+          const color = resolveOwnerColor(curr, t, ownerPalette);
           view.ring = makeIdentityRing(color, ringMarkerFor(identityMarker), slot);
           view.group.add(view.ring);
         } else if (!multiPlayer && view.ring) {
@@ -1499,7 +1505,10 @@ export function createEntityViews(
           // default is still deferred (#201's own brief), but the render seam reads the
           // stored variant now, so tooling (the gallery's --spawn-anim) can already reach it.
           const variant = styleFor(slot).spawnAnim;
-          const color = resolveOwnerColor(curr, t);
+          // Unlike the identity ring, the entrance ring draws in single-player too, in slot
+          // 0's colour. The session's palette applies only where identity does (issue #1057),
+          // so a single-player game stays as shipped under either palette.
+          const color = resolveOwnerColor(curr, t, multiPlayer ? ownerPalette : undefined);
           const ring = makeSpawnRing(color);
           view.group.add(ring);
           view.spawn = { variant, elapsed: 0, ring, protectedFrom: null };
@@ -1581,7 +1590,7 @@ export function createEntityViews(
     if (!owner || owner.kind !== 'player') return null;
     // n-player arc PR 4: teams mode tints by TEAM, mirroring the ring dispatch above --
     // see its own comment for why `t.team ?? 0`'s fallback is defensive, not reachable.
-    return resolveOwnerColor(curr, owner);
+    return resolveOwnerColor(curr, owner, ownerPalette);
   }
 
   function syncBullets(prev: World, curr: World, alpha: number, multiPlayer: boolean): void {

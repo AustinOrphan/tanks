@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-ignored-by-the-slot-lookup",
+  "file": "src/presentation/identity.ts",
+  "find": "  return palette.rings[slot] ?? IDENTITY_COLOR_FALLBACK;",
+  "replace": "  return IDENTITY_RING_COLORS[slot] ?? IDENTITY_COLOR_FALLBACK;",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts"
+  ],
+  "why": "identityColor reads the shipped ring array instead of the palette it is handed, so an FFA ring, shell, trail, pulse and stock chip all stay Classic under High contrast while teams follow the palette (issue #1057). The HUD calls this lookup directly, not through the resolver, which is why it is pinned on its own.",
+  "killedBy": [
+    "owner palettes: every owner colour follows the palette it is handed (issue #1057) resolveOwnerColor: all 7 owner colours from the palette passed, and Classic when none is",
+    "owner palettes: every owner colour follows the palette it is handed (issue #1057) the HUD's two lookups take the palette too, and default to Classic"
+  ]
+}

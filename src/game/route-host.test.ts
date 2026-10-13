@@ -17,6 +17,7 @@ import { CAMPAIGN_LEVELS } from '../sim/config/campaign';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { defaultSlots } from './versus-setup';
 import { createHud, type GameplayHud, type Hud } from './hud';
+import { OWNER_PALETTES } from '../presentation/identity';
 import { ZERO_STATS } from './stats';
 import type { TankPreview } from '../render/preview';
 import type { VersusConfig } from './versus-config';
@@ -954,7 +955,7 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
    *
    * The name is typed `keyof GameplayHud`, so a member that is renamed or removed fails
    * the build here rather than quietly dropping out of the sweep. The COUNT is asserted
-   * below against the same ten `hud-ownership.test.ts` states, which is the half a type
+   * below against the same eleven `hud-ownership.test.ts` states, which is the half a type
    * cannot check: a member ADDED to the union would compile fine as an absence.
    */
   const GAMEPLAY_PUSHES: ReadonlyArray<
@@ -972,15 +973,16 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
       (s) => s.hud.setTouchIndicator({ stick: null, aim: null, scheme: 'stick', used: true }),
     ],
     ['showAchievementToasts', (s) => s.hud.showAchievementToasts([])],
+    ['setStockPalette', (s) => s.hud.setStockPalette(OWNER_PALETTES['high-contrast'])],
     ['showToast', (s) => s.hud.showToast('Gamepad connected')],
   ];
 
   it('reaches the page HUD while the session holds the slot', () => {
-    // Ten, the number `hud-ownership.test.ts` asserts `GameplayHudKey` holds. Stated here
+    // Eleven, the number `hud-ownership.test.ts` asserts `GameplayHudKey` holds. Stated here
     // because the sweep below is only exhaustive if this list is: a member added to the
     // union would make the facade forward it and leave this list one short, and nothing
-    // else in either file would notice.
-    expect(GAMEPLAY_PUSHES, 'GameplayHud has ten members').toHaveLength(10);
+    // else in either file would notice. Issue #1057 added `setStockPalette`: 10 -> 11.
+    expect(GAMEPLAY_PUSHES, 'GameplayHud has eleven members').toHaveLength(11);
     const f = fixture({ launchDismissed: true });
     const slot = f.host.attach(CAMPAIGN);
     for (const [, push] of GAMEPLAY_PUSHES) push(slot);
@@ -991,9 +993,9 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
   });
 
   it('drops EVERY push from a session that has already been replaced', () => {
-    // Exhaustive on purpose: a facade that guarded nine members and forwarded the tenth
+    // Exhaustive on purpose: a facade that guarded ten members and forwarded the eleventh
     // is the shape this whole step exists to rule out, and a spot check of one member
-    // cannot tell that apart from a facade that guards all ten.
+    // cannot tell that apart from a facade that guards all eleven.
     const f = fixture({ launchDismissed: true });
     const retired = f.host.attach(CAMPAIGN);
     const live = f.host.attach(VERSUS_SHAPE);

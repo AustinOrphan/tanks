@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-dropped-by-the-tread-trail-system",
+  "file": "src/render/tread-trails.ts",
+  "find": "      const tint = treadColorFor(curr, t, ownerPalette);",
+  "replace": "      const tint = treadColorFor(curr, t);",
+  "expect": "killed",
+  "tests": [
+    "src/render/tread-trails.test.ts"
+  ],
+  "why": "The trail system is built with the session palette but stops handing it to treadColorFor, so every decal prints Classic (issue #1057). A test of treadColorFor alone cannot see it; the emit-path test reads the colour off the decal material.",
+  "killedBy": [
+    "tread trails: the owner palette (issue #1057) a system built with the palette prints it through the real emit path, in FFA and teams"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-never-reaches-the-death-vignette",
+  "file": "src/game/loop.ts",
+  "find": "deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette)",
+  "replace": "deathVignetteColor(driver.world, playerId ?? -1, playerCount)",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The frame handler stops passing the session palette to deathVignetteColor, so a multiplayer death flashes Classic under High contrast (issue #1057). deathVignetteColor's own tests call it with a palette and cannot see this; the driven-death test reads the colour the HUD was actually handed.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD flashes a two-player FFA death in the session's owner palette (issue #1057)"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "stock-palette-setter-stores-nothing",
+  "file": "src/game/hud.ts",
+  "find": "      stockPalette = palette;",
+  "replace": "      void palette;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "setStockPalette accepts the session palette and keeps nothing, so the chips draw the default (Classic) under any palette (issue #1057). The chip lookup is correct; only a test that goes through the setter, as the session does, can see this.",
+  "killedBy": [
+    "hud: stock chips in the session's owner palette (issue #1057) paints all 4 FFA chips and all 3 teams from the palette it was handed",
+    "hud: stock chips in the session's owner palette (issue #1057) the identity-mark glyph takes its hue from the chip, so it follows the palette too (#778)"
+  ]
+}

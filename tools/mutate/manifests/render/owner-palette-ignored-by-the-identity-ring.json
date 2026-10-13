@@ -1,0 +1,18 @@
+{
+  "id": "owner-palette-ignored-by-the-identity-ring",
+  "file": "src/render/entities.ts",
+  "find": "const color = resolveOwnerColor(curr, t, ownerPalette);\n          view.ring = makeIdentityRing(",
+  "replace": "const color = resolveOwnerColor(curr, t);\n          view.ring = makeIdentityRing(",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts",
+    "tools/hud/ring-chip.test.ts"
+  ],
+  "why": "Site 1 of issue #1057's 7: the identity ring drops the session palette and draws Classic, while the stock chip beside it follows High contrast -- so the ring a player sees and the chip for the same slot disagree, the failure the issue names first. Killed by the ring test in FFA and teams and by the ring-and-chip agreement test.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) site 1 of 7, the identity ring: all 4 FFA slots and all 3 teams follow the palette",
+    "the identity ring and the stock chip are one colour (issue #1057) NEGATIVE CONTROL: a ring and a chip drawn from different palettes disagree in every slot",
+    "the identity ring and the stock chip are one colour (issue #1057) ffa, high-contrast: every player's ring and chip match",
+    "the identity ring and the stock chip are one colour (issue #1057) teams, high-contrast: every player's ring and chip match"
+  ]
+}
