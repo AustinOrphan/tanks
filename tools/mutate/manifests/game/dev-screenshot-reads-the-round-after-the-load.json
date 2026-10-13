@@ -1,0 +1,11 @@
+{
+  "id": "dev-screenshot-reads-the-round-after-the-load",
+  "file": "src/game/hud.ts",
+  "find": "      const round = port.round();\n      whenDevTools(({ exports }) => {\n        try {\n          const shot = exports.screenshotExport(session, round, capture);",
+  "replace": "      whenDevTools(({ exports }) => {\n        try {\n          const shot = exports.screenshotExport(session, port.round(), capture);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Download Screenshot names its file from the round as it is once the modules have loaded, so a frame captured at the press is saved under a tick it was not taken at."
+}

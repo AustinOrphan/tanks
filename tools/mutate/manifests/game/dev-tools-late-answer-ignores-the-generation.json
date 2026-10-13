@@ -1,0 +1,11 @@
+{
+  "id": "dev-tools-late-answer-ignores-the-generation",
+  "file": "src/game/hud.ts",
+  "find": "        if (generation === devToolsGeneration) run(modules);",
+  "replace": "        run(modules);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. An answer that lands after the load ignores the generation, so neither a close nor a teardown can drop it."
+}

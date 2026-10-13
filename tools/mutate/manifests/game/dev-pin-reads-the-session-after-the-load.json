@@ -1,0 +1,11 @@
+{
+  "id": "dev-pin-reads-the-session-after-the-load",
+  "file": "src/game/hud.ts",
+  "find": "    const input = diagnosticsInput();\n    if (input === null) return;\n    whenDevTools(({ diagnostics }) => {\n      const url = diagnostics.pinnedSeedUrl(input);",
+  "replace": "    if (diagnosticsInput() === null) return;\n    whenDevTools(({ diagnostics }) => {\n      const url = diagnostics.pinnedSeedUrl(diagnosticsInput()!);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Pin Current Seed reads the session once the modules have loaded instead of at the press, so a press during the load offers a URL for a seed that was not running when it was pressed."
+}

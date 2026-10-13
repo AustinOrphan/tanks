@@ -1,0 +1,11 @@
+{
+  "id": "dev-action-armed-with-another-actions-confirm-label",
+  "file": "src/game/hud.ts",
+  "find": "      const { confirmLabel } = modules.actions.DEV_ACTIONS[btn.dataset.action as DevActionId];",
+  "replace": "      const { confirmLabel } = modules.actions.DEV_ACTIONS['reroll-seed'];",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Every action arms with Reroll Seed's confirm label, read at the press from the catalogue the pane loaded. The armed control is the only thing saying WHICH action is one press from firing, so two of the three would say the wrong one."
+}

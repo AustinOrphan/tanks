@@ -1,0 +1,11 @@
+{
+  "id": "dev-export-diagnostics-reads-the-session-after-the-load",
+  "file": "src/game/hud.ts",
+  "find": "      const input = diagnosticsInput() as DiagnosticsInput;\n      const port = input.session === null ? null : (devExportPort?.() ?? null);\n      const round = port === null ? null : port.round();\n      return ({ exports }) => exports.diagnosticsExport(input, round);",
+  "replace": "      const pressed = diagnosticsInput() as DiagnosticsInput;\n      const port = pressed.session === null ? null : (devExportPort?.() ?? null);\n      const round = port === null ? null : port.round();\n      return ({ exports }) => exports.diagnosticsExport(diagnosticsInput() as DiagnosticsInput, round);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Download Diagnostics builds its file from the session as it is once the modules have loaded, not as it was at the press, so a press during the load saves a later seed than the one it was pressed on."
+}

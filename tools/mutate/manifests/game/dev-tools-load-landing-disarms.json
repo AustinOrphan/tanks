@@ -1,0 +1,11 @@
+{
+  "id": "dev-tools-load-landing-disarms",
+  "file": "src/game/hud.ts",
+  "find": "      whenDevTools(revealDevActions);",
+  "replace": "      whenDevTools(refreshDevActions);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. The load landing re-runs the whole availability refresh, which disarms whatever is armed when no round exists -- so a Use Production Save armed while the load was in flight lapses for no reason the developer can see."
+}

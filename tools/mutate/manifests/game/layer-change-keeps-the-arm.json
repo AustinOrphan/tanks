@@ -1,0 +1,11 @@
+{
+  "id": "layer-change-keeps-the-arm",
+  "file": "src/game/hud.ts",
+  "find": "    if (result === 'refused') return false;\n    disarmReset();",
+  "replace": "    if (result === 'refused') return false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Opening a layer stops disarming, so a developer action armed before Back is still armed when the pane opens again and its first press there fires it."
+}

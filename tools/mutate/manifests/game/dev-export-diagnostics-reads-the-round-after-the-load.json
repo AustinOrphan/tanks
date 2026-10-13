@@ -1,0 +1,11 @@
+{
+  "id": "dev-export-diagnostics-reads-the-round-after-the-load",
+  "file": "src/game/hud.ts",
+  "find": "      const round = port === null ? null : port.round();\n      return ({ exports }) => exports.diagnosticsExport(input, round);",
+  "replace": "      return ({ exports }) => exports.diagnosticsExport(input, port === null ? null : port.round());",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Download Diagnostics asks the session for its round once the modules have loaded instead of at the press, so a press during the load saves a tick the round reached afterwards."
+}

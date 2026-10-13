@@ -1,0 +1,11 @@
+{
+  "id": "dev-press-before-load-skips-the-wait",
+  "file": "src/game/hud.ts",
+  "find": "    if (devTools !== null) {\n      run(devTools);",
+  "replace": "    if (devTools !== null || true) {\n      run(devTools as DevToolsModules);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. A press runs its answer at once whether or not the pane's modules have loaded, so before they land it reads a module that is not there and throws out of the click handler -- and nothing starts the load. The negative control for every `escapedDuring` check that a press before the load throws nothing."
+}

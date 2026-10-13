@@ -1,0 +1,11 @@
+{
+  "id": "diagnostics-copy-selects-only-once-the-clipboard-accepts",
+  "file": "src/game/hud.ts",
+  "find": "    diagOutEl.focus();\n    diagOutEl.select();\n    // ...and back to the TOP. `select()` leaves a textarea scrolled to the end of the\n    // selection, so the field opened on the middle of the report -- the URL and the heading\n    // above the fold, and the first thing a reader wants at the bottom of what they can see.\n    // Caught in the capture at 900x900 (`issue-247/`), not in a test: jsdom lays nothing out,\n    // so `scrollTop` is 0 there whether or not this line exists and an assertion on it could\n    // not fail.\n    diagOutEl.scrollTop = 0;\n    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;\n    void clipboard?.writeText(text).catch(() => {});",
+  "replace": "    diagOutEl.scrollTop = 0;\n    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;\n    void clipboard?.writeText(text).then(() => {\n      diagOutEl.focus();\n      diagOutEl.select();\n    }, () => {});",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Copy selects its report only once the clipboard accepts it, so a refused write -- or no clipboard at all -- leaves nothing selected, and selected text is the one copy path that always works."
+}

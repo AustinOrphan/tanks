@@ -1,0 +1,11 @@
+{
+  "id": "dev-tools-load-failure-never-retried",
+  "file": "src/game/hud.ts",
+  "find": "      (err: unknown) => {\n        devToolsLoad = null;\n        throw err;\n      },",
+  "replace": "      (err: unknown) => {\n        throw err;\n      },",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. A failed load is kept, so every later open and press reports the same failure without trying again, even once the connection is back."
+}

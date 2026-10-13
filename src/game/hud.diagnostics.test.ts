@@ -6,6 +6,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud } from './hud';
 import type { SessionDiagnostics } from './dev-diagnostics';
+import { DEV_ACTIONS, type DevActionPort } from './dev-actions';
 import {
   NO_SESSION_REPLAY_NOTE,
   NO_SESSION_SCREENSHOT_NOTE,
@@ -51,6 +52,43 @@ const q = <T extends HTMLElement>(root: HTMLElement, sel: string): T =>
 async function settled(): Promise<void> {
   await vi.dynamicImportSettled();
   await new Promise((r) => setTimeout(r, 0));
+}
+
+/**
+ * Everything that escaped while `run` ran and every import settled: a throw from a click
+ * listener, which jsdom reports as a window `error` rather than from `click()` -- so
+ * `expect(click).not.toThrow()` cannot see it -- and an unhandled rejection, which `boot.ts`
+ * treats as the match failing.
+ */
+async function escapedDuring(run: () => void | Promise<void>): Promise<unknown[]> {
+  const escaped: unknown[] = [];
+  const onError = (e: ErrorEvent): void => {
+    escaped.push(e.error);
+    e.preventDefault();
+  };
+  const onRejection = (reason: unknown): void => void escaped.push(reason);
+  window.addEventListener('error', onError);
+  process.on('unhandledRejection', onRejection);
+  try {
+    await run();
+    await settled();
+  } finally {
+    window.removeEventListener('error', onError);
+    process.off('unhandledRejection', onRejection);
+  }
+  return escaped;
+}
+
+/** A port with a round running, recording every rebuild it is asked for. */
+function livePort(rebuilt: Array<number | null> = []): DevActionPort {
+  return {
+    currentSeed: () => 1,
+    hasRound: () => true,
+    rebuild: (seed) => {
+      rebuilt.push(seed);
+      return 1;
+    },
+  };
 }
 
 /**
@@ -657,5 +695,385 @@ describe('the exports (issue #254)', () => {
     hud!.setDevExportPort(() => port());
     expect(() => diagBtn(root).click()).not.toThrow();
     expect(out(root).value).toContain('failed, so no file was saved: blocked');
+  });
+
+  describe('pressed before the developer modules have loaded (issue #1014)', () => {
+    // The pane's modules load when it opens, so a press can land before them. It reads the
+    // session at the press and saves once they are there; what changes in between must not
+    // reach the file. Each case opens the pane and presses in the same task, so the press
+    // really is before the load -- asserted, not assumed.
+
+    it('Download Diagnostics saves the session and round as they were at the press', async () => {
+      // Negative controls: the diagnostics input, and the round, read once the load lands.
+      const d = downloads();
+      const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+      let live: SessionDiagnostics = SESSION;
+      let tick = 10;
+      hud!.setDiagnosticsSource(() => live);
+      hud!.setDevExportPort(() => port({ round: () => ({ ...ROUND, tick }) }));
+      const escaped = await escapedDuring(() => {
+        q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+        diagBtn(root).click();
+        expect(d.saved, 'saved before the load').toEqual([]);
+        live = { ...SESSION, seed: 99 };
+        tick = 99;
+      });
+      expect(escaped).toEqual([]);
+      expect(d.saved).toHaveLength(1);
+      const file = JSON.parse(d.saved[0].text);
+      expect(file.session.seed).toBe(4242424242);
+      expect(file.round.tick).toBe(10);
+      expect(out(root).value).toContain(`Saved ${d.saved[0].fileName}`);
+    });
+
+    it('Download Screenshot saves the frame captured at the press, named from the round then', async () => {
+      // A frame captured once the modules had loaded would be a later one than the developer
+      // saw. Negative controls: the frame captured, and the round read, once the load lands.
+      const d = downloads();
+      const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+      hud!.setDiagnosticsSource(() => SESSION);
+      const atPress = { ...CAPTURE, image: document.createElement('canvas') };
+      const later = { ...CAPTURE, image: document.createElement('canvas') };
+      let frame = atPress;
+      let tick = 480;
+      const captured: HTMLCanvasElement[] = [];
+      hud!.setDevExportPort(() =>
+        port({
+          round: () => ({ ...ROUND, tick }),
+          captureFrame: () => {
+            captured.push(frame.image);
+            return frame;
+          },
+        }),
+      );
+      const escaped = await escapedDuring(() => {
+        q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+        shotBtn(root).click();
+        expect(captured, 'the frame is captured at the press').toHaveLength(1);
+        expect(d.canvases, 'saved before the load').toEqual([]);
+        frame = later;
+        tick = 999;
+      });
+      expect(escaped).toEqual([]);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toBe(atPress.image);
+      expect(d.canvases).toHaveLength(1);
+      expect(d.canvases[0].image).toBe(atPress.image);
+      expect(d.canvases[0].fileName).toBe('tanks-canvas-seed4242424242-tick480-1280x800-dpr2.png');
+      expect(out(root).value).toContain('1280x800 pixels at pixel ratio 2');
+    });
+
+    it('Download Replay saves the trace as it was at the press', async () => {
+      // Negative control: the trace read once the load lands, which carries the tick recorded
+      // in between.
+      const d = downloads();
+      const root = mountDev({ developerPage: PAGE, developerDownloads: d.seam });
+      const world = createWorldFor(arenaById('arena-01'), 5, { lives: 3 });
+      const rec = createRecordingInput(
+        { sample: () => [{ move: { x: 1, y: 0 }, aim: { x: 0, y: 1 }, fire: true, mine: false }] },
+        replayMetaFor(world, 'arena-01', false),
+      );
+      for (let i = 0; i < 3; i++) rec.sample();
+      const atPress = rec.trace();
+      hud!.setDevExportPort(() => port({ replay: () => rec.trace() }));
+      const escaped = await escapedDuring(() => {
+        q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+        replayBtn(root).click();
+        expect(d.saved, 'saved before the load').toEqual([]);
+        rec.sample();
+      });
+      expect(escaped).toEqual([]);
+      expect(d.saved).toHaveLength(1);
+      expect(JSON.parse(d.saved[0].text)).toEqual(atPress);
+      expect(out(root).value).toContain('3 ticks');
+    });
+  });
+});
+
+describe('the developer modules load when the pane opens (issue #1014)', () => {
+  // `dev-actions`, `dev-diagnostics` and `dev-exports` are loaded by dynamic imports when
+  // Developer Tools opens, so an ordinary page never downloads them. Every case above starts
+  // with them loaded (`mountDevLoaded`); these pin the window before they land and what it
+  // must not change.
+
+  it('nothing loads them before the pane opens: a press after every import has settled still waits', async () => {
+    // Negative control: loading them at construction, which answers this press in its own
+    // task. The press then loads them itself and is answered, so the absence is not because
+    // nothing ever could be.
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDiagnosticsSource(() => SESSION);
+    await settled();
+    q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+    expect(out(root).value, 'answered before any load').toBe('');
+    await settled();
+    expect(out(root).value).toContain('- Seed: 4242424242');
+  });
+
+  it('THE CONTROL: opening the pane loads them, so a press once that has settled is answered at once', async () => {
+    // Without this the case above could pass because nothing loads them at all. Negative
+    // control: an open that does not start the load.
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDiagnosticsSource(() => SESSION);
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    await settled();
+    q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+    expect(out(root).value).toContain('- Seed: 4242424242');
+  });
+
+  it('the markup names each action exactly as the catalogue does, one button per entry', () => {
+    // The catalogue is the single source of the wording. The markup carries the labels so a
+    // button has an accessible name before the catalogue has loaded, and this is what keeps the
+    // two from drifting -- a renamed action leaving a stale word on a button that dispatches
+    // the new id. Read off the HUD as constructed, before any load. Negative controls: a stale
+    // word in the markup, and an action renamed in the catalogue alone.
+    const root = mountDev();
+    const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('.hud-devact'));
+    expect(buttons.map((b) => b.dataset.action).sort()).toEqual(Object.keys(DEV_ACTIONS).sort());
+    for (const b of buttons) {
+      const id = b.dataset.action as keyof typeof DEV_ACTIONS;
+      expect(b.textContent, id).toBe(DEV_ACTIONS[id].label);
+    }
+  });
+
+  it('arms each action with its own catalogue confirm label, and restores its own label on disarm', async () => {
+    // Each in turn: arming the next disarms the one before, through `restingLabel`. The case
+    // above `arming one action DISARMS another` restores only the one action whose label a
+    // wrong lookup would happen to produce. Negative controls: the confirm label, and the
+    // resting label, read from one catalogue entry for every button.
+    const root = await mountDevLoaded({ developerPage: PAGE });
+    const rebuilt: Array<number | null> = [];
+    hud!.setDevActionPort(() => livePort(rebuilt));
+    const btn = (id: string): HTMLButtonElement => q(root, `.hud-devact[data-action="${id}"]`);
+    let previous: keyof typeof DEV_ACTIONS | null = null;
+    for (const id of ['restart-same-seed', 'reroll-seed', 'restart-round', 'restart-same-seed'] as const) {
+      btn(id).click();
+      expect(btn(id).textContent, `${id} armed`).toBe(DEV_ACTIONS[id].confirmLabel);
+      if (previous !== null) expect(btn(previous).textContent, `${previous} disarmed`).toBe(DEV_ACTIONS[previous].label);
+      previous = id;
+    }
+    expect(rebuilt).toEqual([]);
+  });
+
+  it('Copy pressed before the load reports the session as it was at the press', async () => {
+    // Negative control: the diagnostics input read once the load lands.
+    const root = mountDev({ developerPage: PAGE });
+    let live: SessionDiagnostics = SESSION;
+    hud!.setDiagnosticsSource(() => live);
+    const escaped = await escapedDuring(() => {
+      q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+      q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+      expect(out(root).value, 'answered before the load').toBe('');
+      live = { ...SESSION, seed: 99 };
+    });
+    expect(escaped).toEqual([]);
+    expect(out(root).value).toContain('- Seed: 4242424242');
+  });
+
+  it('Pin pressed before the load offers the seed that was running at the press', async () => {
+    // Negative control: the diagnostics input read once the load lands.
+    const root = mountDev({ developerPage: PAGE });
+    let live: SessionDiagnostics = SESSION;
+    hud!.setDiagnosticsSource(() => live);
+    const escaped = await escapedDuring(() => {
+      q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+      q<HTMLButtonElement>(root, '.hud-diag-pin').click();
+      expect(out(root).value, 'answered before the load').toBe('');
+      live = { ...SESSION, seed: 99 };
+    });
+    expect(escaped).toEqual([]);
+    expect(out(root).value).toBe('/tanks/?dev=1&seed=4242424242');
+  });
+
+  describe('Copy, when the clipboard refuses', () => {
+    // An answer that waited on the load can outlive the press's user activation, and a browser
+    // then refuses the clipboard. jsdom has no clipboard, so one that refuses is installed.
+    let before: PropertyDescriptor | undefined;
+    afterEach(() => {
+      if (before === undefined) delete (navigator as { clipboard?: unknown }).clipboard;
+      else Object.defineProperty(navigator, 'clipboard', before);
+    });
+    function refuseClipboard(): ReturnType<typeof vi.fn> {
+      before = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+      const writeText = vi.fn(() => Promise.reject(new DOMException('No user activation', 'NotAllowedError')));
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+      return writeText;
+    }
+
+    it('pressed before the load still selects its report when it lands, and the refusal escapes nowhere', async () => {
+      // Negative controls: a selection made only once the clipboard accepts, and a refusal left
+      // unhandled.
+      const writeText = refuseClipboard();
+      const root = mountDev({ developerPage: PAGE });
+      hud!.setDiagnosticsSource(() => SESSION);
+      const escaped = await escapedDuring(() => {
+        q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+        q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+        expect(out(root).value, 'answered before the load').toBe('');
+      });
+      expect(escaped).toEqual([]);
+      expect(writeText).toHaveBeenCalledTimes(1);
+      const field = out(root);
+      expect(field.value).toContain('- Seed: 4242424242');
+      expect(document.activeElement).toBe(field);
+      expect(field.selectionStart).toBe(0);
+      expect(field.selectionEnd).toBe(field.value.length);
+    });
+  });
+
+  it('a press answered after the pane closed writes nothing into the field the close cleared', async () => {
+    // Negative controls: a close that spends no generation, and an answer that ignores it.
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDiagnosticsSource(() => SESSION);
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+    q<HTMLButtonElement>(root, '.hud-devtools-back').click();
+    await settled();
+    expect(out(root).value).toBe('');
+    expect(shown(out(root))).toBe(false);
+  });
+
+  it('a teardown during the load writes nothing into the discarded field', async () => {
+    // `dispose` never runs the pane's close. Negative control: a teardown that spends no
+    // generation.
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDiagnosticsSource(() => SESSION);
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+    const field = out(root);
+    hud!.dispose();
+    hud = null;
+    await settled();
+    expect(field.value).toBe('');
+  });
+
+  it('offers the actions only once their catalogue has loaded, even with a round running', async () => {
+    // Until then there is no confirm label to arm one with. Negative control: availability that
+    // ignores the load, which offers them before it.
+    const root = mountDev({ developerPage: PAGE });
+    hud!.setDevActionPort(() => livePort());
+    const reroll = q<HTMLButtonElement>(root, '.hud-devact[data-action="reroll-seed"]');
+    expect(reroll.hidden, 'offered before the pane opened').toBe(true);
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    expect(reroll.hidden, 'offered before the load landed').toBe(true);
+    await settled();
+    expect(reroll.hidden, 'still not offered once it landed').toBe(false);
+  });
+
+  it('an action clicked before its catalogue loads throws nothing, arms nothing and rebuilds nothing', async () => {
+    // It is hidden until then, so only a programmatic click can arrive. Negative control: the
+    // click handler with no guard, which reads a catalogue that is not there.
+    const root = mountDev({ developerPage: PAGE });
+    const rebuilt: Array<number | null> = [];
+    hud!.setDevActionPort(() => livePort(rebuilt));
+    const reroll = q<HTMLButtonElement>(root, '.hud-devact[data-action="reroll-seed"]');
+    const escaped = await escapedDuring(() => {
+      reroll.click();
+      reroll.click();
+    });
+    expect(escaped).toEqual([]);
+    expect(reroll.textContent).toBe(DEV_ACTIONS['reroll-seed'].label);
+    expect(reroll.classList.contains('hud-danger--armed')).toBe(false);
+    expect(rebuilt).toEqual([]);
+  });
+
+  it('a Use Production Save armed while the load is in flight is still armed when it lands', async () => {
+    // The load landing reveals the actions; it is not a lapse. Negative control: the landing
+    // re-running the whole availability refresh, which disarms whenever no round exists.
+    const root = mountDev({ developerPage: PAGE, storageNamespace: 'developer', applyDeveloperConfig: () => {} });
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    q<HTMLButtonElement>(root, '.hud-prodsave').click();
+    expect(q(root, '.hud-prodsave').textContent).toBe('Reload onto the REAL save?');
+    await settled();
+    expect(q(root, '.hud-prodsave').textContent).toBe('Reload onto the REAL save?');
+  });
+
+  it('an armed action lapses after 4 seconds, back to its catalogue label, and the next press arms again', async () => {
+    // Negative control: an arm that never lapses.
+    const root = await mountDevLoaded({ developerPage: PAGE });
+    const rebuilt: Array<number | null> = [];
+    hud!.setDevActionPort(() => livePort(rebuilt));
+    const reroll = q<HTMLButtonElement>(root, '.hud-devact[data-action="reroll-seed"]');
+    vi.useFakeTimers();
+    try {
+      reroll.click();
+      vi.advanceTimersByTime(3999);
+      expect(reroll.textContent).toBe(DEV_ACTIONS['reroll-seed'].confirmLabel);
+      vi.advanceTimersByTime(1);
+      expect(reroll.textContent).toBe(DEV_ACTIONS['reroll-seed'].label);
+      reroll.click();
+      expect(rebuilt).toEqual([]);
+      expect(reroll.textContent).toBe(DEV_ACTIONS['reroll-seed'].confirmLabel);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('an armed action lapses when the pane is left, so the press on return arms again', async () => {
+    // Negative control: a layer change that keeps the arm.
+    const root = await mountDevLoaded({ developerPage: PAGE });
+    const rebuilt: Array<number | null> = [];
+    hud!.setDevActionPort(() => livePort(rebuilt));
+    const reroll = q<HTMLButtonElement>(root, '.hud-devact[data-action="reroll-seed"]');
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    reroll.click();
+    q<HTMLButtonElement>(root, '.hud-devtools-back').click();
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    expect(reroll.textContent).toBe(DEV_ACTIONS['reroll-seed'].label);
+    reroll.click();
+    expect(rebuilt).toEqual([]);
+  });
+
+  describe('a load that fails', () => {
+    // `dev-exports` made to fail as a stale chunk name or a dropped connection would, mocked
+    // per case and restored after, so no other case loads a failing module. Both the mock and
+    // its removal are flushed by an import of their own before the pane opens: Vitest resolves
+    // a queued `doMock` on the next import, and the pane's three imports start together, so
+    // only the first would wait for it.
+    afterEach(async () => {
+      vi.doUnmock('./dev-exports');
+      vi.resetModules();
+      await import('./dev-exports');
+    });
+    async function failLoads(): Promise<void> {
+      vi.doMock('./dev-exports', () => {
+        throw new Error('offline');
+      });
+      vi.resetModules();
+      await import('./dev-exports').catch(() => {});
+    }
+    async function restoreLoads(): Promise<void> {
+      vi.doUnmock('./dev-exports');
+      vi.resetModules();
+      await import('./dev-exports');
+    }
+
+    it('is reported in the output field when the pane opens, and the next open loads them', async () => {
+      // Negative controls: no rejection handler (an unhandled rejection, and a field that says
+      // nothing), and a failed load kept, so the next open fails again without trying.
+      const root = mountDev({ developerPage: PAGE });
+      hud!.setDiagnosticsSource(() => SESSION);
+      await failLoads();
+      const escaped = await escapedDuring(() => q<HTMLButtonElement>(root, '.hud-devtools-open').click());
+      expect(escaped).toEqual([]);
+      expect(shown(out(root))).toBe(true);
+      expect(out(root).value).toMatch(/^The developer tools could not be loaded \(.*\)\. Reload the page to try again\.$/);
+      await restoreLoads();
+      q<HTMLButtonElement>(root, '.hud-devtools-back').click();
+      q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+      await settled();
+      q<HTMLButtonElement>(root, '.hud-diag-copy').click();
+      expect(out(root).value).toContain('- Seed: 4242424242');
+    });
+
+    it('after the pane closed reports nothing into it', async () => {
+      // Negative control: the failure path ignoring the generation.
+      const root = mountDev({ developerPage: PAGE });
+      await failLoads();
+      q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+      q<HTMLButtonElement>(root, '.hud-devtools-back').click();
+      await settled();
+      expect(out(root).value).toBe('');
+      expect(shown(out(root))).toBe(false);
+    });
   });
 });

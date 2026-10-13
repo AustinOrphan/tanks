@@ -1,0 +1,11 @@
+{
+  "id": "diagnostics-copy-clipboard-refusal-unhandled",
+  "file": "src/game/hud.ts",
+  "find": "    diagOutEl.scrollTop = 0;\n    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;\n    void clipboard?.writeText(text).catch(() => {});",
+  "replace": "    diagOutEl.scrollTop = 0;\n    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;\n    void clipboard?.writeText(text);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. A refused clipboard write escapes as an unhandled rejection, which `boot.ts` treats as the match failing. A Copy answered after the load can outlive the press's user activation, which is exactly when a browser refuses; jsdom has no clipboard, so no case before #1014 could see this."
+}

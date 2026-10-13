@@ -1,0 +1,11 @@
+{
+  "id": "devtools-actions-capture-skips-an-action-wait",
+  "file": "tools/screens/states.mjs",
+  "find": "      { waitVisible: '.hud-devact[data-action=\"restart-round\"]' },\n",
+  "replace": "",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "why": "Issue #1014. The `screen.devtools.actions` capture stops waiting for Restart Current Round, which is hidden until the pane's modules load: a capture can then measure it before it is shown, and an absent measured selector fails only in a real capture."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "dev-action-press-before-load-reads-a-missing-catalogue",
+  "file": "src/game/hud.ts",
+  "find": "      const modules = devTools;\n      if (modules === null) return;\n",
+  "replace": "      const modules = devTools as DevToolsModules;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. An action's click handler loses its guard for a catalogue that has not loaded, so a click that arrives before it -- programmatic, since the button is hidden until then -- throws out of the handler."
+}

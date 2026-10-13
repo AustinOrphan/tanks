@@ -1,0 +1,11 @@
+{
+  "id": "dev-tools-open-never-loads",
+  "file": "src/game/hud.ts",
+  "find": "      whenDevTools(revealDevActions);",
+  "replace": "      void revealDevActions;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Opening Developer Tools stops starting the load of `dev-actions`, `dev-diagnostics` and `dev-exports`, so nothing is loaded until a control is pressed and the first press of every control waits on a load it started itself. This is the negative control for THE CONTROL case and for every case that loads the modules the way the page does, by opening the pane (`mountDevLoaded`): without it they could pass with nothing loaded on the open."
+}

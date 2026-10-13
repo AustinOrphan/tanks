@@ -1,0 +1,11 @@
+{
+  "id": "dev-action-disarms-to-another-actions-label",
+  "file": "src/game/hud.ts",
+  "find": "    return devTools?.actions.DEV_ACTIONS[btn.dataset.action as DevActionId].label ?? '';",
+  "replace": "    return devTools?.actions.DEV_ACTIONS['reroll-seed'].label ?? '';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. `restingLabel` restores every developer action to Reroll Seed's label when it disarms. `arming one action DISARMS another` survives this, because the one action it restores IS Reroll Seed; the per-action case restores all three in turn."
+}
