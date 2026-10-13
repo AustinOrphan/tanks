@@ -7,5 +7,8 @@
   "tests": [
     "tools/screens/capture.aria.test.ts"
   ],
+  "killedBy": [
+    "capture.mjs: the aria object each measured element carries (issue #937) records a value exactly as written, whitespace included"
+  ],
   "why": "Trims each attribute as the capture records it, the way the text field beside it is trimmed. The comparator is exact about whitespace in these values, so this would make that exactness unreachable: a whitespace-only change in the DOM would be cleaned away before it reached the diff, and the gate entry that keeps the comparator from trimming (screen-gate-aria-trims-values) would guard nothing. MEASURED before the test existed: this mutation, and a variant that also collapsed inner whitespace, both survived all 6 tests in capture.aria.test.ts, because no fixture attribute carried whitespace. Shares its find string with two other capture entries; edit by id."
 }
