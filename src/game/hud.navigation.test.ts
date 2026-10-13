@@ -3665,3 +3665,181 @@ describe('the versus map cards (issue #274)', () => {
     expect(cards(root).map((c) => c.dataset.map)).toContain('vs-tri-01');
   });
 });
+
+describe('hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919)', () => {
+  const q = (root: HTMLElement, sel: string): HTMLElement => root.querySelector(sel) as HTMLElement;
+  const at = (ms: number): void => {
+    vi.setSystemTime(ms);
+  };
+  /**
+   * A key as the browser delivers it to the focused element, followed by the browser's own
+   * activation when the event was not cancelled: Enter clicks a focused button on `keypress`,
+   * Space on `keyup`. jsdom performs neither, so this does, and reports whether the event was
+   * cancelled. Its `timeStamp` is the faked clock's, as a real event's is the real one's.
+   */
+  function browserKey(type: 'keydown' | 'keypress' | 'keyup', name: 'Enter' | ' ', repeat = false): boolean {
+    const target = document.activeElement as HTMLElement;
+    const e = new KeyboardEvent(type, { key: name, repeat, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    const activates = (type === 'keypress' && name === 'Enter') || (type === 'keyup' && name === ' ');
+    if (activates && !e.defaultPrevented && target instanceof HTMLButtonElement) target.click();
+    return e.defaultPrevented;
+  }
+
+  it('a Main Menu with a run arrives on Continue Campaign, never on the Start New Campaign beside it', () => {
+    const { hud: h, root } = mount();
+    h.setContinueAvailable(true);
+    h.setState('main-menu');
+    expect(document.activeElement, 'the menu did not arrive on Continue').toBe(q(root, '.hud-continue'));
+    expect(q(root, '.hud-new-game').textContent, 'the fixture lost its destructive label').toBe('Start New Campaign');
+    hud?.dispose();
+    document.body.innerHTML = '';
+    // NEGATIVE CONTROL: with no run there is no Continue, and Start Campaign takes the arrival.
+    const fresh = mount();
+    fresh.hud.setState('main-menu');
+    expect(document.activeElement).toBe(q(fresh.root, '.hud-new-game'));
+    expect(q(fresh.root, '.hud-new-game').textContent).toBe('Start Campaign');
+  });
+
+  it('the Main Menu arrival follows Continue when the run is reported after the surface, until the player moves', () => {
+    // `route-host.ts` repaints whether a run exists AFTER `setState` has made the arrival, so
+    // the menu's shape changes under a focus nobody has moved yet.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    expect(document.activeElement).toBe(q(root, '.hud-new-game'));
+    h.setContinueAvailable(true);
+    expect(document.activeElement, 'focus stayed on what just became Start New Campaign').toBe(
+      q(root, '.hud-continue'),
+    );
+    h.setContinueAvailable(false);
+    expect(document.activeElement, 'focus stayed on a Continue that is now hidden').toBe(q(root, '.hud-new-game'));
+    // NEGATIVE CONTROL: once the player has moved, the menu changing under them moves nothing.
+    const versus = q(root, '.hud-versus-open');
+    versus.focus();
+    h.setContinueAvailable(true);
+    expect(document.activeElement, 'a repaint moved the player back to the primary').toBe(versus);
+  });
+
+  it('the match-failure alert arrives on Retry when one is offered, and on its way out when none is', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showMatchFailure({ title: 'Match failed', detail: 'A transient failure.', action: 'Back to menu' });
+    expect(document.activeElement, 'with no retry, the arrival did not land on the dismiss').toBe(
+      q(root, '.hud-alert-dismiss'),
+    );
+    h.back();
+    h.showMatchFailure({ title: 'Match failed', detail: 'A transient failure.', action: 'Back to menu' }, () => {});
+    expect(document.activeElement, 'with a retry, the arrival did not land on Retry').toBe(q(root, '.hud-alert-retry'));
+  });
+
+  it('Versus Setup arrives on its container when Start is refused, and Confirm there only lands focus', () => {
+    const { hud: h, root } = mount();
+    const starts: unknown[] = [];
+    h.onVersusStart((config) => starts.push(config));
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    // NEGATIVE CONTROL first: the default setup is startable, so Start takes the arrival.
+    expect(document.activeElement).toBe(q(root, '.hud-versus-start'));
+    q(root, '.hud-versus-slot-row[data-slot="0"] .hud-versus-role-btn[data-role="bot"]').click();
+    h.back();
+    h.showVersusSetup(true); // the refused all-bot setup is retained
+    expect((q(root, '.hud-versus-start') as HTMLButtonElement).disabled, 'the fixture did not refuse Start').toBe(true);
+    expect(document.activeElement, 'a refused Start took the arrival').toBe(q(root, '.hud-versus-setup'));
+    expect(h.act('confirm')).toBe(true);
+    expect(starts, 'Confirm on the container started a match').toEqual([]);
+  });
+
+  it('an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { hud: h, root } = mount();
+      const picks: number[] = [];
+      h.onLevelSelect((i) => picks.push(i));
+      h.setLevelSelect(3, 5);
+      at(1_000);
+      h.setState('main-menu');
+      q(root, '.hud-levelselect-open').focus();
+      at(2_000);
+      expect(browserKey('keydown', 'Enter'), 'a fresh press on Practice was cancelled').toBe(false);
+      expect(browserKey('keypress', 'Enter'), 'the press did not reach Practice').toBe(false);
+      const level1 = q(root, '.hud-level-btn[aria-label="Level 1"]');
+      expect(document.activeElement, 'Level Select did not arrive on Level 1').toBe(level1);
+      at(2_500); // the key auto-repeats on Level 1, then is released there
+      expect(browserKey('keydown', 'Enter', true), 'a repeat reached Level 1').toBe(true);
+      expect(browserKey('keypress', 'Enter', true), 'a repeat\'s keypress reached Level 1').toBe(true);
+      expect(browserKey('keyup', 'Enter'), 'the release reached Level 1').toBe(true);
+      expect(picks, 'the Enter that opened Level Select also started Level 1').toEqual([]);
+      // NEGATIVE CONTROL: the next press, made on Level Select, starts Level 1 once.
+      at(3_000);
+      expect(browserKey('keydown', 'Enter')).toBe(false);
+      expect(browserKey('keypress', 'Enter')).toBe(false);
+      expect(picks).toEqual([0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a Space held through the end of a match cannot press Retry with its repeats or its release', () => {
+    // Space lays a mine in play, so a round that ends with it held lands focus on the
+    // outcome's primary with the key still down -- and Space clicks on its release.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { hud: h, root } = mount();
+      let restarts = 0;
+      h.onStartRestart(() => {
+        restarts += 1;
+      });
+      at(1_000);
+      h.setState('main-menu');
+      h.setState('playing');
+      (document.activeElement as HTMLElement).blur();
+      at(2_000);
+      browserKey('keydown', ' '); // held down in play
+      at(3_000);
+      h.setState('outcome-lose');
+      const action = q(root, '.hud-action');
+      expect(document.activeElement, 'the end screen did not arrive on its action').toBe(action);
+      at(3_200);
+      expect(browserKey('keydown', ' ', true), 'a repeat reached the end screen').toBe(true);
+      at(3_600);
+      expect(browserKey('keyup', ' '), 'the release reached the end screen').toBe(true);
+      expect(restarts, 'the Space held through the round pressed the end screen\'s action').toBe(0);
+      // NEGATIVE CONTROL: a Space pressed on the end screen presses its action once.
+      at(4_000);
+      expect(browserKey('keydown', ' ')).toBe(false);
+      expect(browserKey('keyup', ' ')).toBe(false);
+      expect(restarts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a keydown queued behind an arrival cannot press the new primary', () => {
+    // Pressed while the frame that opened the screen was running, delivered after it.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { hud: h } = mount();
+      let restarts = 0;
+      h.onStartRestart(() => {
+        restarts += 1;
+      });
+      at(1_000);
+      h.setState('main-menu');
+      at(2_000);
+      const queued = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+      at(2_010);
+      h.setState('outcome-win'); // arrives, on its action, after the press was made
+      document.activeElement!.dispatchEvent(queued);
+      expect(queued.defaultPrevented, 'a press made before the arrival reached its primary').toBe(true);
+      expect(browserKey('keypress', 'Enter'), 'its keypress reached the primary').toBe(true);
+      expect(restarts).toBe(0);
+      // NEGATIVE CONTROL: the same key pressed after the arrival presses the action.
+      at(2_500);
+      browserKey('keydown', 'Enter');
+      expect(browserKey('keypress', 'Enter')).toBe(false);
+      expect(restarts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

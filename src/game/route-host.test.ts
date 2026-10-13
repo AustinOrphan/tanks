@@ -2218,6 +2218,62 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     f.root.remove();
   });
 
+  /*
+   * ISSUE #919: a pad Confirm pressed for one screen cannot press the next screen's primary.
+   * Arrivals now land on the primary action, so the two ways a Confirm could carry over are
+   * pinned here through the real poller and the real HUD: a button HELD across the arrival
+   * (the poller's one-shot edge), and a press first seen on the poll after an arrival (the
+   * route host's `arrivedSincePoll`).
+   */
+  it('an A held from the press that opened Versus Setup does not press Start until it is released and pressed again (issue #919)', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    (f.root.querySelector('.hud-versus-open') as HTMLElement).focus();
+    f.pads.push(pad(0)); // A, on the Versus button
+    frame(f, 0);
+    const start = f.root.querySelector('.hud-versus-start') as HTMLButtonElement;
+    expect(document.activeElement, 'Versus Setup did not arrive on Start').toBe(start);
+    for (const now of [16, 32, 48, 400, 800]) frame(f, now); // A still held, well past any repeat delay
+    expect(f.startRequests, 'the A that opened Versus Setup also pressed Start').toEqual([]);
+    // NEGATIVE CONTROL: released and pressed again, the same A on the same Start starts the match.
+    f.pads[0] = pad();
+    frame(f, 816);
+    f.pads[0] = pad(0);
+    frame(f, 832);
+    expect(f.startRequests.map((r) => r.kind), 'a fresh A on Start did not start the match exactly once').toEqual(['versus']);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('drops a Confirm first seen on the poll after an arrival, and takes the next press (issue #919)', () => {
+    // Pause arrives from the session, not from the pad, with focus on Resume. An A whose
+    // edge the very next poll is the first to see was pressed before the player could see
+    // Pause -- a round ending while A is mashed is the real case -- so it is dropped, and,
+    // like a Confirm dropped mid-play, it still counts as held.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    const slot = f.host.attach(CAMPAIGN);
+    slot.onStartRestart(() => {
+      if (f.host.sm.isPaused) f.host.sm.resume();
+    });
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    f.pads.push(pad());
+    frame(f, 0);
+    f.host.sm.pause();
+    expect(document.activeElement, 'Pause did not arrive on Resume').toBe(f.root.querySelector('.hud-action'));
+    f.pads[0] = pad(0);
+    frame(f, 16); // the first poll since Pause arrived
+    expect(f.host.sm.isPaused, 'an A first seen on the poll after Pause arrived pressed Resume').toBe(true);
+    frame(f, 32); // still held: not a new press either
+    expect(f.host.sm.isPaused, 'the dropped A fired once it was held').toBe(true);
+    // NEGATIVE CONTROL: the next press, made on the screen the player can now see, resumes.
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(0);
+    frame(f, 64);
+    expect(f.host.sm.isSimulating, 'a fresh A on Resume did not resume').toBe(true);
+    f.host.dispose();
+    f.root.remove();
+  });
+
   it('disposal cancels the queued frame, and a frame that fires anyway emits nothing', () => {
     const f = fixture({ launchDismissed: true });
     f.host.attach(CAMPAIGN);
@@ -2324,5 +2380,47 @@ describe('createRouteHost: prompts follow the input the player is using (issue #
     f.advance(MODALITY_SWITCH_MS);
     pointer(f, 'touch');
     expect(f.hud.argsOf('setState').length, 'a modality change re-rendered a surface').toBe(before);
+  });
+});
+
+describe('createRouteHost: the keystroke that leaves Launch cannot press the Main Menu (issue #919)', () => {
+  /**
+   * The browser's own activation, for the one key this case is about: Enter clicks a button on
+   * the `keypress` that follows its `keydown`, aimed at whatever holds focus by then, unless the
+   * event was cancelled. jsdom performs no activation of its own, so the case does what the
+   * browser would and reports whether it clicked.
+   */
+  function keypressEnter(at?: number): { cancelled: boolean } {
+    const target = document.activeElement as HTMLElement;
+    const e = new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true });
+    if (at !== undefined) Object.defineProperty(e, 'timeStamp', { value: at });
+    target.dispatchEvent(e);
+    if (!e.defaultPrevented && target instanceof HTMLButtonElement) target.click();
+    return { cancelled: e.defaultPrevented };
+  }
+
+  it('cancels the keypress of the Enter that dismissed the splash, so Start Campaign is not pressed', () => {
+    const f = fixture({ realHud: true });
+    expect(f.host.sm.atLaunch).toBe(true);
+    // The browser's order: the HUD's window-capture guard sees the keydown first, then the
+    // page's own listener dismisses Launch on it and the Main Menu arrives on its primary.
+    const down = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(down);
+    f.fireHost('keydown', down);
+    expect(f.host.sm.atMainMenu, 'Enter did not dismiss Launch').toBe(true);
+    expect(document.activeElement, 'the Main Menu did not arrive on Start Campaign').toBe(
+      f.root.querySelector('.hud-new-game'),
+    );
+    expect(keypressEnter().cancelled, 'the keystroke that dismissed Launch reached Start Campaign').toBe(true);
+    expect(f.startRequests, 'one Enter both left Launch and started a campaign').toEqual([]);
+    // NEGATIVE CONTROL: the next Enter, pressed on the Main Menu, starts the campaign.
+    const later = Date.now() + 60_000;
+    const again = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(again, 'timeStamp', { value: later });
+    document.activeElement!.dispatchEvent(again);
+    expect(keypressEnter(later).cancelled).toBe(false);
+    expect(f.startRequests).toEqual([{ kind: 'campaign-new' }]);
+    f.host.dispose();
+    f.root.remove();
   });
 });

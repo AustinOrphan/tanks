@@ -35,9 +35,10 @@
  * because `input.ts` tracks a held Space for play from the same events: a swallowed `keyup`
  * would leave the key down for the next match.
  *
- * NO RESET ON BLUR. A key whose release the page never saw keeps its old stamp, which is
- * harmless: its next press is a fresh `keydown` that writes a new one. A key that is still down
- * when the page regains focus is carried if a screen arrived meanwhile, which is correct.
+ * NO RESET ON BLUR, AND NO CLEAR ON RELEASE. A key keeps the stamp of its latest press, which
+ * is harmless after the release: its next press is a fresh `keydown` that writes a new one, so
+ * a stuck entry cannot swallow a real press. A key that is still down when the page regains
+ * focus is carried if a screen arrived meanwhile, which is correct.
  *
  * A LEAF MODULE over `ui-actions.ts`'s vocabulary, so the keys it guards are the keys that
  * vocabulary calls Confirm.
@@ -69,9 +70,10 @@ export function createCarriedConfirmGuard(now: () => number = eventClock): Carri
     onKey(e: KeyboardEvent): void {
       if (keyToUiAction(e.key) !== 'confirm') return;
       const key = e.key.toLowerCase();
+      // Only the press's first `keydown` writes its start. A stale entry left by a release the
+      // page never saw is overwritten by that key's next press, so nothing is ever cleared.
       if (e.type === 'keydown' && !e.repeat) pressedAt.set(key, e.timeStamp);
       const began = pressedAt.get(key);
-      if (e.type === 'keyup') pressedAt.delete(key);
       // A press whose start the page never saw (held while focus was elsewhere) counts as old.
       if (began === undefined || began <= arrivedAt) e.preventDefault();
     },
