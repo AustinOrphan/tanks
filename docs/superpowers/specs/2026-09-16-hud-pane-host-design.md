@@ -1,9 +1,9 @@
 ---
 status: active
 date: 2026-09-16
-last-reviewed: 2026-09-17
+last-reviewed: 2026-10-13
 scope: What an extracted HUD pane module receives from hud.ts, how it registers, where its markup lives, and how the first extraction proves no behaviour change
-implementation-issues: [556, 765]
+implementation-issues: [556, 765, 919]
 implementation-prs: [779]
 supersedes: []
 superseded-by: []
@@ -131,6 +131,8 @@ export interface PaneHost {
   isSurfaceOpen(surface: Surface): boolean;
   /** Push THIS pane's layer. hud.ts binds the layer id, so the pane never names one. */
   open(opener: HTMLElement | null): boolean;
+  /** Focus where THIS pane's arrival lands (issue #919); bound per pane like `open`. */
+  arrive(): void;
   back(): boolean;
 }
 ```
@@ -151,6 +153,10 @@ export interface PaneHost {
 - **The roster grows with the panes that need it.** It does not start with every member a later
   pane will need. An unused host member is an implementation no test can reach, so a mutation of
   it could only survive. The per-pane scan table is what keeps the costs comparable.
+- **`arrive` joined for both panes with issue #919.** An arrival now lands on the surface's
+  declared primary action, or on its container when it has none, and stamps the carried-Confirm
+  guard; `hud.ts` holds the declaration (`LAYERS`), so a pane calls `arrive()` from its open's
+  `onBegin` where it used to call `root.focus()`, and names no control of its own.
 - **Members a later pane will add** follow the same rule: a function, returning a plain value in
   the pane's vocabulary, never a binding.
   - `captureFocus`, for Controllers and Versus Setup;

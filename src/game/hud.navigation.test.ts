@@ -1115,7 +1115,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
    * Panel-level only, deliberately, and that is a statement about the layer stack rather
    * than about this test's convenience: a pane opened from inside ANOTHER pane replaces
    * it (`openLayer`), so the opener is gone by the time Back runs and `restoreFocus`
-   * falls back to the container. The walk below asserts that Back restores the opener,
+   * leaves the destination's own arrival. The walk below asserts that Back restores the opener,
    * which is true exactly for the openers listed here. The three pane-to-pane moves
    * issue #226 adds -- the Records tabs, Settings -> Controllers, Settings -> About --
    * have their own tests, and issue #327 owns the covering-layer contract that would let

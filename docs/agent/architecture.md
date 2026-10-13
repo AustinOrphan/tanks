@@ -207,7 +207,8 @@ from; genuine nesting waits on issue #327's covering-layer contract.
 Pause is a gameplay phase and stays outside the stack -- the flip is two lines,
 deferred until standalone Back is measured on a device -- and the loop's hotkey guard
 names `input,select,textarea` only, because a restored opener is a button and the old
-`button` term was the reason every arrival had to focus a container. Scroll restoration is
+`button` term was the reason every arrival had to focus a container (issue #919 then moved
+arrivals onto the primary action, below). Scroll restoration is
 not implemented: no shipped flow returns to a pane a deeper layer covered, and two of the
 three scrollers rebuild their rows on reopen (issue #488 records the seam to add with the
 first covering layer).
@@ -220,11 +221,25 @@ arrows and Home/End; a button only Space and Enter, because the arrows are the r
 focus's), and `input.ts`, the session's hotkey guards and the HUD's roving-focus handler
 all ask it, so Escape with a volume slider focused is Back or Pause, never lost. `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
 panel, `confirm` activates the focused control through its own click handler (or lands on
-the first control when only the container is focused, so a Confirm the instant a panel
-arrives cannot start a New Game blind), `back` is `Hud.back()`, and `pause` is reported
-unconsumed for the page to toggle on the state machine exactly as the Pause button's tap
-does. The keyboard reaches the same verbs through the window-capture key handler; a
-keyboard `confirm` is the browser's own Enter/Space activation and is never dispatched.
+the first control when only a container is focused -- a pane with no primary action, or focus
+fallen to one -- so a blind Confirm cannot fire whatever is first), `back` is `Hud.back()`,
+and `pause` is reported unconsumed for the page to toggle on the state machine exactly as the
+Pause button's tap does. The keyboard reaches the same verbs through the window-capture key
+handler; a keyboard `confirm` is the browser's own Enter/Space activation and is never
+dispatched.
+
+**An arrival lands on the primary action, and a Confirm from the screen before cannot press
+it (issue #919).** Each layer's `LayerRow.primary` (required, so a new layer must decide) and
+each panel state's `PANEL_PRIMARY` declare the candidates in preference order; `focusArrival`
+puts focus on the first that `arrivalTarget` (`focusable.ts`) finds focusable, else the
+container, and `followPanelArrival` keeps the Main Menu's arrival on Continue or Start Campaign
+while `route-host.ts` repaints the run after the surface. Landing on a control means the press
+that opened the screen must not press it too, which three guards cover: the gamepad poller's
+one-shot Confirm (a held A never fires again), `route-host.ts` dropping a Confirm whose edge is
+first seen on the poll after an arrival (`Hud.onArrival`), and `carried-confirm.ts`, which
+cancels the keydown, repeats, keypress and keyup of any Enter or Space whose press began at or
+before the latest arrival, judged by the event's own `timeStamp` against an arrival stamped on
+the same clock. It only `preventDefault`s, so `input.ts` still sees a held Space released.
 A direction is spatial (issue #495): `src/game/spatial-focus.ts` derives rows from the
 controls' rectangles at the moment of the move (vertical overlap makes a row, left edge
 orders it), Left/Right wrap within the row, Up/Down land on the nearest column of the

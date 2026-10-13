@@ -5225,7 +5225,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * "Versus Setup" reopen -- `route-ui.ts`'s `openVersusSetup`, reached through the route
    * host's slot -- where no control invoked the pane; recording the opener only around
    * the button's own callback loop is what keeps that reopen's Back landing on the
-   * container rather than on a button nobody pressed.
+   * destination's own arrival rather than on a button nobody pressed.
    */
   let versusOpener: HTMLElement | null = null;
 
@@ -5346,8 +5346,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * handlers pass `recordsOpenBtn` as the opener rather than the tab that was clicked,
    * which is what makes Back land on the Main Menu control the player actually used --
    * the tab they pressed lives inside the pane they are leaving, so restoring it would
-   * mean restoring a control the destination does not show (`restoreFocus` would fall
-   * back to the container and silently lose the player's place).
+   * mean restoring a control the destination does not show (`restoreFocus` would refuse
+   * it and leave the Main Menu's own arrival, losing the player's place).
    *
    * Switching tabs REPLACES the top layer (`openLayer`'s different-id branch), carrying
    * the replaced layer's `origin` forward, so Stats and Achievements are siblings over
@@ -8447,10 +8447,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       pendingAlert = failure;
       pendingRetry = retry ?? null;
       // Opened with NO opener element: there is no button that "led here" -- the player
-      // pressed Start and the match failed -- so `restoreFocus` falls through to the
-      // surface's own container focus, which is what `openLayer` already does for a
-      // programmatic open. Passing the Start button would send focus back to a control
-      // that may no longer be shown.
+      // pressed Start and the match failed -- so on dismissal `restoreFocus` leaves the
+      // destination's own arrival standing, as it does for any programmatic open. Passing
+      // the Start button would send focus back to a control that may no longer be shown.
       openLayer('match-failed', null);
     },
     onQuitToTitle(cb: () => void): void {
