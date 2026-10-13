@@ -1,14 +1,11 @@
 {
   "id": "stock-strip-marker-drawn-for-a-teams-entry",
   "file": "src/game/hud.ts",
-  "find": "if (identityMarker !== null && entry.team === undefined && stockCue !== 'marks') {",
-  "replace": "if (identityMarker !== null && stockCue !== 'marks') {",
+  "find": "if (row === 'pips' && entry.team === undefined && identityMarker !== null) {",
+  "replace": "if (row === 'pips' && identityMarker !== null) {",
   "expect": "killed",
   "tests": [
     "src/game/hud.match.test.ts"
   ],
-  "why": "The mark is FFA-only by the owner's direction on #234, and the guard that makes it so is one clause easily read as redundant beside the `identityMarker !== null` it sits with. Dropping it puts a per-slot shape on a teams entry, which already carries the A/B/C letter as its non-colour channel -- so the entry would state its side twice in two different vocabularies, and a 2v2 would show four different marks for two teams. That is worse than the colour-only strip this arm exists to improve on, and it is invisible in FFA, which is where every capture is taken. RE-POINTED by issue #230's `marks` arm, which added a third clause to the same guard: the arm draws the outline once per stock, so the leading copy is suppressed while it runs. The mutation still drops only the FFA test and leaves the new clause intact, so it proves the same thing it always did.",
-  "killedBy": [
-    "hud: identity mark in the stock strip (issue #778) leaves TEAMS untouched -- the letter is already that entry second channel"
-  ]
+  "why": "The mark is FFA-only by the owner's direction on #234, and the guard that makes it so is one clause easily read as redundant beside the two it sits with. Dropping it puts a per-slot glyph ahead of a teams entry's pips, which already carries the A/B/C letter as its non-colour channel -- so the entry would state its side twice in two different vocabularies, and a 2v2 would show four different marks for two teams. It is invisible in FFA, which is where every capture is taken. Re-pointed twice: by #230's `marks` arm, which added a clause to the guard, and by #1022, which replaced that clause with the row the strip's rule chose. The mutation still drops only the FFA test."
 }

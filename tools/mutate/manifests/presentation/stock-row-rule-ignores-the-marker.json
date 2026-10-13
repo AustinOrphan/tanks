@@ -1,0 +1,12 @@
+{
+  "id": "stock-row-rule-ignores-the-marker",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "  return team === undefined && marker === 'shape' ? 'marks' : 'pips';",
+  "replace": "  return team === undefined ? 'marks' : 'pips';",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/stock-cue.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The strip's rule stops reading the marker, so an FFA entry draws the `marks` row under the reversal value `solid` (which resolves to `null`), under `arcs` and `roof`, and in every injected HUD (issue #1022). The ruling reserved `marks` for a `shape` marker on by default, so that the strip's outlines never appear without the ground ring's; this is the reversed marker drawing marks."
+}

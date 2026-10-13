@@ -2695,8 +2695,9 @@ describe('hud.css: every animation answers to the resolved motion policy (issue 
    * fill holding a keyframe set that opens at `opacity: 0`.
    *
    * The second half is what a base-rule-only predicate misses, and it is not an edge case:
-   * the three stock-cue arms rest invisible that way and no other. A rule that only read
-   * base rules would cover the damage vignette and none of them.
+   * the stock-loss pip's burst ring rests invisible that way and no other, as the `strike`
+   * and `badge` arms did until issue #1022 deleted them. A rule that only read base rules
+   * would cover the damage vignette and none of them.
    */
   function restsInvisibleSites(): { selector: string; why: string }[] {
     const opens = keyframeOpenings();
@@ -2725,11 +2726,13 @@ describe('hud.css: every animation answers to the resolved motion policy (issue 
     // Vacuity guard, in the same shape as the animation one above: the rule below is a loop
     // over this list and passes trivially on an empty one. Anchored on one member of each
     // half rather than on the whole list, so a cue added tomorrow joins the rule without
-    // editing a literal -- which is the entire point of issue #930.
+    // editing a literal -- which is the entire point of issue #930. MEASURED at 4 after issue
+    // #1022 deleted the strike and badge arms' cues: the capacity flash, the count pop, the
+    // damage vignette and the stock pip's burst ring.
     const sites = restsInvisibleSites();
-    expect(sites.length, 'no rests-invisible cues derived from hud.css').toBeGreaterThan(4);
+    expect(sites.length, 'no rests-invisible cues derived from hud.css').toBeGreaterThanOrEqual(4);
     expect(sites.map((s) => s.selector)).toContain('.hud-damage--hit');
-    expect(sites.map((s) => s.selector)).toContain('.hud-stock-cue--badge');
+    expect(sites.map((s) => s.selector)).toContain('.hud-stock-pip.hud-stock-cue::after');
     expect(sites.some((s) => s.why.startsWith('its fill')), 'the fill half derived nothing').toBe(true);
   });
 
@@ -3221,24 +3224,23 @@ describe('hud.css: the selected check (issue #630)', () => {
 });
 
 /*
- * Issue #230's stock-loss cue arms (`?dev=1&stockCue=`). The HUD re-attaches a cue still running
- * after the strip is rebuilt, using STOCK_CUE_MS to decide whether it is still running and a
- * negative `animation-delay` to resume it. Both halves only work if the stylesheet agrees, and a
- * stylesheet is not typechecked -- so the agreement is pinned here.
+ * Issue #230's stock-loss cue, which every strip draws since issue #1022 shipped the `marks` row
+ * and deleted the other arms with their flag. The HUD re-attaches a cue still running after the
+ * strip is rebuilt, using STOCK_CUE_MS to decide whether it is still running and a negative
+ * `animation-delay` to resume it. Both halves only work if the stylesheet agrees, and a
+ * stylesheet is not typechecked -- so the agreement is pinned here. The block keeps the title it
+ * had while the cue was a comparison of arms, because mutation entries name its cases by it.
  */
 describe('hud.css: the stock-loss cue arms (issue #230)', () => {
   const src = stripComments(css);
-  // Every animated cue element, as the HUD renders it: the badge, the struck number and the new
-  // number dropping in behind it, the pip that just emptied, and that pip's burst ring.
+  // Every animated cue element, as the HUD renders it: the pip that just emptied, and that pip's
+  // burst ring.
   const CUE_RULES = [
-    '.hud-stock-cue--badge',
-    '.hud-stock-cue--struck',
-    '.hud-stock-count.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue',
     '.hud-stock-pip.hud-stock-cue::after',
     // The one-pip fallback's pip, cued while the player still holds stock (issue #1055).
     '.hud-stock-pip.hud-stock-cue:not(.hud-stock-pip--lost)',
-    // Issue #230's `marks` arm, held to the same bar as the three above.
+    // The mark that just emptied in the `marks` row, the shipped FFA strip (issue #1022).
     '.hud-stock-mark.hud-stock-cue',
   ];
 
@@ -3330,7 +3332,7 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
   it('sizes the marks from the row\'s custom properties, defaulting to the full size (issue #1021)', () => {
     // hud.ts sets `--hud-mark` and `--hud-mark-gap` on a narrow viewport's row; a rule that read
     // a literal would ignore them and the four-by-four strip would overflow a phone again, with
-    // every jsdom test still green, since jsdom lays nothing out. The defaults are the arm's
+    // every jsdom test still green, since jsdom lays nothing out. The defaults are the row's
     // full size, so the desktop strip draws exactly as it did.
     const mark = ruleBody('.hud-stock-mark');
     expect(mark).toMatch(/\bwidth:\s*var\(--hud-mark,\s*0\.62em\)/);

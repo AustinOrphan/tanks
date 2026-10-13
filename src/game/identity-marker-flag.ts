@@ -15,9 +15,11 @@
  *    reads "present and equal to the default" as a rejected value, so a non-null default
  *    would report `?identityMarker=shape` as rejected.
  *  - THE REVERSAL VALUE IS `solid` (`IDENTITY_MARKER_REVERSAL`), named the way `topbar=full`
- *    names the pre-ruling bar. `?dev=1&identityMarker=solid` draws the solid hue-only ring
- *    and the unmarked strip, which is what every session drew before the ruling. No drawable
- *    style could do this: `roof` keeps the solid ring but adds crown blades and a strip glyph.
+ *    names the pre-ruling bar. `?dev=1&identityMarker=solid` draws the solid hue-only ring,
+ *    which is what every session drew before the ruling, and a stock strip of pips with no
+ *    mark: the `marks` row is drawn only under `shape` (issue #1022, `stockRowFor`). No
+ *    drawable style could do this: `roof` keeps the solid ring but adds crown blades and a
+ *    strip glyph.
  *  - `arcs`, `shape` and `roof` still select themselves by name, in any session.
  *
  * FFA ONLY. The ruling's PP1 scope is the FFA ring and strip; team identity (#923) and shell
@@ -31,9 +33,9 @@
  *    teams tanks slot shapes in team colours, the confusion #923 describes, and change co-op
  *    rings, which the ruling did not cover.
  *  - the HUD is the page's, built once by `createBrowserDeps` with no session mode. It
- *    resolves with `stripIdentityMarker`, and stays FFA-only through its own per-entry gate:
- *    `renderVersusStocks` marks only an entry with no `team`, and a campaign status carries
- *    no stock strip at all.
+ *    resolves with `stripIdentityMarker`, and stays FFA-only through its own per-entry rule:
+ *    `stockRowFor` gives a teams entry pips and no mark whatever the marker, and a campaign
+ *    status carries no stock strip at all.
  *
  * WHY `solid` IS NOT A STYLE. `IDENTITY_MARKER_STYLES` lists what the renderer and the HUD
  * can DRAW, and four tests pin that list. `solid` draws nothing: it resolves to `null` here,
@@ -53,7 +55,7 @@ import {
   type IdentityMarkerStyle,
 } from '../presentation/identity-marker';
 
-/** The flag value that restores the pre-ruling solid ring and unmarked strip. */
+/** The flag value that restores the pre-ruling solid ring, with a stock strip of pips and no mark. */
 export const IDENTITY_MARKER_REVERSAL = 'solid';
 
 /** What `?dev=1&identityMarker=` accepts: a drawable style, or the reversal value. */
@@ -96,10 +98,11 @@ export function sessionIdentityMarker(
 }
 
 /**
- * The marker the page's HUD draws beside each FFA stock-strip entry.
+ * The marker the page's HUD draws its FFA stock-strip entries by: `shape` draws the `marks`
+ * row, and anything else pips (issue #1022, `stockRowFor`).
  *
  * Resolved as an FFA session would be, because FFA entries are the only ones it reaches:
- * the HUD's own `entry.team === undefined` test keeps a teams entry unmarked, so the HUD
+ * the HUD's own rule gives a teams entry pips and no mark whatever the marker, so the HUD
  * needs no session mode, and has none when `createBrowserDeps` builds it.
  */
 export function stripIdentityMarker(flag: IdentityMarkerFlag | null): IdentityMarkerStyle | null {

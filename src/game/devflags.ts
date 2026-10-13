@@ -21,7 +21,6 @@ import {
 } from '../presentation/arrival-language';
 import { WRECK_EFFECTS, isWreckEffect, type WreckEffect } from '../presentation/wreck';
 import { HUD_FONTS, isHudFont, type HudFont } from '../presentation/hud-font';
-import { STOCK_CUES, isStockCue, type StockCue } from '../presentation/stock-cue';
 import {
   ENEMY_ROLE_CUES, isEnemyRoleCue, type EnemyRoleCue,
 } from '../presentation/enemy-role';
@@ -465,13 +464,6 @@ export interface DevFlags {
    */
   wreck: WreckEffect | null;
   /**
-   * Which experimental versus STOCK-LOSS CUE to draw on the stock strip (issue #230). `null`
-   * draws none, which is the shipped strip: only the digit changes. `pips`, `strike` and
-   * `badge` are the shortlisted arms, to be judged in play. A temporary open-question flag.
-   * See presentation/stock-cue.ts.
-   */
-  stockCue: StockCue | null;
-  /**
    * Which alternate TYPEFACE to draw the HUD in (issue #865). `null` is the shipped Plex.
    * `atkinson` and `inter` are the two faces #864 kept rather than discarded, each vendored
    * beside Plex and fetched only when selected. A temporary open-question flag.
@@ -599,7 +591,6 @@ export const DEV_FLAGS_OFF: DevFlags = {
   shellTrail: null,
   arrival: null,
   wreck: null,
-  stockCue: null,
   hudFont: null,
   versusActions: null,
   aiPerception: null,
@@ -806,13 +797,6 @@ function asWreck(params: URLSearchParams): WreckEffect | null {
   return isWreckEffect(raw) ? raw : null;
 }
 
-/** One of the named stock-loss cue arms, or null when absent or unrecognised. */
-function asStockCue(params: URLSearchParams): StockCue | null {
-  const raw = params.get('stockCue');
-  if (raw === null) return null;
-  return isStockCue(raw) ? raw : null;
-}
-
 /** One of the named HUD typeface arms, or null when absent or unrecognised. */
 function asHudFont(params: URLSearchParams): HudFont | null {
   const raw = params.get('hudFont');
@@ -1003,7 +987,6 @@ export function parseDevFlags(search: string): DevFlags {
     shellTrail: asShellTrail(params),
     arrival: asArrival(params),
     wreck: asWreck(params),
-    stockCue: asStockCue(params),
     hudFont: asHudFont(params),
     versusActions: asVersusActions(params),
   };
@@ -1476,17 +1459,6 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       + 'rolls it onto its side. It never blocks anything. Temporary: deleted once an arm '
       + 'is chosen, or once the idea is.',
   },
-  stockCue: {
-    kind: 'valued',
-    values: [...STOCK_CUES],
-    description:
-      'Marks a lost versus stock on the stock strip (issue #230), one of four shortlisted arms: '
-      + '\'pips\' turns the count into pips that empty, \'marks\' draws those pips as the '
-      + 'slot\'s own identity outline so one channel carries both who and how many (FFA only; '
-      + 'teams falls back to \'pips\'), \'strike\' lifts the old number away struck through, '
-      + 'and \'badge\' drops a "−1" under the entry. The shipped strip only '
-      + 'changes the digit. Temporary: deleted once an arm is chosen.',
-  },
   hudFont: {
     kind: 'valued',
     values: [...HUD_FONTS],
@@ -1515,10 +1487,11 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Selects the second, non-colour channel of player identity (issues #630, #922). On the ' +
       "ground ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own " +
       "outline. On the turret crown instead: 'roof' leaves the ring solid and counts the " +
-      'slot in blades. In an FFA match the same mark is drawn beside that player in the HUD ' +
-      'stock strip (issue #778); teams entries are unchanged, since they already carry the ' +
-      "A/B/C letter. 'shape' ships as the FFA default; 'solid' restores the pre-ruling " +
-      'solid ring and unmarked strip.',
+      "slot in blades. In an FFA match the HUD stock strip follows it (issues #778, #1022): " +
+      "under 'shape' each player's stocks are drawn as their own outline, and under 'arcs' or " +
+      "'roof' as pips beside that style's mark. Teams entries draw pips beside their A/B/C " +
+      "letter under every value. 'shape' ships as the FFA default; 'solid' restores the " +
+      'pre-ruling solid ring, and the strip draws pips with no mark.',
     notes: [
       'A kept rollback lever: the comparison is settled (#234), and the flag stays so the ' +
         'default can be reversed and a regression report checked.',

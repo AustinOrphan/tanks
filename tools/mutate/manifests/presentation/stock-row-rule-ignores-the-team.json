@@ -1,0 +1,12 @@
+{
+  "id": "stock-row-rule-ignores-the-team",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "  return team === undefined && marker === 'shape' ? 'marks' : 'pips';",
+  "replace": "  return marker === 'shape' ? 'marks' : 'pips';",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/stock-cue.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The strip's rule stops reading the team, so a teams entry under `shape` draws the slot's outline (issue #1022). Two teammates in one colour would be drawn with two outlines, claiming to be different sides, while the A/B/C letter already answers that question."
+}

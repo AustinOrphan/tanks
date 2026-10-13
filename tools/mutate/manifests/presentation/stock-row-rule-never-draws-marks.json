@@ -1,0 +1,12 @@
+{
+  "id": "stock-row-rule-never-draws-marks",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "  return team === undefined && marker === 'shape' ? 'marks' : 'pips';",
+  "replace": "  return 'pips';",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/stock-cue.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The strip's rule never picks the `marks` row, so the shipped FFA strip under `shape` draws neutral pips (issue #1022) -- the ruling on #230 undone with every test of the rule's other cells still green."
+}

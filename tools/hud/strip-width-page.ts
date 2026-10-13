@@ -9,8 +9,7 @@
  * `.ts`, so a page module sharing the runner's name would load Node code into the browser.
  */
 import { createHud, type GameplayStatus, type Hud, type VersusStock } from '../../src/game/hud';
-import { stripIdentityMarker } from '../../src/game/identity-marker-flag';
-import type { StockCue } from '../../src/presentation/stock-cue';
+import { stripIdentityMarker, type IdentityMarkerFlag } from '../../src/game/identity-marker-flag';
 
 export interface StripReading {
   /** The strip's right edge, px from the viewport's left. */
@@ -22,7 +21,7 @@ export interface StripReading {
   layout: string;
   /** Each entry's text, which is the label plus any digit a fallback adds. */
   labels: string[];
-  /** The strip's markup, so the runner can compare two arms that should draw the same thing. */
+  /** The strip's markup, so the runner can compare two markers that should draw the same thing. */
   html: string;
   /** Whether the shipped face had loaded when the strip was measured. */
   face: boolean;
@@ -43,13 +42,17 @@ function describe(entry: Element): string {
   return `${size}/${round(parseFloat(getComputedStyle(row).columnGap))}`;
 }
 
-async function measureStrip(stockCue: StockCue, stocks: VersusStock[]): Promise<StripReading> {
+/**
+ * Measure one strip as the page's HUD draws it under `?dev=1&identityMarker=<flag>`, where
+ * `null` is the flag absent: resolved exactly as `loop.ts` resolves it, so the shipped FFA strip
+ * is the `marks` row, `solid` draws pips with no mark, and a teams entry draws pips under any
+ * value (issue #1022, `stockRowFor`).
+ */
+async function measureStrip(flag: IdentityMarkerFlag | null, stocks: VersusStock[]): Promise<StripReading> {
   hud?.dispose();
   const root = document.getElementById('app') as HTMLElement;
   root.replaceChildren();
-  // The identity mark the page's HUD is handed with no flag set: the shipped FFA mark, which the
-  // HUD draws ahead of each FFA entry (and of no teams entry) unless the `marks` arm runs.
-  hud = createHud(root, { stockCue, identityMarker: stripIdentityMarker(null) });
+  hud = createHud(root, { identityMarker: stripIdentityMarker(flag) });
   hud.setState('playing');
   const status: GameplayStatus = { kind: 'versus', mission: 1, missions: 1, stocks };
   hud.setStatus(status);

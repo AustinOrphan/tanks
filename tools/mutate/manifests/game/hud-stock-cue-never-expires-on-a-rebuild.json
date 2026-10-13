@@ -1,8 +1,8 @@
 {
   "id": "hud-stock-cue-never-expires-on-a-rebuild",
   "file": "src/game/hud.ts",
-  "find": "        const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;",
-  "replace": "        const running = started !== undefined ? started : null;",
+  "find": "      const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;",
+  "replace": "      const running = started !== undefined ? started : null;",
   "expect": "killed",
   "tests": [
     "src/game/hud.match.test.ts"

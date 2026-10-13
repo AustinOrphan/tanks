@@ -69,11 +69,27 @@ const hudEl = (root: HTMLElement): HTMLElement => root.querySelector('.hud') as 
 const barEl = (root: HTMLElement): HTMLElement => root.querySelector('.hud-topbar') as HTMLElement;
 
 /**
- * The topbar as it reads on screen: every child the cascade is actually showing, in
- * order, joined by ` | `.
+ * One stock-strip entry as assistive technology reads it (issue #1022): its label, then its
+ * row's one name. Since #1022 every entry draws its stocks as a `role="img"` row named
+ * "3 of 3 stocks", so the count is in that name and not in the entry's text.
+ */
+function entryReading(entry: Element): string {
+  const read = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
+    if (!(node instanceof Element) || node.getAttribute('aria-hidden') === 'true') return '';
+    if (node.getAttribute('role') === 'img') return ` ${node.getAttribute('aria-label') ?? ''} `;
+    return Array.from(node.childNodes).map(read).join('');
+  };
+  return read(entry);
+}
+
+/**
+ * The topbar as it reads: every child the cascade is actually showing, in order, joined
+ * by ` | `.
  *
- * The stock strip is joined from its own spans because it renders one element per slot
- * with no separator between them, so its raw `textContent` reads `P1 3P2 3`.
+ * The stock strip is joined from its own entries because it renders one element per slot
+ * with no separator between them, and each entry is read with its row's name: its raw
+ * `textContent` reads `P1 P2 `, with no count in it at all (issue #1022).
  */
 function reading(root: HTMLElement): string {
   const parts: string[] = [];
@@ -81,7 +97,7 @@ function reading(root: HTMLElement): string {
     if (getComputedStyle(child).display === 'none') continue;
     const raw = child.classList.contains('hud-versus-stocks')
       ? Array.from(child.children)
-          .map((entry) => entry.textContent ?? '')
+          .map(entryReading)
           .join(' ')
       : (child.textContent ?? '');
     const text = raw.replace(/\s+/g, ' ').trim();
@@ -161,38 +177,38 @@ const READINGS: Record<TopbarTreatment, Record<SessionName, string>> = {
   full: {
     campaign: 'Lives: 3 | Enemies: 3 | Level: 1/5',
     practice: 'Practice | Lives: 3 | Enemies: 3 | Level: 1/5',
-    'versus-on-campaign-levels': 'Level: 1/5 | P1 3 P2 3',
-    'versus-setup-match': 'P1 3 P2 3',
+    'versus-on-campaign-levels': 'Level: 1/5 | P1 3 of 3 stocks P2 3 of 3 stocks',
+    'versus-setup-match': 'P1 3 of 3 stocks P2 3 of 3 stocks',
   },
   spare: {
     campaign: 'Lives: 3 | Level: 1',
     practice: 'Practice | Lives: 3 | Level: 1',
-    'versus-on-campaign-levels': 'Level: 1 | P1 3 P2 3',
-    'versus-setup-match': 'P1 3 P2 3',
+    'versus-on-campaign-levels': 'Level: 1 | P1 3 of 3 stocks P2 3 of 3 stocks',
+    'versus-setup-match': 'P1 3 of 3 stocks P2 3 of 3 stocks',
   },
   'mode-chips': {
     campaign: 'Campaign | Lives: 3 | Enemies: 3 | Level: 1/5',
     practice: 'Practice | Lives: 3 | Enemies: 3 | Level: 1/5',
-    'versus-on-campaign-levels': 'VS | P1 3 P2 3',
-    'versus-setup-match': 'VS | P1 3 P2 3',
+    'versus-on-campaign-levels': 'VS | P1 3 of 3 stocks P2 3 of 3 stocks',
+    'versus-setup-match': 'VS | P1 3 of 3 stocks P2 3 of 3 stocks',
   },
   'spare-chips': {
     campaign: 'Campaign | Lives: 3 | Level: 1',
     practice: 'Practice | Lives: 3 | Level: 1',
-    'versus-on-campaign-levels': 'VS | P1 3 P2 3',
-    'versus-setup-match': 'VS | P1 3 P2 3',
+    'versus-on-campaign-levels': 'VS | P1 3 of 3 stocks P2 3 of 3 stocks',
+    'versus-setup-match': 'VS | P1 3 of 3 stocks P2 3 of 3 stocks',
   },
   'enemies-only': {
     campaign: 'Lives: 3 | Level: 1/5',
     practice: 'Practice | Lives: 3 | Level: 1/5',
-    'versus-on-campaign-levels': 'Level: 1/5 | P1 3 P2 3',
-    'versus-setup-match': 'P1 3 P2 3',
+    'versus-on-campaign-levels': 'Level: 1/5 | P1 3 of 3 stocks P2 3 of 3 stocks',
+    'versus-setup-match': 'P1 3 of 3 stocks P2 3 of 3 stocks',
   },
   'denominator-only': {
     campaign: 'Lives: 3 | Enemies: 3 | Level: 1',
     practice: 'Practice | Lives: 3 | Enemies: 3 | Level: 1',
-    'versus-on-campaign-levels': 'Level: 1 | P1 3 P2 3',
-    'versus-setup-match': 'P1 3 P2 3',
+    'versus-on-campaign-levels': 'Level: 1 | P1 3 of 3 stocks P2 3 of 3 stocks',
+    'versus-setup-match': 'P1 3 of 3 stocks P2 3 of 3 stocks',
   },
 };
 
@@ -206,6 +222,11 @@ const READINGS: Record<TopbarTreatment, Record<SessionName, string>> = {
  * is normally the thing to avoid, but this is a recording of a bar that no longer exists
  * in the tree, which is exactly what `full` claims to restore and the only way to hold it
  * to that claim.
+ *
+ * ONE PART WAS RE-RECORDED: the stock strip's entries in the two versus sessions. The strip
+ * belongs to no topbar arm -- all six draw the same one -- and issue #1022 changed it under
+ * every arm at once, from the digit to a row of pips (an injected HUD has no identity
+ * marker) whose one name states the count. Those spans are what `createHud` draws now.
  */
 const PRE_RULING_TOPBAR: Record<SessionName, string> = {
   campaign:
@@ -213,9 +234,9 @@ const PRE_RULING_TOPBAR: Record<SessionName, string> = {
   practice:
     '<div class="hud-topbar"> <div class="hud-stat hud-practice">Practice</div> <div class="hud-stat hud-campaign-stat">Lives: <span class="hud-lives">3</span></div> <div class="hud-stat hud-campaign-stat">Enemies: <span class="hud-enemies">3</span></div> <div class="hud-stat hud-level">Level: <span class="hud-level-num">1/5</span></div> <div class="hud-shells hud-shells--hidden"></div> <div class="hud-versus-stocks hud-versus-stocks--hidden"></div> </div>',
   'versus-on-campaign-levels':
-    '<div class="hud-topbar"> <div class="hud-stat hud-practice hud-practice--hidden">Practice</div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Lives: <span class="hud-lives">3</span></div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Enemies: <span class="hud-enemies">3</span></div> <div class="hud-stat hud-level">Level: <span class="hud-level-num">1/5</span></div> <div class="hud-shells hud-shells--hidden"></div> <div class="hud-versus-stocks"><span class="hud-versus-stock-entry" style="color: rgb(63, 208, 255);">P1 3</span><span class="hud-versus-stock-entry" style="color: rgb(255, 138, 30);">P2 3</span></div> </div>',
+    '<div class="hud-topbar"> <div class="hud-stat hud-practice hud-practice--hidden">Practice</div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Lives: <span class="hud-lives">3</span></div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Enemies: <span class="hud-enemies">3</span></div> <div class="hud-stat hud-level">Level: <span class="hud-level-num">1/5</span></div> <div class="hud-shells hud-shells--hidden"></div> <div class="hud-versus-stocks"><span class="hud-versus-stock-entry" style="color: rgb(63, 208, 255);">P1 <span class="hud-stock-pips" role="img" aria-label="3 of 3 stocks"><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span></span></span><span class="hud-versus-stock-entry" style="color: rgb(255, 138, 30);">P2 <span class="hud-stock-pips" role="img" aria-label="3 of 3 stocks"><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span></span></span></div> </div>',
   'versus-setup-match':
-    '<div class="hud-topbar"> <div class="hud-stat hud-practice hud-practice--hidden">Practice</div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Lives: <span class="hud-lives">3</span></div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Enemies: <span class="hud-enemies">3</span></div> <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div> <div class="hud-shells hud-shells--hidden"></div> <div class="hud-versus-stocks"><span class="hud-versus-stock-entry" style="color: rgb(63, 208, 255);">P1 3</span><span class="hud-versus-stock-entry" style="color: rgb(255, 138, 30);">P2 3</span></div> </div>',
+    '<div class="hud-topbar"> <div class="hud-stat hud-practice hud-practice--hidden">Practice</div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Lives: <span class="hud-lives">3</span></div> <div class="hud-stat hud-campaign-stat hud-campaign-stat--hidden">Enemies: <span class="hud-enemies">3</span></div> <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div> <div class="hud-shells hud-shells--hidden"></div> <div class="hud-versus-stocks"><span class="hud-versus-stock-entry" style="color: rgb(63, 208, 255);">P1 <span class="hud-stock-pips" role="img" aria-label="3 of 3 stocks"><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span></span></span><span class="hud-versus-stock-entry" style="color: rgb(255, 138, 30);">P2 <span class="hud-stock-pips" role="img" aria-label="3 of 3 stocks"><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span><span class="hud-stock-pip"></span></span></span></div> </div>',
 };
 
 describe('topbar: the flag that names an arm', () => {
@@ -413,6 +434,17 @@ describe('topbar: what each arm says', () => {
     }
   });
 
+  it('reads each stock entry by its row\'s name, since the strip\'s text carries no count (issue #1022)', () => {
+    const { hud, root } = mount(null);
+    hud.setStatus(SESSIONS['versus-setup-match']);
+    expect(reading(root)).toBe('VS | P1 3 of 3 stocks P2 3 of 3 stocks');
+    // NEGATIVE CONTROL: the strip's own text has no count in it, so a reader built on
+    // `textContent` -- which this one was until #1022 -- would compare the labels alone, and
+    // every versus reading in the table above would pass on a strip that drew no stocks.
+    const strip = root.querySelector('.hud-versus-stocks') as HTMLElement;
+    expect(Array.from(strip.children).map((entry) => entry.textContent)).toEqual(['P1 ', 'P2 ']);
+  });
+
   it('labels the kind it is actually showing, and labels nothing when no session is live', () => {
     // The chip is a FIELD on the shipped bar, so it has to follow the session rather than
     // be written once at construction: a Levels pick really does change the kind on a live
@@ -470,18 +502,18 @@ describe('topbar: the two versus shapes, which question 5 conflated', () => {
     // `missions > 1` was already false. `full` is where that bar still lives.
     const { hud, root } = mount('full');
     hud.setStatus(SESSIONS['versus-setup-match']);
-    expect(reading(root)).toBe('P1 3 P2 3');
+    expect(reading(root)).toBe('P1 3 of 3 stocks P2 3 of 3 stocks');
     // NEGATIVE CONTROL, and the session the issue's table actually described: the same
     // kind on the CAMPAIGN level system (`?dev=1&mode=ffa`) did show the chip -- so this
     // was never a HUD hiding the chip for versus, it was a sequence with nothing to say.
     hud.setStatus(SESSIONS['versus-on-campaign-levels']);
-    expect(reading(root)).toBe('Level: 1/5 | P1 3 P2 3');
+    expect(reading(root)).toBe('Level: 1/5 | P1 3 of 3 stocks P2 3 of 3 stocks');
   });
 
   it('drops it on the shipped bar, where the VS chip takes that slot', () => {
     const { hud, root } = mount(null);
     hud.setStatus(SESSIONS['versus-on-campaign-levels']);
-    expect(reading(root)).toBe('VS | P1 3 P2 3');
+    expect(reading(root)).toBe('VS | P1 3 of 3 stocks P2 3 of 3 stocks');
     // NEGATIVE CONTROL: the shipped bar drops the chip for VERSUS, not for everything --
     // a campaign session keeps the ordinal it is genuinely climbing.
     hud.setStatus(SESSIONS.campaign);

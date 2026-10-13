@@ -1,0 +1,12 @@
+{
+  "id": "stock-row-ignores-the-resolved-marker",
+  "file": "src/game/hud.ts",
+  "find": "const row = stockRowFor(entry.team, identityMarker);",
+  "replace": "const row = stockRowFor(entry.team, 'shape');",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The HUD stops handing the strip's rule its resolved marker, so every FFA entry draws the `marks` row whatever the marker says (issue #1022). The reversal `?dev=1&identityMarker=solid`, `arcs`, `roof` and every injected HUD would then draw the slot's outline in the strip with no `shape` outline on the ground to pair with, which is the one thing the ruling on #230 reserved `marks` against."
+}

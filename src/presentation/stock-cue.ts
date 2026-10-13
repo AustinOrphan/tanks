@@ -1,45 +1,53 @@
 /**
- * How the versus stock strip marks a stock just lost (issue #230).
+ * How the versus stock strip draws each player's stocks, and how it marks one just lost
+ * (issues #230, #1022).
  *
- * A TEMPORARY OPEN-QUESTION FLAG, not a rollback lever: once one arm is chosen it ships
- * unconditionally and this module and its `?dev=1&stockCue=` flag are deleted.
+ * THE RULING ON #230 SHIPPED `marks`: an FFA entry draws one copy of its slot's own identity
+ * outline (issue #234's `shape`: circle, triangle, square, starburst) per stock the match started
+ * with, held ones filled and lost ones hollow, so one channel states both which player and how
+ * many stocks are left, and the row replaces the separate leading mark. The accepted risk is the
+ * one the comparison named: a count wants uniform simple units and identity wants distinct ones,
+ * so five starbursts in a row may read as texture rather than as a number. The comparison's other
+ * arms, `strike` and `badge`, went with its `?dev=1&stockCue=` flag (issue #1022).
  *
- * THE SHIPPED STRIP IS THE ABSENCE OF A VALUE, as with every other arm flag here: `null` draws
- * no cue at all, which is what players see today -- a stock loss is announced to assistive
- * technology (issue #629) but nothing on screen marks it beyond the digit changing.
+ * `pips` STAYS, AS A DRAWING ROUTINE AND NOT AS A CHOICE: the same row with a neutral dot for its
+ * unit. It is what a teams entry draws beside its A/B/C letter, and what an FFA entry draws when
+ * the identity marker is not `shape`. `stockRowFor` is the one rule that picks between them.
  *
- * The three arms are the shortlist from four mockups posted on #230 (the fourth, an inverted
- * chip, was dropped). Each carries the loss on a channel other than colour, and each has a
- * reduced-motion form that keeps the information and drops the movement:
- *
- *  - `pips`   -- the digit becomes one pip per stock the match started with. Remaining stocks
- *                are filled, lost ones hollow, and the pip that just emptied swells and bursts
- *                a ring. Shape carries the count, and it stays readable after the cue ends.
- *  - `marks`  -- the same idea as `pips`, with the pip replaced by the slot's own IDENTITY
- *                outline (issue #234's `shape`: circle, triangle, square, starburst). One
- *                channel does both jobs -- which player, and how many stocks -- so the entry
- *                states its identity once instead of three times, and the separate leading
- *                marker is suppressed while this arm runs. Proposed after #833 paired the
- *                strip with the ground ring and the pairing turned out to say "P1" twice.
- *
- *                THE TRADE IS COUNTING AGAINST RECOGNITION, and it is the thing to judge: a
- *                count wants uniform simple units, which is exactly why `pips` is a dot,
- *                while identity wants maximally distinct ones. Five starbursts in a row may
- *                read as texture rather than as a number, and that is what a capture has to
- *                answer rather than an argument.
- *  - `strike` -- the old number, struck through, lifts away above the new one.
- *  - `badge`  -- a small outlined "−1" appears under the entry and drifts down as it fades.
+ * Every entry marks a loss the same way: the unit that just emptied swells, and the
+ * reduced-motion form keeps the information and drops the movement (`hud.css`).
  *
  * Cue state is drawn with borders and text, never `background`: forced colours drops a
- * background, which in the mockups made a filled pip identical to a hollow one and erased a
- * strike line drawn as a fill.
+ * background, which in the #230 mockups made a filled pip identical to a hollow one.
  */
-export const STOCK_CUES = ['pips', 'marks', 'strike', 'badge'] as const;
+import type { IdentityMarkerStyle } from './identity-marker';
 
-export type StockCue = (typeof STOCK_CUES)[number];
+/** Which row draws one stock entry: the slot's identity outline per stock, or a neutral pip. */
+export type StockRow = 'marks' | 'pips';
 
-export function isStockCue(value: unknown): value is StockCue {
-  return typeof value === 'string' && (STOCK_CUES as readonly string[]).includes(value);
+/**
+ * Which row draws one stock entry, the strip's one rule (issue #1022): `marks` for an entry with
+ * no team whose resolved marker is `shape`, and `pips` for every other combination.
+ *
+ * `marker` is the HUD's resolved `identityMarker` option. The page's HUD is handed `shape` when
+ * the flag is absent, `null` for the reversal value `solid` and the named style otherwise
+ * (`identity-marker-flag.ts`); an injected HUD built without the option has `null`.
+ *
+ *  - A TEAMS ENTRY DRAWS PIPS. `marks` spends the SLOT's outline, and a teams player shares a
+ *    side, not a slot: two teammates in one colour drawn with two outlines would claim to be
+ *    different sides, and the A/B/C letter beside the number already answers the question the
+ *    outline would ask (PR #836's fallback, a week before the ruling).
+ *  - ANY MARKER BUT `shape` DRAWS PIPS. The ruling reserved `marks` for a `shape` marker that is
+ *    on by default, so that the strip's outlines never appear without the ground ring's. With
+ *    the marker reversed (`?dev=1&identityMarker=solid`) there is no outline on the ground to
+ *    pair with, and `arcs` and `roof` mark the ring in another vocabulary; both keep the leading
+ *    mark beside their pips until issue #1023 removes them.
+ *
+ * Both readings are derived from the code and the ruling's own condition rather than ruled on
+ * directly, and a later ruling can reverse either.
+ */
+export function stockRowFor(team: number | undefined, marker: IdentityMarkerStyle | null): StockRow {
+  return team === undefined && marker === 'shape' ? 'marks' : 'pips';
 }
 
 /**
@@ -82,18 +90,18 @@ export const STOCK_CUE_MS = 700;
  *
  * THE LAST TWO ROWS ARE WHY THIS FALLS BACK RATHER THAN SHRINKING FURTHER. They fit
  * arithmetically at 7px and 6px with about ONE pixel of margin -- fragile against any change to
- * a label or a font, and self-defeating: `pips` is the arm that turns the count into shape, and
- * twenty 6px dots do not read as a count. Below 8px the arm stops doing its job.
+ * a label or a font, and self-defeating: pips exist to turn the count into shape, and twenty
+ * 6px dots do not read as a count. Below 8px the row stops doing its job.
  *
  * What it falls back TO is one full-size pip plus the digit, not a bare digit -- see
  * `PipLayout`. The shape channel survives and so does the cue's target.
  *
- * Only consulted on a narrow viewport. At desktop widths the strip has room and every arm draws
- * at its full size, which is where the #230 comparison is mostly read.
+ * Only consulted on a narrow viewport. At desktop widths the strip has room and every row draws
+ * at its full size.
  *
- * A TEAMS ENTRY IS LAID OUT BY THIS SAME RULE (issue #1055). It draws `P1 A ` before its pips,
- * under `pips` and under `marks` (which hands a teams entry to pips), so it carries a space and a
- * letter the table above never measured. Measured on the real HUD at a 390px viewport
+ * A TEAMS ENTRY IS LAID OUT BY THIS SAME RULE (issue #1055). Every teams entry draws pips
+ * (`stockRowFor`), after a `P1 A ` label, so it carries a space and a letter the table above
+ * never measured. Measured on the real HUD at a 390px viewport
  * (`tools/hud/strip-width.mjs`), lettered A, B, A, B, the widest split: the letter fits at every
  * rung this rule already takes, so a teams entry needs no rule of its own. Spare is the room left
  * inside the topbar's content box, which ends at 380px. Teams is offered at three and four
@@ -112,8 +120,9 @@ export const STOCK_CUE_MS = 700;
  *     4      5     one+digit      275.4       54.4
  *
  * The one-pip fallback stays at four players at four and five stocks. It fits, with 54.4px to
- * spare; #1055 leaves a rung that fits unchanged; and this rule is shared with FFA, where every
- * row at the 8px floor overflows four players at four stocks (8/2 by 18.1px, 8/1 by 6.1px). For
+ * spare; #1055 leaves a rung that fits unchanged; and this rule is shared with the FFA entries
+ * that draw pips, where every row at the 8px floor overflows four players at four stocks (8/2 by
+ * 18.1px, 8/1 by 6.1px, measured with the leading mark beside each entry). For
  * teams alone, an 8px row with a 1px gap would fit 4x4 with 8.8px to spare, while an 8/2 row
  * overflows it by 3.2px; at 4x5 every 8px row overflows (8/2 by 43.2px, 8/1 by 27.2px). Those
  * rows were measured on the same page by drawing a full row in place of each fallback.
@@ -131,15 +140,15 @@ export function narrowPipLayout(slots: number, total: number): PipLayout {
 }
 
 /**
- * How the pips arm draws one entry.
+ * How the pips row draws one entry.
  *
- * `row` is the arm proper: one pip per stock the match started with, at the given size.
+ * `row` is the row proper: one pip per stock the match started with, at the given size.
  *
  * `one` is the crowded fallback: a SINGLE pip, at full size, followed by the count as a digit.
  * A bare digit was the first answer and it was wrong twice over. It drops the shape channel
- * entirely, which is the one thing this arm exists to provide -- and it leaves the loss cue
+ * entirely, which is the one thing pips exist to provide -- and it leaves the loss cue
  * with nothing to animate, because the cue IS the pip swelling and bursting a ring. An entry
- * that cannot burst is not a degraded arm, it is the absence of one, and #230 would have been
+ * that cannot burst is not a degraded row, it is the absence of one, and #230 would have been
  * ranking a blank.
  *
  * Measured on the real HUD at 390px (issue #1055), one full-size pip plus the digit leaves 39.4px
@@ -152,7 +161,7 @@ export type PipLayout =
   | { kind: 'one'; pip: number };
 
 /**
- * How the `marks` arm draws one entry on a narrow viewport, for a strip of `slots` entries each
+ * How the `marks` row draws one entry on a narrow viewport, for a strip of `slots` entries each
  * holding `total` stocks: at the stylesheet's own size, as a smaller row, or as the crowded
  * fallback (issue #1021) -- the `marks` analogue of `narrowPipLayout` above.
  *
@@ -185,9 +194,11 @@ export type PipLayout =
  * count as a digit, which keeps the slot's outline and gives the loss cue its target.
  *
  * Only consulted on a narrow viewport; the desktop strip draws every mark at its full size.
- * Measured at the default UI scale: `.hud-versus-stocks` is sized in `rem`, outside the type
- * tokens the UI scale multiplies, and the marks follow it in `em`. If the strip moves onto those
- * tokens the table has to be re-measured.
+ * Measured at the default UI scale (100%) only. Since #1048 `.hud-versus-stocks` is sized
+ * `calc(1rem * var(--hud-ui-scale))` (`hud.css`), and the full-size marks follow it in `em`; at
+ * scale 1 that is numerically the `1rem` this table was measured against, so it holds there.
+ * At 125% and 150% the `em`-sized marks grow while the `px`-sized narrow row does not, and
+ * nothing has measured either scale on a phone.
  */
 export function narrowMarkLayout(slots: number, total: number): MarkLayout {
   if (slots <= 3 || total <= 3) return { kind: 'full' };
@@ -196,9 +207,9 @@ export function narrowMarkLayout(slots: number, total: number): MarkLayout {
 }
 
 /**
- * How the marks arm draws one entry.
+ * How the marks row draws one entry.
  *
- * `full` is the arm at the stylesheet's own size. `row` is the same row with a smaller mark and
+ * `full` is the row at the stylesheet's own size. `row` is the same row with a smaller mark and
  * gap, set through `--hud-mark` and `--hud-mark-gap` on the row so the stylesheet keeps the only
  * definition of the default. `one` is the crowded fallback: a single full-size mark in the
  * slot's outline, filled while the player has stock, followed by the count as a digit.

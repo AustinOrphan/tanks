@@ -1,8 +1,8 @@
 {
   "id": "hud-stock-cue-pips-forget-the-start",
   "file": "src/game/hud.ts",
-  "find": "    if (arm === 'pips') {\n      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);",
-  "replace": "    if (arm === 'pips') {\n      const total = entry.stock;",
+  "find": "    if (row === 'pips') {\n      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);",
+  "replace": "    if (row === 'pips') {\n      const total = entry.stock;",
   "expect": "killed",
   "tests": [
     "src/game/hud.match.test.ts"

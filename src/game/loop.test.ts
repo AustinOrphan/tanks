@@ -7837,10 +7837,12 @@ describe('createBrowserDeps', () => {
 
     it('hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)', () => {
       // The HUD half of #922, through the page's real HUD factory: an injected HUD in any
-      // other test is built with no `identityMarker` and draws no mark, so only this path
-      // shows what a production page puts in the stock strip. Each mark is read as the
-      // outline it draws: 'circle', or the polygon's corner count.
-      const strip = (search: string, stocks: VersusStock[]): Array<'circle' | number> => {
+      // other test is built with no `identityMarker` and draws pips with no mark, so only this
+      // path shows what a production page puts in the stock strip. Since issue #1022 the
+      // shipped mark IS the strip: an FFA entry under `shape` draws the `marks` row, one copy
+      // of its slot's outline per stock, and no separate leading mark. Each outline is read as
+      // what it draws -- 'circle', or the polygon's corner count -- per entry.
+      const strip = (search: string, stocks: VersusStock[]) => {
         const deps = withSearch(search, () => createBrowserDeps());
         const root = document.createElement('div');
         document.body.appendChild(root);
@@ -7848,25 +7850,36 @@ describe('createBrowserDeps', () => {
         try {
           hud.setState('playing');
           hud.setStatus({ kind: 'versus', mission: 1, missions: 1, stocks });
-          return Array.from(root.querySelectorAll('.hud-versus-stocks .hud-stock-marker')).map((mark) =>
-            mark.querySelector('circle') !== null
-              ? 'circle'
-              : mark.querySelector('polygon')!.getAttribute('points')!.trim().split(/\s+/).length / 2);
+          const entries = Array.from(root.querySelectorAll('.hud-versus-stocks .hud-versus-stock-entry'));
+          return {
+            outlines: entries.map((entry) => Array.from(entry.querySelectorAll('.hud-stock-mark')).map((mark) =>
+              mark.querySelector('circle') !== null
+                ? 'circle'
+                : mark.querySelector('polygon')!.getAttribute('points')!.trim().split(/\s+/).length / 2)),
+            pips: root.querySelectorAll('.hud-versus-stocks .hud-stock-pip').length,
+            leading: root.querySelectorAll('.hud-versus-stocks .hud-stock-marker').length,
+          };
         } finally {
           hud.dispose();
           root.remove();
         }
       };
       const ffa: VersusStock[] = [0, 1, 2, 3].map((slot) => ({ slot, stock: 3 }));
+      // Four entries at three stocks: each entry's three marks all carry its slot's outline.
       const want = ffa.map(({ slot }) => {
         const outline = shapeOutlineFor(slot);
-        return outline.kind === 'circle' ? 'circle' : outline.kind === 'polygon' ? outline.sides : outline.points * 2;
+        const one = outline.kind === 'circle' ? 'circle' : outline.kind === 'polygon' ? outline.sides : outline.points * 2;
+        return [one, one, one];
       });
-      expect(strip('', ffa), 'a production page, no ?dev').toEqual(want);
-      expect(strip('?dev=1&identityMarker=solid', ffa), 'the reversal value').toEqual([]);
-      // Teams entries stay unmarked under the shipped default: the HUD's own per-entry gate,
-      // which is why the page HUD can resolve without a session mode.
-      expect(strip('', [{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]), 'teams').toEqual([]);
+      expect(strip('', ffa), 'a production page, no ?dev').toEqual({ outlines: want, pips: 0, leading: 0 });
+      // NEGATIVE CONTROL: the reversal value draws the same four entries as pips, with no
+      // outline anywhere -- so the case above is the flag's doing, not the strip's default.
+      expect(strip('?dev=1&identityMarker=solid', ffa), 'the reversal value')
+        .toEqual({ outlines: [[], [], [], []], pips: 12, leading: 0 });
+      // Teams entries draw pips and no mark under the shipped default: the HUD's own per-entry
+      // rule, which is why the page HUD can resolve without a session mode.
+      expect(strip('', [{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]), 'teams')
+        .toEqual({ outlines: [[], []], pips: 6, leading: 0 });
     });
 
     it('leaves the URL exactly as it found it', () => {
