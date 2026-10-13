@@ -1,0 +1,15 @@
+{
+  "id": "hud-arrival-always-lands-on-the-container",
+  "file": "src/game/hud.ts",
+  "find": "    const target = arrivalTarget(container, primary);",
+  "replace": "    const target = arrivalTarget(container, []);",
+  "tests": [
+    "src/game/hud.reachability.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Issue #919's ruling: an arrival lands on the surface's primary action, so a screen takes one press. Focusing the container everywhere is the pre-#919 behaviour, under which a pad needed two presses wherever the direction spec promised one.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

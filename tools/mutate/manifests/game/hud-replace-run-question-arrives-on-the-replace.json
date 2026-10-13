@@ -1,0 +1,15 @@
+{
+  "id": "hud-replace-run-question-arrives-on-the-replace",
+  "file": "src/game/hud.ts",
+  "find": "      primary: () => [confirmCancelBtn],",
+  "replace": "      primary: () => [confirmAcceptBtn],",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "The replace-run question arrives on its SAFE answer (issue #919), so the one press it takes keeps the run. Arriving on the accept would put the deletion of a campaign one blind Confirm away.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

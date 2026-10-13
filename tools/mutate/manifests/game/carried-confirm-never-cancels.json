@@ -1,0 +1,16 @@
+{
+  "id": "carried-confirm-never-cancels",
+  "file": "src/game/carried-confirm.ts",
+  "find": "      if (began === undefined || began <= arrivedAt) e.preventDefault();",
+  "replace": "      if (began === undefined || began <= arrivedAt) return;",
+  "tests": [
+    "src/game/carried-confirm.test.ts",
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "A keyboard Confirm pressed for one screen must not activate the next screen's primary action (issue #919): the arrival now focuses that primary, and Enter and Space activate it natively. With the cancel gone, a held Enter's repeats, the keypress of the keystroke that dismissed Launch, and a Space released after a match all press the new screen.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "hud-outcome-arrives-on-its-container",
+  "file": "src/game/hud.ts",
+  "find": "    'outcome-win': () => [actionBtn],",
+  "replace": "    'outcome-win': () => [],",
+  "tests": [
+    "src/game/hud.reachability.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "A winning end screen arrives on its action -- Next Level, Play Again, Rematch (issue #919; the spec's \"one Confirm on Next Mission\" and \"Rematch is focused\").",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

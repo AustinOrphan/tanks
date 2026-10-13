@@ -1,0 +1,16 @@
+{
+  "id": "hud-pause-arrives-on-its-container",
+  "file": "src/game/hud.ts",
+  "find": "    paused: () => [actionBtn],",
+  "replace": "    paused: () => [],",
+  "tests": [
+    "src/game/hud.reachability.test.ts",
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Pause arrives on Resume (issue #919; the spec's \"Resume is the default and one Confirm returns to play\").",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

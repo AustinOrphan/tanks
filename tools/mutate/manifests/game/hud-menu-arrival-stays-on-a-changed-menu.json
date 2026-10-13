@@ -1,0 +1,14 @@
+{
+  "id": "hud-menu-arrival-stays-on-a-changed-menu",
+  "file": "src/game/hud.ts",
+  "find": "    renderRunSummary();\n    followPanelArrival();",
+  "replace": "    renderRunSummary();",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "`route-host.ts` repaints whether a run exists after the Main Menu has arrived, so the arrival must follow the menu's shape until the player moves (issue #919). Without it a returning player who arrived before the run was reported sits on what has just become Start New Campaign.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

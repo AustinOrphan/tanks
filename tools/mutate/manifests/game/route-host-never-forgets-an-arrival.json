@@ -1,0 +1,14 @@
+{
+  "id": "route-host-never-forgets-an-arrival",
+  "file": "src/game/route-host.ts",
+  "find": "    menuPoller.poll(now);\n    // After the poll, so an arrival this poll's own Confirm made is not held against the next.\n    arrivedSincePoll = false;",
+  "replace": "    menuPoller.poll(now);\n    // After the poll, so an arrival this poll's own Confirm made is not held against the next.",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The arrival flag covers one poll only (issue #919). Never cleared, every pad Confirm after the first arrival of the page is dropped and the controller cannot activate anything.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

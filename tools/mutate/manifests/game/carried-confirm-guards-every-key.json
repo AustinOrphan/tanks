@@ -1,0 +1,14 @@
+{
+  "id": "carried-confirm-guards-every-key",
+  "file": "src/game/carried-confirm.ts",
+  "find": "      if (keyToUiAction(e.key) !== 'confirm') return;",
+  "replace": "",
+  "tests": [
+    "src/game/carried-confirm.test.ts"
+  ],
+  "why": "Only Enter and Space activate a focused button, so only they are guarded (issue #919). Guarding every key would cancel a held arrow's repeat (the roving walk claims its own keys first, but the default scroll and any widget behaviour go) and the release of Escape and M across an arrival.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

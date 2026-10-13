@@ -1,0 +1,15 @@
+{
+  "id": "hud-carried-confirm-hears-only-keydown",
+  "file": "src/game/hud.ts",
+  "find": "  for (const type of ['keydown', 'keypress', 'keyup'] as const) {\n    window.addEventListener(type, onCarriedConfirmKey, true);",
+  "replace": "  for (const type of ['keydown'] as const) {\n    window.addEventListener(type, onCarriedConfirmKey, true);",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Enter activates on keypress and Space on keyup, so the guard has to hear both (issue #919). Bound to keydown alone, it cancels a held key's repeats but lets the keypress of the keystroke that dismissed Launch, and a held Space's release, press the new primary.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}

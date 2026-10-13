@@ -1,0 +1,15 @@
+{
+  "id": "gamepad-menu-confirm-repeats-while-held",
+  "file": "src/input/gamepad-menu.ts",
+  "find": "          const repeats = action === 'up' || action === 'down' || action === 'left' || action === 'right';",
+  "replace": "          const repeats = action !== 'back' && action !== 'pause';",
+  "tests": [
+    "src/input/gamepad-menu.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Confirm is a one-shot: a held A fires once and never again until released (issue #494). Since issue #919 put focus on each screen's primary on arrival, a repeating Confirm would also press the primary of every screen the held A opened.",
+  "expect": "killed",
+  "killedBy": [
+    "(measured below)"
+  ]
+}
