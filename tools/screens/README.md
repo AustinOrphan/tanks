@@ -221,7 +221,10 @@ the element's `role`, `aria-label`, `aria-labelledby`, `aria-describedby`, `aria
 string, omitting the ones the element lacks; an element with none has no `aria` key. They are
 compared exactly, with no tolerance and no trimming, so a dialog that lost its role or a control
 whose label changed fails the check, and the failure line names the state, the selector and
-the attribute (`.hud-confirm aria.role: expected "alertdialog", got undefined`).
+the attribute (`.hud-confirm aria.role: expected "alertdialog", got undefined`). The line
+shortens each value, collapsing whitespace; when that would print two identical values, as for
+a change only in whitespace, it prints both in full instead (`expected "Level 1", got "Level 1 "
+(in full; the short forms match)`).
 
 What this does NOT prove, so nobody reads it as a screen-reader gate:
 

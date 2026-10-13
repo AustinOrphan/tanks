@@ -141,6 +141,25 @@ describe('the screen baseline: what a diff says (issue #846)', () => {
     expect(out, 'whitespace runs are collapsed').not.toContain('\n');
     expect(brief('short')).toBe('"short"');
   });
+
+  it('prints both values in full when their short forms would read as equal', () => {
+    // The comparison is exact and the summary is not: it collapses whitespace and stops at 72
+    // characters. A difference the summary erases would print two identical values, a line
+    // that reads as a flaky gate and invites a re-accept of the change it is reporting.
+    const line = (before: Record<string, unknown>, after: Record<string, unknown>) => formatFailure({
+      recipeId: 'screen.a', stateId: 'screen.a', viewport: recipe.viewport, profile: recipe.profile,
+      changes: diffMeasurements([m(before)], [m(after)]),
+    }).split('\n')[4];
+    expect(line({ aria: { 'aria-label': 'Level 1' } }, { aria: { 'aria-label': 'Level 1 ' } }))
+      .toBe('  .a aria.aria-label: expected "Level 1", got "Level 1 " (in full; the short forms match)');
+    // A difference past the summary's cut, in two texts of the same length.
+    const long = 'Continue Campaign Start New Campaign Choose Level '.repeat(3);
+    expect(line({ text: `${long}A` }, { text: `${long}B` }))
+      .toBe(`  .a text: expected "${long}A", got "${long}B" (in full; the short forms match)`);
+    // Negative control: a difference the summary shows still prints through it, collapsed.
+    expect(line({ aria: { 'aria-label': 'Level\n  1' } }, { aria: { 'aria-label': 'Level\n  2' } }))
+      .toBe('  .a aria.aria-label: expected "Level 1", got "Level 2"');
+  });
 });
 
 describe('the screen gate: the verdict for one state (issue #846)', () => {

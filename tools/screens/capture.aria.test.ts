@@ -13,6 +13,7 @@ import { ARIA_ATTRIBUTES } from './baseline.mjs';
 
 // Each of the nine attributes appears on at least one element, and `.bare` carries only
 // attributes the list does not name, which is the negative control for what is NOT recorded.
+// `.spaced` carries edge and inner whitespace, which a capture must keep as written.
 const PAGE = `
   <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="t" aria-describedby="b">
     <h2 id="t">Title</h2><p id="b">Body</p>
@@ -21,8 +22,9 @@ const PAGE = `
   <nav><a class="here" aria-current="page" href="#">Home</a></nav>
   <div class="live" aria-live="polite" aria-expanded="true">News</div>
   <span class="bare" aria-hidden="true" aria-busy="true" aria-controls="t" title="x">plain</span>
+  <div class="spaced" aria-label=" Level 1 " aria-labelledby="t  b">x</div>
 `;
-const SELECTORS = ['.dialog', '.toggle', '.here', '.live', '.bare', '.missing'];
+const SELECTORS = ['.dialog', '.toggle', '.here', '.live', '.bare', '.spaced', '.missing'];
 
 type Entry = { selector: string, present: boolean, aria?: Record<string, string>, style?: Record<string, string> };
 const run = (): Entry[] => measureInPage([SELECTORS, ['display'], [...ARIA_ATTRIBUTES]]);
@@ -38,6 +40,13 @@ describe('capture.mjs: the aria object each measured element carries (issue #937
     });
     expect(got.get('.here')?.aria).toEqual({ 'aria-current': 'page' });
     expect(got.get('.live')?.aria).toEqual({ 'aria-live': 'polite', 'aria-expanded': 'true' });
+  });
+
+  it('records a value exactly as written, whitespace included', () => {
+    // Unlike `text`, which is trimmed and cut at 200 characters, an attribute is not cleaned
+    // up. The comparator is exact about whitespace, so a capture that trimmed here would make
+    // that exactness unreachable: a whitespace-only change would never get as far as the diff.
+    expect(bySelector(run()).get('.spaced')?.aria).toEqual({ 'aria-label': ' Level 1 ', 'aria-labelledby': 't  b' });
   });
 
   it('records an EMPTY attribute as an empty string, distinct from no attribute', () => {

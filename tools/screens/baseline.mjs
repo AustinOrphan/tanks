@@ -248,13 +248,23 @@ export function brief(value, limit = 72) {
  * All four, every time, because a diff without them is a set of numbers a reader cannot place
  * -- and the subset runs one viewport today, which is exactly the condition under which a
  * report quietly stops naming it and nobody notices until a second one exists.
+ *
+ * Each value prints through `brief`, EXCEPT when the two summaries come out identical. The
+ * comparison is exact and the summary is not, so a difference only in whitespace, or only past
+ * the summary's cut, would otherwise print as `expected "a", got "a"`. That line reads as a
+ * flaky gate and invites re-accepting the very change it reports, so both values print in full.
  */
 export function formatFailure({ recipeId, stateId, viewport, profile, changes }) {
   const where = `${viewport.width}x${viewport.height}@${viewport.devicePixelRatio}`;
   const how = `${profile.visual}/${profile.capability}/motion=${profile.motion}`;
   const lines = [`FAIL ${recipeId}`, `  state    ${stateId}`, `  viewport ${where}`, `  profile  ${how}`];
   for (const c of changes) {
-    lines.push(`  ${c.selector} ${c.field}: expected ${brief(c.expected)}, got ${brief(c.actual)}`);
+    const expected = brief(c.expected);
+    const actual = brief(c.actual);
+    const values = expected === actual
+      ? `expected ${JSON.stringify(c.expected)}, got ${JSON.stringify(c.actual)} (in full; the short forms match)`
+      : `expected ${expected}, got ${actual}`;
+    lines.push(`  ${c.selector} ${c.field}: ${values}`);
   }
   return lines.join('\n');
 }

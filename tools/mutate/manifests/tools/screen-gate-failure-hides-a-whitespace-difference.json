@@ -1,0 +1,11 @@
+{
+  "id": "screen-gate-failure-hides-a-whitespace-difference",
+  "file": "tools/screens/baseline.mjs",
+  "find": "    const values = expected === actual",
+  "replace": "    const values = false",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "why": "Always prints both values through brief, which collapses whitespace and stops at 72 characters. The comparison is exact, so a change only in whitespace, or only past the cut, fails the check with a line reading `expected \"Level 1\", got \"Level 1\"`: a gate that looks flaky, inviting a re-accept that commits the change it was reporting. MEASURED before the fix: formatFailure printed exactly that line for an aria-describedby of \"hud-a\" against \"hud-a \"."
+}
