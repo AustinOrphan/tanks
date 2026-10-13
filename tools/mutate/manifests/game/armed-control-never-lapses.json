@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.diagnostics.test.ts"
   ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) an armed action lapses after 4 seconds, back to its catalogue label, and the next press arms again"
+  ],
   "why": "Issue #1014. An armed control never lapses, so a developer action armed and forgotten fires on the next press however long after. Shared by every armed control (the resets, Use Production Save, Reset Developer Data, the three actions); measured surviving every case in the 29 test files that build a HUD before #1014 added one."
 }

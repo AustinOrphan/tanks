@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.diagnostics.test.ts"
   ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a load that fails is reported in the output field when the pane opens, and the next open loads them"
+  ],
   "why": "Issue #1014. A failed load is kept, so every later open and press reports the same failure without trying again, even once the connection is back."
 }

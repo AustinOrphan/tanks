@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.diagnostics.test.ts"
   ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) arms each action with its own catalogue confirm label, and restores its own label on disarm"
+  ],
   "why": "Issue #1014. `restingLabel` restores every developer action to Reroll Seed's label when it disarms. `arming one action DISARMS another` survives this, because the one action it restores IS Reroll Seed; the per-action case restores all three in turn."
 }

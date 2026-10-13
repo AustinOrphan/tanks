@@ -7,5 +7,9 @@
   "tests": [
     "src/game/hud.diagnostics.test.ts"
   ],
+  "killedBy": [
+    "Copy Diagnostics writes the session it was given selects the text it wrote, so the keyboard copy path works without a clipboard",
+    "the developer modules load when the pane opens (issue #1014) Copy, when the clipboard refuses pressed before the load still selects its report when it lands, and the refusal escapes nowhere"
+  ],
   "why": "Issue #1014. Copy selects its report only once the clipboard accepts it, so a refused write -- or no clipboard at all -- leaves nothing selected, and selected text is the one copy path that always works."
 }

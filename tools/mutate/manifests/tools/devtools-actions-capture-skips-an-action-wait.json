@@ -7,5 +7,8 @@
   "tests": [
     "tools/screens/states.test.ts"
   ],
+  "killedBy": [
+    "the screen-state catalogue waits for each runtime action it measures, after the pane, since they load with it (issue #1014)"
+  ],
   "why": "Issue #1014. The `screen.devtools.actions` capture stops waiting for Restart Current Round, which is hidden until the pane's modules load: a capture can then measure it before it is shown, and an absent measured selector fails only in a real capture."
 }

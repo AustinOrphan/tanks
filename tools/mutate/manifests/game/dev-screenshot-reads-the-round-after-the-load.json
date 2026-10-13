@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.diagnostics.test.ts"
   ],
+  "killedBy": [
+    "the exports (issue #254) pressed before the developer modules have loaded (issue #1014) Download Screenshot saves the frame captured at the press, named from the round then"
+  ],
   "why": "Issue #1014. Download Screenshot names its file from the round as it is once the modules have loaded, so a frame captured at the press is saved under a tick it was not taken at."
 }
