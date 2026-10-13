@@ -4313,7 +4313,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * it.
    */
   function loadDevTools(): Promise<DevToolsModules> {
-    devToolsLoad ??= Promise.all([import('./dev-actions'), import('./dev-diagnostics'), import('./dev-exports')]).then(
+    devToolsLoad ??= Promise.all([
+      import('./dev-actions'),
+      import('./dev-diagnostics'),
+      import('./dev-exports'),
+    ]).then(
       ([actions, diagnostics, exports]) => (devTools = { actions, diagnostics, exports }),
       (err: unknown) => {
         devToolsLoad = null;

@@ -848,7 +848,9 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
     for (const id of ['restart-same-seed', 'reroll-seed', 'restart-round', 'restart-same-seed'] as const) {
       btn(id).click();
       expect(btn(id).textContent, `${id} armed`).toBe(DEV_ACTIONS[id].confirmLabel);
-      if (previous !== null) expect(btn(previous).textContent, `${previous} disarmed`).toBe(DEV_ACTIONS[previous].label);
+      if (previous !== null) {
+        expect(btn(previous).textContent, `${previous} disarmed`).toBe(DEV_ACTIONS[previous].label);
+      }
       previous = id;
     }
     expect(rebuilt).toEqual([]);
@@ -988,7 +990,11 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
   it('a Use Production Save armed while the load is in flight is still armed when it lands', async () => {
     // The load landing reveals the actions; it is not a lapse. Negative control: the landing
     // re-running the whole availability refresh, which disarms whenever no round exists.
-    const root = mountDev({ developerPage: PAGE, storageNamespace: 'developer', applyDeveloperConfig: () => {} });
+    const root = mountDev({
+      developerPage: PAGE,
+      storageNamespace: 'developer',
+      applyDeveloperConfig: () => {},
+    });
     q<HTMLButtonElement>(root, '.hud-devtools-open').click();
     q<HTMLButtonElement>(root, '.hud-prodsave').click();
     expect(q(root, '.hud-prodsave').textContent).toBe('Reload onto the REAL save?');
