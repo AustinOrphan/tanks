@@ -1984,17 +1984,17 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     expect(f.frames.length, 'exactly one page frame should be queued').toBe(1);
     f.frames.shift()!(now);
   };
-  /** The first control hud.ts's roving walk would land on: enabled and not inside a hidden subtree. */
-  const firstControl = (container: HTMLElement): HTMLElement => {
+  /** The controls hud.ts's roving walk visits, in order: enabled and not inside a hidden subtree. */
+  const rovingControls = (container: HTMLElement): HTMLElement[] => {
     const hidden = (el: HTMLElement): boolean => {
       for (let n: HTMLElement | null = el; n && n !== container; n = n.parentElement) {
         if (getComputedStyle(n).display === 'none') return true;
       }
       return false;
     };
-    return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).find(
+    return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
       (el) => !(el instanceof HTMLButtonElement && el.disabled) && !hidden(el),
-    )!;
+    );
   };
 
   it('polls on a page frame loop from construction: one frame queued, and each frame queues the next', () => {
@@ -2032,7 +2032,9 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
     (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
     (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
-    f.pads.push(pad(0)); // A: confirm
+    f.pads.push(pad());
+    frame(f, -16); // a poll after Settings arrived, so the A below is a press made on it (issue #919)
+    f.pads[0] = pad(0); // A: confirm
     frame(f, 0);
     const pane = f.root.querySelector('.hud-layout') as HTMLElement;
     expect(pane.classList.contains('hud-layout--hidden'), 'Confirm did not open the pane').toBe(false);
@@ -2069,7 +2071,9 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
     (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
     (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
-    f.pads.push(pad(0)); // A: confirm
+    f.pads.push(pad());
+    frame(f, -16); // a poll after Settings arrived, so the A below is a press made on it (issue #919)
+    f.pads[0] = pad(0); // A: confirm
     frame(f, 0);
     const pane = f.root.querySelector('.hud-layout') as HTMLElement;
     f.pads[0] = pad();
@@ -2103,10 +2107,16 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
   it('a direction walks the real HUD and Back pops its layer', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
     const panel = f.root.querySelector('.hud-panel') as HTMLElement;
-    expect(document.activeElement).toBe(panel);
+    // The Main Menu's arrival lands on its primary action (issue #919): no run, so Start Campaign.
+    const primary = f.root.querySelector('.hud-new-game') as HTMLElement;
+    expect(document.activeElement).toBe(primary);
     f.pads.push(pad(13)); // D-pad Down
     frame(f, 0);
-    expect(document.activeElement, 'Down did not move focus into the panel').toBe(firstControl(panel));
+    // jsdom lays nothing out, so the spatial walk falls back to document order.
+    const order = rovingControls(panel);
+    expect(document.activeElement, 'Down did not move focus on from the primary action').toBe(
+      order[order.indexOf(primary) + 1],
+    );
     f.pads[0] = pad(); // released
     frame(f, 16);
     (f.root.querySelector('.hud-customize-open') as HTMLElement).focus();
@@ -2133,9 +2143,10 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     // hand stands in for a future gameplay HUD with focusable controls (issue #324), and
     // a direction must still move nothing while the round runs.
     f.host.hud.setState('main-menu');
-    const panel = f.root.querySelector('.hud-panel') as HTMLElement;
     const focusBefore = document.activeElement;
-    expect(focusBefore, 'the pushed surface focused its container').toBe(panel);
+    expect(focusBefore, 'the pushed surface focused its primary action (issue #919)').toBe(
+      f.root.querySelector('.hud-new-game'),
+    );
     f.pads.push(pad(13, 0, 1)); // Down, A and B all held mid-play
     frame(f, 0);
     expect(f.host.sm.isSimulating, 'a menu action reached a simulating session').toBe(true);
@@ -2194,7 +2205,9 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     const action = f.root.querySelector('.hud-action') as HTMLElement;
     expect(action.textContent).toBe('Resume');
     action.focus();
-    f.pads.push(pad(0));
+    f.pads.push(pad());
+    frame(f, -16); // a poll after Pause arrived, so the A below is a press made on it (issue #919)
+    f.pads[0] = pad(0);
     frame(f, 0);
     expect(f.host.sm.isSimulating, 'Confirm on Resume did not resume').toBe(true);
     f.host.sm.pause();

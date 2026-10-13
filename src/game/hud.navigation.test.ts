@@ -820,7 +820,9 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.showVersusSetup(true);
-    expect(document.activeElement, 'opening the pane did not focus its CONTAINER').toBe(view(root));
+    // Start is the pane's primary action, so the arrival lands on it (issue #919) and the walk
+    // below starts there, wraps, and must still come round to Back and then Start again.
+    expect(document.activeElement, 'opening the pane did not focus Start, its primary action').toBe(startBtn(root));
     let steps = 0;
     while (document.activeElement !== backBtn(root) && steps < 40) {
       (document.activeElement as HTMLElement).dispatchEvent(
@@ -1151,40 +1153,51 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // `walk` below enter this pane exactly like every other one, by an ACTUAL open
     // transition rather than a special case.
     h.onVersusOpen(() => h.showVersusSetup(true));
-    h.setState('main-menu'); // splash -> title: focuses the .hud-panel CONTAINER, index -1
+    h.setState('main-menu'); // splash -> title: focuses Continue, the menu's primary action
 
     let totalControls = 0;
     const visited = new Set<HTMLElement>();
+
+    // WHERE EACH ARRIVAL LANDS (issue #919), spelled out for the panels this walk enters: the
+    // surface's primary action where it has one, its container where it has none. The full
+    // per-surface table, with its population, is `hud.reachability.test.ts`'s.
+    const ARRIVAL_IN: Record<string, string> = {
+      'hud-panel': '.hud-continue', // a run exists (setContinueAvailable above)
+      'hud-levelselect': '.hud-level-btn[aria-label="Level 1"]',
+      'hud-versus-setup': '.hud-versus-start',
+    };
+    const arrivalOf = (container: HTMLElement): HTMLElement => {
+      const primary = ARRIVAL_IN[container.className.split(' ')[0]];
+      return primary === undefined ? container : (container.querySelector(primary) as HTMLElement);
+    };
 
     // Walks ONE panel's flat control list forward with ArrowDown, entering and leaving
     // every subpanel it finds along the way via its own open/Back buttons (never via
     // arrows -- activation is a separate, native concern; see the report). Recursive
     // because a subpanel is walked exactly the same way the title panel is.
     //
-    // EVERY panel-open transition -- the first splash -> title, a subpanel's own open
-    // button, and Back returning to title -- focuses that panel's CONTAINER, never a
-    // control (see the doc comment above `activePanelContainer` in hud.ts for why:
-    // focusing a button there killed Escape/M the instant the panel opened). So `walk`
-    // always starts at index -1 and its own first ArrowDown is what reaches controls[0],
-    // uniformly, with no "already there" special case.
+    // EVERY panel-open transition -- the first splash -> title and a subpanel's own open
+    // button -- lands on that panel's primary action, or on its CONTAINER when it declares
+    // none (issue #919; see `ARRIVAL_IN` above). So `walk` starts from wherever the arrival
+    // put focus -- index -1 for a container, whose first ArrowDown reaches controls[0] -- and
+    // steps forward round the whole cycle back to it.
     function walk(container: HTMLElement): void {
-      expect(
-        document.activeElement,
-        `${container.className} was not focused as a CONTAINER on open`,
-      ).toBe(container);
+      const arrival = arrivalOf(container);
+      expect(document.activeElement, `${container.className} did not arrive where it should`).toBe(arrival);
       const controls = controlsOf(container);
       expect(controls.length, `${container.className} exposed no reachable controls`).toBeGreaterThan(0);
       totalControls += controls.length;
+      const start = controls.indexOf(arrival); // -1 for a container
       for (let i = 0; i < controls.length; i++) {
         pressActive('ArrowDown');
         const active = document.activeElement as HTMLElement;
         expect(active, `step ${i} in .${container.className.split(' ')[0]} landed on the wrong control`).toBe(
-          controls[i],
+          controls[(start + 1 + i) % controls.length],
         );
         visited.add(active);
         const openCls = Array.from(active.classList).find((c) => c in OPEN_TO_PANEL);
         if (openCls) {
-          activate(active); // opens the subpanel and focuses ITS container
+          activate(active); // opens the subpanel: focus lands on ITS arrival
           const subPanel = root.querySelector(`.${OPEN_TO_PANEL[openCls]}`) as HTMLElement;
           walk(subPanel);
           const back = root.querySelector(`.${BACK_OF_PANEL[OPEN_TO_PANEL[openCls]]}`) as HTMLButtonElement;
@@ -1199,10 +1212,10 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
         }
       }
       // One more step proves the list is a closed CYCLE, not just a reachable line --
-      // the last control wraps back to the first rather than dead-ending.
+      // the walk came round to where it started and goes on rather than dead-ending.
       pressActive('ArrowDown');
-      expect(document.activeElement, `${container.className} did not wrap back to its first control`).toBe(
-        controls[0],
+      expect(document.activeElement, `${container.className} did not wrap round its cycle`).toBe(
+        controls[(start + 1) % controls.length],
       );
     }
 
@@ -1350,25 +1363,23 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       steps += 1;
     }
     expect(active.classList.contains('hud-levelselect-open'), 'the walk never reached the Levels opener').toBe(true);
-    activate(active); // open Levels -- focuses the .hud-levelselect CONTAINER
+    activate(active); // open Levels -- the arrival lands on Level 1, the pane's primary action
 
-    const levelSelectView = root.querySelector('.hud-levelselect') as HTMLElement;
-    expect(document.activeElement, 'opening Levels did not focus its container').toBe(
-      levelSelectView,
-    );
     const levelBtns = Array.from(
       root.querySelectorAll('.hud-level-btn'),
     ) as HTMLButtonElement[];
     // 2, not 4: the campaign's length is not in this DOM at all (issue #555).
     expect(levelBtns).toHaveLength(2);
-    // 2 level buttons + Back, and the walk lands on ALL of them -- a grid that still
-    // drew locked entries would either add unreachable nodes here or focus a disabled one.
+    expect(document.activeElement, 'opening Levels did not focus Level 1 (issue #919)').toBe(levelBtns[0]);
+    // 2 level buttons + Back, and the walk lands on ALL of them, from Level 1 round to it
+    // again -- a grid that still drew locked entries would either add unreachable nodes
+    // here or focus a disabled one.
     const reached: HTMLButtonElement[] = [];
     for (let i = 0; i < 3; i++) {
       pressActive('ArrowDown');
       reached.push(document.activeElement as HTMLButtonElement);
     }
-    expect(reached).toEqual([levelBtns[0], levelBtns[1], root.querySelector('.hud-levelselect-back')]);
+    expect(reached).toEqual([levelBtns[1], root.querySelector('.hud-levelselect-back'), levelBtns[0]]);
     expect(reached.some((b) => b.disabled), 'a disabled level button was focused').toBe(false);
   });
 
@@ -1403,22 +1414,22 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     );
   });
 
-  it('focuses the pause panel\'s CONTAINER (not Resume) so Escape-to-resume stays live', () => {
-    // The regression this shape exists to avoid: an earlier draft focused Resume
-    // directly on entering pause, on the reasoning that arriving already positioned
-    // saves a keypress. `isPauseHotkey`/`isMuteHotkey` (game/loop.ts) both ignore any
-    // key whose target sits inside a button, so that draft silently killed
-    // Escape-to-resume and M-to-mute the instant the pause panel opened -- which no
-    // test caught, because the only existing hotkey-liveness test covers splash ->
-    // title, not pause. This constructs the SAME kind of event those guards read,
-    // exactly as that test does, rather than trusting the class name alone.
+  it('focuses Resume on entering pause, and Escape-to-resume and M-to-mute stay live there (issue #919)', () => {
+    // RE-ARGUED, not reversed. This pinned the pause panel's CONTAINER, against an earlier
+    // draft that focused Resume and silently killed Escape-to-resume and M-to-mute the
+    // instant the panel opened: `isPauseHotkey`/`isMuteHotkey` (game/loop.ts) then ignored
+    // any key whose target sat inside a button. Their guard now asks `consumesKey`, under
+    // which a button keeps only Space and Enter -- so Resume can take focus, which is the
+    // owner's #919 ruling, and this is the case that proves both keys survive it. It
+    // constructs the SAME kind of event those guards read, rather than trusting the class
+    // name alone.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.setState('playing');
     h.setState('paused');
-    const panel = root.querySelector('.hud-panel') as HTMLElement;
     const active = document.activeElement as HTMLElement;
-    expect(active, 'pause focused something other than the panel container').toBe(panel);
+    expect(active, 'pause did not focus Resume').toBe(root.querySelector('.hud-action'));
+    expect(active.textContent).toBe('Resume');
     const ev = (key: string): KeyboardEvent =>
       ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
     expect(isPauseHotkey(ev('Escape')), 'Escape-to-resume is dead while paused').toBe(true);
@@ -1429,26 +1440,29 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // Was "two ArrowDowns" before the controller assignment panel landed (docs/
     // superpowers/plans/2026-08-17-controller-assignment.md), and three until issue #226
     // gave the pause panel a Settings entry -- which sits in the utilities region, and so
-    // in DOM order before Controllers and Quit. Each is a real, reachable stop.
+    // in DOM order before Controllers and Quit. Each is a real, reachable stop. Since
+    // issue #919 the arrival is already on Resume, so the walk begins one stop later and
+    // wraps back to Resume to close the cycle.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.setState('playing');
     h.setState('paused');
+    expect(document.activeElement, 'pause did not arrive on Resume').toBe(root.querySelector('.hud-action'));
     pressActive('ArrowDown');
-    expect(document.activeElement, 'the first ArrowDown from pause did not reach Resume').toBe(
-      root.querySelector('.hud-action'),
-    );
-    pressActive('ArrowDown');
-    expect(document.activeElement, 'the second ArrowDown did not reach Settings').toBe(
+    expect(document.activeElement, 'the first ArrowDown did not reach Settings').toBe(
       root.querySelector('.hud-settings-open'),
     );
     pressActive('ArrowDown');
-    expect(document.activeElement, 'the third ArrowDown did not reach Controllers').toBe(
+    expect(document.activeElement, 'the second ArrowDown did not reach Controllers').toBe(
       root.querySelector('.hud-controllers-open'),
     );
     pressActive('ArrowDown');
-    expect(document.activeElement, 'the fourth ArrowDown did not reach Quit').toBe(
+    expect(document.activeElement, 'the third ArrowDown did not reach Quit').toBe(
       root.querySelector('.hud-quit'),
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the fourth ArrowDown did not wrap back to Resume').toBe(
+      root.querySelector('.hud-action'),
     );
   });
 
@@ -1461,7 +1475,9 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     h.setState('main-menu');
     const opener = root.querySelector('.hud-customize-open') as HTMLButtonElement;
     opener.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
-    expect(document.activeElement, 'opening focuses the pane container').not.toBe(opener);
+    expect(document.activeElement, 'Customize declares no primary action, so its container takes focus').toBe(
+      root.querySelector('.hud-customize'),
+    );
     (root.querySelector('.hud-customize-back') as HTMLButtonElement).dispatchEvent(
       new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
     );
@@ -1472,25 +1488,16 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     expect(isMuteHotkey(ev('m')), 'M is dead at the menu after Back').toBe(true);
   });
 
-  it('auto-focuses the panel container, then reaches the action button, on win and lose', () => {
+  it('auto-focuses the action button, the outcome\'s primary action, on win and lose (issue #919)', () => {
     const { hud: h, root } = mount();
-    const panel = root.querySelector('.hud-panel') as HTMLElement;
     const action = root.querySelector('.hud-action') as HTMLButtonElement;
     h.setState('main-menu');
     h.setState('playing');
     h.setState('outcome-win');
-    expect(document.activeElement, 'win focused something other than the panel container').toBe(
-      panel,
-    );
-    pressActive('ArrowDown');
-    expect(document.activeElement).toBe(action);
+    expect(document.activeElement, 'win did not focus its action button').toBe(action);
     h.setState('playing');
     h.setState('outcome-lose');
-    expect(document.activeElement, 'lose focused something other than the panel container').toBe(
-      panel,
-    );
-    pressActive('ArrowDown');
-    expect(document.activeElement).toBe(action);
+    expect(document.activeElement, 'lose did not focus its action button').toBe(action);
   });
 
   it('reaches Retry, then Choose Level, then Main Menu on a PRACTICE end screen', () => {
@@ -1514,17 +1521,21 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     });
     expect((root.querySelector('.hud-action') as HTMLElement).textContent).toBe('Retry');
 
-    pressActive('ArrowDown');
-    expect(document.activeElement, 'the first ArrowDown did not reach Retry').toBe(
+    // The arrival is already on Retry (issue #919), so the walk starts one stop later.
+    expect(document.activeElement, 'the end screen did not arrive on Retry').toBe(
       root.querySelector('.hud-action'),
     );
     pressActive('ArrowDown');
-    expect(document.activeElement, 'the second ArrowDown did not reach Choose Level').toBe(
+    expect(document.activeElement, 'the first ArrowDown did not reach Choose Level').toBe(
       root.querySelector('.hud-choose-level'),
     );
     pressActive('ArrowDown');
-    expect(document.activeElement, 'the third ArrowDown did not reach Main Menu').toBe(
+    expect(document.activeElement, 'the second ArrowDown did not reach Main Menu').toBe(
       root.querySelector('.hud-quit'),
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the third ArrowDown did not wrap back to Retry').toBe(
+      root.querySelector('.hud-action'),
     );
   });
 
@@ -2132,9 +2143,11 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
     const { hud: h, root } = mount();
     h.setRelaunchTarget('versus-setup');
     h.setState('main-menu');
-    expect(document.activeElement, 'opening the title panel did not focus its CONTAINER').toBe(
-      root.querySelector('.hud-panel'),
-    );
+    // A versus session's title has no Continue, so its primary is New Game, labelled for the
+    // match it starts (issue #919's PANEL_PRIMARY), and the walk starts there.
+    const arrival = root.querySelector('.hud-new-game') as HTMLElement;
+    expect(document.activeElement, 'the title panel did not arrive on Start Match').toBe(arrival);
+    expect(arrival.textContent).toBe('Start Match');
     let steps = 0;
     while (document.activeElement !== campaignOpenBtn(root) && steps < 40) {
       (document.activeElement as HTMLElement).dispatchEvent(
@@ -2465,11 +2478,13 @@ describe('hud: the replace-run confirmation (issue #226)', () => {
     expect(starts, 'a surface change answered the question').toEqual([]);
   });
 
-  it('puts the safe answer first, so a blind Confirm cannot delete a run', () => {
-    // `act('confirm')` on a freshly arrived pane lands focus on the FIRST control rather
-    // than activating it (issue #494), and the first ArrowDown from a container lands
-    // there too. Both make the first control the one a hurried player reaches, which is
-    // why the destructive answer is second.
+  it('arrives on the safe answer, so a blind Confirm keeps the run (issue #919)', () => {
+    // RE-ARGUED for #919. `act('confirm')` used to land focus on the first control of a
+    // freshly arrived pane rather than activate it, so the first control was what a hurried
+    // player reached and the destructive answer was put second. The arrival now lands on
+    // the dialog's declared primary action, which is that SAFE answer, so one blind Confirm
+    // activates Keep playing: the question closes and the run survives. The destructive
+    // answer is still second, so the first ArrowDown from a container never reaches it.
     const { hud: h, root } = mount();
     const starts: number[] = [];
     h.onNewGame(() => starts.push(1));
@@ -2477,11 +2492,17 @@ describe('hud: the replace-run confirmation (issue #226)', () => {
     h.setContinueAvailable(true);
     click(root, '.hud-new-game');
 
-    expect(h.act('confirm'), 'the pane did not take the action').toBe(true);
-    expect(document.activeElement, 'the first control is not the safe answer').toBe(
+    expect(document.activeElement, 'the arrival did not land on the safe answer').toBe(
       q(root, '.hud-confirm-cancel'),
     );
+    expect(h.act('confirm'), 'the pane did not take the action').toBe(true);
     expect(starts, 'a single blind Confirm replaced the run').toEqual([]);
+    // Answered, not merely ignored: the question is off the stack and focus is back on the
+    // button that asked it.
+    expect(document.activeElement, 'Keep playing did not return to the button that asked').toBe(
+      q(root, '.hud-new-game'),
+    );
+    expect(h.back(), 'a blind Confirm on the safe answer left the question open').toBe(false);
   });
 });
 
@@ -2533,23 +2554,24 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
     }
   });
 
-  it('a pane opened programmatically (showVersusSetup(true) at the title) falls back to the panel container on Back', () => {
+  it('a pane opened programmatically (showVersusSetup(true) at the title) falls back to the menu\'s own arrival on Back', () => {
     // The post-match "Versus Setup" reopen (loop.ts) invokes no control, so there is
-    // nothing to restore focus to: the destination container stands, as it always did.
-    // Kills an unguarded `opener.focus()` -- a null opener would throw there.
+    // nothing to restore focus to: the destination's own arrival stands -- its primary
+    // action since issue #919, Start Campaign here with no run. Kills an unguarded
+    // `opener.focus()` -- a null opener would throw there.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.showVersusSetup(true);
-    expect(document.activeElement).toBe(q(root, '.hud-versus-setup'));
+    expect(document.activeElement).toBe(q(root, '.hud-versus-start'));
     click(q(root, '.hud-versus-back'));
-    expect(document.activeElement).toBe(q(root, '.hud-panel'));
+    expect(document.activeElement).toBe(q(root, '.hud-new-game'));
   });
 
-  it('Back falls back to the panel container when the opener was hidden while the pane was up', () => {
+  it('Back falls back to the menu\'s own arrival when the opener was hidden while the pane was up', () => {
     // `setLevelSelect(1, 1)` hides the Levels button ("the sandbox is not a choice") and
     // can land while the Levels pane is open. Focusing a hidden button would strand a
-    // keyboard player with no visible position, which is what the container rule
-    // exists to prevent.
+    // keyboard player with no visible position, so the destination's own arrival stands:
+    // its primary action since issue #919, Start Campaign here with no run.
     const { hud: h, root } = mount();
     h.setLevelSelect(2, 3);
     h.setState('main-menu');
@@ -2559,7 +2581,7 @@ describe('hud: navigation layers -- origin, Back and focus restoration (issue #3
     h.setLevelSelect(1, 1);
     click(q(root, '.hud-levelselect-back'));
     expect(opener.classList.contains('hud-levelselect-open--hidden'), 'the fixture no longer hides the opener').toBe(true);
-    expect(document.activeElement).toBe(q(root, '.hud-panel'));
+    expect(document.activeElement).toBe(q(root, '.hud-new-game'));
   });
 
   it('hud.back() pops one layer and reports true; with nothing open it reports false and changes no class', () => {
@@ -2933,10 +2955,16 @@ describe('hud: the semantic action dispatcher (issue #494)', () => {
     const { hud: h, root } = mount();
     h.setState('main-menu');
     const panelControls = controls(root, '.hud-panel');
-    expect(panelControls.length, 'the Main Menu has controls to walk').toBeGreaterThan(1);
+    expect(panelControls.length, 'the Main Menu has controls to walk').toBeGreaterThan(2);
+    // The arrival is on Start Campaign (issue #919), the first control of a menu with no run,
+    // so the walk starts at index 0 rather than entering from the container.
+    expect(document.activeElement, 'the walk does not start where this case assumes').toBe(panelControls[0]);
+    expect(panelControls[0]).toBe(q(root, '.hud-new-game'));
     expect(h.act('down')).toBe(true);
-    expect(document.activeElement).toBe(panelControls[0]);
+    expect(document.activeElement).toBe(panelControls[1]);
     expect(h.act('down')).toBe(true);
+    expect(document.activeElement).toBe(panelControls[2]);
+    expect(h.act('up')).toBe(true);
     expect(document.activeElement).toBe(panelControls[1]);
     expect(h.act('up')).toBe(true);
     expect(document.activeElement).toBe(panelControls[0]);
@@ -2950,24 +2978,31 @@ describe('hud: the semantic action dispatcher (issue #494)', () => {
     expect(document.activeElement).toBe(before);
   });
 
-  it('confirm on a fresh panel lands on the first control instead of activating it; confirm on a focused control activates it once', () => {
-    // A gamepad Confirm the instant a panel arrives must not fire whatever happens to be
-    // first (New Game, on a Main Menu with no run). The activation half is the negative
-    // control: the same verb on a focused control DOES fire, exactly once.
+  it('confirm on a focused container lands on the first control instead of activating it; confirm on the arrival\'s primary activates it once', () => {
+    // Issue #919's ruling, both halves, on one Main Menu with no run. Confirm on a CONTAINER
+    // stays inert: it lands focus on the first control and fires nothing -- which is how a
+    // pane with no primary action, or focus that has fallen to a container, keeps a gamepad
+    // from firing whatever happens to be first (New Game, here). A surface with a primary
+    // action arrives with it focused, so there one Confirm activates it. Each half is the
+    // other's negative control: the same verb, from the two places focus can rest.
     const { hud: h, root } = mount();
-    let opens = 0;
-    h.onCustomizeOpen(() => {
-      opens += 1;
+    let newGames = 0;
+    h.onNewGame(() => {
+      newGames += 1;
     });
     h.setState('main-menu');
-    expect(document.activeElement, 'a fresh panel focuses its container').toBe(q(root, '.hud-panel'));
+    q(root, '.hud-panel').focus();
     expect(h.act('confirm')).toBe(true);
-    expect(document.activeElement).toBe(controls(root, '.hud-panel')[0]);
-    expect(q(root, '.hud-customize').classList.contains('hud-customize--hidden'), 'confirm on the container opened a pane').toBe(true);
-    q(root, '.hud-customize-open').focus();
+    expect(document.activeElement, 'confirm on the container did not land on the first control').toBe(
+      controls(root, '.hud-panel')[0],
+    );
+    expect(newGames, 'confirm on the container activated a control').toBe(0);
+
+    h.setState('playing');
+    h.setState('main-menu');
+    expect(document.activeElement, 'the arrival did not land on Start Campaign').toBe(q(root, '.hud-new-game'));
     expect(h.act('confirm')).toBe(true);
-    expect(opens, 'confirm on the focused opener did not activate it exactly once').toBe(1);
-    expect(q(root, '.hud-customize').classList.contains('hud-customize--hidden')).toBe(false);
+    expect(newGames, 'confirm on the arrival\'s primary did not activate it exactly once').toBe(1);
   });
 
   it('back pops the layer and reports whether it did; pause is never the HUD\'s', () => {
