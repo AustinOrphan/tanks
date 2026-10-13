@@ -822,7 +822,9 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.showVersusSetup(true);
     // Start is the pane's primary action, so the arrival lands on it (issue #919) and the walk
     // below starts there, wraps, and must still come round to Back and then Start again.
-    expect(document.activeElement, 'opening the pane did not focus Start, its primary action').toBe(startBtn(root));
+    expect(document.activeElement, 'opening the pane did not focus Start, its primary action').toBe(
+      startBtn(root),
+    );
     let steps = 0;
     while (document.activeElement !== backBtn(root) && steps < 40) {
       (document.activeElement as HTMLElement).dispatchEvent(
@@ -3000,7 +3002,9 @@ describe('hud: the semantic action dispatcher (issue #494)', () => {
 
     h.setState('playing');
     h.setState('main-menu');
-    expect(document.activeElement, 'the arrival did not land on Start Campaign').toBe(q(root, '.hud-new-game'));
+    expect(document.activeElement, 'the arrival did not land on Start Campaign').toBe(
+      q(root, '.hud-new-game'),
+    );
     expect(h.act('confirm')).toBe(true);
     expect(newGames, 'confirm on the arrival\'s primary did not activate it exactly once').toBe(1);
   });
@@ -3691,7 +3695,9 @@ describe('hud: arrival lands on the primary action, and a Confirm from the scree
     h.setContinueAvailable(true);
     h.setState('main-menu');
     expect(document.activeElement, 'the menu did not arrive on Continue').toBe(q(root, '.hud-continue'));
-    expect(q(root, '.hud-new-game').textContent, 'the fixture lost its destructive label').toBe('Start New Campaign');
+    expect(q(root, '.hud-new-game').textContent, 'the fixture lost its destructive label').toBe(
+      'Start New Campaign',
+    );
     hud?.dispose();
     document.body.innerHTML = '';
     // NEGATIVE CONTROL: with no run there is no Continue, and Start Campaign takes the arrival.
@@ -3712,7 +3718,9 @@ describe('hud: arrival lands on the primary action, and a Confirm from the scree
       q(root, '.hud-continue'),
     );
     h.setContinueAvailable(false);
-    expect(document.activeElement, 'focus stayed on a Continue that is now hidden').toBe(q(root, '.hud-new-game'));
+    expect(document.activeElement, 'focus stayed on a Continue that is now hidden').toBe(
+      q(root, '.hud-new-game'),
+    );
     // NEGATIVE CONTROL: once the player has moved, the menu changing under them moves nothing.
     const versus = q(root, '.hud-versus-open');
     versus.focus();
@@ -3723,13 +3731,16 @@ describe('hud: arrival lands on the primary action, and a Confirm from the scree
   it('the match-failure alert arrives on Retry when one is offered, and on its way out when none is', () => {
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    h.showMatchFailure({ title: 'Match failed', detail: 'A transient failure.', action: 'Back to menu' });
+    const failure = { title: 'Match failed', detail: 'A transient failure.', action: 'Back to menu' };
+    h.showMatchFailure(failure);
     expect(document.activeElement, 'with no retry, the arrival did not land on the dismiss').toBe(
       q(root, '.hud-alert-dismiss'),
     );
     h.back();
-    h.showMatchFailure({ title: 'Match failed', detail: 'A transient failure.', action: 'Back to menu' }, () => {});
-    expect(document.activeElement, 'with a retry, the arrival did not land on Retry').toBe(q(root, '.hud-alert-retry'));
+    h.showMatchFailure(failure, () => {});
+    expect(document.activeElement, 'with a retry, the arrival did not land on Retry').toBe(
+      q(root, '.hud-alert-retry'),
+    );
   });
 
   it('Versus Setup arrives on its container when Start is refused, and Confirm there only lands focus', () => {
@@ -3743,7 +3754,8 @@ describe('hud: arrival lands on the primary action, and a Confirm from the scree
     q(root, '.hud-versus-slot-row[data-slot="0"] .hud-versus-role-btn[data-role="bot"]').click();
     h.back();
     h.showVersusSetup(true); // the refused all-bot setup is retained
-    expect((q(root, '.hud-versus-start') as HTMLButtonElement).disabled, 'the fixture did not refuse Start').toBe(true);
+    const start = q(root, '.hud-versus-start') as HTMLButtonElement;
+    expect(start.disabled, 'the fixture did not refuse Start').toBe(true);
     expect(document.activeElement, 'a refused Start took the arrival').toBe(q(root, '.hud-versus-setup'));
     expect(h.act('confirm')).toBe(true);
     expect(starts, 'Confirm on the container started a match').toEqual([]);

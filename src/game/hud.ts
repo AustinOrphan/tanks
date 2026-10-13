@@ -4950,7 +4950,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /** A layer with no primary action -- see `LayerRow.primary`. */
   const NO_PRIMARY = (): readonly HTMLElement[] => [];
   const LAYERS: Record<HudLayerId, LayerRow> = {
-    stats: { container: statsView, primary: NO_PRIMARY, open: () => showStats(true), close: () => showStats(false) },
+    stats: {
+      container: statsView,
+      primary: NO_PRIMARY,
+      open: () => showStats(true),
+      close: () => showStats(false),
+    },
     customize: {
       container: customizeView,
       // Selection applies the moment a swatch is pressed (the spec's Customize section), so
@@ -4998,8 +5003,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       /** The pane's subscribers own the pad hotplug listeners (issue #785). */
       release: closeVersusSetupSubscribers,
     },
-    // Settings apply immediately, and its first control is Mute: a blind press would flip one.
-    settings: { container: settingsView, primary: NO_PRIMARY, open: () => showSettings(true), close: () => showSettings(false) },
+    settings: {
+      container: settingsView,
+      // Settings apply immediately, and its first control is Mute: a blind press would flip one.
+      primary: NO_PRIMARY,
+      open: () => showSettings(true),
+      close: () => showSettings(false),
+    },
     about: { container: aboutView, primary: NO_PRIMARY, open: () => showAbout(true), close: () => showAbout(false) },
     'developer-tools': {
       container: devToolsView,

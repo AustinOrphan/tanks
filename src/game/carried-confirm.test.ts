@@ -21,7 +21,7 @@ import { createCarriedConfirmGuard } from './carried-confirm';
 let clock = 0;
 const guard = (): ReturnType<typeof createCarriedConfirmGuard> => createCarriedConfirmGuard(() => clock);
 
-/** One keyboard event at `at`, cancellable as the browser's are, offered to `g`. Returns whether it was cancelled. */
+/** One keyboard event at `at`, cancellable as the browser's are, offered to `g`; whether it was cancelled. */
 function key(
   g: ReturnType<typeof createCarriedConfirmGuard>,
   type: 'keydown' | 'keypress' | 'keyup',
@@ -88,7 +88,7 @@ describe('createCarriedConfirmGuard (issue #919)', () => {
     const g = guard();
     clock = 10;
     g.arrive();
-    expect(key(g, 'keydown', 'Enter', 9), 'a press queued behind the arrival reached the new screen').toBe(true);
+    expect(key(g, 'keydown', 'Enter', 9), 'a press queued behind the arrival got through').toBe(true);
     expect(key(g, 'keypress', 'Enter', 9)).toBe(true);
     // NEGATIVE CONTROL: the same press stamped just after the arrival is a fresh one.
     expect(key(g, 'keydown', 'Enter', 10.1)).toBe(false);

@@ -2239,7 +2239,9 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     frame(f, 816);
     f.pads[0] = pad(0);
     frame(f, 832);
-    expect(f.startRequests.map((r) => r.kind), 'a fresh A on Start did not start the match exactly once').toEqual(['versus']);
+    expect(f.startRequests.map((r) => r.kind), 'a fresh A on Start did not start the match once').toEqual([
+      'versus',
+    ]);
     f.host.dispose();
     f.root.remove();
   });

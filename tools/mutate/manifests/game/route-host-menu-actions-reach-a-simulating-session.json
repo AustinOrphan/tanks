@@ -1,8 +1,8 @@
 {
   "id": "route-host-menu-actions-reach-a-simulating-session",
   "file": "src/game/route-host.ts",
-  "find": "    if (sm.isSimulating && action !== 'pause') return;\n    if (hud.act(action)) return;",
-  "replace": "    if (hud.act(action)) return;",
+  "find": "    if (sm.isSimulating && action !== 'pause') return;\n    if (action === 'confirm' && arrivedSincePoll) return; // pressed for the screen before",
+  "replace": "    if (action === 'confirm' && arrivedSincePoll) return; // pressed for the screen before",
   "tests": [
     "src/game/route-host.test.ts"
   ],

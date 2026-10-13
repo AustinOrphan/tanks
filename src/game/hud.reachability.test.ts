@@ -86,7 +86,11 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
       click(root, '.hud-records-tab-achievements');
     },
   },
-  customize: { selector: '.hud-customize', primary: null, open: (_h, root) => click(root, '.hud-customize-open') },
+  customize: {
+    selector: '.hud-customize',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-customize-open'),
+  },
   levelselect: {
     selector: '.hud-levelselect',
     primary: '.hud-level-btn[aria-label="Level 1"]',
@@ -97,7 +101,11 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
       click(root, '.hud-levelselect-open');
     },
   },
-  controllers: { selector: '.hud-controllers', primary: null, open: (_h, root) => click(root, '.hud-controllers-open') },
+  controllers: {
+    selector: '.hud-controllers',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-controllers-open'),
+  },
   'versus-setup': {
     selector: '.hud-versus-setup',
     primary: '.hud-versus-start',
@@ -108,7 +116,11 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
       click(root, '.hud-versus-open');
     },
   },
-  settings: { selector: '.hud-settings', primary: null, open: (_h, root) => click(root, '.hud-settings-open') },
+  settings: {
+    selector: '.hud-settings',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-settings-open'),
+  },
   about: { selector: '.hud-about', primary: null, open: (_h, root) => click(root, '.hud-about-open') },
   'controller-layout': {
     selector: '.hud-layout',
@@ -118,7 +130,11 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
       click(root, '.hud-settings-layout');
     },
   },
-  'developer-tools': { selector: '.hud-devtools', primary: null, open: (_h, root) => click(root, '.hud-devtools-open') },
+  'developer-tools': {
+    selector: '.hud-devtools',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-devtools-open'),
+  },
   'developer-config': {
     selector: '.hud-devcfg',
     primary: null,
@@ -239,11 +255,19 @@ describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', (
         const { hud: h, root } = mount();
         h.setState('main-menu');
         vi.advanceTimersByTime(1000);
+        // What each arrival had focused when it was announced (issue #919): the gamepad route
+        // drops a Confirm first seen on the poll after an announced arrival, so an arrival that
+        // focuses without announcing itself leaves that pane open to a carried press.
+        const announced: (Element | null)[] = [];
+        h.onArrival(() => announced.push(document.activeElement));
         reach.open(h, root);
         vi.advanceTimersByTime(1000); // let the crossfade finish; a LEAVING surface is not active
 
         const container = q(root, reach.selector);
         expect(getComputedStyle(container).display, `${id} did not open`).not.toBe('none');
+        expect(announced.at(-1), `${id}'s own arrival was not the last one announced`).toBe(
+          reach.primary === null ? container : q(container, reach.primary),
+        );
 
         if (reach.padSuppressed === true) {
           // THE ONE DECIDED EXCEPTION (issue #599). The self-test's whole subject is which
@@ -307,9 +331,14 @@ describe('every HUD surface hands the pad a panel, or says why it does not (issu
         // tally its summary line reads and the controls under test are never built.
         if (surface === 'outcome-win') h.setOutcome(outcome('mission-clear'));
         if (surface === 'outcome-lose') h.setOutcome(outcome('campaign-over'));
+        const announced: (Element | null)[] = [];
+        h.onArrival(() => announced.push(document.activeElement));
         h.setState(surface);
         vi.advanceTimersByTime(1000);
         const panel = q(root, '.hud-panel');
+        expect(announced, `${surface}'s arrival was not announced exactly once`).toEqual([
+          q(panel, reach.primary),
+        ]);
         walkWithPad(h, panel, reach.primary, `.hud-panel at ${surface}`);
       } finally {
         vi.useRealTimers();

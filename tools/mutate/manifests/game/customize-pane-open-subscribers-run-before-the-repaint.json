@@ -1,8 +1,8 @@
 {
   "id": "customize-pane-open-subscribers-run-before-the-repaint",
   "file": "src/game/customize-pane.ts",
-  "find": "        choices.renderSelection();\n        root.focus(); // the pane, not the canvas: the roving focus starts from the container\n        if (!wasOpen) for (const cb of openCbs) cb();",
-  "replace": "        if (!wasOpen) for (const cb of openCbs) cb();\n        choices.renderSelection();\n        root.focus(); // the pane, not the canvas: the roving focus starts from the container",
+  "find": "        choices.renderSelection();\n        // Customize declares no primary action, so this lands on the pane, not the canvas.\n        host.arrive();\n        if (!wasOpen) for (const cb of openCbs) cb();",
+  "replace": "        if (!wasOpen) for (const cb of openCbs) cb();\n        choices.renderSelection();\n        // Customize declares no primary action, so this lands on the pane, not the canvas.\n        host.arrive();",
   "expect": "killed",
   "tests": [
     "src/game/customize-pane.test.ts"
