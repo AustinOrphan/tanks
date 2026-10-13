@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-ignored-by-the-death-pulse",
+  "file": "src/render/death-pulse.ts",
+  "find": "      const palette = identityApplies(world) ? ownerPalette : undefined;",
+  "replace": "      const palette = undefined;",
+  "expect": "killed",
+  "tests": [
+    "src/render/death-pulse.test.ts"
+  ],
+  "why": "Site 4 of issue #1057's 7: the death ring drops the session palette and expands in Classic from a tank whose identity ring was High contrast. A pooled ring takes its colour from a separate path in `acquire` (setHex) than a fresh one (makeSpawnRing), so the test reads both.",
+  "killedBy": [
+    "death pulse: the owner palette (issue #1057) a POOLED ring is recoloured in the palette too, not left in the last owner's colour",
+    "death pulse: the owner palette (issue #1057) a fresh ring for each of the 4 FFA slots and 3 teams follows the palette"
+  ]
+}

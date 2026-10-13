@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-flag-ignored-by-the-session",
+  "file": "src/game/loop.ts",
+  "find": "OWNER_PALETTES[deps.devFlags.ownerPalette ?? DEFAULT_OWNER_PALETTE]",
+  "replace": "OWNER_PALETTES[DEFAULT_OWNER_PALETTE]",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The session never reads the flag, so `?dev=1&ownerPalette=high-contrast` parses, reports as accepted in the developer pane and changes nothing (issue #1057). Every reader still agrees with every other, which is why only a test that sets the flag and reads what a reader was handed can see it.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD flashes a two-player FFA death in the session's owner palette (issue #1057)",
+    "startGameWith: dev flags stay off by default threads the ownerPalette dev flag to every reader, once per session (issue #1057) hands the renderer and the stock HUD the SAME palette the flag names, before any status"
+  ]
+}

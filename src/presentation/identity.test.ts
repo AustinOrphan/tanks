@@ -110,8 +110,12 @@ describe('owner palettes: every owner colour follows the palette it is handed (i
     ({ kind: 'player', controlledBy: slot, team }) as unknown as Tank;
 
   it('the premise: the two palettes differ in all 7 colours, so each assertion below discriminates', () => {
-    for (const slot of [0, 1, 2, 3]) expect(HIGH_CONTRAST_RINGS[slot], `ring ${slot}`).not.toBe(CLASSIC_RINGS[slot]);
-    for (const team of [0, 1, 2]) expect(HIGH_CONTRAST_TEAMS[team], `team ${team}`).not.toBe(CLASSIC_TEAMS[team]);
+    for (const slot of [0, 1, 2, 3]) {
+      expect(HIGH_CONTRAST_RINGS[slot], `ring ${slot}`).not.toBe(CLASSIC_RINGS[slot]);
+    }
+    for (const team of [0, 1, 2]) {
+      expect(HIGH_CONTRAST_TEAMS[team], `team ${team}`).not.toBe(CLASSIC_TEAMS[team]);
+    }
   });
 
   it('resolveOwnerColor: all 7 owner colours from the palette passed, and Classic when none is', () => {

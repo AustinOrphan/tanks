@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-never-reaches-the-stock-hud",
+  "file": "src/game/loop.ts",
+  "find": "  hud.setStockPalette(sessionOwnerPalette);\n",
+  "replace": "  void sessionOwnerPalette;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The session never hands the HUD its palette, so the stock chips stay on the default while the renderer draws High contrast (issue #1057). The HUD's own tests call setStockPalette themselves and cannot see a session that forgets to.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default threads the ownerPalette dev flag to every reader, once per session (issue #1057) NEGATIVE CONTROLS: absent and `classic` both hand every reader Classic",
+    "startGameWith: dev flags stay off by default threads the ownerPalette dev flag to every reader, once per session (issue #1057) hands the renderer and the stock HUD the SAME palette the flag names, before any status"
+  ]
+}

@@ -682,6 +682,8 @@ describe('tread trails: the owner palette (issue #1057)', () => {
     expect(treadColorFor(worldWith(solo), solo, high)).toBe(TREAD_COLOR);
     const coop = fourPlayers('ffa');
     const coopWorld = multiWorld(coop); // campaign-coop
-    for (const t of coop) expect(treadColorFor(coopWorld, t, high), `co-op slot ${t.controlledBy}`).toBe(TREAD_COLOR);
+    for (const t of coop) {
+      expect(treadColorFor(coopWorld, t, high), `co-op slot ${t.controlledBy}`).toBe(TREAD_COLOR);
+    }
   });
 });

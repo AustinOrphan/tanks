@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-ignored-by-the-resolver",
+  "file": "src/presentation/identity.ts",
+  "find": "    ? teamColor(tank.team ?? 0, palette)\n    : identityColor(tank.controlledBy ?? 0, palette);",
+  "replace": "    ? teamColor(tank.team ?? 0)\n    : identityColor(tank.controlledBy ?? 0);",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts"
+  ],
+  "why": "resolveOwnerColor keeps its palette parameter but stops passing it on, so every caller that goes through it -- the identity ring, the spawn ring, the shell tint, the death pulse, the tread trail and the death vignette -- draws Classic whatever the session chose (issue #1057). Each of those sites passes the palette correctly and their own tests read the colour back through this function, so the resolver test over all 7 owner colours under each palette is the one that names it.",
+  "killedBy": [
+    "owner palettes: every owner colour follows the palette it is handed (issue #1057) resolveOwnerColor: all 7 owner colours from the palette passed, and Classic when none is"
+  ]
+}

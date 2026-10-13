@@ -1,0 +1,18 @@
+{
+  "id": "owner-palette-ignored-by-the-stock-chips",
+  "file": "src/game/hud.ts",
+  "find": "        ? teamColor(entry.team, stockPalette)\n        : identityColor(entry.slot, stockPalette);",
+  "replace": "        ? teamColor(entry.team)\n        : identityColor(entry.slot);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "tools/hud/ring-chip.test.ts"
+  ],
+  "why": "Site 7 of issue #1057's 7, and the one that used to bypass the resolver: the stock chips paint Classic while every ring on the board is High contrast. Killed by the chip test in FFA and teams and by the ring-and-chip agreement test.",
+  "killedBy": [
+    "hud: stock chips in the session's owner palette (issue #1057) paints all 4 FFA chips and all 3 teams from the palette it was handed",
+    "hud: stock chips in the session's owner palette (issue #1057) the identity-mark glyph takes its hue from the chip, so it follows the palette too (#778)",
+    "the identity ring and the stock chip are one colour (issue #1057) ffa, high-contrast: every player's ring and chip match",
+    "the identity ring and the stock chip are one colour (issue #1057) teams, high-contrast: every player's ring and chip match"
+  ]
+}

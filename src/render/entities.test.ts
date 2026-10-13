@@ -2514,7 +2514,8 @@ describe('player identity: ring and shell tint', () => {
       expect(shellEmissiveAt(hc.scene, 4), 'a single-player shell stays brass').toBe(0x444422);
       let spawn: number | null = null;
       hc.scene.traverse((o) => {
-        if (o.name === 'spawn-ring') spawn = ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).color.getHex();
+        if (o.name !== 'spawn-ring') return;
+        spawn = ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).color.getHex();
       });
       expect(spawn, 'the single-player entrance ring is Classic slot 0').toBe(0x3fd0ff);
       hc.v.dispose();

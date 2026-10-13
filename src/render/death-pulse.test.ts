@@ -162,7 +162,8 @@ describe('death pulse: the owner palette (issue #1057)', () => {
       const world = fourDead(mode);
       const events = ids.map((id) => destroyedEvent(id, 'player', id * 2, 3));
       const hcScene = new THREE.Scene();
-      createDeathPulseSystem(hcScene, false, OWNER_PALETTES['high-contrast']).spawn(events, world, { enemyEnabled: false });
+      const hc = createDeathPulseSystem(hcScene, false, OWNER_PALETTES['high-contrast']);
+      hc.spawn(events, world, { enemyEnabled: false });
       expect(ids.map((id) => ringAt(hcScene, id * 2)), mode).toEqual([...high]);
       // NEGATIVE CONTROL: no palette is Classic.
       const { scene, dp } = setup();
@@ -195,7 +196,8 @@ describe('death pulse: the owner palette (issue #1057)', () => {
     const scene = new THREE.Scene();
     const dp = createDeathPulseSystem(scene, false, OWNER_PALETTES['high-contrast']);
     const solo = makeTank(1, 'player', 5, 5, { controlledBy: 0, alive: false });
-    const world = createWorld({ walls: [], tanks: [solo], spawns: [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }], lives: 3 });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [solo], spawns, lives: 3 });
     dp.spawn([destroyedEvent(1, 'player', 5, 5)], world, { enemyEnabled: false });
     expect(deathRings(scene)[0].material.color.getHex()).toBe(0x3fd0ff);
   });
