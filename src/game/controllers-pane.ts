@@ -51,7 +51,10 @@ export const CONTROLLERS_BODY = `
     `;
 
 /** The host members this pane calls: its shared-state cost. Pinned by `pane-host.test.ts`. */
-export type ControllersHost = Pick<PaneHost, 'enterSurface' | 'closeSurface' | 'isSurfaceOpen' | 'open' | 'back'>;
+export type ControllersHost = Pick<
+  PaneHost,
+  'enterSurface' | 'closeSurface' | 'isSurfaceOpen' | 'open' | 'arrive' | 'back'
+>;
 
 /** What the pane reads that the host owns, and the one string it cannot derive. */
 export interface ControllersDeps {
@@ -215,7 +218,7 @@ export function createControllersPane(
         // markup comment. Supplied by the host, which is the half that knows the route.
         titleEl.textContent = deps.headingText();
         renderRows();
-        root.focus();
+        host.arrive();
         if (!wasOpen) for (const cb of openCbs) cb();
       });
     } else {

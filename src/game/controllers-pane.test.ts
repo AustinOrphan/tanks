@@ -42,6 +42,8 @@ function mount() {
       calls.push(who === opener ? 'open from the opener' : 'open from something else');
       return true;
     },
+    // What the real host does for a pane that declares no primary action (issue #919).
+    arrive: () => root.focus(),
     back: () => {
       calls.push('back');
       return true;

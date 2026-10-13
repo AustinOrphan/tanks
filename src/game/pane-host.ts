@@ -47,6 +47,13 @@ export interface PaneHost {
    * so no pane module names one. Returns whether the layer was pushed or refreshed.
    */
   open(opener: HTMLElement | null): boolean;
+  /**
+   * Put focus where THIS pane's arrival lands (issue #919): its declared primary action, or
+   * the pane's own container when it has none. `hud.ts` binds the layer id and holds the
+   * declaration, and the call also tells the carried-Confirm guard a screen arrived, so a pane
+   * calls this from its open's `onBegin` instead of focusing anything itself.
+   */
+  arrive(): void;
   /** Pop the top layer: the pane's own close, the origin re-rendered, focus restored. */
   back(): boolean;
 }

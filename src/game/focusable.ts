@@ -11,6 +11,10 @@
  * Versus Setup, `isHiddenWithin` by Settings. Moving them is what lets those panes be extracted
  * without the host handing each of them a focus helper of its own.
  *
+ * `arrivalTarget` (issue #919) joined them later: where focus lands when a surface arrives is a
+ * question about which controls can take it, answered by `focusableControls`, and the two
+ * extracted panes need it as much as `hud.ts` does.
+ *
  * A LEAF MODULE. It imports nothing, so a pane module that uses it does not reach `hud.ts`.
  */
 
@@ -54,6 +58,25 @@ export function focusableControls(container: HTMLElement): HTMLElement[] {
     if (ti !== null && Number(ti) < 0) return false; // none today, but future-proof
     return !isHiddenWithin(el, container);
   });
+}
+
+/**
+ * Where focus lands when `container` arrives (issue #919): the first of `primary` that is a
+ * control focus may land on in it, otherwise the container itself.
+ *
+ * `primary` is the surface's declared primary action, in preference order -- the Main Menu
+ * names Continue Campaign before Start Campaign, and the match-failure alert names Retry
+ * before its dismiss -- so a candidate that is hidden or disabled right now (no run to
+ * continue, no retry offered, a Start refused by an invalid setup) passes the choice to the
+ * next. An empty list is a surface with no primary action, and its container takes focus,
+ * where Confirm only lands focus (`hud.ts`'s `act`).
+ *
+ * Judged by `focusableControls`, the one rule for what the keyboard and the D-pad can reach,
+ * so arrival can never put focus on a control the roving walk would refuse.
+ */
+export function arrivalTarget(container: HTMLElement, primary: readonly HTMLElement[]): HTMLElement {
+  const controls = focusableControls(container);
+  return primary.find((el) => controls.includes(el)) ?? container;
 }
 
 /**

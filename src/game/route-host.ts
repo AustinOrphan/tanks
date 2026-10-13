@@ -1017,6 +1017,23 @@ export function createRouteHost(
    * self-heals on the first pointer or key, and the spec's controller-only evidence row
    * records that exception.
    */
+  /**
+   * Whether a surface arrived since the last poll finished (issue #919).
+   *
+   * An arrival puts focus on the new screen's primary action, so a Confirm that reaches it
+   * activates it. A Confirm held across the arrival never does -- the poller fires a press
+   * once and then only on a new one -- but a press whose edge is FIRST SEEN on the poll after
+   * an arrival was made while the player was looking at the screen before: the poll samples
+   * the pad, and between two samples the arrival came first only by the order of events in
+   * one frame, not by anything the player saw. A match ending while A is mashed is the case.
+   * That Confirm is dropped, and like a Confirm dropped mid-play it still counts as held, so
+   * the player presses again for the screen they can now see. One frame, at most, is lost to
+   * a press made deliberately after the arrival.
+   */
+  let arrivedSincePoll = false;
+  hud.onArrival(() => {
+    arrivedSincePoll = true;
+  });
   const onMenuAction = (action: UiAction): void => {
     noteModality('gamepad');
     if (sm.atLaunch) {
@@ -1028,6 +1045,7 @@ export function createRouteHost(
     // the press that completes a capture is a held button, not a new one, on the next frame.
     if (routeUi.capturingBinding()) return;
     if (sm.isSimulating && action !== 'pause') return;
+    if (action === 'confirm' && arrivedSincePoll) return; // pressed for the screen before
     if (hud.act(action)) return;
     if (action === 'pause') {
       if (sm.isPaused) sm.resume();
@@ -1045,6 +1063,8 @@ export function createRouteHost(
   const pollFrame = (now: number): void => {
     cancelFrame = null;
     menuPoller.poll(now);
+    // After the poll, so an arrival this poll's own Confirm made is not held against the next.
+    arrivedSincePoll = false;
     // The Controller Layout capture, on the same frame (issue #754): see `RouteUi.pollBindingCapture`.
     routeUi.pollBindingCapture();
     if (polling) cancelFrame = deps.requestFrame(pollFrame);

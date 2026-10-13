@@ -1542,6 +1542,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // HUD with no layer up.
         back: () => false,
         act: () => false,
+        onArrival: () => {},
         dispose: () => rec.disposed.push('hud'),
       };
     },
