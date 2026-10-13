@@ -564,7 +564,8 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
  * Site 7 of issue #1057's 7: the stock chips in the palette the session hands the HUD with
  * `setStockPalette`. The one site that never went through `resolveOwnerColor`, so threading
  * the resolver alone left it Classic. Population: 4 FFA chips and 3 teams, under High
- * contrast, with a HUD that was never told as the Classic control. Colours written out.
+ * contrast, with a HUD that was never told as the Classic control, and the one-entry and
+ * two-entry strips either side of the identity threshold. Colours written out.
  */
 describe('hud: stock chips in the session\'s owner palette (issue #1057)', () => {
   const entries = (root: HTMLElement): HTMLElement[] =>
@@ -602,6 +603,33 @@ describe('hud: stock chips in the session\'s owner palette (issue #1057)', () =>
     expect(entries(root).map((e) => e.style.color), 'teams').toEqual(
       [CLASSIC_TEAMS[0], CLASSIC_TEAMS[1], CLASSIC_TEAMS[2], CLASSIC_TEAMS[0]].map(rgb),
     );
+  });
+
+  it('a one-entry strip keeps the shipped colour under High contrast, as its spawn ring does', () => {
+    // The world `?dev=1&mode=ffa` (or `mode=teams`) builds without `players`: one player tank,
+    // slot 0 on team A. Identity does not apply to it, so its spawn ring and death pulse draw
+    // the shipped colour, and the chip has to as well. Population: the 1 FFA slot and the 1
+    // team such a world has, against Classic slot 0 (#3fd0ff) and team A (#ff3b3b).
+    const { hud: h, root } = mount();
+    h.setStockPalette(OWNER_PALETTES['high-contrast']);
+    h.setState('playing');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }]));
+    expect(entries(root).map((e) => e.style.color), 'ffa').toEqual(['rgb(63, 208, 255)']);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3, team: 0 }]));
+    expect(entries(root).map((e) => e.style.color), 'teams').toEqual(['rgb(255, 59, 59)']);
+  });
+
+  it('NEGATIVE CONTROL: a two-entry strip, the identity threshold, takes High contrast', () => {
+    // The case above passing because the palette never reached the strip would look the same
+    // there; here the same HUD, one entry more, has to paint High contrast. Two entries, not
+    // four, so a gate one player late fails. Population: 2 FFA slots, then teams A and B.
+    const { hud: h, root } = mount();
+    h.setStockPalette(OWNER_PALETTES['high-contrast']);
+    h.setState('playing');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    expect(entries(root).map((e) => e.style.color), 'ffa').toEqual(['rgb(99, 209, 253)', 'rgb(143, 253, 0)']);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]));
+    expect(entries(root).map((e) => e.style.color), 'teams').toEqual(['rgb(99, 209, 253)', 'rgb(198, 253, 0)']);
   });
 
   it('the identity-mark glyph takes its hue from the chip, so it follows the palette too (#778)', () => {

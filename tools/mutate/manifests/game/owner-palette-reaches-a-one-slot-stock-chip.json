@@ -1,0 +1,12 @@
+{
+  "id": "owner-palette-reaches-a-one-slot-stock-chip",
+  "file": "src/game/hud.ts",
+  "find": "identityAppliesAt(stocks.length) ? stockPalette : undefined",
+  "replace": "stockPalette",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "tools/hud/ring-chip.test.ts"
+  ],
+  "why": "The stock chips take the session palette without the identity gate the spawn ring and death pulse have, so a one-slot versus world (`?dev=1&mode=ffa` or `mode=teams` without `players`) paints its one chip High contrast (#63d1fd) beside a Classic spawn ring (#3fd0ff in FFA, #ff3b3b in teams), breaking issue #1057's single-player and ring-and-chip criteria. The four-entry strips the other chip tests draw cannot see it. Killed by the one-entry HUD case and by the one-player ring-and-chip cases in FFA and teams."
+}
