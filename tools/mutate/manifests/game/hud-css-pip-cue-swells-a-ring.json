@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "The swell frame of the emptied pip's cue loses the inset fill (issue #1022's review), so at 9px the pip swells as a ring with a hole in it -- the floored border the held pip's fill exists to close -- before it empties. The stylesheet test pins every frame before the last to the held pip's own border and fill."
+  "why": "The swell frame of the emptied pip's cue loses the inset fill (issue #1022's review), so at 9px the pip swells as a ring with a hole in it -- the floored border the held pip's fill exists to close -- before it empties. The stylesheet test pins every frame before the last to the held pip's own border and fill.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) starts a cued pip from the held pip's own border and fill, so a 9px pip keeps its box (issue #1022)"
+  ]
 }

@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "The reduced-motion form of the emptied pip's cue starts from a literal 5px border again (issue #1022's review). The same growth as `hud-css-pip-cue-starts-at-a-literal-border`, for half the cue instead of 30% of it and with no swell to hide it: a 9px pip's box grows to 10px and the strip shifts 1px (measured in Chromium). The stylesheet test reads the reduced-motion keyframe set as well as the motion one."
+  "why": "The reduced-motion form of the emptied pip's cue starts from a literal 5px border again (issue #1022's review). The same growth as `hud-css-pip-cue-starts-at-a-literal-border`, for half the cue instead of 30% of it and with no swell to hide it: a 9px pip's box grows to 10px and the strip shifts 1px (measured in Chromium). The stylesheet test reads the reduced-motion keyframe set as well as the motion one.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) starts a cued pip from the held pip's own border and fill, so a 9px pip keeps its box (issue #1022)"
+  ]
 }

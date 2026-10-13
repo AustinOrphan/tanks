@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "The held pip's inset fill reaches every pip, lost ones included (issue #1022's review). A lost pip is a 2px ring; the fill thickens it to 3px at every size, so the ring that says \"lost\" moves toward the dot that says \"held\" and the one channel the row has narrows. This is the negative control of the test that reads the fill the cascade gives a held pip: the same test requires a lost pip in the same cascade to have none."
+  "why": "The held pip's inset fill reaches every pip, lost ones included (issue #1022's review). A lost pip is a 2px ring; the fill thickens it to 3px at every size, so the ring that says \"lost\" moves toward the dot that says \"held\" and the one channel the row has narrows. This is the negative control of the test that reads the fill the cascade gives a held pip: the same test requires a lost pip in the same cascade to have none.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) fills a held pip at every size, since Chromium floors its half-size border (issue #1022)"
+  ]
 }

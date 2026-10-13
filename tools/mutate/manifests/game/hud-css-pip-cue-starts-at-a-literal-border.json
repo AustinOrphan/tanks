@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "The emptied pip's cue starts from a literal 5px border again instead of the pip's own half-size one (issue #1022's review). 5px is wider than a 9px pip's radius, so for the first 30% of the cue the pip's box grows from 9px to 10px and pushes the rest of the strip 1px right (measured in Chromium: row width 32 against 31 uncued). jsdom runs no animation, so only the stylesheet test that reads the frames of the keyframe set the cascade gives a cued lost pip can see it."
+  "why": "The emptied pip's cue starts from a literal 5px border again instead of the pip's own half-size one (issue #1022's review). 5px is wider than a 9px pip's radius, so for the first 30% of the cue the pip's box grows from 9px to 10px and pushes the rest of the strip 1px right (measured in Chromium: row width 32 against 31 uncued). jsdom runs no animation, so only the stylesheet test that reads the frames of the keyframe set the cascade gives a cued lost pip can see it.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) starts a cued pip from the held pip's own border and fill, so a 9px pip keeps its box (issue #1022)"
+  ]
 }

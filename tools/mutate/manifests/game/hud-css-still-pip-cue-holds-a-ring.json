@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.css.test.ts"
   ],
-  "why": "The reduced-motion form of the emptied pip's cue loses the inset fill for its hold (issue #1022's review), so at 9px the pip sits as a ring with a 1px hole for half the cue before it empties. The stylesheet test reads the reduced-motion frames as well as the motion ones."
+  "why": "The reduced-motion form of the emptied pip's cue loses the inset fill for its hold (issue #1022's review), so at 9px the pip sits as a ring with a 1px hole for half the cue before it empties. The stylesheet test reads the reduced-motion frames as well as the motion ones.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) starts a cued pip from the held pip's own border and fill, so a 9px pip keeps its box (issue #1022)"
+  ]
 }
