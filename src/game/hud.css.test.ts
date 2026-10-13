@@ -3283,6 +3283,11 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
    * longhand, when there is one, is the name a browser runs.
    */
   function cueKeyframeBorders(el: Element): string[] {
+    return [...cueKeyframeSet(el).matchAll(/\bborder[\w-]*\s*:[^;}]*/g)].map((m) => m[0].trim());
+  }
+
+  /** The text inside the keyframe set the cascade gives `el` (see `cueKeyframeBorders`). */
+  function cueKeyframeSet(el: Element): string {
     const style = getComputedStyle(el);
     const name = style.animationName !== '' && style.animationName !== 'none'
       ? style.animationName
@@ -3296,7 +3301,15 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
       if (src[close] === '{') depth++;
       else if (src[close] === '}' && --depth === 0) break;
     }
-    return [...src.slice(open + 1, close).matchAll(/\bborder[\w-]*\s*:[^;}]*/g)].map((m) => m[0].trim());
+    return src.slice(open + 1, close);
+  }
+
+  /** Each frame of that set as `[selector, border-width, box-shadow]`, `''` where it sets none. */
+  function cueKeyframeFrames(el: Element): [string, string, string][] {
+    const read = (body: string, prop: string): string =>
+      new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`).exec(body)?.[1].trim() ?? '';
+    return [...cueKeyframeSet(el).matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .map((m) => [m[1].trim(), read(m[2], 'border-width'), read(m[2], 'box-shadow')]);
   }
 
   it('keeps a cued pip the player still holds filled once its cue ends, with motion and without (issue #1055)', () => {
@@ -3324,6 +3337,64 @@ describe('hud.css: the stock-loss cue arms (issue #230)', () => {
         expect(cueKeyframeBorders(lost), `${mode}: the lost pip's cue no longer empties it`)
           .toContain('border-width: 2px');
       }
+    } finally {
+      host.remove();
+    }
+  });
+
+  /** The held pip's fill: an inset shadow over what Chromium's border floor leaves (see below). */
+  const PIP_FILL = 'inset 0 0 0 1px currentColor';
+
+  it('fills a held pip at every size, since Chromium floors its half-size border (issue #1022)', () => {
+    // A held pip is a border half its own size, and Chromium floors a border width to whole
+    // pixels (measured at DPR 1, 2 and 3): the 9px rung's 4.5px border drew 4px round a 1px hole,
+    // so every held pip in a four-player teams strip on a phone read as a thick ring. jsdom lays
+    // nothing out, so this reads what the cascade gives each pip.
+    const host = document.createElement('div');
+    host.className = 'hud';
+    const held = document.createElement('span');
+    held.className = 'hud-stock-pip';
+    // THE NEGATIVE CONTROL: a lost pip in the same cascade, which must stay a bare 2px ring. A fill
+    // there would thicken the ring that says "lost", and a reader that saw every pip filled would
+    // fail here.
+    const lost = document.createElement('span');
+    lost.className = 'hud-stock-pip hud-stock-pip--lost';
+    host.append(held, lost);
+    document.body.appendChild(host);
+    try {
+      // jsdom serialises the keyword in lower case.
+      expect(getComputedStyle(held).boxShadow, 'the held pip keeps its hole').toBe(PIP_FILL.toLowerCase());
+      expect(getComputedStyle(lost).boxShadow, 'the lost pip is filled too').toBe('');
+    } finally {
+      host.remove();
+    }
+  });
+
+  it('starts a cued pip from the held pip\'s own border and fill, so a 9px pip keeps its box (issue #1022)', () => {
+    // A literal 5px start was wider than a 9px pip's radius: for the cue's first frames the pip's
+    // box grew to 10px and pushed the rest of the strip 1px right (measured in Chromium), and it
+    // drew the swell with the floored border's hole. Every frame before the last must draw the
+    // held pip exactly; THE NEGATIVE CONTROL is the last frame in the same list, the lost pip's
+    // bare 2px ring, which a reader that saw every frame as held would fail.
+    const own = /\bborder:\s*([^;]*?)\s+solid\b/.exec(ruleBody('.hud-stock-pip'))?.[1];
+    expect(own, 'the held pip is no longer a border half its size').toBe('calc(var(--hud-pip, 10px) / 2)');
+    const host = document.createElement('div');
+    host.className = 'hud';
+    const lost = document.createElement('span');
+    lost.className = 'hud-stock-pip hud-stock-pip--lost hud-stock-cue';
+    host.append(lost);
+    document.body.appendChild(host);
+    try {
+      expect(cueKeyframeFrames(lost), 'motion: the frames of the emptied pip\'s cue').toEqual([
+        ['0%', own, PIP_FILL],
+        ['30%', own, PIP_FILL],
+        ['100%', '2px', ''],
+      ]);
+      host.classList.add('hud--reduced-motion');
+      expect(cueKeyframeFrames(lost), 'reduced motion: the frames of the emptied pip\'s cue').toEqual([
+        ['0%, 50%', own, PIP_FILL],
+        ['100%', '2px', ''],
+      ]);
     } finally {
       host.remove();
     }
