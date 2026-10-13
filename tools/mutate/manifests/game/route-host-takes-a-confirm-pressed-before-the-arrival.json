@@ -1,8 +1,8 @@
 {
   "id": "route-host-takes-a-confirm-pressed-before-the-arrival",
   "file": "src/game/route-host.ts",
-  "find": "    if (action === 'confirm' && arrivedSincePoll) return; // pressed for the screen before\n",
-  "replace": "",
+  "find": "    if (action === 'confirm' && arrivedSincePoll) return; // pressed for the screen before\n    if (hud.act(action)) return;",
+  "replace": "    if (hud.act(action)) return;",
   "tests": [
     "src/game/route-host.test.ts"
   ],

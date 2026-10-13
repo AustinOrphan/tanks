@@ -1,8 +1,8 @@
 {
   "id": "hud-menu-arrival-follow-moves-the-player",
   "file": "src/game/hud.ts",
-  "find": "    if (active !== panelArrival.target && active !== document.body && active !== null) return;\n",
-  "replace": "",
+  "find": "    if (active !== panelArrival.target && active !== document.body && active !== null) return;\n    const target = arrivalTarget(panel, PANEL_PRIMARY[panelArrival.state]());",
+  "replace": "    const target = arrivalTarget(panel, PANEL_PRIMARY[panelArrival.state]());",
   "tests": [
     "src/game/hud.navigation.test.ts"
   ],

@@ -1,8 +1,8 @@
 {
   "id": "carried-confirm-forgets-when-a-press-began",
   "file": "src/game/carried-confirm.ts",
-  "find": "      if (e.type === 'keydown' && !e.repeat) pressedAt.set(key, e.timeStamp);",
-  "replace": "",
+  "find": "      if (e.type === 'keydown' && !e.repeat) pressedAt.set(key, e.timeStamp);\n      const began = pressedAt.get(key);",
+  "replace": "      const began = pressedAt.get(key);",
   "tests": [
     "src/game/carried-confirm.test.ts",
     "src/game/hud.navigation.test.ts",

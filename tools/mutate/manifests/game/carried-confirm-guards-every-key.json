@@ -1,8 +1,8 @@
 {
   "id": "carried-confirm-guards-every-key",
   "file": "src/game/carried-confirm.ts",
-  "find": "      if (keyToUiAction(e.key) !== 'confirm') return;",
-  "replace": "",
+  "find": "      if (keyToUiAction(e.key) !== 'confirm') return;\n      const key = e.key.toLowerCase();",
+  "replace": "      const key = e.key.toLowerCase();",
   "tests": [
     "src/game/carried-confirm.test.ts"
   ],
