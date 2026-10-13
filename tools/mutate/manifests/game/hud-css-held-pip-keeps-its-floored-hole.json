@@ -1,0 +1,11 @@
+{
+  "id": "hud-css-held-pip-keeps-its-floored-hole",
+  "file": "src/game/hud.css",
+  "find": ".hud-stock-pip:not(.hud-stock-pip--lost) {\n  box-shadow: inset 0 0 0 1px currentColor;\n}",
+  "replace": ".hud-stock-pip:not(.hud-stock-pip--lost) {\n}",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "A held pip loses the inset fill (issue #1022's review). Its border is half its size, and Chromium floors a border width to whole pixels (measured at DPR 1, 2 and 3), so the 9px rung -- four teams players at three stocks on a phone, the strip #1022 made the default -- draws a 4px border round a 1px hole and every held pip reads as a thick ring rather than a dot. Measured in Chromium before the fix: the centre pixel of a held 9px pip was the page behind it. jsdom lays nothing out, so only the stylesheet test that reads the fill the cascade gives a held pip, against a lost one, can see it."
+}

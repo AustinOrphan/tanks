@@ -3834,14 +3834,24 @@
   box-sizing: border-box;
   width: var(--hud-pip, 10px);
   height: var(--hud-pip, 10px);
-  /* A FILLED pip is a border as wide as its own radius, so it scales with the pip rather than
-   * leaving a hole when the pip shrinks. */
+  /* A FILLED pip is a border as wide as its own radius, so it scales with the pip. Alone that
+   * leaves a hole at an odd size; the rule below fills it. */
   border: calc(var(--hud-pip, 10px) / 2) solid currentColor;
   border-radius: 50%;
 }
 
 .hud-stock-pip--lost {
   border-width: 2px;
+}
+
+/* Chromium floors a border width to whole pixels (measured at DPR 1, 2 and 3), so the 9px rung's
+ * 4.5px border draws 4px and leaves a 1px hole in the middle: a held pip read as a thick ring,
+ * not a dot (issue #1022, which made that rung the teams strip on a phone). The inset shadow
+ * fills what the floor leaves, without changing the box, and without `background`, which forced
+ * colours would drop. Forced colours drops the shadow too, leaving a 1px pinhole that still
+ * reads apart from the lost pip's 2px ring. At 10px the border already meets in the middle. */
+.hud-stock-pip:not(.hud-stock-pip--lost) {
+  box-shadow: inset 0 0 0 1px currentColor;
 }
 
 /* The count beside a single pip or mark, where a full row will not fit (issues #835, #1021).
@@ -3889,9 +3899,21 @@
   animation-delay: inherit;
 }
 
+/* The pip starts as a held one, at its own size's border and fill, and empties to the lost
+ * pip's 2px border. A literal 5px start was wider than a 9px pip's radius, so the cued pip's box
+ * grew to 10px and pushed the rest of the strip 1px right for the length of the cue (measured in
+ * Chromium); a literal start also skips the fill a 9px pip needs (see `.hud-stock-pip`). */
 @keyframes hud-stock-pip-empty {
-  0% { border-width: 5px; transform: scale(1); }
-  30% { border-width: 5px; transform: scale(1.6); }
+  0% {
+    border-width: calc(var(--hud-pip, 10px) / 2);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transform: scale(1);
+  }
+  30% {
+    border-width: calc(var(--hud-pip, 10px) / 2);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transform: scale(1.6);
+  }
   100% { border-width: 2px; transform: scale(1); }
 }
 
@@ -4188,7 +4210,11 @@
  * forced colours still leaves a cue.
  */
 @keyframes hud-stock-pip-empty--still {
-  0%, 50% { border-width: 5px; transform: none; }
+  0%, 50% {
+    border-width: calc(var(--hud-pip, 10px) / 2);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transform: none;
+  }
   100% { border-width: 2px; transform: none; }
 }
 
