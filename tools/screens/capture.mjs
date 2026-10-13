@@ -76,8 +76,11 @@ const WATCHED = ['display', 'opacity', 'color', 'background-color', 'font-size',
  * measurement in all of the checked-in baselines, and all of them would need re-accepting for a
  * reading one state wants. The cost of the narrow choice is that a state has to say what it is
  * about, which is the right thing to have to say.
+ *
+ * Exported for `capture.aria.test.ts`, which hands it a page whose `evaluate` calls the function
+ * directly, so the arguments this passes into the page are tested and not just the function.
  */
-async function measure(
+export async function measure(
   /** @type {any} */ page,
   /** @type {readonly string[]} */ selectors,
   /** @type {readonly string[]} */ extra = [],

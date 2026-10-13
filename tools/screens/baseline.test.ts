@@ -6,7 +6,8 @@ import { join } from 'node:path';
 
 import {
   subsetStates, baselineFileName, readBaseline, serialiseBaseline,
-  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal, pageErrorRefusalReason, boxWithinTolerance, BOX_TOLERANCE_PX } from './baseline.mjs';
+  diffMeasurements, formatFailure, brief, judgePageErrors, formatPageErrorRefusal, pageErrorRefusalReason, boxWithinTolerance, BOX_TOLERANCE_PX,
+  ARIA_ATTRIBUTES } from './baseline.mjs';
 import { judgeState, checkExitCode, formatVerdict, recipeFor } from './check.mjs';
 import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
@@ -383,6 +384,92 @@ describe('the screen baseline: how far a box may move between platforms (issue #
     expect(boxWithinTolerance(NaN, NaN)).toBe(false);
     expect(boxWithinTolerance(undefined, undefined)).toBe(true);
     expect(BOX_TOLERANCE_PX).toBe(2);
+  });
+});
+
+/**
+ * THE GATE SEES A STATE'S ROLES AND ACCESSIBLE NAMES (issue #937).
+ *
+ * Every known-bad measurement here is SYNTHETIC: a dropped role or a renamed label is built in
+ * the test, never made by editing a committed baseline, so a fix to a shipped screen cannot
+ * delete the control that proves the gate would have caught it.
+ */
+describe('the screen baseline: role and aria attributes are compared exactly (issue #937)', () => {
+  // SPELLED OUT, not read from ARIA_ATTRIBUTES: an it.each over the production list would lose
+  // a member's case together with the member. The equality test below ties the two together.
+  const NINE = [
+    'role', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-live', 'aria-modal',
+    'aria-expanded', 'aria-pressed', 'aria-current',
+  ];
+
+  it('records exactly the nine attributes the owner ruled on, in this order', () => {
+    // A tenth added to the production list without a case below, or one dropped from it,
+    // fails here rather than quietly changing what every capture records.
+    expect([...ARIA_ATTRIBUTES]).toEqual(NINE);
+  });
+
+  it.each(NINE)('fails a capture that lost %s', (name) => {
+    const expected = [m({ aria: { [name]: 'v' } })];
+    expect(diffMeasurements(expected, [m()])).toEqual([
+      { selector: '.a', field: `aria.${name}`, expected: 'v', actual: undefined },
+    ]);
+    // Negative control: the same attribute on both sides is not a change.
+    expect(diffMeasurements(expected, [m({ aria: { [name]: 'v' } })])).toEqual([]);
+  });
+
+  it('fails a renamed accessible name, and does not trim a value to make it match', () => {
+    const before = [m({ aria: { 'aria-label': 'Level 1' } })];
+    expect(diffMeasurements(before, [m({ aria: { 'aria-label': 'Level 2' } })])).toEqual([
+      { selector: '.a', field: 'aria.aria-label', expected: 'Level 1', actual: 'Level 2' },
+    ]);
+    // A difference only in whitespace is still a difference: the DOM's string is the value.
+    expect(diffMeasurements(before, [m({ aria: { 'aria-label': 'Level 1 ' } })]).map((c) => c.field))
+      .toEqual(['aria.aria-label']);
+  });
+
+  it('tells an empty attribute from an absent one', () => {
+    // `aria-label=""` and no aria-label are different DOM; ui.ts removes aria-describedby rather
+    // than emptying it for exactly this reason.
+    expect(diffMeasurements([m({ aria: { 'aria-label': '' } })], [m()])).toEqual([
+      { selector: '.a', field: 'aria.aria-label', expected: '', actual: undefined },
+    ]);
+    // Negative control: an empty attribute on both sides is not a change.
+    expect(diffMeasurements([m({ aria: { 'aria-label': '' } })], [m({ aria: { 'aria-label': '' } })])).toEqual([]);
+  });
+
+  it('gives an attribute no tolerance, even beside a box change that has one', () => {
+    // A 2px box shift is absorbed; a one-character id change in the same entry is not.
+    const before = [m({ box: { x: 0, y: 0, w: 10, h: 4 }, aria: { 'aria-describedby': 'hud-a' } })];
+    const after = [m({ box: { x: 0, y: 0, w: 12, h: 4 }, aria: { 'aria-describedby': 'hud-b' } })];
+    expect(diffMeasurements(before, after).map((c) => c.field)).toEqual(['aria.aria-describedby']);
+  });
+
+  it('reads an entry with no aria object as one with no attributes, without throwing', () => {
+    // A capture omits `aria` for an element that carries none, and every baseline written
+    // before #937 has no `aria` anywhere. Both have to compare, not crash the gate.
+    expect(diffMeasurements([m()], [m({ aria: { role: 'alert' } })])).toEqual([
+      { selector: '.a', field: 'aria.role', expected: undefined, actual: 'alert' },
+    ]);
+    expect(diffMeasurements([m({ aria: { role: 'alert' } })], [m({ aria: { role: 'alert' } })])).toEqual([]);
+  });
+
+  it('fails the state and names the state, the selector and the attribute in the verdict', () => {
+    const baseline = { measurements: [m({ aria: { role: 'dialog', 'aria-modal': 'true' } })] };
+    const v = judgeState({
+      stateId: 'screen.a', recipe, baseline,
+      report: { measurements: [m({ aria: { 'aria-modal': 'true' } })], pageErrors: [] },
+    });
+    expect(v.status).toBe('differs');
+    const text = formatVerdict(v);
+    expect(text).toContain('  state    screen.a');
+    expect(text).toContain('  .a aria.role: expected "dialog", got undefined');
+    expect(checkExitCode([v])).toBe(1);
+    // Negative control: the same attributes pass.
+    const same = judgeState({
+      stateId: 'screen.a', recipe, baseline,
+      report: { measurements: [m({ aria: { role: 'dialog', 'aria-modal': 'true' } })], pageErrors: [] },
+    });
+    expect(same.status).toBe('match');
   });
 });
 
