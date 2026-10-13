@@ -133,8 +133,9 @@ export function formatPageErrorRefusal(verdict, stateId) {
  * moved, a panel that reflowed or a line that wrapped -- tens of pixels, not two.
  *
  * It applies to BOX GEOMETRY ONLY. `present`, `visible`, `text`, every recorded aria attribute
- * and every watched style property stay exact, because none of them is a rasteriser artefact: a control that vanished,
- * a label that changed wording or a colour that moved is a real difference at any magnitude.
+ * and every watched style property stay exact, because none of them is a rasteriser artefact:
+ * a control that vanished, a label that changed wording or a colour that moved is a real
+ * difference at any magnitude.
  */
 export const BOX_TOLERANCE_PX = 2;
 
