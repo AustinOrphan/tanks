@@ -1,0 +1,11 @@
+{
+  "id": "diagnostics-copy-refusal-dropped",
+  "file": "src/game/hud.ts",
+  "find": "    const input = diagnosticsInput();\n    if (input === null) return;\n    whenDevTools(({ diagnostics }) => showDiagnostics(diagnostics.formatDiagnostics(input)));",
+  "replace": "    const input = diagnosticsInput();\n    whenDevTools(({ diagnostics }) => showDiagnostics(diagnostics.formatDiagnostics(input!)));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #247, restated for #1014. The Copy handler loses its refusal, so a press with no `developerPage` formats a missing input once the modules load: a rejection nothing handles, which `boot.ts` treats as the match failing. Before #1014 the same mutation threw from the click itself."
+}

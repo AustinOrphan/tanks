@@ -129,7 +129,8 @@ describe('the diagnostics controls are offered only when the page half is wired'
     // Not merely hidden: the HANDLER refuses too. A hidden button is still clickable through
     // the DOM, and a handler that ran anyway would have to invent a path and a build. Its write
     // would wait on the developer modules (issue #1014), so the field is read once every load
-    // has settled. Negative control: a handler that answers without a page.
+    // has settled. Negative controls: a handler that answers without a page, and one that drops
+    // the refusal and formats an input that is not there.
     const root = mountDev();
     const escaped = await escapedDuring(() => q<HTMLButtonElement>(root, '.hud-diag-copy').click());
     expect(escaped).toEqual([]);
