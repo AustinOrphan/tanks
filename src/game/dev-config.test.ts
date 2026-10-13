@@ -403,6 +403,22 @@ describe('canonicalDevSearch', () => {
     expect(plain.search).toContain('oldFlag=1');
   });
 
+  it('retires stockCue by default, the one developer parameter removed for good (issue #1022)', () => {
+    // Population: every developer parameter removed for good since this list was built (#413),
+    // which is one -- `stockCue`, whose flag #1022 removed when the `marks` strip shipped.
+    // `menuTransition` went out with the revert in #547 and came back in #548 the same day.
+    expect(DEPRECATED_DEV_PARAMS).toEqual(['stockCue']);
+    const r = canonicalDevSearch('?dev=1&stockCue=marks&aimRay=1');
+    expect(r.search).toBe('?dev=1&aimRay=1');
+    expect(r.deprecated).toEqual(['stockCue']);
+    expect(r.unknown).toEqual([]);
+    // THE NEGATIVE CONTROL: with an empty list, the state before #1022, the same URL carries
+    // `stockCue` into the canonical form as an unrelated parameter.
+    const plain = canonicalDevSearch('?dev=1&stockCue=marks&aimRay=1', { deprecated: [] });
+    expect(plain.unknown).toEqual(['stockCue']);
+    expect(plain.search).toBe('?dev=1&aimRay=1&stockCue=marks');
+  });
+
   it('retains or removes the master gate as asked', () => {
     expect(canonicalDevSearch('?dev=1&aimRay=1').search).toBe('?dev=1&aimRay=1');
     const stripped = canonicalDevSearch('?dev=1&aimRay=1', { keepGate: false });
