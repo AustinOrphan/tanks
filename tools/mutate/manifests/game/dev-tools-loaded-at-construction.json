@@ -1,0 +1,15 @@
+{
+  "id": "dev-tools-loaded-at-construction",
+  "file": "src/game/hud.ts",
+  "find": "  // the three actions start unavailable rather than flashing on before the first push.\n  refreshDevActions();\n",
+  "replace": "  // the three actions start unavailable rather than flashing on before the first push.\n  refreshDevActions();\n  void loadDevTools();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a load that fails is reported in the output field when the pane opens, and the next open loads them",
+    "the developer modules load when the pane opens (issue #1014) nothing loads them before the pane opens: a press after every import has settled still waits"
+  ],
+  "why": "Issue #1014. The HUD loads the three developer modules as it is built, which is every page's startup -- the ordinary page's included, putting them back among the bytes it downloads. A press before the pane ever opened is then answered in its own task, which `nothing loads them before the pane opens` reads."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "dev-action-renamed-in-the-catalogue-only",
+  "file": "src/game/dev-actions.ts",
+  "find": "    label: 'Reroll Seed',",
+  "replace": "    label: 'Reroll the Seed',",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) an action clicked before its catalogue loads throws nothing, arms nothing and rebuilds nothing",
+    "the developer modules load when the pane opens (issue #1014) the markup names each action exactly as the catalogue does, one button per entry",
+    "the three developer actions (issue #252) arming one action DISARMS another, so a stray second press cannot fire the wrong one"
+  ],
+  "why": "Issue #1014. An action is renamed in `DEV_ACTIONS` and nowhere else, so the button the markup labels keeps the old word while the catalogue -- which arms it and words its result line -- says the new one. The markup-against-catalogue case catches it from the catalogue's side; the literal-label case would, too."
+}

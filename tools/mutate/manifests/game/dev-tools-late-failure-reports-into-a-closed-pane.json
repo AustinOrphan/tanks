@@ -1,0 +1,14 @@
+{
+  "id": "dev-tools-late-failure-reports-into-a-closed-pane",
+  "file": "src/game/hud.ts",
+  "find": "      (err: unknown) => {\n        if (generation !== devToolsGeneration) return;\n",
+  "replace": "      (err: unknown) => {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a load that fails after the pane closed reports nothing into it"
+  ],
+  "why": "Issue #1014. A load that fails after the pane closed still writes its failure into the field the close emptied, which the next opener reads as current."
+}

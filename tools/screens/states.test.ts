@@ -110,6 +110,26 @@ describe('the screen-state catalogue', () => {
     );
   });
 
+  it('waits for each runtime action it measures, after the pane, since they load with it (issue #1014)', () => {
+    // The actions are hidden until their catalogue loads with the pane, and the pane is visible
+    // before that, so a capture that waited only for `.hud-devtools` could measure hidden
+    // buttons -- an absent measured selector fails only in a real capture. Spelled out rather
+    // than read from `measure`, so a dropped action loses its check loudly. Negative control:
+    // dropping one action's wait.
+    const state = findScreenState('screen.devtools.actions')!;
+    const waits = state.steps.filter((s: any) => 'waitVisible' in s).map((s: any) => s.waitVisible);
+    const pane = waits.indexOf('.hud-devtools');
+    expect(pane, 'no wait for the pane').toBeGreaterThanOrEqual(0);
+    for (const action of [
+      '.hud-devact[data-action="restart-same-seed"]',
+      '.hud-devact[data-action="reroll-seed"]',
+      '.hud-devact[data-action="restart-round"]',
+    ]) {
+      expect(state.measure, `${action} is not measured`).toContain(action);
+      expect(waits.indexOf(action), `no wait for ${action} after the pane's`).toBeGreaterThan(pane);
+    }
+  });
+
   it('measures something on every state, and never an empty selector', () => {
     // A capture with nothing measured is a picture with no caption: it proves the page did
     // not crash and nothing else. The measurement half is the part that has actually

@@ -1,8 +1,8 @@
 {
   "id": "hud-export-screenshot-late-failure-unreported",
   "file": "src/game/hud.ts",
-  "find": "      downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);",
-  "replace": "      downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), () => {});",
+  "find": "          downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);",
+  "replace": "          downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), () => {});",
   "expect": "killed",
   "tests": [
     "src/game/hud.diagnostics.test.ts"

@@ -1,0 +1,41 @@
+{
+  "id": "dev-tools-open-never-loads",
+  "file": "src/game/hud.ts",
+  "find": "      if (devTools === null) whenDevTools(revealDevActions);",
+  "replace": "      if (devTools === null) void revealDevActions;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "Copy Diagnostics writes the session it was given READS THE SOURCE AT PRESS TIME, not when it was registered",
+    "Copy Diagnostics writes the session it was given reports the live seed, and the field is only shown once there is something in it",
+    "Copy Diagnostics writes the session it was given says there is no session when nothing is live, rather than reporting a seed",
+    "Pin Current Seed offers a URL and changes nothing says why there is nothing to pin when no session is live",
+    "Pin Current Seed offers a URL and changes nothing writes a URL carrying the live seed",
+    "the developer modules load when the pane opens (issue #1014) THE CONTROL: opening the pane loads them, so a press once that has settled is answered at once",
+    "the developer modules load when the pane opens (issue #1014) a load that fails is reported in the output field when the pane opens, and the next open loads them",
+    "the developer modules load when the pane opens (issue #1014) an armed action lapses after 4 seconds, back to its catalogue label, and the next press arms again",
+    "the developer modules load when the pane opens (issue #1014) an armed action lapses when another pane opens over it, so the press on return arms again",
+    "the developer modules load when the pane opens (issue #1014) arms each action with its own catalogue confirm label, and restores its own label on disarm",
+    "the developer modules load when the pane opens (issue #1014) offers the actions only once their catalogue has loaded, even with a round running",
+    "the exports (issue #254) Download Diagnostics saves one JSON file of the live session and round, and says so",
+    "the exports (issue #254) Download Replay saves NOTHING when recording is off, and says how to turn it on",
+    "the exports (issue #254) Download Replay saves nothing with no session, and says so",
+    "the exports (issue #254) Download Replay saves the recorded trace as it is",
+    "the exports (issue #254) Download Screenshot saves nothing with no session, and says so",
+    "the exports (issue #254) Download Screenshot saves the frame the session copied, and says what it is",
+    "the exports (issue #254) reads the round at press time, not when the port was registered",
+    "the exports (issue #254) reports a download that throws, too",
+    "the exports (issue #254) saves a no-session file without a round when nothing is live",
+    "the field does not outlive the pane is cleared and re-hidden when Developer Tools closes",
+    "the three developer actions (issue #252) ARMS before it fires, and the first press rebuilds nothing",
+    "the three developer actions (issue #252) arming one action DISARMS another, so a stray second press cannot fire the wrong one",
+    "the three developer actions (issue #252) asks for the CURRENT seed on a same-seed restart, and reports what came back",
+    "the three developer actions (issue #252) hides all three with no session, and shows them once one is live",
+    "the three developer actions (issue #252) puts a REPRODUCTION URL beside a rerolled seed, not just the number",
+    "the three developer actions (issue #252) re-asks whether a round exists every time the pane opens, not only at registration",
+    "the three developer actions (issue #252) says so rather than appearing to work when the port refuses"
+  ],
+  "why": "Issue #1014. Opening Developer Tools stops starting the load of `dev-actions`, `dev-diagnostics` and `dev-exports`, so nothing is loaded until a control is pressed and the first press of every control waits on a load it started itself. This is the negative control for THE CONTROL case and for every case that loads the modules the way the page does, by opening the pane (`mountDevLoaded`): without it they could pass with nothing loaded on the open."
+}

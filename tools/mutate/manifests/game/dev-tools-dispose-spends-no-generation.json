@@ -1,0 +1,14 @@
+{
+  "id": "dev-tools-dispose-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "      devToolsGeneration += 1; // and a press still waiting on the developer modules writes nothing\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a teardown during the load writes nothing into the discarded field"
+  ],
+  "why": "Issue #1014. Teardown stops spending the generation, and teardown never runs the pane's close, so a press still waiting on the load writes into the tree the teardown discarded."
+}

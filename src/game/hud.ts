@@ -378,23 +378,19 @@ import {
   type RelevanceSettingId,
 } from './control-relevance';
 import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
-import { DEV_ACTIONS, runDevAction, type DevActionId, type DevActionPort } from './dev-actions';
-import {
-  formatDiagnostics,
-  pinnedSeedUrl,
-  type DiagnosticsInput,
-  type SessionDiagnostics,
-} from './dev-diagnostics';
+// The three modules behind the Developer Tools pane's own controls are named for their TYPES
+// only: their values are loaded when the pane opens (issue #1014) -- see `loadDevTools`.
+import type { DevActionId, DevActionPort } from './dev-actions';
+import type { DiagnosticsInput, SessionDiagnostics } from './dev-diagnostics';
 import type { BuildIdentity } from './build-identity';
-import {
-  NO_SESSION_REPLAY_NOTE,
-  NO_SESSION_SCREENSHOT_NOTE,
-  diagnosticsExport,
-  replayExport,
-  screenshotExport,
-  type DevExportPort,
-  type ExportResult,
-} from './dev-exports';
+import type { DevExportPort, ExportResult } from './dev-exports';
+
+/** The modules `loadDevTools` lands, one field per module, so each control names what it runs. */
+interface DevToolsModules {
+  readonly actions: typeof import('./dev-actions');
+  readonly diagnostics: typeof import('./dev-diagnostics');
+  readonly exports: typeof import('./dev-exports');
+}
 
 /*
  * ---- WHAT EACH ENDING SAYS, AND WHAT IT OFFERS (issue #323) ----------------------
@@ -2556,13 +2552,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--slab hud-export-replay" type="button">Download Replay</button>
       <!-- RUNTIME ACTIONS (issue #252). Each rebuilds the board, so each arms first: the
            same two-press confirmation Reset stats and Reset progress use, rather than a
-           modal, because these sit in a pane a developer is already working in. Labels come
-           from DEV_ACTIONS so the catalogue and the markup cannot name different things.
-           Hidden as a group whenever no session holds the slot -- there is no round to
-           restart from the main menu. -->
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button"></button>
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button"></button>
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button"></button>
+           modal, because these sit in a pane a developer is already working in. The labels
+           are DEV_ACTIONS's, written here because that catalogue loads with the pane (issue
+           #1014) and a button with no text has no accessible name; a test compares the two,
+           so they cannot name different things. Hidden until the catalogue has loaded,
+           since it holds what each says while armed, and as a group whenever no session
+           holds the slot -- there is no round to restart from the main menu. -->
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button">Restart with Same Seed</button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button">Reroll Seed</button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button">Restart Current Round</button>
       <!-- PERSISTENCE (issue #249). The namespace line is always present while the pane is,
            because "obvious" is a property of being shown continuously rather than on demand;
            it takes a warning modifier when the session is on the production keys. Both
@@ -2816,11 +2814,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const prodSaveBtn = el.querySelector('.hud-prodsave') as HTMLButtonElement;
   const devResetBtn = el.querySelector('.hud-devreset') as HTMLButtonElement;
   const devActionBtns = Array.from(el.querySelectorAll<HTMLButtonElement>('.hud-devact'));
-  // Labelled FROM the catalogue rather than written into the markup, so a renamed action
-  // cannot leave a stale word on a button that still dispatches the new id.
-  for (const btn of devActionBtns) {
-    btn.textContent = DEV_ACTIONS[btn.dataset.action as DevActionId].label;
-  }
   const selfTestView = el.querySelector('.hud-selftest') as HTMLElement;
   const selfTestListEl = el.querySelector('.hud-selftest-list') as HTMLElement;
   const selfTestCopyBtn = el.querySelector('.hud-selftest-copy') as HTMLButtonElement;
@@ -3043,6 +3036,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   let selfTestPendingPads: readonly PadDiagnostic[] | null = null;
   /** Taken by every load and spent by every close and teardown; see `loadSelfTestBody`. */
   let selfTestGeneration = 0;
+  /**
+   * The modules behind the Developer Tools pane's own controls (issue #1014): null until
+   * `loadDevTools` lands them, and kept from then on. `devToolsLoad` is that load while it is
+   * in flight or landed, shared by the open and every press, and forgotten if it fails.
+   */
+  let devTools: DevToolsModules | null = null;
+  let devToolsLoad: Promise<DevToolsModules> | null = null;
+  /**
+   * Taken by every wait on that load and spent by every close, replace and teardown; see
+   * `whenDevTools`.
+   */
+  let devToolsGeneration = 0;
   const layoutOpenCbs: Array<() => void> = [];
   const layoutCloseCbs: Array<() => void> = [];
   const layoutRequestCbs: Array<(request: LayoutRequest) => void> = [];
@@ -4005,7 +4010,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * A LOOKUP rather than the two-way `=== resetStatsBtn` ternary it replaces (issue #252):
    * with three developer actions joining the two resets, that ternary would have restored
    * "Reset progress" onto whichever action was armed. The developer ones are labelled from
-   * `DEV_ACTIONS`, which is the same place the markup gets them.
+   * `DEV_ACTIONS`, which is the catalogue the markup's labels are tested against.
    */
   function restingLabel(btn: HTMLButtonElement): string {
     if (btn === resetStatsBtn) return 'Reset stats';
@@ -4015,7 +4020,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // function replaced; extending the lookup is the point of it being one.
     if (btn === prodSaveBtn) return 'Use Production Save';
     if (btn === devResetBtn) return 'Reset Developer Data';
-    return DEV_ACTIONS[btn.dataset.action as DevActionId].label;
+    // An action is armed only once its catalogue has loaded (issue #1014), so the catalogue is
+    // always here when this runs; the `''` only spares the type a null it never meets.
+    return devTools?.actions.DEV_ACTIONS[btn.dataset.action as DevActionId].label ?? '';
   }
 
   /**
@@ -4305,7 +4312,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       refreshDevActions();
       refreshNamespace();
       swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
+      // The pane's modules load on its first open (issue #1014), after the arrival focus as the
+      // self-test's body does, and the actions are revealed once their catalogue is there;
+      // after that, the refresh above is what decides them.
+      if (devTools === null) whenDevTools(revealDevActions);
     } else {
+      devToolsGeneration += 1; // an answer still waiting on the load now writes nothing
       closeSurface(DEVTOOLS_SURFACE);
       // Same reason the self-test's report field is cleared on close (issue #247 following
       // #599): a URL or a report left in the field is a stale statement about a session that
@@ -4313,6 +4325,73 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       diagOutEl.value = '';
       diagOutEl.classList.add('hud-diag-out--hidden');
     }
+  }
+
+  /**
+   * Loads the three modules behind the Developer Tools pane's own controls -- `dev-actions`,
+   * `dev-diagnostics` and `dev-exports` (issue #1014) -- in the shape `loadSelfTestBody` uses:
+   * dynamic imports, so an ordinary page downloads none of them.
+   *
+   * ONE LOAD FOR THE THREE, kept once it lands. Every control needs two of them -- Pin the
+   * diagnostics, an action its catalogue and the diagnostics for its URL, an export its own
+   * module and the report it builds on -- so three loads would be three failure states for
+   * one pane. The open starts it and a press joins it; a press with no load in flight (after
+   * a failed one, or from a test that never opened the pane) starts it. The load builds
+   * nothing and listens to nothing, so it is bound to no generation; what waits on it is.
+   *
+   * A FAILED LOAD is forgotten, so the next open or press tries again; `whenDevTools` reports
+   * it.
+   */
+  function loadDevTools(): Promise<DevToolsModules> {
+    devToolsLoad ??= Promise.all([
+      import('./dev-actions'),
+      import('./dev-diagnostics'),
+      import('./dev-exports'),
+    ]).then(
+      ([actions, diagnostics, exports]) => (devTools = { actions, diagnostics, exports }),
+      (err: unknown) => {
+        devToolsLoad = null;
+        throw err;
+      },
+    );
+    return devToolsLoad;
+  }
+
+  /**
+   * Runs `run` with the pane's modules: at once when they have landed, which is every press
+   * after the open's load, so Copy still selects its text in the press's own task; otherwise
+   * when the load lands (issue #1014).
+   *
+   * A PRESS READS THE SESSION FIRST. Every caller reads what it reports -- the diagnostics
+   * input, the round, the captured frame -- before calling this, so a press that waits still
+   * describes the instant it was made. Only the formatting, which is the modules', waits.
+   *
+   * WHY THE GENERATION, as for `loadSelfTestBody`: the load spans at least one turn of the
+   * event loop, and the pane can be closed, replaced or torn down inside it. Every wait takes
+   * a generation, and every close, every replace (the layer's `release`) and `dispose` spends
+   * one, so an answer that lands after them writes nothing into a field cleared or discarded.
+   *
+   * A FAILED LOAD (offline, or a chunk name a deploy made stale) is written into the field, as
+   * a failed export is, rather than left as an unhandled rejection, which `boot.ts` treats as
+   * the match failing whenever a session exists. A browser may keep the failure for the life
+   * of the page, so the line asks for a reload.
+   */
+  function whenDevTools(run: (modules: DevToolsModules) => void): void {
+    if (devTools !== null) {
+      run(devTools);
+      return;
+    }
+    const generation = devToolsGeneration;
+    void loadDevTools().then(
+      (modules) => {
+        if (generation === devToolsGeneration) run(modules);
+      },
+      (err: unknown) => {
+        if (generation !== devToolsGeneration) return;
+        const reason = err instanceof Error ? err.message : String(err);
+        showExportNote(`The developer tools could not be loaded (${reason}). Reload the page to try again.`);
+      },
+    );
   }
 
   /**
@@ -4851,6 +4930,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       container: devToolsView,
       open: () => showDeveloperTools(true),
       close: () => showDeveloperTools(false),
+      // Replaced, most often from three of its own buttons (Configuration, the Self-Test, the
+      // Gallery): a press still waiting on the developer modules (issue #1014) must not answer
+      // into the pane that is leaving, and the field is cleared for the reason the close
+      // clears it.
+      release: () => {
+        devToolsGeneration += 1;
+        diagOutEl.value = '';
+        diagOutEl.classList.add('hud-diag-out--hidden');
+      },
     },
     'controller-selftest': {
       container: selfTestView,
@@ -5398,7 +5486,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleDiagCopy = (): void => {
     const input = diagnosticsInput();
     if (input === null) return;
-    showDiagnostics(formatDiagnostics(input));
+    whenDevTools(({ diagnostics }) => showDiagnostics(diagnostics.formatDiagnostics(input)));
   };
 
   /*
@@ -5411,10 +5499,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleDiagPin = (): void => {
     const input = diagnosticsInput();
     if (input === null) return;
-    const url = pinnedSeedUrl(input);
-    showDiagnostics(
-      url ?? 'No session is running, so there is no resolved seed to pin. Start a round and press this again.',
-    );
+    whenDevTools(({ diagnostics }) => {
+      const url = diagnostics.pinnedSeedUrl(input);
+      showDiagnostics(
+        url ?? 'No session is running, so there is no resolved seed to pin. Start a round and press this again.',
+      );
+    });
   };
 
   /*
@@ -5422,9 +5512,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * saves it and says it. The note goes in the same field without selecting it or touching the
    * clipboard: it describes a file, and is not itself the thing to copy.
    *
-   * A FAILURE IS REPORTED, NOT THROWN. Everything from reading the session to saving the file
-   * runs inside one `try`, and the port has only readers, so a failed export leaves the field
+   * A FAILURE IS REPORTED, NOT THROWN. Reading the session and building and saving the file
+   * each run inside a `try`, and the port has only readers, so a failed export leaves the field
    * saying what failed and the session as it was.
+   *
+   * TWO HALVES (issue #1014): `read` runs at the press and reads the session, and what it
+   * returns builds the file once the pane's modules are there -- at once, after the open's load.
    */
   const showExportNote = (text: string): void => {
     diagOutEl.value = text;
@@ -5432,32 +5525,47 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     diagOutEl.scrollTop = 0;
   };
 
-  const runExport = (label: string, build: () => ExportResult): void => {
+  const runExport = (label: string, read: () => (modules: DevToolsModules) => ExportResult): void => {
     const downloads = opts.developerDownloads;
     if (downloads === undefined || opts.developerPage === undefined) return;
-    let result: ExportResult;
-    try {
-      result = build();
-      if (result.kind === 'file') downloads.saveText(result.text, result.fileName, result.type);
-    } catch (err) {
+    const fail = (err: unknown): void => {
       const reason = err instanceof Error ? err.message : String(err);
       showExportNote(`${label} failed, so no file was saved: ${reason}`);
+    };
+    let build: (modules: DevToolsModules) => ExportResult;
+    try {
+      build = read();
+    } catch (err) {
+      fail(err);
       return;
     }
-    showExportNote(result.note);
+    whenDevTools((modules) => {
+      let result: ExportResult;
+      try {
+        result = build(modules);
+        if (result.kind === 'file') downloads.saveText(result.text, result.fileName, result.type);
+      } catch (err) {
+        fail(err);
+        return;
+      }
+      showExportNote(result.note);
+    });
   };
 
   const handleExportDiagnostics = (): void =>
     runExport('Download Diagnostics', () => {
       const input = diagnosticsInput() as DiagnosticsInput;
       const port = input.session === null ? null : (devExportPort?.() ?? null);
-      return diagnosticsExport(input, port === null ? null : port.round());
+      const round = port === null ? null : port.round();
+      return ({ exports }) => exports.diagnosticsExport(input, round);
     });
 
   /*
    * The screenshot's save is ASYNCHRONOUS (PNG encoding), so a failure can arrive after the click
    * has returned; both the synchronous and the late failure land in the field. The renderer copied
-   * the pixels before the encoder runs, so a later frame cannot change what is saved.
+   * the pixels before the encoder runs, so a later frame cannot change what is saved -- and the
+   * frame is captured at the press, before any wait on the modules (issue #1014), because a frame
+   * captured once they had loaded would be a later one than the developer saw.
    */
   const handleExportScreenshot = (): void => {
     const downloads = opts.developerDownloads;
@@ -5469,12 +5577,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     try {
       const port = devExportPort?.() ?? null;
       if (port === null) {
-        showExportNote(NO_SESSION_SCREENSHOT_NOTE);
+        whenDevTools(({ exports }) => showExportNote(exports.NO_SESSION_SCREENSHOT_NOTE));
         return;
       }
       const capture = port.captureFrame();
-      const shot = screenshotExport(diagnosticsSource?.() ?? null, port.round(), capture);
-      downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);
+      const session = diagnosticsSource?.() ?? null;
+      const round = port.round();
+      whenDevTools(({ exports }) => {
+        try {
+          const shot = exports.screenshotExport(session, round, capture);
+          downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);
+        } catch (err) {
+          fail(err);
+        }
+      });
     } catch (err) {
       fail(err);
     }
@@ -5483,7 +5599,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleExportReplay = (): void =>
     runExport('Download Replay', () => {
       const port = devExportPort?.() ?? null;
-      return port === null ? { kind: 'unavailable', note: NO_SESSION_REPLAY_NOTE } : replayExport(port.replay());
+      const trace = port === null ? null : port.replay();
+      return ({ exports }) =>
+        port === null ? { kind: 'unavailable', note: exports.NO_SESSION_REPLAY_NOTE } : exports.replayExport(trace);
     });
 
   /**
@@ -5496,9 +5614,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * is shut.
    */
   function refreshDevActions(): void {
+    if (!revealDevActions()) disarmReset();
+  }
+
+  /**
+   * Shows the three actions when a round exists AND their catalogue has loaded (issue #1014),
+   * and says whether a round exists. Until the pane's modules land there is no label to show
+   * and no confirm label to arm with, so they are not offered -- the rule a control the
+   * session cannot serve already follows.
+   *
+   * Split from `refreshDevActions` because the load LANDING calls this alone: it disarms
+   * nothing, so a Use Production Save armed while the load was in flight stays armed.
+   */
+  function revealDevActions(): boolean {
     const available = (devActionPort?.() ?? null)?.hasRound() === true;
-    for (const btn of devActionBtns) btn.hidden = !available;
-    if (!available) disarmReset();
+    for (const btn of devActionBtns) btn.hidden = !available || devTools === null;
+    return available;
   }
 
   /*
@@ -5507,11 +5638,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * writes the answer where Copy Diagnostics already writes its report, so the seed a reroll
    * lands on is one selection away from a URL.
    */
-  const runDevActionFor = (btn: HTMLButtonElement): void => {
+  const runDevActionFor = (btn: HTMLButtonElement, { actions, diagnostics }: DevToolsModules): void => {
     const id = btn.dataset.action as DevActionId;
     const port = devActionPort?.() ?? null;
     if (port === null) return;
-    const outcome = runDevAction(id, port);
+    const outcome = actions.runDevAction(id, port);
     if (outcome.kind === 'refused') {
       showDiagnostics('No round is running, so there is nothing to restart. Start a round and press this again.');
       return;
@@ -5520,11 +5651,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // it, because "reports an exact seed that can immediately be copied into a reproduction
     // URL" is the criterion, and a bare number still leaves the developer to build one.
     const input = diagnosticsInput();
-    const url = input === null ? null : pinnedSeedUrl({ ...input, session: input.session });
+    const url = input === null ? null : diagnostics.pinnedSeedUrl({ ...input, session: input.session });
     showDiagnostics(
       url === null
-        ? `${DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.`
-        : `${DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.\n${url}`,
+        ? `${actions.DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.`
+        : `${actions.DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.\n${url}`,
     );
   };
 
@@ -5596,9 +5727,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
   exportReplayBtn.addEventListener('click', handleExportReplay);
   for (const btn of devActionBtns) {
-    btn.addEventListener('click', () =>
-      handleDangerClick(btn, [() => runDevActionFor(btn)], DEV_ACTIONS[btn.dataset.action as DevActionId].confirmLabel),
-    );
+    btn.addEventListener('click', () => {
+      // Hidden until the catalogue has loaded (see `revealDevActions`), so only a programmatic
+      // click arrives before it -- and with no confirm label to arm with, it does nothing.
+      const modules = devTools;
+      if (modules === null) return;
+      const { confirmLabel } = modules.actions.DEV_ACTIONS[btn.dataset.action as DevActionId];
+      handleDangerClick(btn, [() => runDevActionFor(btn, modules)], confirmLabel);
+    });
   }
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
@@ -8588,6 +8724,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // Teardown does not run the pane's close, so it spends the generation itself: a self-test
       // load still in flight must not build into the tree this teardown discards.
       selfTestGeneration += 1;
+      devToolsGeneration += 1; // and a press still waiting on the developer modules writes nothing
       settingsLayoutBtn.removeEventListener('click', handleSettingsLayoutOpen);
       settingsLayoutBtn.removeEventListener('click', blurIfPointer);
       layoutBackBtn.removeEventListener('click', handleLayoutBack);

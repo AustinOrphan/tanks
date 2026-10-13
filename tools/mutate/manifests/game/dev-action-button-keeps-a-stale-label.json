@@ -1,0 +1,16 @@
+{
+  "id": "dev-action-button-keeps-a-stale-label",
+  "file": "src/game/hud.ts",
+  "find": "data-action=\"reroll-seed\" type=\"button\">Reroll Seed</button>",
+  "replace": "data-action=\"reroll-seed\" type=\"button\">Reroll</button>",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) an action clicked before its catalogue loads throws nothing, arms nothing and rebuilds nothing",
+    "the developer modules load when the pane opens (issue #1014) the markup names each action exactly as the catalogue does, one button per entry",
+    "the three developer actions (issue #252) offers all three, labelled from the catalogue"
+  ],
+  "why": "Issue #1014. The markup's label for Reroll Seed drifts from the catalogue's -- the stale word on a button that still dispatches its id, which is the failure the catalogue being the single source exists to stop. The labels are in the markup since #1014 (so a button has an accessible name before the catalogue loads with the pane), and the comparison with `DEV_ACTIONS` is what holds them to it."
+}

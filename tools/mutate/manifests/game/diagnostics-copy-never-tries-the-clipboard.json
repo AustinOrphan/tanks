@@ -1,0 +1,14 @@
+{
+  "id": "diagnostics-copy-never-tries-the-clipboard",
+  "file": "src/game/hud.ts",
+  "find": "    diagOutEl.scrollTop = 0;\n    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;\n    void clipboard?.writeText(text).catch(() => {});\n  };\n\n  const handleDiagCopy",
+  "replace": "    diagOutEl.scrollTop = 0;\n  };\n\n  const handleDiagCopy",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) Copy, when the clipboard refuses pressed before the load still selects its report when it lands, and the refusal escapes nowhere"
+  ],
+  "why": "Issue #1014. Copy stops attempting the clipboard. The selection is the path that always works, but the attempt is still made, best effort, and a Copy answered after the load must still make it."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "dev-tools-replace-keeps-the-field",
+  "file": "src/game/hud.ts",
+  "find": "        devToolsGeneration += 1;\n        diagOutEl.value = '';\n        diagOutEl.classList.add('hud-diag-out--hidden');\n      },\n",
+  "replace": "        devToolsGeneration += 1;\n      },\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a load that fails leaves no note behind when another pane replaces the pane"
+  ],
+  "why": "Issue #1014. A replace leaves the field as it was, so a failed load's note, written while the pane was open, still asks for a reload at the next open, beside the catalogue that open did load. The close clears the field for the same reason (issue #247): what is left in it is a stale statement."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "dev-actions-offered-before-their-catalogue",
+  "file": "src/game/hud.ts",
+  "find": "    for (const btn of devActionBtns) btn.hidden = !available || devTools === null;",
+  "replace": "    for (const btn of devActionBtns) btn.hidden = !available;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) offers the actions only once their catalogue has loaded, even with a round running"
+  ],
+  "why": "Issue #1014. The three actions are offered as soon as a round exists, before their catalogue has loaded, so a press arrives with no confirm label to arm with and the action does nothing."
+}
