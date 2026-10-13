@@ -34,6 +34,7 @@ who doubts a row can run it rather than re-inspect by eye.
 | The shell-capacity flash overlaps no chip and no board, and stays inside the safe area | same | same |
 | Topbar chips do not move when the flash appears | same | same |
 | A screen's boxes and computed styles match a committed baseline | `tools/screens/check.mjs` | every state the screen gate captures |
+| A measured element's `role` and its `aria-label`, `-labelledby`, `-describedby`, `-live`, `-modal`, `-expanded`, `-pressed` and `-current` attributes match a committed baseline, exactly (#937) | same | the elements each state measures, not the whole screen |
 | A captured screen raises no uncaught page error | same — page errors fail on their own, outside the measurement hash | same |
 | The board paints, is not a flat fill, and fills its viewport | `tools/visual/verify.mjs` | 4 viewports |
 
@@ -52,7 +53,7 @@ pages.
 | Thumb reach on a real device | A viewport is not a hand | none |
 | Rendered pixels against a reference image | No gate in this repository compares pixels to a committed image | none |
 | Forced-colors and OS high-contrast modes | Not driven by any required check | none |
-| Screen-reader output | Not driven at all | none |
+| Screen-reader output | Not driven at all. The screen gate compares role and aria attributes AS WRITTEN on the measured elements (#937), never the computed accessibility tree, so implicit roles, names computed from content and what is actually announced are all unproven | the attribute row in the first table |
 
 A reviewer who finds something in the left column has found something no machine here can.
 A reviewer who re-measures something in the first table has spent the sitting's budget on a
