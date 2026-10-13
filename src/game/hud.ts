@@ -3029,7 +3029,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   let devTools: DevToolsModules | null = null;
   let devToolsLoad: Promise<DevToolsModules> | null = null;
-  /** Taken by every wait on that load and spent by every close and teardown; see `whenDevTools`. */
+  /**
+   * Taken by every wait on that load and spent by every close, replace and teardown; see
+   * `whenDevTools`.
+   */
   let devToolsGeneration = 0;
   const layoutOpenCbs: Array<() => void> = [];
   const layoutCloseCbs: Array<() => void> = [];
@@ -4337,9 +4340,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * describes the instant it was made. Only the formatting, which is the modules', waits.
    *
    * WHY THE GENERATION, as for `loadSelfTestBody`: the load spans at least one turn of the
-   * event loop, and the pane can be closed or torn down inside it. Every wait takes a
-   * generation and every close and `dispose` spends one, so an answer that lands after them
-   * writes nothing into the field the close has just cleared.
+   * event loop, and the pane can be closed, replaced or torn down inside it. Every wait takes
+   * a generation, and every close, every replace (the layer's `release`) and `dispose` spends
+   * one, so an answer that lands after them writes nothing into a field cleared or discarded.
    *
    * A FAILED LOAD (offline, or a chunk name a deploy made stale) is written into the field, as
    * a failed export is, rather than left as an unhandled rejection, which `boot.ts` treats as
@@ -4900,6 +4903,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       container: devToolsView,
       open: () => showDeveloperTools(true),
       close: () => showDeveloperTools(false),
+      // Replaced, most often from three of its own buttons (Configuration, the Self-Test, the
+      // Gallery): a press still waiting on the developer modules (issue #1014) must not answer
+      // into the pane that is leaving, and the field is cleared for the reason the close
+      // clears it.
+      release: () => {
+        devToolsGeneration += 1;
+        diagOutEl.value = '';
+        diagOutEl.classList.add('hud-diag-out--hidden');
+      },
     },
     'controller-selftest': {
       container: selfTestView,

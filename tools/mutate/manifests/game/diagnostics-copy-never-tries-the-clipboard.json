@@ -1,0 +1,11 @@
+{
+  "id": "diagnostics-copy-never-tries-the-clipboard",
+  "file": "src/game/hud.ts",
+  "find": "    diagOutEl.scrollTop = 0;\n    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;\n    void clipboard?.writeText(text).catch(() => {});\n  };\n\n  const handleDiagCopy",
+  "replace": "    diagOutEl.scrollTop = 0;\n  };\n\n  const handleDiagCopy",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "why": "Issue #1014. Copy stops attempting the clipboard. The selection is the path that always works, but the attempt is still made, best effort, and a Copy answered after the load must still make it."
+}
