@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-aria-absent-equals-empty",
+  "file": "tools/screens/baseline.mjs",
+  "find": "      if (ev !== av) changes.push({ selector, field: `aria.${name}`, expected: ev, actual: av });",
+  "replace": "      if ((ev ?? '') !== (av ?? '')) changes.push({ selector, field: `aria.${name}`, expected: ev, actual: av });",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) tells an empty attribute from an absent one"
+  ],
+  "why": "Treats an empty attribute and a missing one as the same. aria-label=\"\" is a real, and usually wrong, accessible name -- it can blank a control that has visible text -- while no aria-label falls back to the content. ui.ts removes aria-describedby rather than emptying it for exactly this reason, so a screen that started writing an empty attribute instead must fail the check."
+}

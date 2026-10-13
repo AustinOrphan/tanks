@@ -1,0 +1,27 @@
+{
+  "id": "screen-gate-ignores-aria-changes",
+  "file": "tools/screens/baseline.mjs",
+  "find": "      if (ev !== av) changes.push({ selector, field: `aria.${name}`, expected: ev, actual: av });",
+  "replace": "      if (false) changes.push({ selector, field: `aria.${name}`, expected: ev, actual: av });",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost role",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-label",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-labelledby",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-describedby",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-live",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-modal",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-expanded",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-pressed",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-current",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a renamed accessible name, and does not trim a value to make it match",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) tells an empty attribute from an absent one",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) gives an attribute no tolerance, even beside a box change that has one",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) reads an entry with no aria object as one with no attributes, without throwing",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails the state and names the state, the selector and the attribute in the verdict"
+  ],
+  "why": "Compares the aria attributes and never reports a difference, which is the comparator as it stood before issue #937 with a loop added for show. A screen whose confirm dialog lost role=\"alertdialog\", or whose level card lost its accessible name, would pass the required screens check while a screen reader announced something else entirely. The capture would still record the change in actual.json; nothing would ever fail to make anyone read it."
+}
