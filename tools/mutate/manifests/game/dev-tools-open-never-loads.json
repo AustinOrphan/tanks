@@ -1,8 +1,8 @@
 {
   "id": "dev-tools-open-never-loads",
   "file": "src/game/hud.ts",
-  "find": "      whenDevTools(revealDevActions);",
-  "replace": "      void revealDevActions;",
+  "find": "      if (devTools === null) whenDevTools(revealDevActions);",
+  "replace": "      if (devTools === null) void revealDevActions;",
   "expect": "killed",
   "tests": [
     "src/game/hud.diagnostics.test.ts"

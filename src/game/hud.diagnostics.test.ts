@@ -892,17 +892,26 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
       if (before === undefined) delete (navigator as { clipboard?: unknown }).clipboard;
       else Object.defineProperty(navigator, 'clipboard', before);
     });
-    function refuseClipboard(): ReturnType<typeof vi.fn> {
+    /**
+     * Installs a clipboard whose every write is refused, and returns the writes it was asked for.
+     * A plain function, not `vi.fn`: a mock attaches its own handlers to a promise it returns
+     * (to record how it settled), which would mark the refusal handled and hide the leak.
+     */
+    function refuseClipboard(): string[] {
       before = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
-      const writeText = vi.fn(() => Promise.reject(new DOMException('No user activation', 'NotAllowedError')));
+      const asked: string[] = [];
+      const writeText = (text: string): Promise<void> => {
+        asked.push(text);
+        return Promise.reject(new DOMException('No user activation', 'NotAllowedError'));
+      };
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
-      return writeText;
+      return asked;
     }
 
     it('pressed before the load still selects its report when it lands, and the refusal escapes nowhere', async () => {
       // Negative controls: a selection made only once the clipboard accepts, and a refusal left
       // unhandled.
-      const writeText = refuseClipboard();
+      const asked = refuseClipboard();
       const root = mountDev({ developerPage: PAGE });
       hud!.setDiagnosticsSource(() => SESSION);
       const escaped = await escapedDuring(() => {
@@ -911,8 +920,8 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
         expect(out(root).value, 'answered before the load').toBe('');
       });
       expect(escaped).toEqual([]);
-      expect(writeText).toHaveBeenCalledTimes(1);
       const field = out(root);
+      expect(asked, 'the clipboard was tried, with the report').toEqual([field.value]);
       expect(field.value).toContain('- Seed: 4242424242');
       expect(document.activeElement).toBe(field);
       expect(field.selectionStart).toBe(0);
@@ -1008,17 +1017,20 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
     }
   });
 
-  it('an armed action lapses when the pane is left, so the press on return arms again', async () => {
-    // Negative control: a layer change that keeps the arm.
+  it('an armed action lapses when another pane opens over it, so the press on return arms again', async () => {
+    // Read the moment Configuration opens: every Back re-enters its origin through `setState`,
+    // which disarms on its own, so after one the layer's own disarm could not be told apart.
+    // Negative control: opening a layer that keeps the arm.
     const root = await mountDevLoaded({ developerPage: PAGE });
     const rebuilt: Array<number | null> = [];
     hud!.setDevActionPort(() => livePort(rebuilt));
     const reroll = q<HTMLButtonElement>(root, '.hud-devact[data-action="reroll-seed"]');
     q<HTMLButtonElement>(root, '.hud-devtools-open').click();
     reroll.click();
-    q<HTMLButtonElement>(root, '.hud-devtools-back').click();
-    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    expect(reroll.textContent).toBe(DEV_ACTIONS['reroll-seed'].confirmLabel);
+    q<HTMLButtonElement>(root, '.hud-devcfg-open').click();
     expect(reroll.textContent).toBe(DEV_ACTIONS['reroll-seed'].label);
+    q<HTMLButtonElement>(root, '.hud-devcfg-back').click();
     reroll.click();
     expect(rebuilt).toEqual([]);
   });

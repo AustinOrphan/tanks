@@ -4282,9 +4282,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       refreshDevActions();
       refreshNamespace();
       swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
-      // The pane's modules load on its open (issue #1014), after the arrival focus as the
-      // self-test's body does, and the actions are revealed once their catalogue is there.
-      whenDevTools(revealDevActions);
+      // The pane's modules load on its first open (issue #1014), after the arrival focus as the
+      // self-test's body does, and the actions are revealed once their catalogue is there;
+      // after that, the refresh above is what decides them.
+      if (devTools === null) whenDevTools(revealDevActions);
     } else {
       devToolsGeneration += 1; // an answer still waiting on the load now writes nothing
       closeSurface(DEVTOOLS_SURFACE);

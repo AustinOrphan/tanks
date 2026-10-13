@@ -7,5 +7,5 @@
   "tests": [
     "src/game/hud.diagnostics.test.ts"
   ],
-  "why": "Issue #1014. Opening a layer stops disarming, so a developer action armed before Back is still armed when the pane opens again and its first press there fires it."
+  "why": "Issue #1014. Opening a layer stops disarming, so a developer action armed in Developer Tools stays armed while Configuration is open over it. Read at that moment: every Back re-enters its origin through `setState`, which disarms on its own, so a case that read the arm only after coming back could not see this -- measured, it survived that shape."
 }

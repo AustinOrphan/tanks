@@ -1,8 +1,8 @@
 {
   "id": "dev-tools-load-landing-disarms",
   "file": "src/game/hud.ts",
-  "find": "      whenDevTools(revealDevActions);",
-  "replace": "      whenDevTools(refreshDevActions);",
+  "find": "      if (devTools === null) whenDevTools(revealDevActions);",
+  "replace": "      if (devTools === null) whenDevTools(refreshDevActions);",
   "expect": "killed",
   "tests": [
     "src/game/hud.diagnostics.test.ts"
