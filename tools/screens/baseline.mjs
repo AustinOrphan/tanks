@@ -132,11 +132,35 @@ export function formatPageErrorRefusal(verdict, stateId) {
  * 54px survived the hinting flag. A real layout regression in this codebase is a control that
  * moved, a panel that reflowed or a line that wrapped -- tens of pixels, not two.
  *
- * It applies to BOX GEOMETRY ONLY. `present`, `visible`, `text` and every watched style
- * property stay exact, because none of them is a rasteriser artefact: a control that vanished,
+ * It applies to BOX GEOMETRY ONLY. `present`, `visible`, `text`, every recorded aria attribute
+ * and every watched style property stay exact, because none of them is a rasteriser artefact: a control that vanished,
  * a label that changed wording or a colour that moved is a real difference at any magnitude.
  */
 export const BOX_TOLERANCE_PX = 2;
+
+/**
+ * The accessibility attributes a measurement records beside its box and style (issue #937).
+ *
+ * The owner's ruling names exactly these: `role` and the eight aria-* the states already use.
+ * Before #937 nothing in the screens baseline described what a state exposes to assistive
+ * technology, so a dialog that lost its role, or a control that lost its accessible name,
+ * passed the required check unseen.
+ *
+ * ATTRIBUTES AS WRITTEN, never a computed role and never an `ariaSnapshot`. The ruling
+ * excludes both because Chromium derives them, and that derivation can shift between browser
+ * versions inside a required check. An attribute changes only when the app's own DOM changes,
+ * which is the signal this gate wants. The cost is the IMPLICIT role: a `<button>` carries no
+ * `role` attribute, so a button replaced by a `<div>` records nothing different here and has to
+ * be caught by its text, box or style instead.
+ *
+ * Defined HERE, in the pure module, rather than in `capture.mjs`: the capture passes the list
+ * into the page as an argument (a page function cannot import), and the tests read it from a
+ * module with no Playwright behind it. The order is the order a capture writes the keys in.
+ */
+export const ARIA_ATTRIBUTES = Object.freeze([
+  'role', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-live', 'aria-modal',
+  'aria-expanded', 'aria-pressed', 'aria-current',
+]);
 
 /** Whether two box values agree to within the tolerance; exact for anything non-numeric. */
 export function boxWithinTolerance(expected, actual, tolerance = BOX_TOLERANCE_PX) {
@@ -175,6 +199,16 @@ export function diffMeasurements(expected, actual) {
       if (!boxWithinTolerance(ev, av)) {
         changes.push({ selector, field: `box.${axis}`, expected: ev, actual: av });
       }
+    }
+    // EXACT, like `text`: an attribute is the app's own string, not a rasteriser reading, so
+    // none of the box tolerance's argument applies, and no value is trimmed or normalised.
+    // A side with no `aria` object reads as one with no attributes, which is how a capture
+    // records an element that has none -- and how a baseline written before #937 reads.
+    const attributes = new Set([...Object.keys(e.aria ?? {}), ...Object.keys(a.aria ?? {})]);
+    for (const name of [...attributes].sort()) {
+      const ev = e.aria?.[name];
+      const av = a.aria?.[name];
+      if (ev !== av) changes.push({ selector, field: `aria.${name}`, expected: ev, actual: av });
     }
     const styles = new Set([...Object.keys(e.style ?? {}), ...Object.keys(a.style ?? {})]);
     for (const prop of [...styles].sort()) {

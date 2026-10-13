@@ -14,6 +14,7 @@ import { serveStatic } from '../visual/static-server.mjs';
 import { runStep, webglOverrideSource, applyEntryMode } from './steps.mjs';
 import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { GAME_CANVAS } from '../gallery/enter-gameplay.mjs';
+import { ARIA_ATTRIBUTES } from './baseline.mjs';
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
@@ -81,25 +82,50 @@ async function measure(
   /** @type {readonly string[]} */ selectors,
   /** @type {readonly string[]} */ extra = [],
 ) {
-  return page.evaluate(
-    ([sels, props]) => sels.map((sel) => {
-      const el = document.querySelector(sel);
-      if (el === null) return { selector: sel, present: false };
-      const cs = getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      const style = {};
-      for (const p of props) style[p] = cs.getPropertyValue(p);
-      return {
-        selector: sel,
-        present: true,
-        visible: cs.display !== 'none' && r.width > 0 && r.height > 0,
-        box: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
-        text: (el.textContent ?? '').trim().slice(0, 200),
-        style,
-      };
-    }),
-    [selectors, [...WATCHED, ...extra]],
-  );
+  return page.evaluate(measureInPage, [selectors, [...WATCHED, ...extra], [...ARIA_ATTRIBUTES]]);
+}
+
+/**
+ * The measurement itself, which runs INSIDE the page: one entry per selector, first match only.
+ *
+ * CLOSES OVER NOTHING. Playwright sends this function to the page as source text, so any module
+ * name its body used would not exist there. That is why the computed properties and the aria
+ * attribute names both arrive as arguments rather than being read from this module.
+ *
+ * Exported so `capture.aria.test.ts` can run THIS function against a jsdom document. Before
+ * #937 the body was an inline arrow that no test could reach, so what a capture recorded was
+ * guarded only by reading this file's source.
+ *
+ * `aria` (issue #937) holds each listed attribute the element CARRIES, as the raw string
+ * `getAttribute` returns: `aria-label=""` is recorded as `""`, distinct from no attribute. An
+ * attribute the element lacks is omitted rather than written as null, and so is the whole
+ * object when it would be empty -- nine nulls on each of the baseline's measured elements would
+ * bury the attributes that exist under the ones that do not. It sits before `style` so that
+ * adding it to a committed baseline inserts lines and changes none.
+ */
+export function measureInPage(/** @type {[string[], string[], string[]]} */ [sels, props, ariaNames]) {
+  return sels.map((sel) => {
+    const el = document.querySelector(sel);
+    if (el === null) return { selector: sel, present: false };
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const style = {};
+    for (const p of props) style[p] = cs.getPropertyValue(p);
+    const aria = {};
+    for (const name of ariaNames) {
+      const value = el.getAttribute(name);
+      if (value !== null) aria[name] = value;
+    }
+    return {
+      selector: sel,
+      present: true,
+      visible: cs.display !== 'none' && r.width > 0 && r.height > 0,
+      box: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      text: (el.textContent ?? '').trim().slice(0, 200),
+      ...(Object.keys(aria).length > 0 ? { aria } : {}),
+      style,
+    };
+  });
 }
 
 /**
