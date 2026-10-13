@@ -620,9 +620,9 @@ describe('hud: stock chips in the session\'s owner palette (issue #1057)', () =>
   });
 
   it('NEGATIVE CONTROL: a two-entry strip, the identity threshold, takes High contrast', () => {
-    // The case above passing because the palette never reached the strip would look the same
-    // there; here the same HUD, one entry more, has to paint High contrast. Two entries, not
-    // four, so a gate one player late fails. Population: 2 FFA slots, then teams A and B.
+    // The case above would also pass if the palette never reached the strip; here a HUD handed
+    // the same palette, with one entry more, has to paint High contrast. Two entries, not four,
+    // so a gate one player late fails. Population: 2 FFA slots, then teams A and B.
     const { hud: h, root } = mount();
     h.setStockPalette(OWNER_PALETTES['high-contrast']);
     h.setState('playing');
