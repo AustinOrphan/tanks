@@ -240,8 +240,8 @@ and VS do not replenish or advance it.
 generic disabled button.
 
 **Layout:** card/list on phone; preview-plus-list on desktop/TV. Remember the last highlighted
-level; until that is remembered, arrival focus is the first level offered. Back returns to Main Menu
-and does not modify the campaign.
+level; until that is remembered, arrival focus is the first level offered. Back returns to Main
+Menu and does not modify the campaign.
 
 ### VS Setup
 
@@ -644,9 +644,10 @@ opened from Pause returns to Pause; Main Menu always returns to the root without
 7. Main Menu returns directly to the root.
 
 The common first VS match drops from **five confirmations to three**: Launch, Versus, Start --
-VS Setup arrives with Start focused. A rematch drops from as many as **four actions to one**. From Pause, changing configuration becomes
-Pause → Change Setup rather than Quit → title/menu → Versus → setup. Every removed action was an
-implementation artifact, not a meaningful player decision.
+VS Setup arrives with Start focused. A rematch drops from as many as **four actions to one**.
+From Pause, changing configuration becomes Pause → Change Setup rather than Quit → title/menu →
+Versus → setup. Every removed action was an implementation artifact, not a meaningful player
+decision.
 
 ## Final direction
 
