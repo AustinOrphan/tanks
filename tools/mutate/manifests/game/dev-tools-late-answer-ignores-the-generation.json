@@ -1,0 +1,15 @@
+{
+  "id": "dev-tools-late-answer-ignores-the-generation",
+  "file": "src/game/hud.ts",
+  "find": "        if (generation === devToolsGeneration) run(modules);",
+  "replace": "        run(modules);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a press answered after the pane closed writes nothing into the field the close cleared",
+    "the developer modules load when the pane opens (issue #1014) a teardown during the load writes nothing into the discarded field"
+  ],
+  "why": "Issue #1014. An answer that lands after the load ignores the generation, so neither a close nor a teardown can drop it."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "hud-css-pip-cue-ends-filled",
+  "file": "src/game/hud.css",
+  "find": "  100% { border-width: 2px; transform: scale(1); }",
+  "replace": "  100% { border-width: 2px; box-shadow: inset 0 0 0 1px currentColor; transform: scale(1); }",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.css.test.ts"
+  ],
+  "why": "The emptied pip's cue ends on the held pip's fill (issue #1022's review). Fill mode `both` holds the last frame until the strip next rebuilds, so the pip the player just lost stays a 3px ring rather than the lost pip's 2px one. This is the negative control of the test that pins every frame before the last to the held pip: the same assertion requires the last frame to be the bare 2px ring.",
+  "killedBy": [
+    "hud.css: the stock-loss cue arms (issue #230) starts a cued pip from the held pip's own border and fill, so a 9px pip keeps its box (issue #1022)"
+  ]
+}

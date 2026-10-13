@@ -1,0 +1,14 @@
+{
+  "id": "dev-replay-reads-the-trace-after-the-load",
+  "file": "src/game/hud.ts",
+  "find": "        port === null ? { kind: 'unavailable', note: exports.NO_SESSION_REPLAY_NOTE } : exports.replayExport(trace);",
+  "replace": "        port === null ? { kind: 'unavailable', note: exports.NO_SESSION_REPLAY_NOTE } : exports.replayExport(port.replay());",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the exports (issue #254) pressed before the developer modules have loaded (issue #1014) Download Replay saves the trace as it was at the press"
+  ],
+  "why": "Issue #1014. Download Replay reads the recording once the modules have loaded instead of at the press, so a press during the load saves ticks recorded after it."
+}

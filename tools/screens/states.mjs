@@ -968,6 +968,11 @@ export const SCREEN_STATES = Object.freeze([
       { waitHidden: '.hud-panel' },
       { click: '.hud-devbadge' },
       { waitVisible: '.hud-devtools' },
+      // The actions are hidden until their catalogue loads with the pane (issue #1014), so the
+      // pane can be visible before them; each measured one is waited for by itself.
+      { waitVisible: '.hud-devact[data-action="restart-same-seed"]' },
+      { waitVisible: '.hud-devact[data-action="reroll-seed"]' },
+      { waitVisible: '.hud-devact[data-action="restart-round"]' },
     ],
     // Each action measured by its own id rather than by the shared class: `querySelector`
     // returns the first match, so one `.hud-devact` selector would photograph three controls

@@ -28,10 +28,17 @@ describe('developerExitSearch', () => {
   });
 
   it('drops retired developer parameters too', () => {
-    // DEPRECATED_DEV_PARAMS is empty today, so this passes one explicitly rather than
-    // asserting nothing. A retired parameter is still a developer parameter, and an Exit
-    // that left one behind would hand back a URL still carrying developer state.
+    // This passes its own list, so the mechanism is proven whatever the shipped list holds; the
+    // shipped `stockCue` is the next case. A retired parameter is still a developer parameter,
+    // and an Exit that left one behind would hand back a URL still carrying developer state.
     expect(developerExitSearch('?dev=1&oldFlag=1&keep=me', ['oldFlag'])).toBe('?keep=me');
+  });
+
+  it('drops stockCue with the shipped list, the flag issue #1022 removed', () => {
+    // An old #230 comparison URL, exited. THE NEGATIVE CONTROL is the same call with an empty
+    // list, the state before #1022 retired it: `stockCue` survives Exit as an unrelated parameter.
+    expect(developerExitSearch('?dev=1&stockCue=marks&keep=me')).toBe('?keep=me');
+    expect(developerExitSearch('?dev=1&stockCue=marks&keep=me', [])).toBe('?stockCue=marks&keep=me');
   });
 
   it('returns an empty string rather than a bare question mark', () => {

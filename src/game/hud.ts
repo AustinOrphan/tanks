@@ -292,7 +292,8 @@ import { menuTransitionClass, type MenuTransition } from './menu-transition';
 import { MODE_CHIP_LABELS, topbarDepartures, type TopbarTreatment } from './topbar-treatment';
 import type { VersusActionLayout } from '../presentation/versus-actions';
 import {
-  STOCK_CUE_MS, type StockCue, narrowPipLayout, narrowMarkLayout, NARROW_STRIP_QUERY, type PipLayout, type MarkLayout,
+  STOCK_CUE_MS, stockRowFor, type StockRow, narrowPipLayout, narrowMarkLayout, NARROW_STRIP_QUERY, type PipLayout,
+  type MarkLayout,
 } from '../presentation/stock-cue';
 import {
   type IdentityMarkerStyle,
@@ -378,23 +379,19 @@ import {
   type RelevanceSettingId,
 } from './control-relevance';
 import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
-import { DEV_ACTIONS, runDevAction, type DevActionId, type DevActionPort } from './dev-actions';
-import {
-  formatDiagnostics,
-  pinnedSeedUrl,
-  type DiagnosticsInput,
-  type SessionDiagnostics,
-} from './dev-diagnostics';
+// The three modules behind the Developer Tools pane's own controls are named for their TYPES
+// only: their values are loaded when the pane opens (issue #1014) -- see `loadDevTools`.
+import type { DevActionId, DevActionPort } from './dev-actions';
+import type { DiagnosticsInput, SessionDiagnostics } from './dev-diagnostics';
 import type { BuildIdentity } from './build-identity';
-import {
-  NO_SESSION_REPLAY_NOTE,
-  NO_SESSION_SCREENSHOT_NOTE,
-  diagnosticsExport,
-  replayExport,
-  screenshotExport,
-  type DevExportPort,
-  type ExportResult,
-} from './dev-exports';
+import type { DevExportPort, ExportResult } from './dev-exports';
+
+/** The modules `loadDevTools` lands, one field per module, so each control names what it runs. */
+interface DevToolsModules {
+  readonly actions: typeof import('./dev-actions');
+  readonly diagnostics: typeof import('./dev-diagnostics');
+  readonly exports: typeof import('./dev-exports');
+}
 
 /*
  * ---- WHAT EACH ENDING SAYS, AND WHAT IT OFFERS (issue #323) ----------------------
@@ -1515,13 +1512,13 @@ interface MarkerRadii {
 }
 
 /**
- * The same four outlines sized for FILL rather than for stroke (issue #230's `marks` arm).
+ * The same four outlines sized for FILL rather than for stroke (issue #230's `marks` row).
  *
  * A separate table, and not a tidy-up waiting to happen. The set above is tuned so the
  * outlines' CORNERS sit level, which is the right axis when the shape is a thin line: what
  * the eye measures on a hollow mark is how far it reaches. Filled, the eye measures ink as
  * well, and corner-level shapes are not area-level -- a square whose corners match a
- * circle's radius encloses a third less ink, which is how the first build of this arm
+ * circle's radius encloses a third less ink, which is how the first build of this row
  * rendered: P3's squares read visibly smaller than P1's circles at the same nominal size.
  *
  * NEITHER AXIS ALONE WORKS, which is the same finding #660 recorded for the outlines --
@@ -1555,9 +1552,11 @@ const markerXY = (angle: number, r: number): string =>
 /**
  * The `shape` outline for one slot as SVG body, with the caller's presentation attributes.
  *
- * Extracted so the leading identity marker (issue #778) and the `marks` stock arm (issue #230)
+ * Extracted so the leading identity marker (issue #778) and the `marks` stock row (issue #230)
  * draw the SAME outline from the same code rather than from the same table twice. They
  * differ only in their attributes: the marker is always stroked hollow, a held stock mark is filled.
+ * Since issue #1022 the row replaces the leading marker wherever the marker is `shape`, so in
+ * play only the row reaches this.
  */
 function shapeOutlineBody(
   slot: number, attrs: string, radii: MarkerRadii = MARKER_GLYPH_R,
@@ -1582,10 +1581,10 @@ function shapeOutlineBody(
 }
 
 /**
- * One stock, drawn as the slot's identity outline (issue #230's `marks` arm).
+ * One stock, drawn as the slot's identity outline (issue #230's `marks` row).
  *
  * HELD IS FILLED, LOST IS HOLLOW -- the same read `pips` gets from its border width, and the
- * reason this arm suppresses the separate leading marker: an outlined mark beside an outlined
+ * reason the row replaces the separate leading marker: an outlined mark beside an outlined
  * lost stock is two hollow copies of one shape, and slot 1's circle made them identical.
  *
  * Fill AND stroke, not fill alone, so a held mark keeps the same silhouette as a lost one at
@@ -1631,6 +1630,8 @@ function identityMarkerIcon(style: IdentityMarkerStyle, slot: number): string {
         + `${MARKER_GLYPH_STROKE}/>`;
     }).join('');
   } else {
+    // Unreached in play since issue #1022: an FFA entry under `shape` draws the `marks` row,
+    // which replaces this glyph (`stockRowFor`). Issue #1023 removes the leading mark entirely.
     body = shapeOutlineBody(slot, MARKER_GLYPH_STROKE);
   }
   // No accessible name and not focusable: the entry's own text already says which player
@@ -1717,22 +1718,18 @@ export interface HudOptions {
    */
   readonly versusActions?: VersusActionLayout | null;
   /**
-   * Issue #230's stock-loss cue arms: how the versus stock strip marks a stock just lost. `null`
-   * (and absent, which is every injected HUD) is the shipped strip, where only the digit changes.
-   * See presentation/stock-cue.ts.
-   */
-  readonly stockCue?: StockCue | null;
-  /**
-   * Issue #778's identity marker in the stock strip: the same mark that slot wears in the
-   * arena, which #234 ruled on as a pair. `null` (and absent, which is every injected HUD)
-   * draws no mark, the strip with identity in hue alone. The page's HUD is handed the
-   * shipped `shape` here unless the flag says otherwise (issue #922): `loop.ts` resolves the
-   * flag before this option sees it, so the default lives in `identity-marker-flag.ts`, not
-   * in this file.
+   * The identity marker the stock strip pairs with the arena's (issues #778, #922, #1022): the
+   * RESOLVED style, which picks each entry's row through `stockRowFor`. `shape` draws an FFA
+   * entry as the `marks` row, one copy of the slot's own outline per stock; `null` (and absent,
+   * which is every injected HUD) draws pips, with identity in hue alone; `arcs` and `roof` draw
+   * pips with that style's glyph ahead of the label. The page's HUD is handed the shipped
+   * `shape` here unless the flag says otherwise: `loop.ts` resolves the flag before this option
+   * sees it, so the default lives in `identity-marker-flag.ts`, not in this file.
    *
-   * FFA ONLY, which is the owner's direction on #234. A teams entry already carries a second
-   * non-colour channel -- the A/B/C letter beside the player number -- so a mark there would
-   * be a third name for a side the reader has already been told twice.
+   * FFA ONLY, which is the owner's direction on #234: a teams entry draws pips and no mark
+   * whatever this says. It already carries a second non-colour channel -- the A/B/C letter
+   * beside the player number -- so a mark there would be a third name for a side the reader has
+   * already been told twice.
    */
   readonly identityMarker?: IdentityMarkerStyle | null;
   /**
@@ -2556,13 +2553,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--slab hud-export-replay" type="button">Download Replay</button>
       <!-- RUNTIME ACTIONS (issue #252). Each rebuilds the board, so each arms first: the
            same two-press confirmation Reset stats and Reset progress use, rather than a
-           modal, because these sit in a pane a developer is already working in. Labels come
-           from DEV_ACTIONS so the catalogue and the markup cannot name different things.
-           Hidden as a group whenever no session holds the slot -- there is no round to
-           restart from the main menu. -->
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button"></button>
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button"></button>
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button"></button>
+           modal, because these sit in a pane a developer is already working in. The labels
+           are DEV_ACTIONS's, written here because that catalogue loads with the pane (issue
+           #1014) and a button with no text has no accessible name; a test compares the two,
+           so they cannot name different things. Hidden until the catalogue has loaded,
+           since it holds what each says while armed, and as a group whenever no session
+           holds the slot -- there is no round to restart from the main menu. -->
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button">Restart with Same Seed</button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button">Reroll Seed</button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button">Restart Current Round</button>
       <!-- PERSISTENCE (issue #249). The namespace line is always present while the pane is,
            because "obvious" is a property of being shown continuously rather than on demand;
            it takes a warning modifier when the session is on the production keys. Both
@@ -2816,11 +2815,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const prodSaveBtn = el.querySelector('.hud-prodsave') as HTMLButtonElement;
   const devResetBtn = el.querySelector('.hud-devreset') as HTMLButtonElement;
   const devActionBtns = Array.from(el.querySelectorAll<HTMLButtonElement>('.hud-devact'));
-  // Labelled FROM the catalogue rather than written into the markup, so a renamed action
-  // cannot leave a stale word on a button that still dispatches the new id.
-  for (const btn of devActionBtns) {
-    btn.textContent = DEV_ACTIONS[btn.dataset.action as DevActionId].label;
-  }
   const selfTestView = el.querySelector('.hud-selftest') as HTMLElement;
   const selfTestListEl = el.querySelector('.hud-selftest-list') as HTMLElement;
   const selfTestCopyBtn = el.querySelector('.hud-selftest-copy') as HTMLButtonElement;
@@ -3043,6 +3037,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   let selfTestPendingPads: readonly PadDiagnostic[] | null = null;
   /** Taken by every load and spent by every close and teardown; see `loadSelfTestBody`. */
   let selfTestGeneration = 0;
+  /**
+   * The modules behind the Developer Tools pane's own controls (issue #1014): null until
+   * `loadDevTools` lands them, and kept from then on. `devToolsLoad` is that load while it is
+   * in flight or landed, shared by the open and every press, and forgotten if it fails.
+   */
+  let devTools: DevToolsModules | null = null;
+  let devToolsLoad: Promise<DevToolsModules> | null = null;
+  /**
+   * Taken by every wait on that load and spent by every close, replace and teardown; see
+   * `whenDevTools`.
+   */
+  let devToolsGeneration = 0;
   const layoutOpenCbs: Array<() => void> = [];
   const layoutCloseCbs: Array<() => void> = [];
   const layoutRequestCbs: Array<(request: LayoutRequest) => void> = [];
@@ -3425,13 +3431,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // screenshot all lose the hue and keep the letter. Same A/B/C the setup pane's team
       // selector shows, so the readout and the control that set it agree.
       const teamMark = entry.team !== undefined ? ` ${TEAM_LABELS[entry.team] ?? '?'}` : '';
-      if (stockCue === null) {
-        span.textContent = `P${entry.slot + 1}${teamMark} ${entry.stock}`;
-      } else {
-        const started = stockCueStarts.get(entry.slot);
-        const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
-        fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, running, now, stocks.length);
-      }
+      // The strip's one rule (issue #1022): the `marks` row for an FFA entry under `shape`, pips
+      // for every other entry. See `stockRowFor`.
+      const row = stockRowFor(entry.team, identityMarker);
+      const started = stockCueStarts.get(entry.slot);
+      const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
+      fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, row, running, now, stocks.length);
       // teams: teamColor(team); ffa (no `team` on the entry): identityColor(slot) -- the
       // SAME two lookups `resolveOwnerColor` dispatches between for the ring, read in
       // `chipPalette` above, so the chip and the ring agree under either palette (see
@@ -3442,18 +3447,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // descriptor landing and TEAM_COLORS gaining its third entry: a 2v1v1 rendered team
       // 2's stock white, which is also the unstyled-slot placeholder.
       // Issue #778: the mark this slot wears in the arena, ahead of its label, so the
-      // strip and the ground ring read as one channel (#234's pair). AFTER the two branches
-      // above, because `textContent =` would drop a child written before it.
+      // strip and the ground ring read as one channel (#234's pair).
+      //
+      // BESIDE PIPS ONLY (issue #1022). The `marks` row already draws this slot's outline once
+      // per stock and replaces it: a leading copy would state the identity twice and, worse,
+      // sit beside a hollow LOST mark of the same shape -- which for slot 1 is the same
+      // circle drawn the same way, and reads as a second identity mark rather than as a
+      // spent stock (measured on a real frame, issue #230). So it is left beside the pips an
+      // explicit `arcs` or `roof` marker draws, until issue #1023 removes those styles.
       //
       // FFA ONLY, by `entry.team === undefined` -- the same test the label and the colour
       // below already branch on. A teams entry carries the A/B/C letter as its non-colour
       // channel, so a mark there would be a third name for a side already stated twice.
-      // NOT while the `marks` arm runs (issue #230): that arm already draws this slot's
-      // outline once per stock, so a leading copy would state the identity twice and, worse,
-      // sit beside a hollow LOST mark of the same shape -- which for slot 1 is the same
-      // circle drawn the same way, and reads as a second identity mark rather than as a
-      // spent stock. Measured on a real frame before this guard existed.
-      if (identityMarker !== null && entry.team === undefined && stockCue !== 'marks') {
+      if (row === 'pips' && entry.team === undefined && identityMarker !== null) {
         span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));
       }
       const hex = entry.team !== undefined
@@ -3465,12 +3471,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     versusStocksEl.classList.remove('hud-versus-stocks--hidden');
   }
 
-  /** Issue #230's stock-loss cue arm, or `null` for the shipped strip -- see presentation/stock-cue.ts. */
-  const stockCue: StockCue | null = opts.stockCue ?? null;
   /**
-   * Issue #778's identity mark in the stock strip, or `null` for none -- the strip with
-   * identity in hue alone, which is what every injected HUD draws. The page's HUD is handed
-   * the shipped `shape` (issue #922; see `identity-marker-flag.ts`). See
+   * The resolved identity marker each stock entry's row is chosen by (issues #778, #1022), or
+   * `null` for none -- pips, with identity in hue alone, which is what every injected HUD
+   * draws. The page's HUD is handed the shipped `shape` (issue #922; see
+   * `identity-marker-flag.ts`), which draws the `marks` row. See
    * presentation/identity-marker.ts for the shared table this and the arena ring both read.
    */
   const identityMarker: IdentityMarkerStyle | null = opts.identityMarker ?? null;
@@ -3502,7 +3507,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     : null;
   const isNarrowViewport = (): boolean => narrowStrip?.matches ?? false;
   /**
-   * The pips arm's denominator: each slot's stock when this match's strip began. `VersusStock`
+   * The rows' denominator: each slot's stock when this match's strip began. `VersusStock`
    * carries no starting stock, so it is remembered from the first push of a match, and taken
    * again whenever a push is not a loss within the same match -- different slots, or any stock
    * going up, which is a rematch.
@@ -3518,7 +3523,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * recorded: two entries can each be running a cue.
    */
   function recordStockLosses(next: GameplayStatus): void {
-    if (stockCue === null) return;
     // No expiry sweep here: `renderVersusStocks` already skips a cue past STOCK_CUE_MS, and the
     // map holds at most one entry per slot -- overwritten by that slot's next loss and cleared
     // when a different match starts -- so an expired entry is inert and bounded.
@@ -3542,16 +3546,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   /**
-   * One stock entry under a cue arm: the label, then the arm's own count, then the cue if one is
-   * running. Every cue element carries `hud-stock-cue` and a negative `animation-delay` for the
-   * time already spent, so a cue re-attached by a rebuild resumes where it was instead of
-   * replaying. Cue elements are `aria-hidden`: the loss is already spoken (issue #629), and the
-   * count stays available as text.
+   * One stock entry: the label, then its row -- `marks` or `pips`, as `stockRowFor` chose --
+   * with the unit a running loss emptied carrying the cue. Every cue element carries
+   * `hud-stock-cue` and a negative `animation-delay` for the time already spent, so a cue
+   * re-attached by a rebuild resumes where it was instead of replaying. The row is one
+   * `role="img"` named "N of M stocks", so the count is in its accessible name rather than its
+   * text (issue #1022), except for the digit beside the single unit of a narrow fallback; the
+   * loss itself is already spoken (issue #629).
    */
   function fillStockCueEntry(
     span: HTMLElement,
     label: string,
     entry: VersusStock,
+    row: StockRow,
     running: { at: number; from: number } | null,
     now: number,
     slots: number,
@@ -3563,20 +3570,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return el;
     };
     span.append(label);
-    // `marks` is an FFA proposition: it spends the SLOT's identity outline, and in teams the
-    // identity a player shares is their TEAM. Two teammates drawn with different outlines
-    // would claim they are different sides while wearing one colour, and the A/B/C letter
-    // beside the number already answers the question the outline would be asking. So teams
-    // falls back to `pips` -- the same count, drawn in the neutral dot -- which keeps the arm
-    // a complete stock-loss cue in both modes instead of silently having none in one.
-    const arm = stockCue === 'marks' && entry.team !== undefined ? 'pips' : stockCue;
-    if (arm === 'pips') {
+    if (row === 'pips') {
       const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
       // ISSUE #835: the strip is a nowrap flex row with no scrolling, so a strip too wide for
       // the viewport clips its last entry silently. On a narrow viewport the pip is sized from
       // the measured table in `stock-cue.ts`, and where no legible size fits -- four players at
-      // four or five stocks -- the arm hands this entry back to the shipped digit rather than
-      // drawing dots too small to count. The digit is the same text the no-cue strip writes.
+      // four or five stocks -- the entry keeps one full-size pip and states the count as a
+      // digit (`PipLayout`) rather than drawing dots too small to count.
       const layout: PipLayout = isNarrowViewport()
         ? narrowPipLayout(slots, total)
         : { kind: 'row', pip: 10, gap: 3 };
@@ -3591,7 +3591,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       if (layout.kind === 'one') {
         // ONE pip and the count as a digit. The pip is hollow once the player is out, the same
         // read a lost pip carries in the row, and it is what the cue animates -- a bare digit
-        // would leave the loss with nothing to swell or burst, which is the arm's whole cue.
+        // would leave the loss with nothing to swell or burst, which is the whole cue.
         const pip = document.createElement('span');
         pip.className = 'hud-stock-pip';
         if (entry.stock <= 0) pip.classList.add('hud-stock-pip--lost');
@@ -3615,70 +3615,50 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       span.appendChild(pips);
       return;
     }
-    if (arm === 'marks') {
-      // The same contract `pips` keeps -- one unit per stock the match STARTED with, held
-      // ones solid and lost ones hollow, so the denominator survives -- with the unit
-      // replaced by this slot's identity outline. One channel carries both facts.
-      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
-      // ISSUE #1021, the `marks` half of #835: on a narrow viewport the row is sized from the
-      // measured table in `stock-cue.ts`, and where no row of legible marks fits -- four
-      // players at five stocks -- the entry keeps ONE mark and states the count as a digit.
-      const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };
-      const row = document.createElement('span');
-      row.className = 'hud-stock-marks';
-      if (layout.kind === 'row') {
-        row.style.setProperty('--hud-mark', `${layout.mark}px`);
-        row.style.setProperty('--hud-mark-gap', `${layout.gap}px`);
-      }
-      // ONE name for the row, not one per mark: the marks are a single quantity, and naming
-      // each of five would read the player's stock count out five times.
-      row.setAttribute('role', 'img');
-      row.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
-      if (layout.kind === 'one') {
-        // ONE full-size mark in the slot's outline, filled while the player has stock, then the
-        // count. The mark is what the cue swells, so a loss still has a target.
-        row.innerHTML = identityStockMark(entry.slot, entry.stock > 0);
-        const mark = row.firstElementChild;
-        if (running !== null && mark !== null) cueEl(mark as SVGElement);
-        span.appendChild(row);
-        const count = document.createElement('span');
-        count.className = 'hud-stock-mark-count';
-        count.textContent = `${entry.stock}`;
-        span.appendChild(count);
-        return;
-      }
-      row.innerHTML = Array.from(
-        { length: total }, (_, i) => identityStockMark(entry.slot, i < entry.stock),
-      ).join('');
-      if (running !== null) {
-        // The marks that emptied on THIS loss: from the stock now held up to the stock held
-        // before it. Bounded by `total` because a rematch can raise the count above the
-        // baseline this cue was armed against.
-        for (let i = entry.stock; i < Math.min(running.from, total); i++) {
-          const mark = row.children[i];
-          if (mark !== undefined) cueEl(mark as SVGElement);
-        }
-      }
-      span.appendChild(row);
+    // The same contract `pips` keeps -- one unit per stock the match STARTED with, held
+    // ones solid and lost ones hollow, so the denominator survives -- with the unit
+    // replaced by this slot's identity outline. One channel carries both facts.
+    const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
+    // ISSUE #1021, the `marks` half of #835: on a narrow viewport the row is sized from the
+    // measured table in `stock-cue.ts`, and where no row of legible marks fits -- four
+    // players at five stocks -- the entry keeps ONE mark and states the count as a digit.
+    const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };
+    const marks = document.createElement('span');
+    marks.className = 'hud-stock-marks';
+    if (layout.kind === 'row') {
+      marks.style.setProperty('--hud-mark', `${layout.mark}px`);
+      marks.style.setProperty('--hud-mark-gap', `${layout.gap}px`);
+    }
+    // ONE name for the row, not one per mark: the marks are a single quantity, and naming
+    // each of five would read the player's stock count out five times.
+    marks.setAttribute('role', 'img');
+    marks.setAttribute('aria-label', `${entry.stock} of ${total} stocks`);
+    if (layout.kind === 'one') {
+      // ONE full-size mark in the slot's outline, filled while the player has stock, then the
+      // count. The mark is what the cue swells, so a loss still has a target.
+      marks.innerHTML = identityStockMark(entry.slot, entry.stock > 0);
+      const mark = marks.firstElementChild;
+      if (running !== null && mark !== null) cueEl(mark as SVGElement);
+      span.appendChild(marks);
+      const count = document.createElement('span');
+      count.className = 'hud-stock-mark-count';
+      count.textContent = `${entry.stock}`;
+      span.appendChild(count);
       return;
     }
-    const count = document.createElement('span');
-    count.className = 'hud-stock-count';
-    count.textContent = String(entry.stock);
-    span.appendChild(count);
-    if (running === null) return;
-    const cue = document.createElement('span');
-    cue.setAttribute('aria-hidden', 'true');
-    if (arm === 'strike') {
-      cue.className = 'hud-stock-cue--struck';
-      cue.textContent = String(running.from);
-      // The new number drops in behind the struck one, so it animates too, on the same clock.
-      cueEl(count);
-    } else {
-      cue.className = 'hud-stock-cue--badge';
-      cue.textContent = `−${running.from - entry.stock}`;
+    marks.innerHTML = Array.from(
+      { length: total }, (_, i) => identityStockMark(entry.slot, i < entry.stock),
+    ).join('');
+    if (running !== null) {
+      // The marks that emptied on THIS loss: from the stock now held up to the stock held
+      // before it. Bounded by `total` because a rematch can raise the count above the
+      // baseline this cue was armed against.
+      for (let i = entry.stock; i < Math.min(running.from, total); i++) {
+        const mark = marks.children[i];
+        if (mark !== undefined) cueEl(mark as SVGElement);
+      }
     }
-    span.appendChild(cueEl(cue));
+    span.appendChild(marks);
   }
 
   /**
@@ -4005,7 +3985,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * A LOOKUP rather than the two-way `=== resetStatsBtn` ternary it replaces (issue #252):
    * with three developer actions joining the two resets, that ternary would have restored
    * "Reset progress" onto whichever action was armed. The developer ones are labelled from
-   * `DEV_ACTIONS`, which is the same place the markup gets them.
+   * `DEV_ACTIONS`, which is the catalogue the markup's labels are tested against.
    */
   function restingLabel(btn: HTMLButtonElement): string {
     if (btn === resetStatsBtn) return 'Reset stats';
@@ -4015,7 +3995,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // function replaced; extending the lookup is the point of it being one.
     if (btn === prodSaveBtn) return 'Use Production Save';
     if (btn === devResetBtn) return 'Reset Developer Data';
-    return DEV_ACTIONS[btn.dataset.action as DevActionId].label;
+    // An action is armed only once its catalogue has loaded (issue #1014), so the catalogue is
+    // always here when this runs; the `''` only spares the type a null it never meets.
+    return devTools?.actions.DEV_ACTIONS[btn.dataset.action as DevActionId].label ?? '';
   }
 
   /**
@@ -4305,7 +4287,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       refreshDevActions();
       refreshNamespace();
       swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
+      // The pane's modules load on its first open (issue #1014), after the arrival focus as the
+      // self-test's body does, and the actions are revealed once their catalogue is there;
+      // after that, the refresh above is what decides them.
+      if (devTools === null) whenDevTools(revealDevActions);
     } else {
+      devToolsGeneration += 1; // an answer still waiting on the load now writes nothing
       closeSurface(DEVTOOLS_SURFACE);
       // Same reason the self-test's report field is cleared on close (issue #247 following
       // #599): a URL or a report left in the field is a stale statement about a session that
@@ -4313,6 +4300,73 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       diagOutEl.value = '';
       diagOutEl.classList.add('hud-diag-out--hidden');
     }
+  }
+
+  /**
+   * Loads the three modules behind the Developer Tools pane's own controls -- `dev-actions`,
+   * `dev-diagnostics` and `dev-exports` (issue #1014) -- in the shape `loadSelfTestBody` uses:
+   * dynamic imports, so an ordinary page downloads none of them.
+   *
+   * ONE LOAD FOR THE THREE, kept once it lands. Every control needs two of them -- Pin the
+   * diagnostics, an action its catalogue and the diagnostics for its URL, an export its own
+   * module and the report it builds on -- so three loads would be three failure states for
+   * one pane. The open starts it and a press joins it; a press with no load in flight (after
+   * a failed one, or from a test that never opened the pane) starts it. The load builds
+   * nothing and listens to nothing, so it is bound to no generation; what waits on it is.
+   *
+   * A FAILED LOAD is forgotten, so the next open or press tries again; `whenDevTools` reports
+   * it.
+   */
+  function loadDevTools(): Promise<DevToolsModules> {
+    devToolsLoad ??= Promise.all([
+      import('./dev-actions'),
+      import('./dev-diagnostics'),
+      import('./dev-exports'),
+    ]).then(
+      ([actions, diagnostics, exports]) => (devTools = { actions, diagnostics, exports }),
+      (err: unknown) => {
+        devToolsLoad = null;
+        throw err;
+      },
+    );
+    return devToolsLoad;
+  }
+
+  /**
+   * Runs `run` with the pane's modules: at once when they have landed, which is every press
+   * after the open's load, so Copy still selects its text in the press's own task; otherwise
+   * when the load lands (issue #1014).
+   *
+   * A PRESS READS THE SESSION FIRST. Every caller reads what it reports -- the diagnostics
+   * input, the round, the captured frame -- before calling this, so a press that waits still
+   * describes the instant it was made. Only the formatting, which is the modules', waits.
+   *
+   * WHY THE GENERATION, as for `loadSelfTestBody`: the load spans at least one turn of the
+   * event loop, and the pane can be closed, replaced or torn down inside it. Every wait takes
+   * a generation, and every close, every replace (the layer's `release`) and `dispose` spends
+   * one, so an answer that lands after them writes nothing into a field cleared or discarded.
+   *
+   * A FAILED LOAD (offline, or a chunk name a deploy made stale) is written into the field, as
+   * a failed export is, rather than left as an unhandled rejection, which `boot.ts` treats as
+   * the match failing whenever a session exists. A browser may keep the failure for the life
+   * of the page, so the line asks for a reload.
+   */
+  function whenDevTools(run: (modules: DevToolsModules) => void): void {
+    if (devTools !== null) {
+      run(devTools);
+      return;
+    }
+    const generation = devToolsGeneration;
+    void loadDevTools().then(
+      (modules) => {
+        if (generation === devToolsGeneration) run(modules);
+      },
+      (err: unknown) => {
+        if (generation !== devToolsGeneration) return;
+        const reason = err instanceof Error ? err.message : String(err);
+        showExportNote(`The developer tools could not be loaded (${reason}). Reload the page to try again.`);
+      },
+    );
   }
 
   /**
@@ -4851,6 +4905,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       container: devToolsView,
       open: () => showDeveloperTools(true),
       close: () => showDeveloperTools(false),
+      // Replaced, most often from three of its own buttons (Configuration, the Self-Test, the
+      // Gallery): a press still waiting on the developer modules (issue #1014) must not answer
+      // into the pane that is leaving, and the field is cleared for the reason the close
+      // clears it.
+      release: () => {
+        devToolsGeneration += 1;
+        diagOutEl.value = '';
+        diagOutEl.classList.add('hud-diag-out--hidden');
+      },
     },
     'controller-selftest': {
       container: selfTestView,
@@ -5398,7 +5461,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleDiagCopy = (): void => {
     const input = diagnosticsInput();
     if (input === null) return;
-    showDiagnostics(formatDiagnostics(input));
+    whenDevTools(({ diagnostics }) => showDiagnostics(diagnostics.formatDiagnostics(input)));
   };
 
   /*
@@ -5411,10 +5474,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleDiagPin = (): void => {
     const input = diagnosticsInput();
     if (input === null) return;
-    const url = pinnedSeedUrl(input);
-    showDiagnostics(
-      url ?? 'No session is running, so there is no resolved seed to pin. Start a round and press this again.',
-    );
+    whenDevTools(({ diagnostics }) => {
+      const url = diagnostics.pinnedSeedUrl(input);
+      showDiagnostics(
+        url ?? 'No session is running, so there is no resolved seed to pin. Start a round and press this again.',
+      );
+    });
   };
 
   /*
@@ -5422,9 +5487,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * saves it and says it. The note goes in the same field without selecting it or touching the
    * clipboard: it describes a file, and is not itself the thing to copy.
    *
-   * A FAILURE IS REPORTED, NOT THROWN. Everything from reading the session to saving the file
-   * runs inside one `try`, and the port has only readers, so a failed export leaves the field
+   * A FAILURE IS REPORTED, NOT THROWN. Reading the session and building and saving the file
+   * each run inside a `try`, and the port has only readers, so a failed export leaves the field
    * saying what failed and the session as it was.
+   *
+   * TWO HALVES (issue #1014): `read` runs at the press and reads the session, and what it
+   * returns builds the file once the pane's modules are there -- at once, after the open's load.
    */
   const showExportNote = (text: string): void => {
     diagOutEl.value = text;
@@ -5432,32 +5500,47 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     diagOutEl.scrollTop = 0;
   };
 
-  const runExport = (label: string, build: () => ExportResult): void => {
+  const runExport = (label: string, read: () => (modules: DevToolsModules) => ExportResult): void => {
     const downloads = opts.developerDownloads;
     if (downloads === undefined || opts.developerPage === undefined) return;
-    let result: ExportResult;
-    try {
-      result = build();
-      if (result.kind === 'file') downloads.saveText(result.text, result.fileName, result.type);
-    } catch (err) {
+    const fail = (err: unknown): void => {
       const reason = err instanceof Error ? err.message : String(err);
       showExportNote(`${label} failed, so no file was saved: ${reason}`);
+    };
+    let build: (modules: DevToolsModules) => ExportResult;
+    try {
+      build = read();
+    } catch (err) {
+      fail(err);
       return;
     }
-    showExportNote(result.note);
+    whenDevTools((modules) => {
+      let result: ExportResult;
+      try {
+        result = build(modules);
+        if (result.kind === 'file') downloads.saveText(result.text, result.fileName, result.type);
+      } catch (err) {
+        fail(err);
+        return;
+      }
+      showExportNote(result.note);
+    });
   };
 
   const handleExportDiagnostics = (): void =>
     runExport('Download Diagnostics', () => {
       const input = diagnosticsInput() as DiagnosticsInput;
       const port = input.session === null ? null : (devExportPort?.() ?? null);
-      return diagnosticsExport(input, port === null ? null : port.round());
+      const round = port === null ? null : port.round();
+      return ({ exports }) => exports.diagnosticsExport(input, round);
     });
 
   /*
    * The screenshot's save is ASYNCHRONOUS (PNG encoding), so a failure can arrive after the click
    * has returned; both the synchronous and the late failure land in the field. The renderer copied
-   * the pixels before the encoder runs, so a later frame cannot change what is saved.
+   * the pixels before the encoder runs, so a later frame cannot change what is saved -- and the
+   * frame is captured at the press, before any wait on the modules (issue #1014), because a frame
+   * captured once they had loaded would be a later one than the developer saw.
    */
   const handleExportScreenshot = (): void => {
     const downloads = opts.developerDownloads;
@@ -5469,12 +5552,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     try {
       const port = devExportPort?.() ?? null;
       if (port === null) {
-        showExportNote(NO_SESSION_SCREENSHOT_NOTE);
+        whenDevTools(({ exports }) => showExportNote(exports.NO_SESSION_SCREENSHOT_NOTE));
         return;
       }
       const capture = port.captureFrame();
-      const shot = screenshotExport(diagnosticsSource?.() ?? null, port.round(), capture);
-      downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);
+      const session = diagnosticsSource?.() ?? null;
+      const round = port.round();
+      whenDevTools(({ exports }) => {
+        try {
+          const shot = exports.screenshotExport(session, round, capture);
+          downloads.saveCanvas(capture.image, shot.fileName).then(() => showExportNote(shot.note), fail);
+        } catch (err) {
+          fail(err);
+        }
+      });
     } catch (err) {
       fail(err);
     }
@@ -5483,7 +5574,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const handleExportReplay = (): void =>
     runExport('Download Replay', () => {
       const port = devExportPort?.() ?? null;
-      return port === null ? { kind: 'unavailable', note: NO_SESSION_REPLAY_NOTE } : replayExport(port.replay());
+      const trace = port === null ? null : port.replay();
+      return ({ exports }) =>
+        port === null ? { kind: 'unavailable', note: exports.NO_SESSION_REPLAY_NOTE } : exports.replayExport(trace);
     });
 
   /**
@@ -5496,9 +5589,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * is shut.
    */
   function refreshDevActions(): void {
+    if (!revealDevActions()) disarmReset();
+  }
+
+  /**
+   * Shows the three actions when a round exists AND their catalogue has loaded (issue #1014),
+   * and says whether a round exists. Until the pane's modules land there is no label to show
+   * and no confirm label to arm with, so they are not offered -- the rule a control the
+   * session cannot serve already follows.
+   *
+   * Split from `refreshDevActions` because the load LANDING calls this alone: it disarms
+   * nothing, so a Use Production Save armed while the load was in flight stays armed.
+   */
+  function revealDevActions(): boolean {
     const available = (devActionPort?.() ?? null)?.hasRound() === true;
-    for (const btn of devActionBtns) btn.hidden = !available;
-    if (!available) disarmReset();
+    for (const btn of devActionBtns) btn.hidden = !available || devTools === null;
+    return available;
   }
 
   /*
@@ -5507,11 +5613,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * writes the answer where Copy Diagnostics already writes its report, so the seed a reroll
    * lands on is one selection away from a URL.
    */
-  const runDevActionFor = (btn: HTMLButtonElement): void => {
+  const runDevActionFor = (btn: HTMLButtonElement, { actions, diagnostics }: DevToolsModules): void => {
     const id = btn.dataset.action as DevActionId;
     const port = devActionPort?.() ?? null;
     if (port === null) return;
-    const outcome = runDevAction(id, port);
+    const outcome = actions.runDevAction(id, port);
     if (outcome.kind === 'refused') {
       showDiagnostics('No round is running, so there is nothing to restart. Start a round and press this again.');
       return;
@@ -5520,11 +5626,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // it, because "reports an exact seed that can immediately be copied into a reproduction
     // URL" is the criterion, and a bare number still leaves the developer to build one.
     const input = diagnosticsInput();
-    const url = input === null ? null : pinnedSeedUrl({ ...input, session: input.session });
+    const url = input === null ? null : diagnostics.pinnedSeedUrl({ ...input, session: input.session });
     showDiagnostics(
       url === null
-        ? `${DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.`
-        : `${DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.\n${url}`,
+        ? `${actions.DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.`
+        : `${actions.DEV_ACTIONS[id].label}: now running seed ${outcome.seed}.\n${url}`,
     );
   };
 
@@ -5596,9 +5702,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
   exportReplayBtn.addEventListener('click', handleExportReplay);
   for (const btn of devActionBtns) {
-    btn.addEventListener('click', () =>
-      handleDangerClick(btn, [() => runDevActionFor(btn)], DEV_ACTIONS[btn.dataset.action as DevActionId].confirmLabel),
-    );
+    btn.addEventListener('click', () => {
+      // Hidden until the catalogue has loaded (see `revealDevActions`), so only a programmatic
+      // click arrives before it -- and with no confirm label to arm with, it does nothing.
+      const modules = devTools;
+      if (modules === null) return;
+      const { confirmLabel } = modules.actions.DEV_ACTIONS[btn.dataset.action as DevActionId];
+      handleDangerClick(btn, [() => runDevActionFor(btn, modules)], confirmLabel);
+    });
   }
   achBackBtn.addEventListener('click', handleAchBack);
   achBackBtn.addEventListener('click', blurIfPointer);
@@ -8588,6 +8699,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // Teardown does not run the pane's close, so it spends the generation itself: a self-test
       // load still in flight must not build into the tree this teardown discards.
       selfTestGeneration += 1;
+      devToolsGeneration += 1; // and a press still waiting on the developer modules writes nothing
       settingsLayoutBtn.removeEventListener('click', handleSettingsLayoutOpen);
       settingsLayoutBtn.removeEventListener('click', blurIfPointer);
       layoutBackBtn.removeEventListener('click', handleLayoutBack);

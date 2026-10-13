@@ -1,0 +1,14 @@
+{
+  "id": "layer-change-keeps-the-arm",
+  "file": "src/game/hud.ts",
+  "find": "    if (result === 'refused') return false;\n    disarmReset();",
+  "replace": "    if (result === 'refused') return false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) an armed action lapses when another pane opens over it, so the press on return arms again"
+  ],
+  "why": "Issue #1014. Opening a layer stops disarming, so a developer action armed in Developer Tools stays armed while Configuration is open over it. Read at that moment: every Back re-enters its origin through `setState`, which disarms on its own, so a case that read the arm only after coming back could not see this -- measured, it survived that shape."
+}

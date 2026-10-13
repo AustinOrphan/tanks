@@ -1,0 +1,14 @@
+{
+  "id": "dev-screenshot-captures-the-frame-after-the-load",
+  "file": "src/game/hud.ts",
+  "find": "      const capture = port.captureFrame();\n      const session = diagnosticsSource?.() ?? null;\n      const round = port.round();\n      whenDevTools(({ exports }) => {\n        try {\n",
+  "replace": "      const session = diagnosticsSource?.() ?? null;\n      const round = port.round();\n      whenDevTools(({ exports }) => {\n        try {\n          const capture = port.captureFrame();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the exports (issue #254) pressed before the developer modules have loaded (issue #1014) Download Screenshot saves the frame captured at the press, named from the round then"
+  ],
+  "why": "Issue #1014. Download Screenshot captures the frame once the modules have loaded instead of at the press, so a press during the load saves a later frame than the one the developer saw -- the case the issue names."
+}

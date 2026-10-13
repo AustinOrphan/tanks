@@ -1,0 +1,15 @@
+{
+  "id": "dev-tools-close-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "      devToolsGeneration += 1; // an answer still waiting on the load now writes nothing\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a load that fails after the pane closed reports nothing into it",
+    "the developer modules load when the pane opens (issue #1014) a press answered after the pane closed writes nothing into the field the close cleared"
+  ],
+  "why": "Issue #1014. The pane's close stops spending the generation, so a press still waiting on the load when Back closes the pane is answered into the field the close has just cleared -- the staleness that clearing exists to prevent."
+}

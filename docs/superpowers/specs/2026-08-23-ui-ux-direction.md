@@ -1,9 +1,9 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-10-13
 scope: Authoritative Public Prototype 1.0 UI architecture, navigation, interaction, responsive, accessibility, and visual-system direction
-implementation-issues: [117, 226, 227, 228, 230, 234, 238, 240, 258, 260, 261, 267, 268, 269, 274, 276, 279, 281, 289, 290, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327]
+implementation-issues: [117, 226, 227, 228, 230, 234, 238, 240, 258, 260, 261, 267, 268, 269, 274, 276, 279, 281, 289, 290, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 916]
 implementation-prs: [329]
 supersedes: ["docs/superpowers/specs/2026-07-31-main-menu-design.md", "docs/superpowers/specs/2026-07-31-pause-design.md", "docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md"]
 superseded-by: []
@@ -507,6 +507,21 @@ controller-only, and couch-distance TV review. Automated screenshots cannot repl
 legibility or touch reachability review. Controller-only review starts from a splash dismissed
 by the pad; audio unlocks only on the first pointer or key (the engine self-heals), so a
 pad-only session is expected to be silent until then (issue #494).
+
+### Automated semantic checks
+
+Ruled on 2026-10-13 (issue #916). #327's first criterion asks for "automated semantic checks". The
+repository's hand-written jsdom contracts satisfy it, and no accessibility rule engine (axe or
+similar) is added before Public Prototype 1.0.
+
+- **Why the contracts are enough.** They check the rendered UI directly, and they encode
+  decisions a generic rule set would flag as violations: the Records tabs are deliberately not a
+  tablist, and selection uses `aria-pressed` rather than radio semantics.
+- **Why not a rule engine.** It would bring a rule set nobody here has reviewed, and a browser
+  dependency the repository keeps out: Playwright is resolved through `PLAYWRIGHT_MODULE`, not
+  declared.
+
+Revisiting this takes a new ruling. A reviewer's preference does not reopen it.
 
 ## 8. Existing-issue reconciliation
 

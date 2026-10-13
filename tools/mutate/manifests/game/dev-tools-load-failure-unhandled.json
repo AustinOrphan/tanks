@@ -1,0 +1,15 @@
+{
+  "id": "dev-tools-load-failure-unhandled",
+  "file": "src/game/hud.ts",
+  "find": "      (modules) => {\n        if (generation === devToolsGeneration) run(modules);\n      },\n      (err: unknown) => {\n        if (generation !== devToolsGeneration) return;\n        const reason = err instanceof Error ? err.message : String(err);\n        showExportNote(`The developer tools could not be loaded (${reason}). Reload the page to try again.`);\n      },\n",
+  "replace": "      (modules) => {\n        if (generation === devToolsGeneration) run(modules);\n      },\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the developer modules load when the pane opens (issue #1014) a load that fails is reported in the output field when the pane opens, and the next open loads them",
+    "the developer modules load when the pane opens (issue #1014) a load that fails leaves no note behind when another pane replaces the pane"
+  ],
+  "why": "Issue #1014. A failed load of the pane's modules (offline, or a chunk name a deploy made stale) is left as an unhandled rejection, which `boot.ts` treats as the match failing, and the output field says nothing."
+}

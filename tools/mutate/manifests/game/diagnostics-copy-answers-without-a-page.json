@@ -1,0 +1,14 @@
+{
+  "id": "diagnostics-copy-answers-without-a-page",
+  "file": "src/game/hud.ts",
+  "find": "    const input = diagnosticsInput();\n    if (input === null) return;\n    whenDevTools(({ diagnostics }) => showDiagnostics(diagnostics.formatDiagnostics(input)));",
+  "replace": "    const input = diagnosticsInput();\n    if (input === null) {\n      whenDevTools(() => showDiagnostics('invented a path and a build'));\n      return;\n    }\n    whenDevTools(({ diagnostics }) => showDiagnostics(diagnostics.formatDiagnostics(input)));",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the diagnostics controls are offered only when the page half is wired does nothing at all when Copy is pressed without one"
+  ],
+  "why": "Issue #247, restated for #1014. Copy with no `developerPage` must refuse in its handler, not only by being hidden. Its write now waits on the developer modules, so a handler that answers anyway writes after a case that reads the field straight after the press has finished; only a case that waits for the load can see it."
+}

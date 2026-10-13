@@ -131,7 +131,7 @@ describe('control type is derived from the registry, not declared twice', () => 
     // only reason a stated population is worth writing down. 17 -> 18 under issue #249's
     // `prodSave`, which is a boolean and therefore a toggle like its seventeen siblings.
     expect(toggles).toBe(18);
-    expect(controls).toHaveLength(49); // +1: ownerPalette (#1057's owner palette), measured 48 -> 49; +1: wreck (#232's destroyed-hull arms), measured 47 -> 48; +1: hudFont (#865's typeface arms), measured 46 -> 47; +1: enemyRole (#773's approved role cue), measured 45 -> 46; +1: stockCue (#230's stock-loss cue arms), measured 44 -> 45; +4: shadowMapSize, antialias, pixelRatioCap, fillRimLights (#735's render overrides); +1 each: gallery (#730's workbench link), aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm), outcome (#591's capture arm), identityMarker (#630's identity-channel candidates), arrival (#230's opposed spawn/death language), versusActions (#668's action-bar arm), prodSave (#249's production-save access), shellTrail (#688's bounce-trail experiment), bench (#734's benchmark report)
+    expect(controls).toHaveLength(48); // -1: stockCue (#1022 shipped the marks row and removed the flag), measured 49 -> 48; +1: ownerPalette (#1057's owner palette), measured 48 -> 49; +1: wreck (#232's destroyed-hull arms), measured 47 -> 48; +1: hudFont (#865's typeface arms), measured 46 -> 47; +1: enemyRole (#773's approved role cue), measured 45 -> 46; +1: stockCue (#230's stock-loss cue arms), measured 44 -> 45; +4: shadowMapSize, antialias, pixelRatioCap, fillRimLights (#735's render overrides); +1 each: gallery (#730's workbench link), aiPerception (#359's superseded bound), aiContact (#372's contact overlay), blockedFire (#356's cue arms), menuTransition (#542's menu transitions), topbar (#552's topbar arms), pp1Roles (#358's role-matrix arm), outcome (#591's capture arm), identityMarker (#630's identity-channel candidates), arrival (#230's opposed spawn/death language), versusActions (#668's action-bar arm), prodSave (#249's production-save access), shellTrail (#688's bounce-trail experiment), bench (#734's benchmark report)
   });
 
   it('reads each parameter from the registry, using the field name only where none is given', () => {
@@ -168,7 +168,7 @@ describe('explainDevConfig', () => {
     // `?players=1` look rejected.
     const valued = (Object.keys(FLAG_REGISTRY) as (keyof typeof FLAG_REGISTRY)[])
       .filter((f) => FLAG_REGISTRY[f].kind === 'valued');
-    expect(valued.length, 'the population this premise covers').toBe(31); // +1: ownerPalette (#1057's owner palette), measured 30 -> 31; +1: wreck (#232's hull arms), measured 29 -> 30; +1: hudFont (#865's typeface arms), measured 28 -> 29; +1: enemyRole (#773's role cue), measured 27 -> 28; +1: stockCue (#230's cue arms), measured 26 -> 27; +4: #735's render overrides; +1 each: gallery, aiPerception, blockedFire, menuTransition, topbar, outcome, identityMarker, arrival, versusActions, shellTrail, bench
+    expect(valued.length, 'the population this premise covers').toBe(30); // -1: stockCue (#1022 removed the flag), measured 31 -> 30; +1: ownerPalette (#1057's owner palette), measured 30 -> 31; +1: wreck (#232's hull arms), measured 29 -> 30; +1: hudFont (#865's typeface arms), measured 28 -> 29; +1: enemyRole (#773's role cue), measured 27 -> 28; +1: stockCue (#230's cue arms), measured 26 -> 27; +4: #735's render overrides; +1 each: gallery, aiPerception, blockedFire, menuTransition, topbar, outcome, identityMarker, arrival, versusActions, shellTrail, bench
     for (const f of valued) {
       expect(DEV_FLAGS_OFF[f], `${f} defaults to something a valid value could parse to`).toBeNull();
     }
@@ -390,10 +390,8 @@ describe('canonicalDevSearch', () => {
   });
 
   it('drops deprecated parameters and names them', () => {
-    // DEPRECATED_DEV_PARAMS ships empty -- no developer parameter has been retired yet, and a
-    // populated list would be invented history -- so the MECHANISM is proven with an injected
-    // list instead. That is the whole reason the option exists.
-    expect(DEPRECATED_DEV_PARAMS, 'the shipped list is empty by design').toEqual([]);
+    // The MECHANISM, proven with an injected list so it does not lean on what the shipped list
+    // holds; the shipped list is the next case.
     const r = canonicalDevSearch('?dev=1&oldFlag=1&aimRay=1', { deprecated: ['oldFlag'] });
     expect(r.search).toBe('?dev=1&aimRay=1');
     expect(r.deprecated).toEqual(['oldFlag']);
@@ -403,6 +401,22 @@ describe('canonicalDevSearch', () => {
     expect(plain.deprecated).toEqual([]);
     expect(plain.unknown).toEqual(['oldFlag']);
     expect(plain.search).toContain('oldFlag=1');
+  });
+
+  it('retires stockCue by default, the one developer parameter removed for good (issue #1022)', () => {
+    // Population: every developer parameter removed for good since this list was built (#413),
+    // which is one -- `stockCue`, whose flag #1022 removed when the `marks` strip shipped.
+    // `menuTransition` went out with the revert in #547 and came back in #548 the same day.
+    expect(DEPRECATED_DEV_PARAMS).toEqual(['stockCue']);
+    const r = canonicalDevSearch('?dev=1&stockCue=marks&aimRay=1');
+    expect(r.search).toBe('?dev=1&aimRay=1');
+    expect(r.deprecated).toEqual(['stockCue']);
+    expect(r.unknown).toEqual([]);
+    // THE NEGATIVE CONTROL: with an empty list, the state before #1022, the same URL carries
+    // `stockCue` into the canonical form as an unrelated parameter.
+    const plain = canonicalDevSearch('?dev=1&stockCue=marks&aimRay=1', { deprecated: [] });
+    expect(plain.unknown).toEqual(['stockCue']);
+    expect(plain.search).toBe('?dev=1&aimRay=1&stockCue=marks');
   });
 
   it('retains or removes the master gate as asked', () => {

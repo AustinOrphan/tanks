@@ -1,8 +1,8 @@
 {
   "id": "stock-marks-lose-the-denominator",
   "file": "src/game/hud.ts",
-  "find": "      const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);\n      // ISSUE #1021, the `marks` half of #835",
-  "replace": "      const total = entry.stock;\n      // ISSUE #1021, the `marks` half of #835",
+  "find": "    const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);\n    // ISSUE #1021, the `marks` half of #835",
+  "replace": "    const total = entry.stock;\n    // ISSUE #1021, the `marks` half of #835",
   "expect": "killed",
   "tests": [
     "src/game/hud.match.test.ts"
