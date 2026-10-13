@@ -12,6 +12,12 @@
         "h": 800
       },
       "text": "That match could not start.\n      Something went wrong while loading the match. Try again, or go back to the menu.\n      \n      Retry\n      Back to menu",
+      "aria": {
+        "role": "alertdialog",
+        "aria-labelledby": "hud-alert-title",
+        "aria-describedby": "hud-alert-body",
+        "aria-modal": "true"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -96,6 +102,10 @@
         "h": 0
       },
       "text": "TANKS!\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Continue Campaign\n      Start Campaign\n      \n      \n      Choose Level\n      \n      Practice This Level\n     ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-panel-title"
+      },
       "style": {
         "display": "none",
         "opacity": "1",

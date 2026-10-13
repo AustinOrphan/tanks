@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "About & Legal\n      Tanks! is a browser arena shooter.\n      It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-about-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -75,6 +79,9 @@
         "h": 44
       },
       "text": "PrivacyShow",
+      "aria": {
+        "aria-expanded": "false"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

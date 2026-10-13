@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "TANKS!\n      Press any key or tap to begin",
+      "aria": {
+        "role": "dialog",
+        "aria-label": "Tanks! title screen. Press any key to begin."
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "TANKS!\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Mission 3 -- 2 lives left\n      \n      Continue Campaign\n      Start New Campaign\n      \n      \n      Choose Level\n      \n  ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-panel-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

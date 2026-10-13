@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "About & Legal\n      Tanks! is a browser arena shooter.\n      It runs entirely on this device. Your settings, campaign progress, stats, achievements and customization are saved in this browser's local ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-about-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -33,6 +37,10 @@
         "h": 1640
       },
       "text": "Privacy PolicyThe full text of PRIVACY.md in this repository.Last updated: 2026-09-17This policy covers the Tanks! browser game (the \"game\" or \"app\"), published at austinorphan.com/tanks/.SummaryThe g",
+      "aria": {
+        "role": "group",
+        "aria-labelledby": "hud-legal-toggle-privacy"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

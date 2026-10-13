@@ -33,6 +33,9 @@
         "h": 56
       },
       "text": "II",
+      "aria": {
+        "aria-label": "Pause"
+      },
       "style": {
         "display": "block",
         "opacity": "1",
@@ -54,6 +57,9 @@
         "h": 56
       },
       "text": "FIRE",
+      "aria": {
+        "aria-label": "Fire"
+      },
       "style": {
         "display": "block",
         "opacity": "1",
@@ -75,6 +81,9 @@
         "h": 56
       },
       "text": "MINE",
+      "aria": {
+        "aria-label": "Drop mine"
+      },
       "style": {
         "display": "block",
         "opacity": "1",

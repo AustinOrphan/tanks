@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Settings\n      \n        Audio\n        \n          Mute (M)\n          \n          \n        \n      \n      \n        Controls\n        \n          \n          Aim: Stick\n          \n          Fire: Tap to fire\n",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-settings-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -33,6 +37,9 @@
         "h": 44
       },
       "text": "Aim: Stick",
+      "aria": {
+        "aria-label": "Touch aim style: Aim: Stick. A second thumbstick -- push toward where you want to aim. Tap to switch to Aim: Point."
+      },
       "style": {
         "display": "block",
         "opacity": "1",
@@ -54,6 +61,9 @@
         "h": 44
       },
       "text": "Fire: Tap to fire",
+      "aria": {
+        "aria-label": "Touch fire style: Fire: Tap to fire. A tap on the aim side fires. The FIRE button still works too. Tap to switch to Fire: Double-tap to fire."
+      },
       "style": {
         "display": "block",
         "opacity": "1",

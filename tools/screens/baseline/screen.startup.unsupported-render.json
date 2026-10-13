@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "This browser cannot run Tanks!The game needs WebGL 2, and this browser is not providing it. Try a different browser, or turn on hardware acceleration in this one’s settings.Reload",
+      "aria": {
+        "role": "alert",
+        "aria-live": "assertive"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Level 3 cleared!\n      \n      Level attempt: 0 kills · 0 deaths · -- accuracy\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Continue Campaign\n      Start New Campaign\n      Next",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-panel-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

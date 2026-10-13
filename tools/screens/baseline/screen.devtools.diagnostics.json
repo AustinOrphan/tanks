@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Developer Tools\n      Developer mode is on for this page.\n      It is not a privileged mode: nothing here unlocks anything the ordinary game will not do. Leaving removes the developer parameters from ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-devtools-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -33,6 +37,9 @@
         "h": 18
       },
       "text": "",
+      "aria": {
+        "aria-label": "Session diagnostics"
+      },
       "style": {
         "display": "block",
         "opacity": "1",

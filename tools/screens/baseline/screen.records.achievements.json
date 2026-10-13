@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Records\n      \n      \n        Stats\n        Achievements\n      \n      0 of 14 earned\n      \n      Locked. First BloodDestroy a tank with a shell.Locked. MarksmanDestroy 25 tanks with shells.Locked. Gu",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-achievements-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -33,6 +37,9 @@
         "h": 472
       },
       "text": "Locked. First BloodDestroy a tank with a shell.Locked. MarksmanDestroy 25 tanks with shells.Locked. GunslingerDestroy 100 tanks with shells.Locked. SapperDestroy 10 tanks with mines.Locked. Demolition",
+      "aria": {
+        "role": "list"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -75,6 +82,9 @@
         "h": 46
       },
       "text": "Locked. First BloodDestroy a tank with a shell.",
+      "aria": {
+        "role": "listitem"
+      },
       "style": {
         "display": "flex",
         "opacity": "0.45",
