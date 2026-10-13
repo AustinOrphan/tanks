@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-reaches-a-single-player-death-pulse",
+  "file": "src/render/death-pulse.ts",
+  "find": "      const palette = identityApplies(world) ? ownerPalette : undefined;",
+  "replace": "      const palette = ownerPalette;",
+  "expect": "killed",
+  "tests": [
+    "src/render/death-pulse.test.ts"
+  ],
+  "why": "A player death rings at ONE player too, in slot 0's colour, so without the identity gate a High contrast session recolours the single-player death pulse -- and issue #1057 says a single-player game is unchanged under either palette. Killed by the single-player negative control.",
+  "killedBy": [
+    "death pulse: the owner palette (issue #1057) single-player is untouched: one player's death ring stays Classic under High contrast"
+  ]
+}

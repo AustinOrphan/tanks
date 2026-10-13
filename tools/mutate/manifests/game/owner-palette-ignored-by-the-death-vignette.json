@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-ignored-by-the-death-vignette",
+  "file": "src/game/loop.ts",
+  "find": "  return resolveOwnerColor(world, tank, ownerPalette);",
+  "replace": "  return resolveOwnerColor(world, tank);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Site 6 of issue #1057's 7: the multiplayer death vignette tints Classic while the dying tank's ring was High contrast. The single-player branch reads no palette and is unaffected, which the playerCount-1 negative control pins separately.",
+  "killedBy": [
+    "deathVignetteColor follows the owner palette at playerCount >= 2, for all 4 FFA slots and all 3 teams",
+    "startGameWith: a real player death reaches the HUD flashes a two-player FFA death in the session's owner palette (issue #1057)"
+  ]
+}

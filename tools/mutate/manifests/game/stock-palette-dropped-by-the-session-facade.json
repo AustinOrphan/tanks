@@ -1,0 +1,15 @@
+{
+  "id": "stock-palette-dropped-by-the-session-facade",
+  "file": "src/game/route-host.ts",
+  "find": "          if (current()) hud.setStockPalette(palette);",
+  "replace": "          void palette;",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The guarded gameplay HUD forwards setStockPalette to nothing, so a live session's palette never reaches the page HUD and the chips stay on the default (issue #1057). Killed by the facade's exhaustive live-slot sweep.",
+  "killedBy": [
+    "createRouteHost: the slot's gameplay HUD drops EVERY push from a session that has already been replaced",
+    "createRouteHost: the slot's gameplay HUD reaches the page HUD while the session holds the slot"
+  ]
+}

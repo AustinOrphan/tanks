@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-ignored-by-the-shell-tint",
+  "file": "src/render/entities.ts",
+  "find": "    return resolveOwnerColor(curr, owner, ownerPalette);",
+  "replace": "    return resolveOwnerColor(curr, owner);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Site 3 of issue #1057's 7: a player's shell glows Classic under High contrast, so the one cue that says whose shell is incoming disagrees with the firer's ring. Read in FFA and teams.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) site 3 of 7, the shell tint: a shell from each of the 4 FFA slots and 3 teams follows the palette"
+  ]
+}

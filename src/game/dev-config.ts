@@ -78,6 +78,7 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   pixelRatioCap: 'Rendering',
   fillRimLights: 'Rendering',
   identityMarker: 'Rendering',
+  ownerPalette: 'Rendering',
   enemyRole: 'Rendering',
   shellTrail: 'Rendering',
   arrival: 'Rendering',

@@ -1,0 +1,15 @@
+{
+  "id": "stock-chip-palette-waits-for-a-third-player",
+  "file": "src/game/hud.ts",
+  "find": "identityAppliesAt(stocks.length)",
+  "replace": "identityAppliesAt(stocks.length - 1)",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "tools/hud/ring-chip.test.ts"
+  ],
+  "why": "The stock chips' identity gate counts one player short, so a two-player versus match keeps Classic chips while its rings draw High contrast (issue #1057). Two is the threshold `identityApplies` uses, and the four-entry strips stay High contrast under this mutation. Killed by the two-entry negative control.",
+  "killedBy": [
+    "hud: stock chips in the session's owner palette (issue #1057) NEGATIVE CONTROL: a two-entry strip, the identity threshold, takes High contrast"
+  ]
+}

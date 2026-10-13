@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-ignored-by-the-team-lookup",
+  "file": "src/presentation/identity.ts",
+  "find": "  return palette.teams[team] ?? IDENTITY_COLOR_FALLBACK;",
+  "replace": "  return TEAM_COLORS[team] ?? IDENTITY_COLOR_FALLBACK;",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity.test.ts"
+  ],
+  "why": "The team half of owner-palette-ignored-by-the-slot-lookup: teamColor reads TEAM_COLORS instead of the palette, so every teams colour stays Classic under High contrast while FFA follows it (issue #1057).",
+  "killedBy": [
+    "owner palettes: every owner colour follows the palette it is handed (issue #1057) resolveOwnerColor: all 7 owner colours from the palette passed, and Classic when none is",
+    "owner palettes: every owner colour follows the palette it is handed (issue #1057) the HUD's two lookups take the palette too, and default to Classic"
+  ]
+}

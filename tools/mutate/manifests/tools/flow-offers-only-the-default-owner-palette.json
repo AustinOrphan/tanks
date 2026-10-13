@@ -1,0 +1,14 @@
+{
+  "id": "flow-offers-only-the-default-owner-palette",
+  "file": "tools/screens/flow.mjs",
+  "find": "  ownerPalette: Object.freeze(['classic', 'high-contrast']),",
+  "replace": "  ownerPalette: Object.freeze(['classic']),",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/flow.test.ts"
+  ],
+  "why": "The capture allowlist loses High contrast, so `record.mjs --flag ownerPalette=high-contrast` -- the recording #586's evidence asks for -- is refused as an unknown value (issue #1057). Killed by the two-way pin against OWNER_PALETTE_IDS.",
+  "killedBy": [
+    "the flow catalogue (issue #815) allowlists only flags the dev-flag registry knows, with the vocabulary it knows"
+  ]
+}

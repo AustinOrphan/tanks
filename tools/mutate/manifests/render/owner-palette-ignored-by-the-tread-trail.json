@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-ignored-by-the-tread-trail",
+  "file": "src/render/tread-trails.ts",
+  "find": "resolveOwnerColor(world, tank, ownerPalette), TREAD_IDENTITY_BLEND",
+  "replace": "resolveOwnerColor(world, tank), TREAD_IDENTITY_BLEND",
+  "expect": "killed",
+  "tests": [
+    "src/render/tread-trails.test.ts"
+  ],
+  "why": "Site 5 of issue #1057's 7: treadColorFor blends toward the Classic colour whatever palette it is handed, so a High contrast match prints trails leaning toward hues no ring on the board wears. Read in FFA and teams.",
+  "killedBy": [
+    "tread trails: the owner palette (issue #1057) a system built with the palette prints it through the real emit path, in FFA and teams",
+    "tread trails: the owner palette (issue #1057) treadColorFor leans toward the palette it is handed, for all 4 FFA slots and all 3 teams"
+  ]
+}

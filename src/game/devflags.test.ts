@@ -734,6 +734,46 @@ describe('parseDevFlags: stockCue (issue #230 -- the versus stock-loss cue arms)
   });
 });
 
+describe('parseDevFlags: ownerPalette (issue #1057 -- the owner palette, until the setting lands)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?ownerPalette=high-contrast').ownerPalette).toBeNull();
+  });
+
+  it('is null when absent -- the session then draws the shipped default', () => {
+    expect(parseDevFlags('?dev=1').ownerPalette).toBeNull();
+  });
+
+  it('accepts each palette -- population: the 2 ids OWNER_PALETTE_IDS holds, written out', () => {
+    expect(parseDevFlags('?dev=1&ownerPalette=classic').ownerPalette).toBe('classic');
+    expect(parseDevFlags('?dev=1&ownerPalette=high-contrast').ownerPalette).toBe('high-contrast');
+    // ...and the registry documents the same two, so docs/dev-flags.md cannot drift from them.
+    expect(FLAG_REGISTRY.ownerPalette.values).toEqual(['classic', 'high-contrast']);
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 7 forms below', () => {
+    // The label (`High contrast`), its case and spacing variants, and the words someone
+    // reaching for a palette might type. Any of them accepted would hand the session an id
+    // OWNER_PALETTES has no entry for.
+    for (const v of ['', 'High contrast', 'high contrast', 'High-Contrast', 'highcontrast', 'hc', 'default']) {
+      expect(parseDevFlags(`?dev=1&ownerPalette=${encodeURIComponent(v)}`).ownerPalette, v).toBeNull();
+    }
+  });
+
+  it('does not disturb the other flags', () => {
+    expect(parseDevFlags('?dev=1&ownerPalette=high-contrast'))
+      .toEqual({ ...DEV_FLAGS_OFF, ownerPalette: 'high-contrast' });
+  });
+
+  it('names its end state and claims no permanence (.claude/rules/game.md)', () => {
+    // A flag kept on purpose has to say so in its module header; this one is not, so its
+    // registry text must not read as a kept lever, and must say what survives it.
+    const notes = (FLAG_REGISTRY.ownerPalette.notes ?? []).join(' ');
+    expect(notes).toMatch(/Settings control is what survives/);
+    expect(notes).toMatch(/tanks\.settings\.v1/);
+    expect(notes).not.toMatch(/\bkept\b|rollback/i);
+  });
+});
+
 describe('registryKeyMismatch: proven against synthetic fixtures first', () => {
   // The point of factoring this out: a check written directly against FLAG_REGISTRY can
   // never fail while `Record<keyof DevFlags, FlagSpec>` stands (a missing or extra key is

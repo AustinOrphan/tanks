@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { createHud, type GameplayStatus, type Hud, type VersusStock } from './hud';
 import { STOCK_CUE_MS, type StockCue } from '../presentation/stock-cue';
 import { configFor } from '../sim/config';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
+import { IDENTITY_RING_COLORS, OWNER_PALETTES, TEAM_COLORS } from '../presentation/identity';
 import {
   IDENTITY_MARKER_STYLES, type IdentityMarkerStyle, markerCount, shapeOutlineFor,
 } from '../presentation/identity-marker';
@@ -557,6 +557,102 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
     expect(strip(root).classList.contains('hud-versus-stocks--hidden'), 'setup').toBe(false);
     h.setStatus(boardStatus('campaign'));
     expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(true);
+  });
+});
+
+/**
+ * Site 7 of issue #1057's 7: the stock chips in the palette the session hands the HUD with
+ * `setStockPalette`. The one site that never went through `resolveOwnerColor`, so threading
+ * the resolver alone left it Classic. Population: 4 FFA chips and 3 teams, under High
+ * contrast, with a HUD that was never told as the Classic control, and the one-entry and
+ * two-entry strips either side of the identity threshold. Colours written out.
+ */
+describe('hud: stock chips in the session\'s owner palette (issue #1057)', () => {
+  const entries = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-stock-entry')) as HTMLElement[];
+  const rgb = (hex: number): string => `rgb(${(hex >> 16) & 0xff}, ${(hex >> 8) & 0xff}, ${hex & 0xff})`;
+  const CLASSIC_RINGS = [0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bff];
+  const HIGH_CONTRAST_RINGS = [0x63d1fd, 0x8ffd00, 0xfdbbc6, 0xfdfdbb];
+  const CLASSIC_TEAMS = [0xff3b3b, 0xfcc0fc, 0x4eff3b];
+  const HIGH_CONTRAST_TEAMS = [0x63d1fd, 0xc6fd00, 0xf2c6bb];
+  const FFA: VersusStock[] = [0, 1, 2, 3].map((slot) => ({ slot, stock: 3 }));
+  // Slot 3 on team A, so a teams chip read from the slot table would show ring 3.
+  const TEAMS: VersusStock[] = [
+    { slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 },
+    { slot: 2, stock: 3, team: 2 }, { slot: 3, stock: 3, team: 0 },
+  ];
+
+  it('paints all 4 FFA chips and all 3 teams from the palette it was handed', () => {
+    const { hud: h, root } = mount();
+    h.setStockPalette(OWNER_PALETTES['high-contrast']);
+    h.setState('playing');
+    h.setStatus(versusStatus(FFA));
+    expect(entries(root).map((e) => e.style.color), 'ffa').toEqual(HIGH_CONTRAST_RINGS.map(rgb));
+    h.setStatus(versusStatus(TEAMS));
+    expect(entries(root).map((e) => e.style.color), 'teams').toEqual(
+      [HIGH_CONTRAST_TEAMS[0], HIGH_CONTRAST_TEAMS[1], HIGH_CONTRAST_TEAMS[2], HIGH_CONTRAST_TEAMS[0]].map(rgb),
+    );
+  });
+
+  it('NEGATIVE CONTROL: a HUD the session never told paints Classic, in FFA and teams', () => {
+    const { hud: h, root } = mount();
+    h.setState('playing');
+    h.setStatus(versusStatus(FFA));
+    expect(entries(root).map((e) => e.style.color), 'ffa').toEqual(CLASSIC_RINGS.map(rgb));
+    h.setStatus(versusStatus(TEAMS));
+    expect(entries(root).map((e) => e.style.color), 'teams').toEqual(
+      [CLASSIC_TEAMS[0], CLASSIC_TEAMS[1], CLASSIC_TEAMS[2], CLASSIC_TEAMS[0]].map(rgb),
+    );
+  });
+
+  it('a one-entry strip keeps the shipped colour under High contrast, as its spawn ring does', () => {
+    // The world `?dev=1&mode=ffa` (or `mode=teams`) builds without `players`: one player tank,
+    // slot 0 on team A. Identity does not apply to it, so its spawn ring and death pulse draw
+    // the shipped colour, and the chip has to as well. Population: the 1 FFA slot and the 1
+    // team such a world has, against Classic slot 0 (#3fd0ff) and team A (#ff3b3b).
+    const { hud: h, root } = mount();
+    h.setStockPalette(OWNER_PALETTES['high-contrast']);
+    h.setState('playing');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }]));
+    expect(entries(root).map((e) => e.style.color), 'ffa').toEqual(['rgb(63, 208, 255)']);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3, team: 0 }]));
+    expect(entries(root).map((e) => e.style.color), 'teams').toEqual(['rgb(255, 59, 59)']);
+  });
+
+  it('NEGATIVE CONTROL: a two-entry strip, the identity threshold, takes High contrast', () => {
+    // The case above would also pass if the palette never reached the strip; here a HUD handed
+    // the same palette, with one entry more, has to paint High contrast. Two entries, not four,
+    // so a gate one player late fails. Population: 2 FFA slots, then teams A and B.
+    const { hud: h, root } = mount();
+    h.setStockPalette(OWNER_PALETTES['high-contrast']);
+    h.setState('playing');
+    h.setStatus(versusStatus([{ slot: 0, stock: 3 }, { slot: 1, stock: 3 }]));
+    expect(entries(root).map((e) => e.style.color), 'ffa').toEqual(['rgb(99, 209, 253)', 'rgb(143, 253, 0)']);
+    h.setStatus(versusStatus([{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]));
+    expect(entries(root).map((e) => e.style.color), 'teams').toEqual(['rgb(99, 209, 253)', 'rgb(198, 253, 0)']);
+  });
+
+  it('the identity-mark glyph takes its hue from the chip, so it follows the palette too (#778)', () => {
+    // The glyph carries no colour of its own: every stroke and fill it paints is
+    // `currentColor`, which resolves to the chip's own `color`. A glyph painted from a
+    // constant would stay Classic beside a High contrast chip. Slot 1, where the two
+    // palettes are furthest apart (amber against green).
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, { identityMarker: 'shape' });
+    hud.setStockPalette(OWNER_PALETTES['high-contrast']);
+    hud.setState('playing');
+    hud.setStatus(versusStatus(FFA));
+    const chip = entries(root)[1];
+    expect(chip.style.color).toBe(rgb(0x8ffd00));
+    const glyph = chip.querySelector('.hud-stock-marker');
+    expect(glyph, 'the shape style draws a glyph in an FFA chip').not.toBeNull();
+    const painted = [glyph!, ...Array.from(glyph!.querySelectorAll('*'))];
+    const paints = painted.flatMap((el) => ['stroke', 'fill'].map((a) => el.getAttribute(a)))
+      .filter((v): v is string => v !== null && v !== 'none');
+    expect(paints.length, 'the glyph paints something').toBeGreaterThan(0);
+    expect(new Set(paints), 'every paint the glyph uses is the chip colour').toEqual(new Set(['currentColor']));
+    expect((glyph as SVGElement).getAttribute('style'), 'no colour set on the glyph itself').toBeNull();
   });
 });
 

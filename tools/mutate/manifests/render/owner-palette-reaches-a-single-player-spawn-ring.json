@@ -1,0 +1,17 @@
+{
+  "id": "owner-palette-reaches-a-single-player-spawn-ring",
+  "file": "src/render/entities.ts",
+  "find": "resolveOwnerColor(curr, t, multiPlayer ? ownerPalette : undefined);",
+  "replace": "resolveOwnerColor(curr, t, ownerPalette);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts",
+    "tools/hud/ring-chip.test.ts"
+  ],
+  "why": "Unlike the identity ring, the entrance ring draws at ONE player too, in slot 0's colour, so without the identity gate `?dev=1&ownerPalette=high-contrast` recolours a single-player spawn from #3fd0ff to #63d1fd -- and issue #1057 says a single-player game is unchanged under either palette. Killed by the single-player negative control, and by the one-player ring-and-chip cases in FFA and teams, where the ring would leave its Classic chip.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) single-player is untouched under High contrast: no identity ring or tint, and a Classic spawn ring",
+    "the identity ring and the stock chip are one colour (issue #1057) ffa, one player, high-contrast: the chip keeps the shipped colour its spawn ring draws",
+    "the identity ring and the stock chip are one colour (issue #1057) teams, one player, high-contrast: the chip keeps the shipped colour its spawn ring draws"
+  ]
+}

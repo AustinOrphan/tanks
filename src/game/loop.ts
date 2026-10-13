@@ -115,7 +115,12 @@ import { browserHistoryHost } from './navigation';
 import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import type { BlockedFireCue } from '../presentation/blocked-fire';
 import type { GameplayRouteHost, RouteHostDeps, StartIntent } from './route-host';
-import { resolveOwnerColor } from '../presentation/identity';
+import {
+  DEFAULT_OWNER_PALETTE,
+  OWNER_PALETTES,
+  resolveOwnerColor,
+  type OwnerPalette,
+} from '../presentation/identity';
 import { readPadDiagnostics, type PadDiagnostic } from '../input/gamepad-diagnostics';
 import { createDriver, type RafScheduler } from './driver';
 import {
@@ -205,6 +210,7 @@ export interface GameDeps {
       shellTrail?: import('../presentation/shell-trail').ShellTrailStyle | null;
       arrival?: import('../presentation/arrival-language').ArrivalLanguage | null;
       enemyRole?: import('../presentation/enemy-role').EnemyRoleCue | null;
+      ownerPalette?: OwnerPalette;
       playerColor?: string;
       playerSkin?: SkinId;
       playerAccent?: string | null;
@@ -817,9 +823,9 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
  *
  * Single-player (`playerCount` 1) always gets the classic red -- `SINGLE_PLAYER_DEATH_
  * VIGNETTE` -- unconditionally, so existing single-player behaviour cannot move. At
- * `playerCount >= 2` it is the DYING tank's own identity colour: `TEAM_COLORS[team]` in
- * 'teams' mode, `IDENTITY_RING_COLORS[controlledBy]` otherwise -- the same dispatch
- * entities.ts's own ring/tint colouring already uses at its `curr.mode === 'teams' ?
+ * `playerCount >= 2` it is the DYING tank's own identity colour in the session's owner
+ * palette (issue #1057): its team's colour in 'teams' mode, its slot's otherwise -- the same
+ * dispatch entities.ts's own ring/tint colouring already uses at its `curr.mode === 'teams' ?
  * teamColor(...) : identityColor(...)` sites, so the vignette always matches the ring
  * the dying tank draws on screen. `tank-destroyed` does not carry `controlledBy` itself
  * (see events.ts), so this looks the tank up in `world`; `resolveWalls`'s sibling
@@ -827,19 +833,28 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
  * `driver.world.lives` above does -- a destroyed tank stays in `world.tanks` (`alive:
  * false`, never spliced, see world.ts/bullets.ts/mines.ts) -- so the lookup finds it.
  * Falls back to the classic red if the tank cannot be found (should not happen). The
- * multiplayer branch delegates to `resolveOwnerColor` (`render/entities.ts`, issue
+ * multiplayer branch delegates to `resolveOwnerColor` (`presentation/identity.ts`, issue
  * #200's death-pulse work) -- the same team/identity dispatch `syncTanks`'s own
  * ring/spawn-ring sites and `shellTintFor` use, rather than a fourth copy that indexed
  * `TEAM_COLORS`/`IDENTITY_RING_COLORS` directly. That used to mean an out-of-range slot
  * fell back to this file's red instead of `resolveOwnerColor`'s white; unreached today
  * (`players` caps at 4, matching both palettes' length) and not pinned by any test, so
  * folding it in changes no observed behaviour.
+ *
+ * `ownerPalette` is the one the session's renderer was handed, so the vignette matches the
+ * ring under High contrast too. The single-player return comes first and reads no palette:
+ * one player has no ring to match, and the red is what single-player has always shown.
  */
-export function deathVignetteColor(world: World, playerId: number, playerCount: number): number {
+export function deathVignetteColor(
+  world: World,
+  playerId: number,
+  playerCount: number,
+  ownerPalette?: OwnerPalette,
+): number {
   if (playerCount === 1) return SINGLE_PLAYER_DEATH_VIGNETTE;
   const tank = world.tanks.find((t) => t.id === playerId);
   if (!tank) return SINGLE_PLAYER_DEATH_VIGNETTE;
-  return resolveOwnerColor(world, tank);
+  return resolveOwnerColor(world, tank, ownerPalette);
 }
 
 /**
@@ -1995,6 +2010,15 @@ export function startGameWith(
    */
   const sessionQuality = deps.devFlags.quality ?? deps.effectiveSettings.current().quality;
 
+  /*
+   * THE OWNER PALETTE THIS SESSION DRAWS IN (issue #1057), resolved once, as quality is, and
+   * handed to the three readers that each draw part of it: the renderer (rings, shell tints,
+   * trails, death pulses), the HUD's stock chips and the death vignette. One value for all
+   * three is what keeps a ring and its chip the same colour. `?dev=1&ownerPalette=` is the
+   * only selector until the Settings control lands; without it this is the shipped default.
+   */
+  const sessionOwnerPalette = OWNER_PALETTES[deps.devFlags.ownerPalette ?? DEFAULT_OWNER_PALETTE];
+
   // One renderer setting at a time on top of that preset (issue #735), for a device sweep. Held
   // beside the resolved configuration because the benchmark report records both: the
   // overrides say which settings were moved, the configuration what the renderer applied.
@@ -2037,6 +2061,7 @@ export function startGameWith(
     shellTrail: deps.devFlags.shellTrail,
     arrival: deps.devFlags.arrival,
     enemyRole: deps.devFlags.enemyRole,
+    ownerPalette: sessionOwnerPalette,
     // The paint shop's saved colour, skin and accent, applied from the first frame.
     playerColor: deps.customization.hexFor(deps.customization.hull()),
     playerSkin: deps.customization.skin(),
@@ -2260,7 +2285,7 @@ export function startGameWith(
   const slot = routeHost.attach({ relaunchTarget });
   const { sm, routeUi } = routeHost;
   /**
-   * THIS SESSION'S HUD: the ten gameplay members, behind the slot's generation guard.
+   * THIS SESSION'S HUD: the eleven gameplay members, behind the slot's generation guard.
    *
    * Not `routeHost.hud`, which no longer exists on the type a session is handed (issue
    * #324, step S8). Two things follow, and both used to be one careful convention away
@@ -2269,6 +2294,9 @@ export function startGameWith(
    * every method on the facade re-checks the generation first.
    */
   const hud = slot.hud;
+  // The stock chips' palette, before the first status push below can draw a chip (issue
+  // #1057). Once per session and never again, so the chips cannot repaint mid-match.
+  hud.setStockPalette(sessionOwnerPalette);
   /**
    * Issue #516's `hud` blocked-fire arm. Constructed here rather than behind a `GameDeps`
    * seam because it needs nothing from the browser -- the audio and haptic arms sit behind
@@ -2823,7 +2851,9 @@ export function startGameWith(
     // being unique the moment a second player-kind tank exists (the co-op foundation).
     onFrameEvents(events): void {
       if (isPlayerDeath(events, playerId ?? -1)) {
-        hud.signalPlayerDeath(deathVignetteColor(driver.world, playerId ?? -1, playerCount));
+        hud.signalPlayerDeath(
+          deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette),
+        );
         // The #152 fix: persist the reduced life count on the RUN before the player
         // can escape it by refreshing or leaving gameplay -- not deferred to any
         // later click. `driver.world.lives` is already the post-step count: the

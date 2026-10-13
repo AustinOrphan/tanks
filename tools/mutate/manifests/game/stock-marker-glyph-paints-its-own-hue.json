@@ -1,0 +1,15 @@
+{
+  "id": "stock-marker-glyph-paints-its-own-hue",
+  "file": "src/game/hud.ts",
+  "find": "  'fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.18\" stroke-linejoin=\"round\" stroke-linecap=\"round\"';",
+  "replace": "  'fill=\"none\" stroke=\"#ff8a1e\" stroke-width=\"0.18\" stroke-linejoin=\"round\" stroke-linecap=\"round\"';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The #778 identity-mark glyph strokes a fixed hue instead of `currentColor`, so it no longer takes its colour from the chip it sits in: under High contrast a green slot-1 chip carries an amber glyph, and the glyph cannot follow any palette (issue #1057). Killed by the test that requires every paint the glyph uses to be the chip colour, and already by #778's forced-colours case, which refuses any literal colour in the glyph.",
+  "killedBy": [
+    "hud: identity mark in the stock strip (issue #778) paints on currentColor, so forced colours repaints it instead of dropping it",
+    "hud: stock chips in the session's owner palette (issue #1057) the identity-mark glyph takes its hue from the chip, so it follows the palette too (#778)"
+  ]
+}

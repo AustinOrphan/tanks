@@ -193,10 +193,11 @@ type VersusTally = { kills: number[]; deaths: number[]; shots: number[]; shellKi
  *
  * INDICES, NEVER COLOURS (issue #473): `slot` is `Tank.controlledBy` and `team` is
  * `Tank.team`, and the HUD looks the hue up for itself in `presentation/identity.ts` --
- * `IDENTITY_RING_COLORS[slot]` in ffa, `TEAM_COLORS[team]` in teams, the same exported
- * constants this slot's ring is tinted from, imported rather than copied out as literal
- * hex so retuning either palette moves the readout with it. `team` is absent outside
- * 'teams' mode, where `loadArena` stamps no side at all.
+ * `identityColor(slot, palette)` in ffa, `teamColor(team, palette)` in teams, the same
+ * lookups and the same session palette (`setStockPalette`, issue #1057) this slot's ring is
+ * tinted from, rather than literal hex, so retuning or switching a palette moves the
+ * readout with it. `team` is absent outside 'teams' mode, where `loadArena` stamps no side
+ * at all.
  *
  * Each entry renders its OWN element, because a joined string could not carry a per-slot
  * tint, and the strip is placed in the topbar beside `.hud-stat`/`.hud-shells` --
@@ -281,7 +282,9 @@ import { keyHint, type Modality } from './modality';
 import { teamOf } from '../sim/arena';
 import { VERSUS_CATALOG, versusCatalogEntryById } from '../sim/config/versus-catalog';
 import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
-import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
+import {
+  TEAM_LABELS, identityAppliesAt, identityColor, teamColor, type OwnerPalette,
+} from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
 import { equalizeMenuRows } from './menu-row-width';
 import { hudFontClass, type HudFont } from '../presentation/hud-font';
@@ -620,6 +623,16 @@ export interface Hud {
    */
   setStatus(status: GameplayStatus | null): void;
   /**
+   * The owner palette the versus stock chips are painted in (issue #1057): the same one the
+   * session handed its renderer, so a chip and its slot's ring are one colour. A session
+   * calls it once, when it is built and before its first `setStatus`; it repaints nothing by
+   * itself, and the chips read it the next time the strip is drawn. A strip of one entry, or
+   * a HUD that is never told, draws the shipped default, as a single-player spawn ring does.
+   * Named for what it paints, leaving `setOwnerPalette` and `onOwnerPaletteChange` free for
+   * the Settings control.
+   */
+  setStockPalette(palette: OwnerPalette): void;
+  /**
    * The main menu's level select: `unlocked` of `total` levels are pickable
    * (1-based count; level 1 is always open). A one-level total hides the Levels button
    * entirely -- the sandbox is not a choice. Locked buttons are DISABLED, not merely
@@ -904,10 +917,8 @@ export interface Hud {
    * SECOND WebGLRenderer against it, which is why the HUD only hands the element out
    * rather than doing any WebGL of its own: hud.ts constructs no WebGL context and
    * builds no `three` object of its own, which is what lets hud.test.ts keep running
-   * under plain jsdom. (It DOES import render/entities' plain
-   * IDENTITY_RING_COLORS/TEAM_COLORS number arrays -- see `VersusStock`'s own doc
-   * comment -- a value import, not a WebGL one; measured under this file's own jsdom
-   * suite before landing, since `entities.ts` pulls in `three` at module scope too.)
+   * under plain jsdom. (Its owner colours come from `presentation/identity.ts`, which
+   * imports no `three` -- see `VersusStock`'s own doc comment.)
    */
   readonly previewCanvas: HTMLCanvasElement;
   /**
@@ -1395,7 +1406,7 @@ export type RouteHudKey =
 
 /**
  * What a live match may write, and the ONLY part of `Hud` a gameplay session ever holds.
- * Nine members plus the lent `showToast`.
+ * Ten members plus the lent `showToast`.
  *
  * "Ever holds" literally, since issue #324's step S8: `GameplaySlot.hud` (route-host.ts)
  * IS this `Pick`, forwarded member by member behind the slot's generation guard, and it is
@@ -1417,6 +1428,9 @@ export type GameplayHudKey =
   | 'setRoundPhase' | 'setShellCount' | 'signalShellCapacity'
   | 'signalPlayerDeath' | 'signalPlayerFire' | 'setTouchIndicator'
   | 'showAchievementToasts'
+  // Issue #1057. Gameplay rather than route because the SESSION picks the palette, once,
+  // for its renderer and its chips together; a route push could repaint chips mid-match.
+  | 'setStockPalette'
   // Lent from the frame, which owns the stack itself. A session needs it for the gamepad
   // connect/disconnect edges, which are neither route changes nor gameplay events but do
   // happen mid-match and have nowhere else to report.
@@ -3380,7 +3394,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * The in-match stock strip -- see `VersusStock` and `GameplayStatus` for the contract.
    * Rebuilt from scratch on every call (at most 4 entries, the identity palette's own cap
-   * -- entities.ts's own IDENTITY_RING_COLORS comment) rather than diffed, the same
+   * -- identity.ts's own IDENTITY_RING_COLORS comment) rather than diffed, the same
    * "cheap enough to just rebuild" precedent renderAchievements/renderVersusSlotRows
    * already use elsewhere in this file.
    * ONE ELEMENT PER ENTRY, not one joined string like renderVersusResultsLine above:
@@ -3397,6 +3411,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return;
     }
     const now = performance.now();
+    // The session's palette applies only where identity does (issue #1057). One entry per
+    // player-kind tank, so the strip's length is the population `identityApplies` counts: a
+    // one-slot versus world (`?dev=1&mode=ffa` without `players`) keeps the shipped chip
+    // beside the shipped spawn ring and death pulse, as every single-player game does.
+    const chipPalette = identityAppliesAt(stocks.length) ? stockPalette : undefined;
     for (const entry of stocks) {
       const span = document.createElement('span');
       span.className = 'hud-versus-stock-entry';
@@ -3413,16 +3432,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
         fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, running, now, stocks.length);
       }
-      // teams: TEAM_COLORS[team]; ffa (no `team` on the entry): IDENTITY_RING_COLORS[
-      // slot] -- the SAME dispatch entities.ts's own ring/tint colouring uses at its
-      // `mode === 'teams' ? teamColor(...) : identityColor(...)` site, imported rather
-      // than copied out as literal hex (see `VersusStock`'s own doc comment). The
-      // `?? 0xffffff` fallback is unreached today -- both palettes cover every slot the
-      // n-player cap (4) allows, and TEAM_COLORS covers all three teams issue #281 permits
-      // -- kept only so a future out-of-range slot degrades to a colour rather than an NaN
-      // hex string. It was REACHABLE between #281's descriptor landing and TEAM_COLORS
-      // gaining its third entry: a 2v1v1 rendered team 2's stock white, which is also the
-      // unstyled-slot placeholder.
+      // teams: teamColor(team); ffa (no `team` on the entry): identityColor(slot) -- the
+      // SAME two lookups `resolveOwnerColor` dispatches between for the ring, read in
+      // `chipPalette` above, so the chip and the ring agree under either palette (see
+      // `VersusStock`'s own doc comment). Their white fallback is
+      // unreached today -- both palettes cover every slot the n-player cap (4) allows and
+      // all three teams issue #281 permits -- kept only so a future out-of-range slot
+      // degrades to a colour rather than an NaN hex string. It was REACHABLE between #281's
+      // descriptor landing and TEAM_COLORS gaining its third entry: a 2v1v1 rendered team
+      // 2's stock white, which is also the unstyled-slot placeholder.
       // Issue #778: the mark this slot wears in the arena, ahead of its label, so the
       // strip and the ground ring read as one channel (#234's pair). AFTER the two branches
       // above, because `textContent =` would drop a child written before it.
@@ -3438,7 +3456,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       if (identityMarker !== null && entry.team === undefined && stockCue !== 'marks') {
         span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));
       }
-      const hex = entry.team !== undefined ? (TEAM_COLORS[entry.team] ?? 0xffffff) : (IDENTITY_RING_COLORS[entry.slot] ?? 0xffffff);
+      const hex = entry.team !== undefined
+        ? teamColor(entry.team, chipPalette)
+        : identityColor(entry.slot, chipPalette);
       span.style.color = cssColor(hex);
       versusStocksEl.appendChild(span);
     }
@@ -3454,6 +3474,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * presentation/identity-marker.ts for the shared table this and the arena ring both read.
    */
   const identityMarker: IdentityMarkerStyle | null = opts.identityMarker ?? null;
+  /**
+   * The palette the stock chips are painted in, as the live session last stated it through
+   * `setStockPalette` (issue #1057). Undefined until then, which `identityColor`/`teamColor`
+   * read as the shipped default: the strip every injected HUD draws. A one-entry strip draws
+   * the default too (`renderVersusStocks`'s `chipPalette`).
+   */
+  let stockPalette: OwnerPalette | undefined;
   /**
    * The stock losses still worth drawing, by slot: WHEN each arrived (`performance.now()`) and the
    * stock it dropped FROM. Kept here rather than on an element, because `renderVersusStocks`
@@ -7921,6 +7948,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   return {
+    setStockPalette(palette: OwnerPalette): void {
+      // Stored, not painted: the next status push redraws the strip, and the session states
+      // this before its first one.
+      stockPalette = palette;
+    },
     setStatus(status: GameplayStatus | null): void {
       // The announcement is decided BEFORE `prevStatus` moves, and from the pushed value
       // rather than from anything rendered (issue #629). Leaving gameplay (`null`) clears

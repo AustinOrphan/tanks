@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-ignored-by-the-spawn-ring",
+  "file": "src/render/entities.ts",
+  "find": "resolveOwnerColor(curr, t, multiPlayer ? ownerPalette : undefined);\n          const ring = makeSpawnRing(color);",
+  "replace": "resolveOwnerColor(curr, t);\n          const ring = makeSpawnRing(color);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Site 2 of issue #1057's 7: the entrance ring a respawning or round-starting player wears drops the session palette and flashes Classic around a tank whose identity ring is High contrast. Read on the respawn edge, in FFA and teams.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) site 2 of 7, the spawn ring: a round entrance in all 4 FFA slots and all 3 teams follows the palette"
+  ]
+}
