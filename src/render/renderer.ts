@@ -11,6 +11,7 @@ import type { MineWarnStyle } from './mine-warning';
 import type { IdentityMarkerStyle } from '../presentation/identity-marker';
 import type { ArrivalLanguage } from '../presentation/arrival-language';
 import type { EnemyRoleCue } from '../presentation/enemy-role';
+import type { OwnerPalette } from '../presentation/identity';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createWreckSystem, type WreckSystem } from './wreck';
@@ -117,6 +118,12 @@ export interface RendererOptions {
   /** Experimental shell bounce-trail (`shellTrail` dev flag, issue #688); absent = none
    *  drawn, which is the shipped render. */
   readonly shellTrail?: ShellTrailStyle | null;
+  /**
+   * The owner palette every owner colour this renderer draws comes from (issue #1057): the
+   * identity and spawn rings, shell tints, tread trails and death pulses. Resolved once per
+   * session by the game layer; absent = the shipped default.
+   */
+  readonly ownerPalette?: OwnerPalette;
   /** The paint shop's saved hull colour, applied from the first frame. */
   readonly playerColor?: string;
   /** The paint shop's saved skin, applied from the first frame. */
@@ -184,7 +191,7 @@ export function createRenderer(
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary, options.quality);
   const entities: EntityViews = createEntityViews(
     ctx.scene, ctx.textures, options.mineWarn ?? null, options.identityMarker ?? null,
-    options.arrival ?? null, options.enemyRole ?? null,
+    options.arrival ?? null, options.enemyRole ?? null, options.ownerPalette,
   );
   if (options.playerColor || options.playerSkin || options.playerAccent) {
     entities.setPlayerStyle(
@@ -194,11 +201,13 @@ export function createRenderer(
     );
   }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
-  const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene, options.arrival === 'opposed');
+  const deathPulse: DeathPulseSystem = createDeathPulseSystem(
+    ctx.scene, options.arrival === 'opposed', options.ownerPalette,
+  );
   // Constructed only when an arm is asked for: an absent flag must leave the scene graph
   // byte-identical to the shipped one, not merely quiet.
   const wreck: WreckSystem | null = options.wreck ? createWreckSystem(ctx.scene, options.wreck) : null;
-  const treadTrails: TreadTrailSystem = createTreadTrailSystem(ctx.scene);
+  const treadTrails: TreadTrailSystem = createTreadTrailSystem(ctx.scene, options.ownerPalette);
   // Built only when the flag names it, like the blocked-fire arms below: without it there is
   // no mesh in the scene and no per-frame sync, so the shipped render is untouched. It is not
   // in the setReducedMotion fan-out because it has no motion of its own to reduce -- the

@@ -55,8 +55,17 @@ export const IDENTITY_RING_COLORS: OwnerRingSet = [0x3fd0ff, 0xff8a1e, 0xff4d2e,
  * colour rather than `undefined` reaching a THREE material constructor.
  */
 const IDENTITY_COLOR_FALLBACK = 0xffffff;
-function identityColor(slot: number): number {
-  return IDENTITY_RING_COLORS[slot] ?? IDENTITY_COLOR_FALLBACK;
+/**
+ * One slot's ring colour in `palette`, which defaults to the shipped one. Exported for the
+ * HUD's stock chips (issue #1057), which hold a slot rather than a tank and so cannot call
+ * `resolveOwnerColor`. They used to index `IDENTITY_RING_COLORS` themselves, so a palette
+ * threaded through the resolver alone would have missed them.
+ */
+export function identityColor(
+  slot: number,
+  palette: OwnerPalette = OWNER_PALETTES[DEFAULT_OWNER_PALETTE],
+): number {
+  return palette.rings[slot] ?? IDENTITY_COLOR_FALLBACK;
 }
 
 /**
@@ -135,8 +144,12 @@ export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0xfcc0f
  * pane's team selector shows -- so the readout and the control that set it agree.
  */
 export const TEAM_LABELS: readonly [string, string, string] = ['A', 'B', 'C'];
-function teamColor(team: number): number {
-  return TEAM_COLORS[team] ?? IDENTITY_COLOR_FALLBACK;
+/** One team's colour in `palette`: the team half of `identityColor`, exported for the same reason. */
+export function teamColor(
+  team: number,
+  palette: OwnerPalette = OWNER_PALETTES[DEFAULT_OWNER_PALETTE],
+): number {
+  return palette.teams[team] ?? IDENTITY_COLOR_FALLBACK;
 }
 
 /** An owner palette's rings: one colour per co-op slot (`Tank.controlledBy`), slots 0 to 3. */
@@ -156,9 +169,11 @@ export interface OwnerPalette {
 /**
  * The owner palettes (issue #1056, the data half of #586). The ids live here, free of any
  * renderer, so `game/settings.ts` can name them later the way it names
- * `presentation/quality.ts`'s presets. NOTHING READS THE PALETTES YET: every consumer still
- * indexes `IDENTITY_RING_COLORS` and `TEAM_COLORS`, which are Classic's own arrays, so the
- * game draws exactly what it drew before.
+ * `presentation/quality.ts`'s presets. Issue #1057 threaded them: every owner colour is read
+ * through `identityColor`, `teamColor` or `resolveOwnerColor` with a palette passed in, and
+ * a session picks the palette once, from the `ownerPalette` dev flag or this default. The
+ * palette is an ARGUMENT at every site rather than state held here, so a test that draws in
+ * High contrast cannot leave the next file's tests drawing in it too.
  */
 export const OWNER_PALETTE_IDS = ['classic', 'high-contrast'] as const;
 export type OwnerPaletteId = (typeof OWNER_PALETTE_IDS)[number];
@@ -242,9 +257,19 @@ export const OWNER_PALETTES: Readonly<Record<OwnerPaletteId, OwnerPalette>> = {
  * palettes' length) and not pinned by any test, so folding it into this fallback
  * changes no observed behaviour. `tank.team ?? 0`/`tank.controlledBy ?? 0` mirror the
  * defensive fallbacks the three existing call sites already use.
+ *
+ * `palette` is the session's owner palette (issue #1057). When it is absent the shipped
+ * default applies, which is how the customization preview and the gallery scenes stay on
+ * Classic without naming it.
  */
-export function resolveOwnerColor(world: World, tank: Tank): number {
-  return world.rules.mode === 'teams' ? teamColor(tank.team ?? 0) : identityColor(tank.controlledBy ?? 0);
+export function resolveOwnerColor(
+  world: World,
+  tank: Tank,
+  palette: OwnerPalette = OWNER_PALETTES[DEFAULT_OWNER_PALETTE],
+): number {
+  return world.rules.mode === 'teams'
+    ? teamColor(tank.team ?? 0, palette)
+    : identityColor(tank.controlledBy ?? 0, palette);
 }
 
 /**

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Tank, Vec2 } from '../sim/types';
 import type { World } from '../sim/world';
 import { HULL_WIDTH, TRACK_W } from './entities';
-import { identityApplies, resolveOwnerColor } from '../presentation/identity';
+import { identityApplies, resolveOwnerColor, type OwnerPalette } from '../presentation/identity';
 
 /**
  * Fading tread-print decals left behind a moving tank (issue #231).
@@ -139,8 +139,10 @@ export function blendHex(from: number, to: number, t: number): number {
  * rings do (one player-kind tank is below the threshold) rather than by a separate mode
  * check that could drift from it. Enemy tanks are neutral in every mode: they have no slot
  * and no team, and `resolveOwnerColor` would hand them slot 0's colour.
+ *
+ * `ownerPalette` is the session's (issue #1057); absent = the shipped default.
  */
-export function treadColorFor(world: World, tank: Tank): number {
+export function treadColorFor(world: World, tank: Tank, ownerPalette?: OwnerPalette): number {
   if (tank.kind !== 'player') return TREAD_COLOR;
   // VS ONLY, and `campaign-coop` is checked EXPLICITLY rather than left to the player-count
   // gate below. Four-player co-op clears that gate -- it has four player tanks and draws
@@ -153,7 +155,7 @@ export function treadColorFor(world: World, tank: Tank): number {
   // `identityApplies` is kept alongside the mode check rather than dropped as redundant:
   // it is the SAME gate the rings hang on, so a trail can never be tinted on a board where
   // the ring it leans toward is not drawn.
-  return blendHex(TREAD_COLOR, resolveOwnerColor(world, tank), TREAD_IDENTITY_BLEND);
+  return blendHex(TREAD_COLOR, resolveOwnerColor(world, tank, ownerPalette), TREAD_IDENTITY_BLEND);
 }
 const TREAD_OPACITY = 0.5; // peak opacity of a fresh decal
 // Just off the felt, matching the RING_Y/IDENTITY_RING_Y precedent (spawn-anim.ts,
@@ -198,7 +200,11 @@ function makeGeometry(): THREE.PlaneGeometry {
   return geo;
 }
 
-export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
+export function createTreadTrailSystem(
+  scene: THREE.Scene,
+  /** The session's owner palette (issue #1057), handed to `treadColorFor`; absent = the default. */
+  ownerPalette?: OwnerPalette,
+): TreadTrailSystem {
   const geo = makeGeometry();
   const pool: Decal[] = [];
   const active: Decal[] = [];
@@ -309,7 +315,7 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
       }
       // Resolved once per tank per sync rather than inside the emit loop: every mark in
       // one walk belongs to the same tank, and the identity gate reads the whole world.
-      const tint = treadColorFor(curr, t);
+      const tint = treadColorFor(curr, t, ownerPalette);
       let dx = t.pos.x - anchor.x;
       let dy = t.pos.y - anchor.y;
       let dist = Math.hypot(dx, dy);

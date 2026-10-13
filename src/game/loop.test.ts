@@ -160,7 +160,12 @@ import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
 import { RECOMMENDED_LAYOUT, type ControlLayout, type LayoutLookup } from '../input/gamepad-profile';
 import type { PadDiagnostic } from '../input/gamepad-diagnostics';
 import { SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../presentation/identity';
+import {
+  IDENTITY_RING_COLORS,
+  OWNER_PALETTES,
+  TEAM_COLORS,
+  type OwnerPalette,
+} from '../presentation/identity';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -206,6 +211,11 @@ interface Recorder {
   deathSignals: number;
   /** Every colour passed to signalPlayerDeath, in order -- death-pulse issue #200. */
   deathColors: number[];
+  /**
+   * Every palette passed to hud.setStockPalette, in order (issue #1057). Also logged to
+   * `hudCallLog` as `stockPalette`, so a case can read it against the first status push.
+   */
+  stockPalettes: OwnerPalette[];
   inputClears: number;
   /** `resyncGamepad()` calls on slot 0's controller and on each co-player source, by pad index (issue #494). */
   resyncs: number;
@@ -564,6 +574,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     roundPhases: [],
     deathSignals: 0,
     deathColors: [],
+    stockPalettes: [],
     inputClears: 0,
     minePresses: 0,
     firePresses: 0,
@@ -1259,6 +1270,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         signalShellCapacity: (i) => rec.capacityFlashes.push(i),
         setRoundPhase: (info) => rec.roundPhases.push(info),
         signalPlayerDeath: (color: number) => { rec.deathSignals += 1; rec.deathColors.push(color); },
+        setStockPalette: (palette: OwnerPalette) => {
+          rec.stockPalettes.push(palette);
+          rec.hudCallLog.push('stockPalette');
+        },
         signalPlayerFire: () => { rec.fireSignals += 1; },
         onMuteToggle: (cb) => {
           onMute = cb;
@@ -5119,7 +5134,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     // catches a NEW overlay flag shipped defaulting to on. Adding a flag should make you
     // come here and write `false`.
     const off = boot();
-    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, wreck: null });
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, ownerPalette: OWNER_PALETTES.classic, wreck: null });
     off.handle.dispose();
   });
 
@@ -5127,19 +5142,19 @@ describe('startGameWith: dev flags stay off by default', () => {
     // One at a time, so a wiring that turns them all on together -- or crosses two of
     // them -- fails rather than passing on the aggregate.
     const ray = boot(makeDeps({ devFlags: { aimRay: true } }));
-    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, wreck: null });
+    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, ownerPalette: OWNER_PALETTES.classic, wreck: null });
     ray.handle.dispose();
 
     const reach = boot(makeDeps({ devFlags: { mineReach: true } }));
-    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, wreck: null });
+    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, ownerPalette: OWNER_PALETTES.classic, wreck: null });
     reach.handle.dispose();
 
     const timer = boot(makeDeps({ devFlags: { mineTimer: true } }));
-    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, wreck: null });
+    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, aiContact: false, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, ownerPalette: OWNER_PALETTES.classic, wreck: null });
     timer.handle.dispose();
 
     const contact = boot(makeDeps({ devFlags: { aiContact: true } }));
-    expect(contact.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: true, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, wreck: null });
+    expect(contact.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, aiContact: true, blockedFire: null, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false, mineWarn: null, identityMarker: null, shellTrail: null, arrival: null, enemyRole: null, ownerPalette: OWNER_PALETTES.classic, wreck: null });
     contact.handle.dispose();
   });
 

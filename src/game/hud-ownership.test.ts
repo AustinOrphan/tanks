@@ -213,8 +213,13 @@ describe('HUD ownership boundary (issue #324)', () => {
     // inherits, so it belongs to no single route -- and it is pushed from the same one
     // `effectiveSettings` subscription in `route-host.ts`. A session must not write it, because
     // the player's UI scale outlives any match.
-    expect(frame.size + route.size + gameplay.size).toBe(91);
-    expect(gameplay.size, 'what a live match may write').toBe(10);
+    //
+    // Issue #1057 adds ONE, gameplay-owned: `setStockPalette`. 91 -> 92, and gameplay 10 -> 11.
+    // GAMEPLAY rather than route because the session picks the owner palette once, for its
+    // renderer and its stock chips together; a page push could repaint the chips mid-match,
+    // which the issue rules out.
+    expect(frame.size + route.size + gameplay.size).toBe(92);
+    expect(gameplay.size, 'what a live match may write').toBe(11);
   });
 
   /** Every route/frame member a source calls that the session is not entitled to. */
