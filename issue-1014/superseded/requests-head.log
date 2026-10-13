@@ -1,0 +1,105 @@
+[19:00:39.423] preview up on 4396, pid 44647, serving /Users/austinorphan/src/tanks/.claude/worktrees/imperative-waddling-willow/dist
+[19:00:39.510] chromium 151.0.7922.34
+[19:00:39.510] arm 1 (ordinary URL): start
+[19:00:41.837]    snapshot "main menu": new=["index-DKSkR52s.js","blocked-fire-C-xN3qqJ.js","world-BiB0Jzri.js"] devChunks=[]
+[19:00:46.619]    snapshot "in a round, 3 s after Start Campaign": new=[] devChunks=[]
+[19:00:46.629] arm 2 (?dev=1): start
+[19:00:48.441]    snapshot "main menu, before Developer Tools": new=["index-DKSkR52s.js","blocked-fire-C-xN3qqJ.js","world-BiB0Jzri.js"] devChunks=[]
+[19:00:50.021]    snapshot "Developer Tools open from the Main Menu, before any press": new=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"] devChunks=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+[19:00:50.139]    snapshot "after the five Main Menu presses": new=[] devChunks=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+[19:00:53.902]    snapshot "in a round, before the DEV badge": new=[] devChunks=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+[19:00:55.068]    snapshot "Developer Tools reopened from the DEV badge": new=[] devChunks=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+[19:01:06.006]    armed .hud-devact[data-action="restart-same-seed"]: {"sel":".hud-devact[data-action=\"restart-same-seed\"]","visible":true,"resting":{"text":"Restart with Same Seed","armed":false},"armed":{"text":"Restart, losing this round?","armed":true},"lapsed":{"text":"Restart with Same Seed","armed":false}}
+[19:01:11.358]    armed .hud-devact[data-action="reroll-seed"]: {"sel":".hud-devact[data-action=\"reroll-seed\"]","visible":true,"resting":{"text":"Reroll Seed","armed":false},"armed":{"text":"Reroll, losing this round?","armed":true},"lapsed":{"text":"Reroll Seed","armed":false}}
+[19:01:16.708]    armed .hud-devact[data-action="restart-round"]: {"sel":".hud-devact[data-action=\"restart-round\"]","visible":true,"resting":{"text":"Restart Current Round","armed":false},"armed":{"text":"Restart this round?","armed":true},"lapsed":{"text":"Restart Current Round","armed":false}}
+[19:01:22.069]    armed .hud-prodsave: {"sel":".hud-prodsave","visible":true,"resting":{"text":"Use Production Save","armed":false},"armed":{"text":"Reload onto the REAL save?","armed":true},"lapsed":{"text":"Use Production Save","armed":false}}
+[19:01:27.460]    armed .hud-devreset: {"sel":".hud-devreset","visible":true,"resting":{"text":"Reset Developer Data","armed":false},"armed":{"text":"Erase all developer data?","armed":true},"lapsed":{"text":"Reset Developer Data","armed":false}}
+[19:01:33.482]    cross-arm: {"firstArmed":"Restart, losing this round?","firstAfterSecondArmed":"Restart with Same Seed","secondArmed":"Reroll, losing this round?","secondLapsed":"Reroll Seed"}
+[19:01:35.459]    snapshot "end of the arm": new=[] devChunks=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+[19:01:35.470] arm 3 (?dev=1, the load held back 2.5 s): start
+[19:01:39.372]    snapshot "in a round, before the DEV badge": new=["index-DKSkR52s.js","blocked-fire-C-xN3qqJ.js","world-BiB0Jzri.js"] devChunks=[]
+[19:01:45.528]    snapshot "after the held load landed": new=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"] devChunks=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+[19:01:45.540] arm 4 (?dev=1, the three chunks aborted): start
+[19:01:47.097]    snapshot "after the failed load and a Copy": new=["index-DKSkR52s.js","blocked-fire-C-xN3qqJ.js","world-BiB0Jzri.js","dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"] devChunks=["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+
+DIST 10 js files, 1205541 B; index.html names ["index-DKSkR52s.js (script)","blocked-fire-C-xN3qqJ.js (modulepreload)","world-BiB0Jzri.js (modulepreload)"]
+   blocked-fire-C-xN3qqJ.js 292446
+   controller-selftest-Bf_ncUKd.js 2822
+   dev-actions-DvQIcs-d.js 733
+   dev-diagnostics-DCxABR2C.js 1792
+   dev-exports-Cj0vU3wa.js 2434
+   gallery-selection-Bd0FWD70.js 2687
+   gallery-workbench-D12sD7Dd.js 8248
+   index-DKSkR52s.js 826584
+   workbench-scene-Bta8eZCE.js 22519
+   world-BiB0Jzri.js 45276
+   probe strings in dist: {"dev-actions":["dev-actions-DvQIcs-d.js: Restart, losing this round?","dev-actions-DvQIcs-d.js: Reroll, losing this round?","dev-actions-DvQIcs-d.js: Restart this round?"],"dev-diagnostics":["dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)","dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"],"dev-exports":["dev-exports-Cj0vU3wa.js: has not simulated a tick yet","dev-exports-Cj0vU3wa.js: there is no game canvas to save"]}
+ARM 1 ordinary: errors=0 failed=0 devChunks=[] probes={}
+   menu={"url":"http://127.0.0.1:4396/","mainMenuShown":true,"developerToolsEntryShown":false,"devBadgeShown":false} round={"panelHidden":true,"devBadgeShown":false}
+   [main menu] 3 file(s), 1164306 B; new: index-DKSkR52s.js blocked-fire-C-xN3qqJ.js world-BiB0Jzri.js
+   [in a round, 3 s after Start Campaign] 3 file(s), 1164306 B; new: (none)
+   index-DKSkR52s.js 826584
+   blocked-fire-C-xN3qqJ.js 292446
+   world-BiB0Jzri.js 45276
+ARM 2 ?dev=1: errors=[] failed=0 downloads=["tanks-diagnostics-no-session.json","tanks-diagnostics-seed918085089-tick367.json","tanks-canvas-seed918085089-tick475-1280x900-dpr1.png"]
+   [main menu, before Developer Tools] 3 file(s), 1164306 B; new: index-DKSkR52s.js blocked-fire-C-xN3qqJ.js world-BiB0Jzri.js; probes so far: none
+   [Developer Tools open from the Main Menu, before any press] 6 file(s), 1169265 B; new: dev-exports-Cj0vU3wa.js dev-diagnostics-DCxABR2C.js dev-actions-DvQIcs-d.js; probes so far: dev-actions,dev-diagnostics,dev-exports
+   [after the five Main Menu presses] 6 file(s), 1169265 B; new: (none); probes so far: dev-actions,dev-diagnostics,dev-exports
+   [in a round, before the DEV badge] 6 file(s), 1169265 B; new: (none); probes so far: dev-actions,dev-diagnostics,dev-exports
+   [Developer Tools reopened from the DEV badge] 6 file(s), 1169265 B; new: (none); probes so far: dev-actions,dev-diagnostics,dev-exports
+   [end of the arm] 6 file(s), 1169265 B; new: (none); probes so far: dev-actions,dev-diagnostics,dev-exports
+   actions at menu before open: [{"id":"restart-same-seed","hidden":true,"text":"Restart with Same Seed"},{"id":"reroll-seed","hidden":true,"text":"Reroll Seed"},{"id":"restart-round","hidden":true,"text":"Restart Current Round"}]
+   actions in round: [{"id":"restart-same-seed","hidden":false,"text":"Restart with Same Seed"},{"id":"reroll-seed","hidden":false,"text":"Reroll Seed"},{"id":"restart-round","hidden":false,"text":"Restart Current Round"}]
+   menu.copy: {"head":"## Tanks! session diagnostics |  | - URL: /?dev=1","chars":263,"shown":true,"focused":true,"wholeTextSelected":true}
+   menu.pin: {"head":"No session is running, so there is no resolved seed to pin. Start a round and press this again.","chars":95,"shown":true,"focused":true,"wholeTextSelected":true}
+   menu.exportDiagnostics: {"head":"Saved tanks-diagnostics-no-session.json: the fields Copy Diagnostics reports, plus where the round stands (no session running); build unknown (not a deployed bu","chars":165,"shown":true,"focused":false,"wholeTextSelected":false}
+   menu.exportReplay: {"head":"No session is running, so there is no replay to save. Start a round and press this again.","chars":89,"shown":true,"focused":false,"wholeTextSelected":false}
+   menu.exportScreenshot: {"head":"No session is running, so there is no game canvas to save. Start a round and press this again.","chars":94,"shown":true,"focused":false,"wholeTextSelected":false}
+   menu.copySameTask: {"changedInTheSameTask":true,"head":"## Tanks! session diagnostics","focused":true,"wholeTextSelected":true}
+   round.copy: {"head":"## Tanks! session diagnostics |  | - URL: /?dev=1","chars":317,"shown":true,"focused":true,"wholeTextSelected":true}
+   round.pin: {"head":"/?dev=1&seed=918085089","chars":22,"shown":true,"focused":true,"wholeTextSelected":true}
+   round.exportDiagnostics: {"head":"Saved tanks-diagnostics-seed918085089-tick367.json: the fields Copy Diagnostics reports, plus where the round stands (tick 367, gameplay/playing); build unknown","chars":184,"shown":true,"focused":false,"wholeTextSelected":false}
+   round.exportReplay: {"head":"Replay recording is off on this page, so there is no replay to save. Reload with replay=1 added to the address to record one.","chars":125,"shown":true,"focused":false,"wholeTextSelected":false}
+   round.exportScreenshot: {"head":"Saved tanks-canvas-seed918085089-tick475-1280x900-dpr1.png: the game canvas only, 1280x900 pixels at pixel ratio 1 (tick 475, gameplay/playing). The HUD is not ","chars":230,"shown":true,"focused":false,"wholeTextSelected":false}
+   round.copyAfterArming: {"head":"## Tanks! session diagnostics |  | - URL: /?dev=1","chars":317,"shown":true,"focused":true,"wholeTextSelected":true}
+   arm .hud-devact[data-action="restart-same-seed"]: {"resting":{"text":"Restart with Same Seed","armed":false},"armed":{"text":"Restart, losing this round?","armed":true},"lapsed":{"text":"Restart with Same Seed","armed":false}}
+   arm .hud-devact[data-action="reroll-seed"]: {"resting":{"text":"Reroll Seed","armed":false},"armed":{"text":"Reroll, losing this round?","armed":true},"lapsed":{"text":"Reroll Seed","armed":false}}
+   arm .hud-devact[data-action="restart-round"]: {"resting":{"text":"Restart Current Round","armed":false},"armed":{"text":"Restart this round?","armed":true},"lapsed":{"text":"Restart Current Round","armed":false}}
+   arm .hud-prodsave: {"resting":{"text":"Use Production Save","armed":false},"armed":{"text":"Reload onto the REAL save?","armed":true},"lapsed":{"text":"Use Production Save","armed":false}}
+   arm .hud-devreset: {"resting":{"text":"Reset Developer Data","armed":false},"armed":{"text":"Erase all developer data?","armed":true},"lapsed":{"text":"Reset Developer Data","armed":false}}
+   cross-arm: {"firstArmed":"Restart, losing this round?","firstAfterSecondArmed":"Restart with Same Seed","secondArmed":"Reroll, losing this round?","secondLapsed":"Reroll Seed"}
+   seed before arming 918085089, after 918085089: worldNotRebuilt=true
+   index-DKSkR52s.js 826584
+   blocked-fire-C-xN3qqJ.js 292446
+   world-BiB0Jzri.js 45276
+   dev-exports-Cj0vU3wa.js 2434
+   dev-diagnostics-DCxABR2C.js 1792
+   dev-actions-DvQIcs-d.js 733
+   requested-file probes: {"dev-actions":["dev-actions-DvQIcs-d.js: Restart, losing this round?","dev-actions-DvQIcs-d.js: Reroll, losing this round?","dev-actions-DvQIcs-d.js: Restart this round?"],"dev-diagnostics":["dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)","dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"],"dev-exports":["dev-exports-Cj0vU3wa.js: has not simulated a tick yet","dev-exports-Cj0vU3wa.js: there is no game canvas to save"]}
+ARM dev-held-load:
+   name: "dev-held-load"
+   query: "?dev=1"
+   held: ["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+   beforeLoad: {"actions":[{"id":"restart-same-seed","hidden":true,"text":"Restart with Same Seed"},{"id":"reroll-seed","hidden":true,"text":"Reroll Seed"},{"id":"restart-round","hidden":true,"text":"Restart Current Round"}],"field":{"head":"","chars":0,"shown":false,"focused":false,"wholeTextSelected":false}}
+   atPress: {"ms":4866,"fieldValueAfterTheClicks":"","fieldHidden":true}
+   afterLand: {"ms":7236}
+   fieldLog: [{"ms":3981,"v":"[hidden] "},{"ms":7179,"v":"Saved tanks-diagnostics-seed918515592-tick208.json: the fields Copy Diagnostics reports, plus where the round "},{"ms":7291,"v":"Saved tanks-diagnostics-seed918515592-tick350.json: the fields Copy Diagnostics reports, plus where the round "},{"ms":8446,"v":"Saved tanks-canvas-seed918515592-tick208-1280x900-dpr1.png: the game canvas only, 1280x900 pixels at pixel rat"}]
+   end: {"actions":[{"id":"restart-same-seed","hidden":false,"text":"Restart with Same Seed"},{"id":"reroll-seed","hidden":false,"text":"Reroll Seed"},{"id":"restart-round","hidden":false,"text":"Restart Current Round"}],"field":{"head":"Saved tanks-canvas-seed918515592-tick208-1280x900-dpr1.png: the game canvas only, 1280x900 pixels at pixel ratio 1 (tick 208, gameplay/playing). The HUD is not ","chars":230,"shown":true,"focused":true,"wholeTextSelected":false}}
+   ticks: {"screenshotPressedBeforeLoad":208,"diagnosticsPressedBeforeLoad":208,"diagnosticsPressedAfterLoad":350,"msBetweenThePresses":2370,"ticksBetweenThePresses":142}
+   downloads: ["tanks-diagnostics-seed918515592-tick208.json","tanks-diagnostics-seed918515592-tick350.json","tanks-canvas-seed918515592-tick208-1280x900-dpr1.png"]
+   errors: []
+   failed: []
+   [in a round, before the DEV badge] new: index-DKSkR52s.js blocked-fire-C-xN3qqJ.js world-BiB0Jzri.js
+   [after the held load landed] new: dev-exports-Cj0vU3wa.js dev-diagnostics-DCxABR2C.js dev-actions-DvQIcs-d.js
+ARM dev-failed-load:
+   name: "dev-failed-load"
+   query: "?dev=1"
+   aborted: ["dev-exports-Cj0vU3wa.js","dev-diagnostics-DCxABR2C.js","dev-actions-DvQIcs-d.js"]
+   afterOpen: "The developer tools could not be loaded (Failed to fetch dynamically imported module: http://127.0.0.1:4396/assets/dev-exports-Cj0vU3wa.js). Reload the page to try again."
+   copyAfterFailure: {"head":"The developer tools could not be loaded (Failed to fetch dynamically imported module: http://127.0.0.1:4396/assets/dev-actions-DvQIcs-d.js). Reload the page to ","chars":170,"shown":true,"focused":false,"wholeTextSelected":false}
+   copyText: "The developer tools could not be loaded (Failed to fetch dynamically imported module: http://127.0.0.1:4396/assets/dev-actions-DvQIcs-d.js). Reload the page to try again."
+   actions: [{"id":"restart-same-seed","hidden":true,"text":"Restart with Same Seed"},{"id":"reroll-seed","hidden":true,"text":"Reroll Seed"},{"id":"restart-round","hidden":true,"text":"Restart Current Round"}]
+   errors: []
+   failed: ["dev-exports-Cj0vU3wa.js: net::ERR_INTERNET_DISCONNECTED","dev-diagnostics-DCxABR2C.js: net::ERR_INTERNET_DISCONNECTED","dev-actions-DvQIcs-d.js: net::ERR_INTERNET_DISCONNECTED"]
+   [after the failed load and a Copy] new: index-DKSkR52s.js blocked-fire-C-xN3qqJ.js world-BiB0Jzri.js dev-exports-Cj0vU3wa.js dev-diagnostics-DCxABR2C.js dev-actions-DvQIcs-d.js
+exit 0

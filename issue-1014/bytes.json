@@ -1,0 +1,228 @@
+{
+  "head": {
+    "ordinaryUrl": {
+      "files": 3,
+      "raw": 1164306,
+      "gzip": 325509,
+      "rows": [
+        {
+          "file": "index-DKSkR52s.js",
+          "raw": 826584,
+          "gzip": 229035
+        },
+        {
+          "file": "blocked-fire-C-xN3qqJ.js",
+          "raw": 292446,
+          "gzip": 80478
+        },
+        {
+          "file": "world-BiB0Jzri.js",
+          "raw": 45276,
+          "gzip": 15996
+        }
+      ]
+    },
+    "devArmAll": {
+      "files": 6,
+      "raw": 1169265,
+      "gzip": 327822,
+      "rows": [
+        {
+          "file": "index-DKSkR52s.js",
+          "raw": 826584,
+          "gzip": 229035
+        },
+        {
+          "file": "blocked-fire-C-xN3qqJ.js",
+          "raw": 292446,
+          "gzip": 80478
+        },
+        {
+          "file": "world-BiB0Jzri.js",
+          "raw": 45276,
+          "gzip": 15996
+        },
+        {
+          "file": "dev-exports-Cj0vU3wa.js",
+          "raw": 2434,
+          "gzip": 1124
+        },
+        {
+          "file": "dev-diagnostics-DCxABR2C.js",
+          "raw": 1792,
+          "gzip": 858
+        },
+        {
+          "file": "dev-actions-DvQIcs-d.js",
+          "raw": 733,
+          "gzip": 331
+        }
+      ]
+    },
+    "devArmOnOpen": {
+      "files": 3,
+      "raw": 4959,
+      "gzip": 2313,
+      "rows": [
+        {
+          "file": "dev-exports-Cj0vU3wa.js",
+          "raw": 2434,
+          "gzip": 1124
+        },
+        {
+          "file": "dev-diagnostics-DCxABR2C.js",
+          "raw": 1792,
+          "gzip": 858
+        },
+        {
+          "file": "dev-actions-DvQIcs-d.js",
+          "raw": 733,
+          "gzip": 331
+        }
+      ]
+    },
+    "shipped": {
+      "files": 10,
+      "raw": 1205541,
+      "gzip": 338860,
+      "rows": [
+        {
+          "file": "blocked-fire-C-xN3qqJ.js",
+          "raw": 292446,
+          "gzip": 80478
+        },
+        {
+          "file": "controller-selftest-Bf_ncUKd.js",
+          "raw": 2822,
+          "gzip": 1141
+        },
+        {
+          "file": "dev-actions-DvQIcs-d.js",
+          "raw": 733,
+          "gzip": 331
+        },
+        {
+          "file": "dev-diagnostics-DCxABR2C.js",
+          "raw": 1792,
+          "gzip": 858
+        },
+        {
+          "file": "dev-exports-Cj0vU3wa.js",
+          "raw": 2434,
+          "gzip": 1124
+        },
+        {
+          "file": "gallery-selection-Bd0FWD70.js",
+          "raw": 2687,
+          "gzip": 1189
+        },
+        {
+          "file": "gallery-workbench-D12sD7Dd.js",
+          "raw": 8248,
+          "gzip": 3071
+        },
+        {
+          "file": "index-DKSkR52s.js",
+          "raw": 826584,
+          "gzip": 229035
+        },
+        {
+          "file": "workbench-scene-Bta8eZCE.js",
+          "raw": 22519,
+          "gzip": 5637
+        },
+        {
+          "file": "world-BiB0Jzri.js",
+          "raw": 45276,
+          "gzip": 15996
+        }
+      ]
+    }
+  },
+  "main": {
+    "ordinaryUrl": {
+      "files": 1,
+      "raw": 1163167,
+      "gzip": 323019,
+      "rows": [
+        {
+          "file": "index-DCK_xJX1.js",
+          "raw": 1163167,
+          "gzip": 323019
+        }
+      ]
+    },
+    "devArmAll": {
+      "files": 1,
+      "raw": 1163167,
+      "gzip": 323019,
+      "rows": [
+        {
+          "file": "index-DCK_xJX1.js",
+          "raw": 1163167,
+          "gzip": 323019
+        }
+      ]
+    },
+    "devArmOnOpen": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0,
+      "rows": []
+    },
+    "shipped": {
+      "files": 5,
+      "raw": 1199364,
+      "gzip": 334015,
+      "rows": [
+        {
+          "file": "controller-selftest-aaNo6Yrd.js",
+          "raw": 2822,
+          "gzip": 1142
+        },
+        {
+          "file": "gallery-selection-XgkyAG_o.js",
+          "raw": 2687,
+          "gzip": 1189
+        },
+        {
+          "file": "gallery-workbench-3uKC-RRm.js",
+          "raw": 8248,
+          "gzip": 3061
+        },
+        {
+          "file": "index-DCK_xJX1.js",
+          "raw": 1163167,
+          "gzip": 323019
+        },
+        {
+          "file": "workbench-scene-CVa61J1_.js",
+          "raw": 22440,
+          "gzip": 5604
+        }
+      ]
+    }
+  },
+  "delta": {
+    "ordinaryUrl": {
+      "files": 2,
+      "raw": 1139,
+      "gzip": 2490
+    },
+    "devArmAll": {
+      "files": 5,
+      "raw": 6098,
+      "gzip": 4803
+    },
+    "devArmOnOpen": {
+      "files": 3,
+      "raw": 4959,
+      "gzip": 2313
+    },
+    "shipped": {
+      "files": 5,
+      "raw": 6177,
+      "gzip": 4845
+    }
+  }
+}

@@ -1,0 +1,80 @@
+tree /Users/austinorphan/src/tanks/.claude/worktrees/imperative-waddling-willow
+same file names in dist and sourcemap build: true
+dist/index.html names: blocked-fire-C-xN3qqJ.js index-DKSkR52s.js world-BiB0Jzri.js
+entry index-DKSkR52s.js names: blocked-fire-C-xN3qqJ.js x2, controller-selftest-Bf_ncUKd.js x1, dev-actions-DvQIcs-d.js x1, dev-diagnostics-DCxABR2C.js x2, dev-exports-Cj0vU3wa.js x2, gallery-selection-Bd0FWD70.js x2, gallery-workbench-D12sD7Dd.js x2, workbench-scene-Bta8eZCE.js x2, world-BiB0Jzri.js x2
+src/game/dev-actions.ts is in: dev-actions-DvQIcs-d.js
+src/game/dev-diagnostics.ts is in: dev-diagnostics-DCxABR2C.js
+src/game/dev-exports.ts is in: dev-exports-Cj0vU3wa.js
+blocked-fire-C-xN3qqJ.js: dist 292446 B, identical-after-map-comment=true, 22 sources (21 under src/, 1 elsewhere), dev modules: none
+   src/sim/config/data/balance.json
+   src/sim/constants.ts
+   src/sim/config/enums.ts
+   src/sim/config/resolve.ts
+   src/sim/config/arena-types.ts
+   src/sim/config/versus-catalog-types.ts
+   src/sim/config/validate.ts
+   src/sim/config/data/ai-profiles.json
+   src/sim/config/balance.ts
+   src/sim/config/catalog.ts
+   src/sim/config/data/tank-defs.json
+   src/sim/config/roster.ts
+   src/sim/config/walls.ts
+   src/sim/config/data/arenas.json
+   src/sim/config/arenas.ts
+   src/presentation/quality.ts
+   src/presentation/enemy-role.ts
+   src/presentation/shell-trail.ts
+   src/presentation/identity-marker.ts
+   src/render/mine-warning.ts
+   src/presentation/blocked-fire.ts
+   (outside src/) node_modules/three/build/three.core.js
+controller-selftest-Bf_ncUKd.js: dist 2822 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), dev modules: none
+   src/game/controller-selftest.ts
+dev-actions-DvQIcs-d.js: dist 733 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), dev modules: src/game/dev-actions.ts
+   src/game/dev-actions.ts
+dev-diagnostics-DCxABR2C.js: dist 1792 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), dev modules: src/game/dev-diagnostics.ts
+   src/game/dev-diagnostics.ts
+dev-exports-Cj0vU3wa.js: dist 2434 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), dev modules: src/game/dev-exports.ts
+   src/game/dev-exports.ts
+gallery-selection-Bd0FWD70.js: dist 2687 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), dev modules: none
+   src/game/gallery-selection.ts
+gallery-workbench-D12sD7Dd.js: dist 8248 B, identical-after-map-comment=true, 2 sources (2 under src/, 0 elsewhere), dev modules: none
+   src/game/gallery-command.ts
+   src/game/gallery-workbench.ts
+index-DKSkR52s.js: dist 826584 B, identical-after-map-comment=true, 126 sources (124 under src/, 2 elsewhere), dev modules: none
+   (outside src/) node_modules/three/build/three.module.js
+   (outside src/) node_modules/howler/dist/howler.js
+workbench-scene-Bta8eZCE.js: dist 22519 B, identical-after-map-comment=true, 4 sources (4 under src/, 0 elsewhere), dev modules: none
+   src/render/gallery/subjects.ts
+   src/render/gallery/moments.ts
+   src/render/gallery/moment-scene.ts
+   src/render/gallery/workbench-scene.ts
+world-BiB0Jzri.js: dist 45276 B, identical-after-map-comment=true, 27 sources (27 under src/, 0 elsewhere), dev modules: none
+   src/sim/math/bits.ts
+   src/sim/math/rem-pio2.ts
+   src/sim/math/trig.ts
+   src/sim/types.ts
+   src/sim/rules.ts
+   src/sim/math/hypot.ts
+   src/sim/collision.ts
+   src/sim/mines.ts
+   src/sim/bullets.ts
+   src/sim/ai/targeting.ts
+   src/sim/ai/brown.ts
+   src/sim/ai/hazard-perception.ts
+   src/sim/ai/grey.ts
+   src/sim/ai/teal.ts
+   src/sim/ai/commitment.ts
+   src/sim/ai/turret-accel.ts
+   src/sim/ai/aim-hold.ts
+   src/sim/ai/search.ts
+   src/sim/ai/target-selection.ts
+   src/sim/ai/bot-difficulty.ts
+   src/sim/ai/bot-commitment.ts
+   src/sim/ai/target-memory.ts
+   src/sim/round.ts
+   src/sim/ai/index.ts
+   src/sim/wall-merge.ts
+   src/sim/versus-spawns.ts
+   src/sim/world.ts
+exit 0

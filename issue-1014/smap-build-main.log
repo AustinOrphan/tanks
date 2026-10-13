@@ -1,0 +1,26 @@
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 198 modules transformed.
+rendering chunks...
+computing gzip size...
+../smap-main/index.html                                                       12.87 kB │ gzip:   4.98 kB
+../smap-main/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2             14.70 kB
+../smap-main/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2             15.62 kB
+../smap-main/assets/atkinson-hyperlegible-latin-400-normal-BrHNak5F.woff2     17.20 kB
+../smap-main/assets/atkinson-hyperlegible-latin-700-normal-GZI4o3u0.woff2     17.52 kB
+../smap-main/assets/ibm-plex-sans-latin-wght-normal-IvpUvPa2.woff2            45.71 kB
+../smap-main/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                    48.25 kB
+../smap-main/assets/index-NkmvsewS.css                                        46.20 kB │ gzip:   8.68 kB
+../smap-main/assets/gallery-selection-XgkyAG_o.js                              2.74 kB │ gzip:   1.22 kB │ map:    13.07 kB
+../smap-main/assets/controller-selftest-aaNo6Yrd.js                            2.87 kB │ gzip:   1.18 kB │ map:    13.50 kB
+../smap-main/assets/gallery-workbench-3uKC-RRm.js                              8.30 kB │ gzip:   3.10 kB │ map:    35.57 kB
+../smap-main/assets/workbench-scene-CVa61J1_.js                               22.49 kB │ gzip:   5.67 kB │ map:   174.53 kB
+../smap-main/assets/index-DCK_xJX1.js                                      1,163.21 kB │ gzip: 326.31 kB │ map: 6,405.91 kB
+
+✓ built in 439ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+exit 0

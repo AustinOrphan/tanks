@@ -1,0 +1,24 @@
+tree /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/w1014/main-src
+same file names in dist and sourcemap build: true
+dist/index.html names: index-DCK_xJX1.js
+entry index-DCK_xJX1.js names: controller-selftest-aaNo6Yrd.js x1, gallery-selection-XgkyAG_o.js x2, gallery-workbench-3uKC-RRm.js x2, workbench-scene-CVa61J1_.js x1
+src/game/dev-actions.ts is in: index-DCK_xJX1.js
+src/game/dev-diagnostics.ts is in: index-DCK_xJX1.js
+src/game/dev-exports.ts is in: index-DCK_xJX1.js
+controller-selftest-aaNo6Yrd.js: dist 2822 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), dev modules: none
+   src/game/controller-selftest.ts
+gallery-selection-XgkyAG_o.js: dist 2687 B, identical-after-map-comment=true, 1 sources (1 under src/, 0 elsewhere), dev modules: none
+   src/game/gallery-selection.ts
+gallery-workbench-3uKC-RRm.js: dist 8248 B, identical-after-map-comment=true, 2 sources (2 under src/, 0 elsewhere), dev modules: none
+   src/game/gallery-command.ts
+   src/game/gallery-workbench.ts
+index-DCK_xJX1.js: dist 1163167 B, identical-after-map-comment=true, 174 sources (171 under src/, 3 elsewhere), dev modules: src/game/dev-actions.ts src/game/dev-diagnostics.ts src/game/dev-exports.ts
+   (outside src/) ../../../../../../src/tanks/.claude/worktrees/imperative-waddling-willow/node_modules/three/build/three.core.js
+   (outside src/) ../../../../../../src/tanks/.claude/worktrees/imperative-waddling-willow/node_modules/three/build/three.module.js
+   (outside src/) ../../../../../../src/tanks/.claude/worktrees/imperative-waddling-willow/node_modules/howler/dist/howler.js
+workbench-scene-CVa61J1_.js: dist 22440 B, identical-after-map-comment=true, 4 sources (4 under src/, 0 elsewhere), dev modules: none
+   src/render/gallery/subjects.ts
+   src/render/gallery/moments.ts
+   src/render/gallery/moment-scene.ts
+   src/render/gallery/workbench-scene.ts
+exit 0

@@ -1,0 +1,1081 @@
+{
+  "root": "/Users/austinorphan/src/tanks/.claude/worktrees/imperative-waddling-willow",
+  "port": 4396,
+  "chromium": "151.0.7922.34",
+  "probes": {
+    "dev-actions": [
+      "Restart, losing this round?",
+      "Reroll, losing this round?",
+      "Restart this round?"
+    ],
+    "dev-diagnostics": [
+      "Session: none simulating (no seed to report)",
+      "## Tanks! session diagnostics"
+    ],
+    "dev-exports": [
+      "has not simulated a tick yet",
+      "there is no game canvas to save"
+    ]
+  },
+  "dist": {
+    "files": [
+      {
+        "file": "blocked-fire-C-xN3qqJ.js",
+        "bytes": 292446
+      },
+      {
+        "file": "controller-selftest-Bf_ncUKd.js",
+        "bytes": 2822
+      },
+      {
+        "file": "dev-actions-DvQIcs-d.js",
+        "bytes": 733
+      },
+      {
+        "file": "dev-diagnostics-DCxABR2C.js",
+        "bytes": 1792
+      },
+      {
+        "file": "dev-exports-Cj0vU3wa.js",
+        "bytes": 2434
+      },
+      {
+        "file": "gallery-selection-Bd0FWD70.js",
+        "bytes": 2687
+      },
+      {
+        "file": "gallery-workbench-D12sD7Dd.js",
+        "bytes": 8248
+      },
+      {
+        "file": "index-DKSkR52s.js",
+        "bytes": 826584
+      },
+      {
+        "file": "workbench-scene-Bta8eZCE.js",
+        "bytes": 22519
+      },
+      {
+        "file": "world-BiB0Jzri.js",
+        "bytes": 45276
+      }
+    ],
+    "bytes": 1205541,
+    "devChunks": [
+      "dev-actions-DvQIcs-d.js",
+      "dev-diagnostics-DCxABR2C.js",
+      "dev-exports-Cj0vU3wa.js"
+    ],
+    "probes": {
+      "dev-actions": [
+        "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+        "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+        "dev-actions-DvQIcs-d.js: Restart this round?"
+      ],
+      "dev-diagnostics": [
+        "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+        "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+      ],
+      "dev-exports": [
+        "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+        "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+      ]
+    },
+    "namedByIndexHtml": [
+      "index-DKSkR52s.js (script)",
+      "blocked-fire-C-xN3qqJ.js (modulepreload)",
+      "world-BiB0Jzri.js (modulepreload)"
+    ]
+  },
+  "arms": [
+    {
+      "name": "ordinary",
+      "query": "",
+      "menuFacts": {
+        "url": "http://127.0.0.1:4396/",
+        "mainMenuShown": true,
+        "developerToolsEntryShown": false,
+        "devBadgeShown": false
+      },
+      "roundFacts": {
+        "panelHidden": true,
+        "devBadgeShown": false
+      },
+      "errors": [],
+      "failed": [],
+      "snaps": [
+        {
+          "label": "main menu",
+          "count": 3,
+          "newSincePrevious": [
+            "index-DKSkR52s.js",
+            "blocked-fire-C-xN3qqJ.js",
+            "world-BiB0Jzri.js"
+          ],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              }
+            ],
+            "bytes": 1164306,
+            "devChunks": [],
+            "probes": {}
+          }
+        },
+        {
+          "label": "in a round, 3 s after Start Campaign",
+          "count": 3,
+          "newSincePrevious": [],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              }
+            ],
+            "bytes": 1164306,
+            "devChunks": [],
+            "probes": {}
+          }
+        }
+      ],
+      "requested": {
+        "files": [
+          {
+            "file": "index-DKSkR52s.js",
+            "bytes": 826584
+          },
+          {
+            "file": "blocked-fire-C-xN3qqJ.js",
+            "bytes": 292446
+          },
+          {
+            "file": "world-BiB0Jzri.js",
+            "bytes": 45276
+          }
+        ],
+        "bytes": 1164306,
+        "devChunks": [],
+        "probes": {}
+      }
+    },
+    {
+      "name": "dev",
+      "query": "?dev=1",
+      "errors": [],
+      "failed": [],
+      "downloads": [
+        "tanks-diagnostics-no-session.json",
+        "tanks-diagnostics-seed918339200-tick369.json",
+        "tanks-canvas-seed918339200-tick483-1280x900-dpr1.png"
+      ],
+      "snaps": [
+        {
+          "label": "main menu, before Developer Tools",
+          "count": 3,
+          "newSincePrevious": [
+            "index-DKSkR52s.js",
+            "blocked-fire-C-xN3qqJ.js",
+            "world-BiB0Jzri.js"
+          ],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              }
+            ],
+            "bytes": 1164306,
+            "devChunks": [],
+            "probes": {}
+          }
+        },
+        {
+          "label": "Developer Tools open from the Main Menu, before any press",
+          "count": 6,
+          "newSincePrevious": [
+            "dev-exports-Cj0vU3wa.js",
+            "dev-diagnostics-DCxABR2C.js",
+            "dev-actions-DvQIcs-d.js"
+          ],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              },
+              {
+                "file": "dev-exports-Cj0vU3wa.js",
+                "bytes": 2434
+              },
+              {
+                "file": "dev-diagnostics-DCxABR2C.js",
+                "bytes": 1792
+              },
+              {
+                "file": "dev-actions-DvQIcs-d.js",
+                "bytes": 733
+              }
+            ],
+            "bytes": 1169265,
+            "devChunks": [
+              "dev-exports-Cj0vU3wa.js",
+              "dev-diagnostics-DCxABR2C.js",
+              "dev-actions-DvQIcs-d.js"
+            ],
+            "probes": {
+              "dev-actions": [
+                "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+                "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+                "dev-actions-DvQIcs-d.js: Restart this round?"
+              ],
+              "dev-diagnostics": [
+                "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+                "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+              ],
+              "dev-exports": [
+                "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+                "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+              ]
+            }
+          }
+        },
+        {
+          "label": "after the five Main Menu presses",
+          "count": 6,
+          "newSincePrevious": [],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              },
+              {
+                "file": "dev-exports-Cj0vU3wa.js",
+                "bytes": 2434
+              },
+              {
+                "file": "dev-diagnostics-DCxABR2C.js",
+                "bytes": 1792
+              },
+              {
+                "file": "dev-actions-DvQIcs-d.js",
+                "bytes": 733
+              }
+            ],
+            "bytes": 1169265,
+            "devChunks": [
+              "dev-exports-Cj0vU3wa.js",
+              "dev-diagnostics-DCxABR2C.js",
+              "dev-actions-DvQIcs-d.js"
+            ],
+            "probes": {
+              "dev-actions": [
+                "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+                "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+                "dev-actions-DvQIcs-d.js: Restart this round?"
+              ],
+              "dev-diagnostics": [
+                "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+                "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+              ],
+              "dev-exports": [
+                "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+                "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+              ]
+            }
+          }
+        },
+        {
+          "label": "in a round, before the DEV badge",
+          "count": 6,
+          "newSincePrevious": [],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              },
+              {
+                "file": "dev-exports-Cj0vU3wa.js",
+                "bytes": 2434
+              },
+              {
+                "file": "dev-diagnostics-DCxABR2C.js",
+                "bytes": 1792
+              },
+              {
+                "file": "dev-actions-DvQIcs-d.js",
+                "bytes": 733
+              }
+            ],
+            "bytes": 1169265,
+            "devChunks": [
+              "dev-exports-Cj0vU3wa.js",
+              "dev-diagnostics-DCxABR2C.js",
+              "dev-actions-DvQIcs-d.js"
+            ],
+            "probes": {
+              "dev-actions": [
+                "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+                "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+                "dev-actions-DvQIcs-d.js: Restart this round?"
+              ],
+              "dev-diagnostics": [
+                "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+                "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+              ],
+              "dev-exports": [
+                "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+                "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+              ]
+            }
+          }
+        },
+        {
+          "label": "Developer Tools reopened from the DEV badge",
+          "count": 6,
+          "newSincePrevious": [],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              },
+              {
+                "file": "dev-exports-Cj0vU3wa.js",
+                "bytes": 2434
+              },
+              {
+                "file": "dev-diagnostics-DCxABR2C.js",
+                "bytes": 1792
+              },
+              {
+                "file": "dev-actions-DvQIcs-d.js",
+                "bytes": 733
+              }
+            ],
+            "bytes": 1169265,
+            "devChunks": [
+              "dev-exports-Cj0vU3wa.js",
+              "dev-diagnostics-DCxABR2C.js",
+              "dev-actions-DvQIcs-d.js"
+            ],
+            "probes": {
+              "dev-actions": [
+                "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+                "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+                "dev-actions-DvQIcs-d.js: Restart this round?"
+              ],
+              "dev-diagnostics": [
+                "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+                "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+              ],
+              "dev-exports": [
+                "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+                "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+              ]
+            }
+          }
+        },
+        {
+          "label": "end of the arm",
+          "count": 6,
+          "newSincePrevious": [],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              },
+              {
+                "file": "dev-exports-Cj0vU3wa.js",
+                "bytes": 2434
+              },
+              {
+                "file": "dev-diagnostics-DCxABR2C.js",
+                "bytes": 1792
+              },
+              {
+                "file": "dev-actions-DvQIcs-d.js",
+                "bytes": 733
+              }
+            ],
+            "bytes": 1169265,
+            "devChunks": [
+              "dev-exports-Cj0vU3wa.js",
+              "dev-diagnostics-DCxABR2C.js",
+              "dev-actions-DvQIcs-d.js"
+            ],
+            "probes": {
+              "dev-actions": [
+                "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+                "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+                "dev-actions-DvQIcs-d.js: Restart this round?"
+              ],
+              "dev-diagnostics": [
+                "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+                "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+              ],
+              "dev-exports": [
+                "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+                "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+              ]
+            }
+          }
+        }
+      ],
+      "actionsAtMenuBeforeOpen": [
+        {
+          "id": "restart-same-seed",
+          "hidden": true,
+          "text": "Restart with Same Seed"
+        },
+        {
+          "id": "reroll-seed",
+          "hidden": true,
+          "text": "Reroll Seed"
+        },
+        {
+          "id": "restart-round",
+          "hidden": true,
+          "text": "Restart Current Round"
+        }
+      ],
+      "actionsAtMenu": [
+        {
+          "id": "restart-same-seed",
+          "hidden": true,
+          "text": "Restart with Same Seed"
+        },
+        {
+          "id": "reroll-seed",
+          "hidden": true,
+          "text": "Reroll Seed"
+        },
+        {
+          "id": "restart-round",
+          "hidden": true,
+          "text": "Restart Current Round"
+        }
+      ],
+      "actionsInRound": [
+        {
+          "id": "restart-same-seed",
+          "hidden": false,
+          "text": "Restart with Same Seed"
+        },
+        {
+          "id": "reroll-seed",
+          "hidden": false,
+          "text": "Reroll Seed"
+        },
+        {
+          "id": "restart-round",
+          "hidden": false,
+          "text": "Restart Current Round"
+        }
+      ],
+      "menu": {
+        "copy": {
+          "head": "## Tanks! session diagnostics |  | - URL: /?dev=1",
+          "chars": 263,
+          "shown": true,
+          "focused": true,
+          "wholeTextSelected": true
+        },
+        "pin": {
+          "head": "No session is running, so there is no resolved seed to pin. Start a round and press this again.",
+          "chars": 95,
+          "shown": true,
+          "focused": true,
+          "wholeTextSelected": true
+        },
+        "exportDiagnostics": {
+          "head": "Saved tanks-diagnostics-no-session.json: the fields Copy Diagnostics reports, plus where the round stands (no session running); build unknown (not a deployed bu",
+          "chars": 165,
+          "shown": true,
+          "focused": false,
+          "wholeTextSelected": false
+        },
+        "exportReplay": {
+          "head": "No session is running, so there is no replay to save. Start a round and press this again.",
+          "chars": 89,
+          "shown": true,
+          "focused": false,
+          "wholeTextSelected": false
+        },
+        "exportScreenshot": {
+          "head": "No session is running, so there is no game canvas to save. Start a round and press this again.",
+          "chars": 94,
+          "shown": true,
+          "focused": false,
+          "wholeTextSelected": false
+        },
+        "copySameTask": {
+          "changedInTheSameTask": true,
+          "head": "## Tanks! session diagnostics",
+          "focused": true,
+          "wholeTextSelected": true
+        }
+      },
+      "round": {
+        "copy": {
+          "head": "## Tanks! session diagnostics |  | - URL: /?dev=1",
+          "chars": 317,
+          "shown": true,
+          "focused": true,
+          "wholeTextSelected": true
+        },
+        "pin": {
+          "head": "/?dev=1&seed=918339200",
+          "chars": 22,
+          "shown": true,
+          "focused": true,
+          "wholeTextSelected": true
+        },
+        "exportDiagnostics": {
+          "head": "Saved tanks-diagnostics-seed918339200-tick369.json: the fields Copy Diagnostics reports, plus where the round stands (tick 369, gameplay/playing); build unknown",
+          "chars": 184,
+          "shown": true,
+          "focused": false,
+          "wholeTextSelected": false
+        },
+        "exportReplay": {
+          "head": "Replay recording is off on this page, so there is no replay to save. Reload with replay=1 added to the address to record one.",
+          "chars": 125,
+          "shown": true,
+          "focused": false,
+          "wholeTextSelected": false
+        },
+        "exportScreenshot": {
+          "head": "Saved tanks-canvas-seed918339200-tick483-1280x900-dpr1.png: the game canvas only, 1280x900 pixels at pixel ratio 1 (tick 483, gameplay/playing). The HUD is not ",
+          "chars": 230,
+          "shown": true,
+          "focused": false,
+          "wholeTextSelected": false
+        },
+        "copyAfterArming": {
+          "head": "## Tanks! session diagnostics |  | - URL: /?dev=1",
+          "chars": 317,
+          "shown": true,
+          "focused": true,
+          "wholeTextSelected": true
+        }
+      },
+      "arming": [
+        {
+          "sel": ".hud-devact[data-action=\"restart-same-seed\"]",
+          "visible": true,
+          "resting": {
+            "text": "Restart with Same Seed",
+            "armed": false
+          },
+          "armed": {
+            "text": "Restart, losing this round?",
+            "armed": true
+          },
+          "lapsed": {
+            "text": "Restart with Same Seed",
+            "armed": false
+          }
+        },
+        {
+          "sel": ".hud-devact[data-action=\"reroll-seed\"]",
+          "visible": true,
+          "resting": {
+            "text": "Reroll Seed",
+            "armed": false
+          },
+          "armed": {
+            "text": "Reroll, losing this round?",
+            "armed": true
+          },
+          "lapsed": {
+            "text": "Reroll Seed",
+            "armed": false
+          }
+        },
+        {
+          "sel": ".hud-devact[data-action=\"restart-round\"]",
+          "visible": true,
+          "resting": {
+            "text": "Restart Current Round",
+            "armed": false
+          },
+          "armed": {
+            "text": "Restart this round?",
+            "armed": true
+          },
+          "lapsed": {
+            "text": "Restart Current Round",
+            "armed": false
+          }
+        },
+        {
+          "sel": ".hud-prodsave",
+          "visible": true,
+          "resting": {
+            "text": "Use Production Save",
+            "armed": false
+          },
+          "armed": {
+            "text": "Reload onto the REAL save?",
+            "armed": true
+          },
+          "lapsed": {
+            "text": "Use Production Save",
+            "armed": false
+          }
+        },
+        {
+          "sel": ".hud-devreset",
+          "visible": true,
+          "resting": {
+            "text": "Reset Developer Data",
+            "armed": false
+          },
+          "armed": {
+            "text": "Erase all developer data?",
+            "armed": true
+          },
+          "lapsed": {
+            "text": "Reset Developer Data",
+            "armed": false
+          }
+        }
+      ],
+      "crossArm": {
+        "firstArmed": "Restart, losing this round?",
+        "firstAfterSecondArmed": "Restart with Same Seed",
+        "secondArmed": "Reroll, losing this round?",
+        "secondLapsed": "Reroll Seed"
+      },
+      "seedBefore": "918339200",
+      "seedAfter": "918339200",
+      "worldNotRebuilt": true,
+      "requested": {
+        "files": [
+          {
+            "file": "index-DKSkR52s.js",
+            "bytes": 826584
+          },
+          {
+            "file": "blocked-fire-C-xN3qqJ.js",
+            "bytes": 292446
+          },
+          {
+            "file": "world-BiB0Jzri.js",
+            "bytes": 45276
+          },
+          {
+            "file": "dev-exports-Cj0vU3wa.js",
+            "bytes": 2434
+          },
+          {
+            "file": "dev-diagnostics-DCxABR2C.js",
+            "bytes": 1792
+          },
+          {
+            "file": "dev-actions-DvQIcs-d.js",
+            "bytes": 733
+          }
+        ],
+        "bytes": 1169265,
+        "devChunks": [
+          "dev-exports-Cj0vU3wa.js",
+          "dev-diagnostics-DCxABR2C.js",
+          "dev-actions-DvQIcs-d.js"
+        ],
+        "probes": {
+          "dev-actions": [
+            "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+            "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+            "dev-actions-DvQIcs-d.js: Restart this round?"
+          ],
+          "dev-diagnostics": [
+            "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+            "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+          ],
+          "dev-exports": [
+            "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+            "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+          ]
+        }
+      }
+    },
+    {
+      "name": "dev-held-load",
+      "query": "?dev=1",
+      "held": [
+        "dev-exports-Cj0vU3wa.js",
+        "dev-diagnostics-DCxABR2C.js",
+        "dev-actions-DvQIcs-d.js"
+      ],
+      "beforeLoad": {
+        "actions": [
+          {
+            "id": "restart-same-seed",
+            "hidden": true,
+            "text": "Restart with Same Seed"
+          },
+          {
+            "id": "reroll-seed",
+            "hidden": true,
+            "text": "Reroll Seed"
+          },
+          {
+            "id": "restart-round",
+            "hidden": true,
+            "text": "Restart Current Round"
+          }
+        ],
+        "field": {
+          "head": "",
+          "chars": 0,
+          "shown": false,
+          "focused": false,
+          "wholeTextSelected": false
+        }
+      },
+      "atPress": {
+        "ms": 4566,
+        "fieldValueAfterTheClicks": "",
+        "fieldHidden": true
+      },
+      "afterLand": {
+        "ms": 7209
+      },
+      "fieldLog": [
+        {
+          "ms": 3956,
+          "v": "[hidden] "
+        },
+        {
+          "ms": 7263,
+          "v": "Saved tanks-diagnostics-seed917752764-tick349.json: the fields Copy Diagnostics reports, plus where the round "
+        },
+        {
+          "ms": 8364,
+          "v": "Saved tanks-canvas-seed917752764-tick190-1280x900-dpr1.png: the game canvas only, 1280x900 pixels at pixel rat"
+        }
+      ],
+      "observed": {
+        "selects": [
+          {
+            "ms": 7152,
+            "head": "## Tanks! session diagnostics",
+            "chars": 317,
+            "wholeTextSelected": true,
+            "focused": true
+          }
+        ],
+        "clipboard": [
+          {
+            "ms": 7152,
+            "head": "## Tanks! session diagnostics",
+            "settled": "rejected: NotAllowedError Failed to execute 'writeText' on 'Clipboard': Write permission denied."
+          }
+        ]
+      },
+      "end": {
+        "actions": [
+          {
+            "id": "restart-same-seed",
+            "hidden": false,
+            "text": "Restart with Same Seed"
+          },
+          {
+            "id": "reroll-seed",
+            "hidden": false,
+            "text": "Reroll Seed"
+          },
+          {
+            "id": "restart-round",
+            "hidden": false,
+            "text": "Restart Current Round"
+          }
+        ],
+        "field": {
+          "head": "Saved tanks-canvas-seed917752764-tick190-1280x900-dpr1.png: the game canvas only, 1280x900 pixels at pixel ratio 1 (tick 190, gameplay/playing). The HUD is not ",
+          "chars": 230,
+          "shown": true,
+          "focused": true,
+          "wholeTextSelected": false
+        }
+      },
+      "ticks": {
+        "screenshotPressedBeforeLoad": 190,
+        "diagnosticsPressedBeforeLoad": 190,
+        "diagnosticsPressedAfterLoad": 349,
+        "msBetweenThePresses": 2643,
+        "ticksBetweenThePresses": 159
+      },
+      "downloads": [
+        "tanks-diagnostics-seed917752764-tick190.json",
+        "tanks-diagnostics-seed917752764-tick349.json",
+        "tanks-canvas-seed917752764-tick190-1280x900-dpr1.png"
+      ],
+      "errors": [],
+      "failed": [],
+      "snaps": [
+        {
+          "label": "in a round, before the DEV badge",
+          "count": 3,
+          "newSincePrevious": [
+            "index-DKSkR52s.js",
+            "blocked-fire-C-xN3qqJ.js",
+            "world-BiB0Jzri.js"
+          ],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              }
+            ],
+            "bytes": 1164306,
+            "devChunks": [],
+            "probes": {}
+          }
+        },
+        {
+          "label": "after the held load landed",
+          "count": 6,
+          "newSincePrevious": [
+            "dev-exports-Cj0vU3wa.js",
+            "dev-diagnostics-DCxABR2C.js",
+            "dev-actions-DvQIcs-d.js"
+          ],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              },
+              {
+                "file": "dev-exports-Cj0vU3wa.js",
+                "bytes": 2434
+              },
+              {
+                "file": "dev-diagnostics-DCxABR2C.js",
+                "bytes": 1792
+              },
+              {
+                "file": "dev-actions-DvQIcs-d.js",
+                "bytes": 733
+              }
+            ],
+            "bytes": 1169265,
+            "devChunks": [
+              "dev-exports-Cj0vU3wa.js",
+              "dev-diagnostics-DCxABR2C.js",
+              "dev-actions-DvQIcs-d.js"
+            ],
+            "probes": {
+              "dev-actions": [
+                "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+                "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+                "dev-actions-DvQIcs-d.js: Restart this round?"
+              ],
+              "dev-diagnostics": [
+                "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+                "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+              ],
+              "dev-exports": [
+                "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+                "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "dev-failed-load",
+      "query": "?dev=1",
+      "aborted": [
+        "dev-exports-Cj0vU3wa.js",
+        "dev-diagnostics-DCxABR2C.js",
+        "dev-actions-DvQIcs-d.js"
+      ],
+      "afterOpen": "The developer tools could not be loaded (Failed to fetch dynamically imported module: http://127.0.0.1:4396/assets/dev-exports-Cj0vU3wa.js). Reload the page to try again.",
+      "copyAfterFailure": {
+        "head": "The developer tools could not be loaded (Failed to fetch dynamically imported module: http://127.0.0.1:4396/assets/dev-actions-DvQIcs-d.js). Reload the page to ",
+        "chars": 170,
+        "shown": true,
+        "focused": false,
+        "wholeTextSelected": false
+      },
+      "copyText": "The developer tools could not be loaded (Failed to fetch dynamically imported module: http://127.0.0.1:4396/assets/dev-actions-DvQIcs-d.js). Reload the page to try again.",
+      "actions": [
+        {
+          "id": "restart-same-seed",
+          "hidden": true,
+          "text": "Restart with Same Seed"
+        },
+        {
+          "id": "reroll-seed",
+          "hidden": true,
+          "text": "Reroll Seed"
+        },
+        {
+          "id": "restart-round",
+          "hidden": true,
+          "text": "Restart Current Round"
+        }
+      ],
+      "errors": [],
+      "failed": [
+        "dev-exports-Cj0vU3wa.js: net::ERR_INTERNET_DISCONNECTED",
+        "dev-diagnostics-DCxABR2C.js: net::ERR_INTERNET_DISCONNECTED",
+        "dev-actions-DvQIcs-d.js: net::ERR_INTERNET_DISCONNECTED"
+      ],
+      "snaps": [
+        {
+          "label": "after the failed load and a Copy",
+          "count": 6,
+          "newSincePrevious": [
+            "index-DKSkR52s.js",
+            "blocked-fire-C-xN3qqJ.js",
+            "world-BiB0Jzri.js",
+            "dev-exports-Cj0vU3wa.js",
+            "dev-diagnostics-DCxABR2C.js",
+            "dev-actions-DvQIcs-d.js"
+          ],
+          "cumulative": {
+            "files": [
+              {
+                "file": "index-DKSkR52s.js",
+                "bytes": 826584
+              },
+              {
+                "file": "blocked-fire-C-xN3qqJ.js",
+                "bytes": 292446
+              },
+              {
+                "file": "world-BiB0Jzri.js",
+                "bytes": 45276
+              },
+              {
+                "file": "dev-exports-Cj0vU3wa.js",
+                "bytes": 2434
+              },
+              {
+                "file": "dev-diagnostics-DCxABR2C.js",
+                "bytes": 1792
+              },
+              {
+                "file": "dev-actions-DvQIcs-d.js",
+                "bytes": 733
+              }
+            ],
+            "bytes": 1169265,
+            "devChunks": [
+              "dev-exports-Cj0vU3wa.js",
+              "dev-diagnostics-DCxABR2C.js",
+              "dev-actions-DvQIcs-d.js"
+            ],
+            "probes": {
+              "dev-actions": [
+                "dev-actions-DvQIcs-d.js: Restart, losing this round?",
+                "dev-actions-DvQIcs-d.js: Reroll, losing this round?",
+                "dev-actions-DvQIcs-d.js: Restart this round?"
+              ],
+              "dev-diagnostics": [
+                "dev-diagnostics-DCxABR2C.js: Session: none simulating (no seed to report)",
+                "dev-diagnostics-DCxABR2C.js: ## Tanks! session diagnostics"
+              ],
+              "dev-exports": [
+                "dev-exports-Cj0vU3wa.js: has not simulated a tick yet",
+                "dev-exports-Cj0vU3wa.js: there is no game canvas to save"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

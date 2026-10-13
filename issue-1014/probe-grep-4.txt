@@ -1,0 +1,3 @@
+src/game/dev-diagnostics.test.ts:107:    expect(text).toContain('- Session: none simulating (no seed to report)');
+src/game/dev-diagnostics.ts:171:    lines.push('- Session: none simulating (no seed to report)');
+tools/screens/flow.test.ts:332:    '- Session: none simulating (no seed to report)',

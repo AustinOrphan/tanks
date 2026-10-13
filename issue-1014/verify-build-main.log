@@ -1,0 +1,47 @@
+
+> tanks@0.0.0 verify:build
+> npm run build && npm run portability && npm run bundle:budget
+
+
+> tanks@0.0.0 build
+> vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 198 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                       12.87 kB │ gzip:   4.98 kB
+dist/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2             14.70 kB
+dist/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2             15.62 kB
+dist/assets/atkinson-hyperlegible-latin-400-normal-BrHNak5F.woff2     17.20 kB
+dist/assets/atkinson-hyperlegible-latin-700-normal-GZI4o3u0.woff2     17.52 kB
+dist/assets/ibm-plex-sans-latin-wght-normal-IvpUvPa2.woff2            45.71 kB
+dist/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                    48.25 kB
+dist/assets/index-NkmvsewS.css                                        46.20 kB │ gzip:   8.68 kB
+dist/assets/gallery-selection-XgkyAG_o.js                              2.68 kB │ gzip:   1.18 kB
+dist/assets/controller-selftest-aaNo6Yrd.js                            2.82 kB │ gzip:   1.14 kB
+dist/assets/gallery-workbench-3uKC-RRm.js                              8.24 kB │ gzip:   3.07 kB
+dist/assets/workbench-scene-CVa61J1_.js                               22.44 kB │ gzip:   5.63 kB
+dist/assets/index-DCK_xJX1.js                                      1,163.16 kB │ gzip: 326.27 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 201ms
+
+> tanks@0.0.0 portability
+> node tools/portability/check.mjs dist
+
+subpath-portable: dist/index.html + 5 bundle(s) + the PWA shell checked, and the share image is in the build
+
+> tanks@0.0.0 bundle:budget
+> node tools/bundle-budget/check.mjs dist
+
+js  1,199,364 B raw (92.0% of budget), 334,015 B gzip (92.5%)
+css 46,205 B raw (96.3% of budget), 8,626 B gzip (94.8%)
+fonts 159,028 B over 6 file(s) -- reported, not budgeted
+within budget: dist weighed against the ceilings set from 0b1b513
+exit 0

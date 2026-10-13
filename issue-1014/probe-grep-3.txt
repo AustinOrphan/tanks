@@ -1,0 +1,2 @@
+src/game/dev-actions.ts:92:    confirmLabel: 'Restart this round?',
+src/game/hud.diagnostics.test.ts:320:    expect(act(root, 'restart-round').textContent).toBe('Restart this round?');

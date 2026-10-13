@@ -1,0 +1,3 @@
+src/game/dev-diagnostics.ts:165:  const lines: string[] = ['## Tanks! session diagnostics', ''];
+tools/screens/flow.mjs:526:  if (typeof text !== 'string' || !text.startsWith('## Tanks! session diagnostics')) {
+tools/screens/flow.test.ts:327:    '## Tanks! session diagnostics',

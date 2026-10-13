@@ -1,0 +1,57 @@
+
+> tanks@0.0.0 screens:check
+> node tools/screens/check.mjs --dist dist --out /Users/austinorphan/.claude/jobs/8fe9c2c6/tmp/w1014/screens-check-out
+
+PASS screen.boot-loading
+PASS screen.startup.entry-refused
+PASS screen.startup.entry-unparseable
+PASS screen.launch
+PASS screen.main-menu
+PASS screen.main-menu.pad-only
+PASS screen.main-menu.fresh
+PASS screen.levels
+PASS screen.practice
+PASS screen.practice.touch
+PASS screen.records.stats
+PASS screen.records.stats.empty
+PASS screen.records.achievements
+PASS screen.settings
+PASS screen.settings.ui-scale
+PASS screen.settings.touch
+PASS screen.settings.focused
+PASS screen.settings.pad-focus
+PASS screen.settings.pressed
+PASS screen.settings.rumble-refused
+PASS screen.settings.controller-layout
+PASS screen.customize
+PASS screen.versus-setup
+PASS screen.versus-setup.selected
+PASS screen.versus-setup.teams
+PASS screen.versus-setup.map-replaced
+PASS screen.versus-setup.fresh
+PASS screen.devtools
+PASS screen.devtools.config
+PASS screen.devtools.config.sandbox
+PASS screen.devtools.production-save
+PASS screen.devtools.actions
+PASS screen.devtools.diagnostics
+PASS screen.devtools.controller-selftest
+PASS screen.about
+PASS screen.about.document
+PASS screen.confirm.new-campaign
+PASS screen.pause.versus
+PASS screen.pause.campaign
+PASS screen.controllers
+PASS screen.controllers.pads
+PASS screen.ending.mission-clear
+PASS screen.ending.campaign-over
+PASS screen.ending.campaign-complete
+PASS screen.ending.practice-cleared
+PASS screen.ending.practice-failed
+PASS screen.startup.unsupported-render
+PASS screen.startup.probe-blocked
+PASS screen.startup.match-failed
+PASS screen.no-script
+
+50 state(s) checked in 85.8s, 0 failing
+exit 0

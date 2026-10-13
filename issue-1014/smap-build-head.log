@@ -1,0 +1,31 @@
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 198 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/index.html                                                     13.03 kB │ gzip:   5.03 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2           14.70 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2           15.62 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/atkinson-hyperlegible-latin-400-normal-BrHNak5F.woff2   17.20 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/atkinson-hyperlegible-latin-700-normal-GZI4o3u0.woff2   17.52 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/ibm-plex-sans-latin-wght-normal-IvpUvPa2.woff2          45.71 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                  48.25 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/index-NkmvsewS.css                                      46.20 kB │ gzip:   8.68 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/dev-actions-DvQIcs-d.js                                  0.78 kB │ gzip:   0.37 kB │ map:     7.05 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/dev-diagnostics-DCxABR2C.js                              1.84 kB │ gzip:   0.89 kB │ map:    12.96 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/dev-exports-Cj0vU3wa.js                                  2.48 kB │ gzip:   1.16 kB │ map:    10.61 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/gallery-selection-Bd0FWD70.js                            2.74 kB │ gzip:   1.23 kB │ map:    13.13 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/controller-selftest-Bf_ncUKd.js                          2.87 kB │ gzip:   1.17 kB │ map:    13.57 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/gallery-workbench-D12sD7Dd.js                            8.30 kB │ gzip:   3.11 kB │ map:    35.69 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/workbench-scene-Bta8eZCE.js                             22.57 kB │ gzip:   5.71 kB │ map:   174.78 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/world-BiB0Jzri.js                                       45.31 kB │ gzip:  16.20 kB │ map:   356.77 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/blocked-fire-C-xN3qqJ.js                               292.49 kB │ gzip:  81.48 kB │ map: 2,157.91 kB
+../../../../../.claude/jobs/8fe9c2c6/tmp/w1014/smap-head/assets/index-DKSkR52s.js                                      826.62 kB │ gzip: 231.27 kB │ map: 3,939.66 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 347ms
+exit 0

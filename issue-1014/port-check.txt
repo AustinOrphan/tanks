@@ -1,0 +1,3 @@
+port 4396 free before the HEAD run
+port 4396 free before the main run
+port 4396 free after both runs
