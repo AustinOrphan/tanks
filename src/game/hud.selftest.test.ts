@@ -376,18 +376,23 @@ describe('the self-test body loads when its pane first opens (issue #1013)', () 
       vi.doUnmock('./controller-selftest');
       vi.resetModules();
     });
-    function failLoads(): void {
+    async function failLoads(): Promise<void> {
       vi.doMock('./controller-selftest', () => {
         throw new Error('offline');
       });
       vi.resetModules();
+      // Registers the mock before the pane opens. Vitest resolves a queued `doMock` on the next
+      // import, and an import that starts while that is still resolving does not wait for it --
+      // so the Developer Tools pane's own modules, which start loading on the open just before
+      // (issue #1014), could leave the self-test's import to miss the mock.
+      await import('./controller-selftest').catch(() => {});
     }
 
     it('is reported in the pane, and the next open builds the body in its place', async () => {
       // Negative controls: no rejection handler (the failure is an unhandled rejection and the
       // pane stays blank), and a retry that leaves the old failure line beside the new body.
       const { hud: h, root } = mountDev();
-      failLoads();
+      await failLoads();
       openSelfTest(root);
       await settled();
       expect(Array.from(list(root).children).map((c) => c.className)).toEqual([
@@ -408,7 +413,7 @@ describe('the self-test body loads when its pane first opens (issue #1013)', () 
     it('after the pane closed reports nothing into it', async () => {
       // Negative control: the failure path ignoring the generation.
       const { hud: h, root } = mountDev();
-      failLoads();
+      await failLoads();
       openSelfTest(root);
       h.back();
       await settled();

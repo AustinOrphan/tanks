@@ -2538,14 +2538,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <button class="ui-btn ui-btn--slab hud-export-replay" type="button">Download Replay</button>
       <!-- RUNTIME ACTIONS (issue #252). Each rebuilds the board, so each arms first: the
            same two-press confirmation Reset stats and Reset progress use, rather than a
-           modal, because these sit in a pane a developer is already working in. Labels come
-           from DEV_ACTIONS so the catalogue and the markup cannot name different things,
-           written when the pane's modules load (issue #1014), and the buttons stay hidden
-           until then. Hidden as a group whenever no session holds the slot -- there is no
-           round to restart from the main menu. -->
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button"></button>
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button"></button>
-      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button"></button>
+           modal, because these sit in a pane a developer is already working in. The labels
+           are DEV_ACTIONS's, written here because that catalogue loads with the pane (issue
+           #1014) and a button with no text has no accessible name; a test compares the two,
+           so they cannot name different things. Hidden until the catalogue has loaded,
+           since it holds what each says while armed, and as a group whenever no session
+           holds the slot -- there is no round to restart from the main menu. -->
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-same-seed" type="button">Restart with Same Seed</button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="reroll-seed" type="button">Reroll Seed</button>
+      <button class="ui-btn ui-btn--slab ui-btn--danger hud-devact" data-action="restart-round" type="button">Restart Current Round</button>
       <!-- PERSISTENCE (issue #249). The namespace line is always present while the pane is,
            because "obvious" is a property of being shown continuously rather than on demand;
            it takes a warning modifier when the session is on the production keys. Both
@@ -3979,7 +3980,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * A LOOKUP rather than the two-way `=== resetStatsBtn` ternary it replaces (issue #252):
    * with three developer actions joining the two resets, that ternary would have restored
    * "Reset progress" onto whichever action was armed. The developer ones are labelled from
-   * `DEV_ACTIONS`, which is the same place `loadDevTools` labels the markup from.
+   * `DEV_ACTIONS`, which is the catalogue the markup's labels are tested against.
    */
   function restingLabel(btn: HTMLButtonElement): string {
     if (btn === resetStatsBtn) return 'Reset stats';
@@ -3989,8 +3990,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // function replaced; extending the lookup is the point of it being one.
     if (btn === prodSaveBtn) return 'Use Production Save';
     if (btn === devResetBtn) return 'Reset Developer Data';
-    // An action can only be armed once its catalogue has loaded (issue #1014), so this finds
-    // it; the empty string is the button's template text, should that ever not hold.
+    // An action is armed only once its catalogue has loaded (issue #1014), so the catalogue is
+    // always here when this runs; the `''` only spares the type a null it never meets.
     return devTools?.actions.DEV_ACTIONS[btn.dataset.action as DevActionId].label ?? '';
   }
 
@@ -4304,24 +4305,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * diagnostics, an action its catalogue and the diagnostics for its URL, an export its own
    * module and the report it builds on -- so three loads would be three failure states for
    * one pane. The open starts it and a press joins it; a press with no load in flight (after
-   * a failed one, or from a test that never opened the pane) starts it.
-   *
-   * The action buttons are labelled here, FROM the catalogue rather than written into the
-   * markup, so a renamed action cannot leave a stale word on a button that still dispatches
-   * the new id. That builds nothing and listens to nothing, so it is bound to no generation.
+   * a failed one, or from a test that never opened the pane) starts it. The load builds
+   * nothing and listens to nothing, so it is bound to no generation; what waits on it is.
    *
    * A FAILED LOAD is forgotten, so the next open or press tries again; `whenDevTools` reports
-   * it. Only the imports are caught: a throw from the labelling is a bug, not a load failure.
+   * it.
    */
   function loadDevTools(): Promise<DevToolsModules> {
     devToolsLoad ??= Promise.all([import('./dev-actions'), import('./dev-diagnostics'), import('./dev-exports')]).then(
-      ([actions, diagnostics, exports]) => {
-        for (const btn of devActionBtns) {
-          btn.textContent = actions.DEV_ACTIONS[btn.dataset.action as DevActionId].label;
-        }
-        devTools = { actions, diagnostics, exports };
-        return devTools;
-      },
+      ([actions, diagnostics, exports]) => (devTools = { actions, diagnostics, exports }),
       (err: unknown) => {
         devToolsLoad = null;
         throw err;

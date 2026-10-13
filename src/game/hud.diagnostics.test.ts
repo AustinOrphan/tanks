@@ -45,18 +45,25 @@ const q = <T extends HTMLElement>(root: HTMLElement, sel: string): T =>
   root.querySelector<T>(sel) as T;
 
 /**
- * `mountDev`, with the pane's modules loaded the way the page loads them: Developer Tools is
- * opened, the REAL imports are awaited (issue #1014), and the pane is closed again, so a case
- * starts where it always has -- at the main menu -- and every press after it is answered in
- * its own task. Bounded by `vi.waitFor` on the action labels, which the load writes, so a load
- * that never lands fails here rather than in every assertion after it.
+ * Every dynamic import in flight has landed, plus a macrotask, so the HUD's `.then` has run:
+ * an assertion of ABSENCE after this is not merely early. `hud.selftest.test.ts`'s helper.
+ */
+async function settled(): Promise<void> {
+  await vi.dynamicImportSettled();
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+/**
+ * `mountDev`, with the pane's modules loaded the way the page loads them (issue #1014):
+ * Developer Tools is opened, the REAL imports are awaited, and the pane is closed again, so a
+ * case starts where it always has -- at the main menu -- and every press in it is answered in
+ * its own task, which its assertions read straight after the press. An open that loaded
+ * nothing fails those assertions rather than this helper.
  */
 async function mountDevLoaded(opts: Parameters<typeof createHud>[1] = {}): Promise<HTMLElement> {
   const root = mountDev(opts);
   q<HTMLButtonElement>(root, '.hud-devtools-open').click();
-  await vi.waitFor(() => {
-    expect(q(root, '.hud-devact').textContent, 'the developer modules never loaded').not.toBe('');
-  });
+  await settled();
   q<HTMLButtonElement>(root, '.hud-devtools-back').click();
   return root;
 }
