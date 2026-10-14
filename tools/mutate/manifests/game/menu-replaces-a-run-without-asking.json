@@ -14,6 +14,6 @@
     "hud: the replace-run confirmation (issue #226) Cancel starts nothing and returns to the menu; Confirm starts exactly one campaign",
     "hud: the replace-run confirmation (issue #226) is a BLOCKING layer: no route opens under an unanswered question",
     "hud: the replace-run confirmation (issue #226) Back cancels it, and a surface change dismisses it rather than letting it outlive the menu",
-    "hud: the replace-run confirmation (issue #226) puts the safe answer first, so a blind Confirm cannot delete a run"
+    "hud: the replace-run confirmation (issue #226) arrives on the safe answer, so a blind Confirm keeps the run (issue #919)"
   ]
 }
