@@ -1329,7 +1329,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
-  });
+    // A RAISED BUDGET, not a hung test. Every ArrowDown re-derives the active panel's controls
+    // through `getComputedStyle`, and since jsdom 30.1.2 empties its computed-style cache on
+    // each focus move, every step re-runs the cascade for the whole panel: 0.97s in CI before
+    // that bump, 7.3s after, against the 5s default.
+  }, 20_000);
 
   it('steps through every button the Levels panel draws, because none of them is inert', () => {
     // Was "skips locked level buttons". Issue #555 stopped drawing them, so the walk has
@@ -3169,7 +3173,9 @@ describe('hud: spatial focus follows the drawn layout (issue #495)', () => {
     expect(visited.size, 'the walk did not cover the pane').toBe(population.length);
     // 29 since issue #1035: the Map row gains vs-tri-01 and vs-quad-01 at two players.
     expect(population.length, 'the population this walk covers').toBe(29);
-  });
+    // A RAISED BUDGET, for the reason the title-screen walk above has one: 0.5s in CI before
+    // jsdom 30.1.2 and 6.8s after, because jsdom now recomputes every style per focus move.
+  }, 20_000);
 
   it('negative control: with jsdom\'s empty rects the same Right leaves the segment in document order', () => {
     const { hud: h, root } = mount();
