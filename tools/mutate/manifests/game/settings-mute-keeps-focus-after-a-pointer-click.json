@@ -1,0 +1,11 @@
+{
+  "id": "settings-mute-keeps-focus-after-a-pointer-click",
+  "file": "src/game/hud.ts",
+  "find": "  settingsMuteBtn.addEventListener('click', blurIfPointer);",
+  "replace": "  void blurIfPointer;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "Settings' Mute keeps focus after a mouse click, so a mouse player's arrows and Space go to the button instead of the tank. This survived under jsdom 30.1.2 while the case focused Mute on the hidden Settings pane: focus() refused the hidden button, and 'focus is not on Mute' held with no blur at all (measured while PR #1080 bumped jsdom). The case now opens Settings and checks focus landed first."
+}

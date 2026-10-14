@@ -2987,16 +2987,21 @@ describe('hud: the semantic action dispatcher (issue #494)', () => {
     // The product-visible half of issue #494's ruling: the slider consumes only the keys
     // that move it. ArrowDown is the negative control -- the same handler, a key the
     // slider DOES keep, so the roving focus must not take it.
+    //
+    // SETTINGS, where the slider lives (issue #226). This case opened Customize until the
+    // jsdom 30.1.2 bump and focused the slider on the hidden Settings pane, which only an
+    // older jsdom allowed; `focus()` now refuses an element that is not rendered, as
+    // browsers do, and the precondition below is what caught it.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    click(q(root, '.hud-customize-open'));
+    click(q(root, '.hud-settings-open'));
     const slider = q(root, '.hud-settings-volume') as HTMLInputElement;
     slider.focus();
-    expect(document.activeElement).toBe(slider);
+    expect(document.activeElement, 'precondition: focus did not land on the slider').toBe(slider);
     press('ArrowDown');
     expect(document.activeElement, 'the roving focus took an arrow the slider consumes').toBe(slider);
     press('Escape');
-    expect(q(root, '.hud-customize').classList.contains('ui-surface--leaving'), 'Escape at a slider did not pop the layer').toBe(true);
+    expect(q(root, '.hud-settings').classList.contains('ui-surface--leaving'), 'Escape at a slider did not pop the layer').toBe(true);
   });
 
   it('focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not', () => {
