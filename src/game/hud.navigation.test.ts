@@ -3816,6 +3816,65 @@ describe('hud: arrival lands on the primary action, and a Confirm from the scree
     expect(starts, 'Confirm on the container started a match').toEqual([]);
   });
 
+  // The browser's focus scroll judges the box the entrance still holds 16px low (`focusInView`),
+  // and moved Versus Setup 4px under a Start already in view. Its negative controls are the
+  // manifest entries `hud-arrival-focus-takes-the-browser-scroll` and
+  // `hud-menu-arrival-follow-takes-the-browser-scroll`.
+  it('an arrival, and the Main Menu arrival\'s follow, focus without the browser\'s focus scroll', () => {
+    const { hud: h, root } = mount();
+    const unscrolled = [[{ preventScroll: true }]];
+    h.setState('main-menu');
+    const cont = q(root, '.hud-continue');
+    const follow = vi.spyOn(cont, 'focus');
+    h.setContinueAvailable(true);
+    expect(document.activeElement).toBe(cont);
+    expect(follow.mock.calls, 'the follow took the browser\'s focus scroll').toEqual(unscrolled);
+    const start = q(root, '.hud-versus-start');
+    const arrival = vi.spyOn(start, 'focus');
+    h.showVersusSetup(true);
+    expect(document.activeElement).toBe(start);
+    expect(arrival.mock.calls, 'the arrival took the browser\'s focus scroll').toEqual(unscrolled);
+  });
+
+  it('Versus Setup scrolls its pane to a Start out of view, and leaves one in view where it is', () => {
+    // jsdom lays nothing out, so the pane states Chromium's geometry at 1280x800 and records
+    // every scroll written to it: an 800px pane, Start 49px tall.
+    const { hud: h, root } = mount();
+    const pane = q(root, '.hud-versus-setup');
+    const bar = q(root, '.hud-versus-actions');
+    const start = q(root, '.hud-versus-start');
+    const set = (el: HTMLElement, props: Record<string, unknown>): void => {
+      for (const [key, value] of Object.entries(props)) {
+        Object.defineProperty(el, key, { configurable: true, value });
+      }
+    };
+    const writes: number[] = [];
+    let scrollTop = 0;
+    pane.style.overflowY = 'auto';
+    set(pane, { clientHeight: 800 });
+    Object.defineProperty(pane, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (v: number) => {
+        writes.push(v);
+        scrollTop = v;
+      },
+    });
+    // As shipped: the sticky bar stuck at the pane's foot holds Start at 739..788.
+    set(bar, { offsetParent: pane, offsetTop: 715, clientTop: 0 });
+    set(start, { offsetParent: bar, offsetTop: 24, offsetHeight: 49 });
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    expect(document.activeElement).toBe(start);
+    expect(writes, 'the arrival scrolled a pane whose Start was in view').toEqual([]);
+    h.back();
+    // NEGATIVE CONTROL: unpinned, Start sits at 915..964, 164px past the pane's view.
+    set(start, { offsetParent: pane, offsetTop: 915 });
+    h.showVersusSetup(true);
+    expect(document.activeElement).toBe(start);
+    expect(writes, 'the arrival left Start out of view').toEqual([164]);
+  });
+
   it('an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {

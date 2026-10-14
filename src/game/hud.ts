@@ -308,7 +308,7 @@ import {
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import type { HullColorId, SkinId, AccentId } from '../presentation/customization';
 import { createCarriedConfirmGuard } from './carried-confirm';
-import { arrivalTarget, captureFocus, focusableControls, isHiddenWithin } from './focusable';
+import { arrivalTarget, captureFocus, focusableControls, focusInView, isHiddenWithin } from './focusable';
 import { createCustomizePane, CUSTOMIZE_BODY } from './customize-pane';
 import { createControllersPane, CONTROLLERS_BODY } from './controllers-pane';
 import type { Surface } from './pane-host';
@@ -4760,6 +4760,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * gamepad route uses that to drop a Confirm first seen on the next poll (`route-host.ts`).
    * `graceMs` reaches both: the arrival's reaction window, which only an outcome has.
    *
+   * `focusInView`, not `focus()`: the browser's focus scroll runs while the entrance still holds
+   * the surface's content 16px low, and moved Versus Setup 4px under a Start already in view.
+   *
    * Returns the element focused, which the panel uses to follow its own affordances.
    */
   function focusArrival(
@@ -4769,7 +4772,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   ): HTMLElement {
     carriedConfirm.arrive(graceMs);
     const target = arrivalTarget(container, primary);
-    target.focus();
+    focusInView(target);
     for (const cb of arrivalCbs) cb(graceMs);
     return target;
   }
@@ -5156,7 +5159,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const target = arrivalTarget(panel, PANEL_PRIMARY[panelArrival.state]());
     if (target === active) return;
     panelArrival = { state: panelArrival.state, target };
-    target.focus();
+    focusInView(target);
   }
 
   /**

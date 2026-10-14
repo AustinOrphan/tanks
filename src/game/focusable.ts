@@ -13,7 +13,7 @@
  *
  * `arrivalTarget` (issue #919) joined them later: where focus lands when a surface arrives is a
  * question about which controls can take it, answered by `focusableControls`, and the two
- * extracted panes need it as much as `hud.ts` does.
+ * extracted panes need it as much as `hud.ts` does. `focusInView` is how it is put there.
  *
  * A LEAF MODULE. It imports nothing, so a pane module that uses it does not reach `hud.ts`.
  */
@@ -77,6 +77,48 @@ export function focusableControls(container: HTMLElement): HTMLElement[] {
 export function arrivalTarget(container: HTMLElement, primary: readonly HTMLElement[]): HTMLElement {
   const controls = focusableControls(container);
   return primary.find((el) => controls.includes(el)) ?? container;
+}
+
+/**
+ * Focus `el` and leave it in view: without the browser's own focus scroll, and then scrolling
+ * its nearest scrolling offset parent only as far as `el` needs to be wholly inside it.
+ *
+ * WHY NOT `el.focus()`. An arrival focuses inside its surface's open, while the entrance's
+ * `ui-surface-rise-content` still holds every child of the surface 16px low (`hud.css`) --
+ * under reduced motion too, where the class comes off later in the same task. The browser
+ * judges its focus scroll on that transformed box. Versus Setup's Start is pinned to the foot
+ * of the pane with 12px under it, so the 16px put it 4px past the pane's edge and Chromium
+ * scrolled the pane 4px, which stayed when the transform came off. MEASURED on the production
+ * build: the focus call scrolled the pane 4px on every Versus Setup arrival at 1280x800, 390x844
+ * and 320x568, and the screens gate saw the rows above Start move up (3px on CI's Linux runner
+ * in the Teams state). `scrollIntoView` judges the same transformed box.
+ *
+ * SO IT JUDGES LAYOUT, NOT PAINT. `offsetTop` excludes transforms and includes a sticky
+ * element's stuck offset (measured in Chromium, both), so summing it up the offset-parent
+ * chain gives `el`'s position in its scroller's content, as it will stand once the entrance
+ * ends. Every surface is `position: absolute`, so the surface is on that chain. A scroller
+ * that is not positioned is not, and is left alone; no surface has one.
+ *
+ * Vertical only: no surface scrolls sideways.
+ */
+export function focusInView(el: HTMLElement): void {
+  el.focus({ preventScroll: true });
+  let top = 0;
+  for (let node: HTMLElement = el; ; ) {
+    top += node.offsetTop;
+    const parent = node.offsetParent;
+    if (!(parent instanceof HTMLElement)) return;
+    const overflowY = getComputedStyle(parent).overflowY;
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      const bottom = top + el.offsetHeight;
+      const { scrollTop, clientHeight } = parent;
+      if (top < scrollTop) parent.scrollTop = top;
+      else if (bottom > scrollTop + clientHeight) parent.scrollTop = bottom - clientHeight;
+      return;
+    }
+    top += parent.clientTop;
+    node = parent;
+  }
 }
 
 /**

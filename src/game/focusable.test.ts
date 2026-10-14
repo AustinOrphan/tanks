@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { arrivalTarget, focusableControls } from './focusable';
+import { arrivalTarget, focusableControls, focusInView } from './focusable';
 
 /**
  * ONE case, and it is here because it is the only one the `createHud` tests cannot reach
@@ -97,5 +97,90 @@ describe('arrivalTarget (issue #919)', () => {
     expect(arrivalTarget(el, [outside]), 'focus left the surface that arrived').toBe(el);
     // NEGATIVE CONTROL: the same container with a candidate inside it lands there.
     expect(arrivalTarget(el, [byId(el, 'inside')])).toBe(byId(el, 'inside'));
+  });
+});
+
+/**
+ * How an arrival puts focus on its target (issue #919): without the browser's focus scroll,
+ * scrolling the target's scroller only when the target is out of its view.
+ *
+ * jsdom lays nothing out, so each case states the geometry Chromium reports -- `offsetTop` up
+ * the offset-parent chain, the scroller's `clientHeight` -- and records every write to the
+ * scroller's `scrollTop`. The numbers are Versus Setup's at 1280x800: an 800px pane, a 49px
+ * Start, its sticky bar stuck at 715 with Start 24px inside it.
+ */
+describe('focusInView (issue #919)', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+    vi.restoreAllMocks();
+  });
+
+  const set = (el: HTMLElement, props: Record<string, unknown>): void => {
+    for (const [key, value] of Object.entries(props)) {
+      Object.defineProperty(el, key, { configurable: true, value });
+    }
+  };
+  /** An 800px scroller at `scrollTop`, and the record of every `scrollTop` written to it. */
+  const scroller = (scrollTop: number): { el: HTMLElement; writes: number[] } => {
+    const el = document.createElement('div');
+    el.style.overflowY = 'auto';
+    document.body.appendChild(el);
+    const writes: number[] = [];
+    let current = scrollTop;
+    set(el, { clientHeight: 800 });
+    Object.defineProperty(el, 'scrollTop', {
+      configurable: true,
+      get: () => current,
+      set: (v: number) => {
+        writes.push(v);
+        current = v;
+      },
+    });
+    return { el, writes };
+  };
+  /** A 49px button at `offsetTop` inside `parent`, which is its offset parent. */
+  const control = (parent: HTMLElement, offsetTop: number): HTMLButtonElement => {
+    const btn = document.createElement('button');
+    parent.appendChild(btn);
+    set(btn, { offsetParent: parent, offsetTop, offsetHeight: 49 });
+    return btn;
+  };
+
+  it('focuses without the browser\'s focus scroll, and leaves a control already in view alone', () => {
+    // Start inside its sticky bar, which Chromium reports at its STUCK offset: 715 + 24 = 739,
+    // so 739..788 of an 800px view. The browser's focus scroll judged the entrance's transformed
+    // box, 16px lower and 4px out, and scrolled.
+    const { el: pane, writes } = scroller(0);
+    const bar = document.createElement('div');
+    pane.appendChild(bar);
+    set(bar, { offsetParent: pane, offsetTop: 715, clientTop: 0 });
+    const start = control(bar, 24);
+    const focus = vi.spyOn(start, 'focus');
+    focusInView(start);
+    expect(document.activeElement).toBe(start);
+    expect(focus.mock.calls, 'focus took the browser\'s scroll').toEqual([[{ preventScroll: true }]]);
+    expect(writes, 'a control already in view scrolled its pane').toEqual([]);
+  });
+
+  it('scrolls just far enough to show a control below the view, measured through every offset parent', () => {
+    // A card 1000px down, with a 2px border, holds the control 300px in: its top is 1302 and
+    // its bottom 1351, 551px past an 800px view.
+    const { el: pane, writes } = scroller(0);
+    const card = document.createElement('div');
+    pane.appendChild(card);
+    set(card, { offsetParent: pane, offsetTop: 1000, clientTop: 2 });
+    const start = control(card, 300);
+    focusInView(start);
+    expect(document.activeElement).toBe(start);
+    expect(writes, 'the pane did not bring the control\'s bottom edge to its own').toEqual([551]);
+    // NEGATIVE CONTROL: the first case, where a control in view writes nothing.
+  });
+
+  it('scrolls back just far enough to show a control above the view', () => {
+    const { el: pane, writes } = scroller(500);
+    const start = control(pane, 100);
+    focusInView(start);
+    expect(writes, 'the pane did not bring the control\'s top edge to its own').toEqual([100]);
+    // NEGATIVE CONTROL: the first case, where a control in view writes nothing.
   });
 });

@@ -228,23 +228,27 @@ Pause button's tap does. The keyboard reaches the same verbs through the window-
 handler; a keyboard `confirm` is the browser's own Enter/Space activation and is never
 dispatched.
 
-**An arrival lands on the primary action, and a Confirm from the screen before cannot press
-it (issue #919).** Each layer's `LayerRow.primary` (required, so a new layer must decide) and
-each panel state's `PANEL_PRIMARY` declare the candidates in preference order; `focusArrival`
-puts focus on the first that `arrivalTarget` (`focusable.ts`) finds focusable, else the
-container, and `followPanelArrival` keeps the Main Menu's arrival on Continue or Start Campaign
-while `route-host.ts` repaints the run after the surface. Landing on a control means the press
-that opened the screen must not press it too, which three guards cover: the gamepad poller's
-one-shot Confirm (a held A never fires again), `route-host.ts` dropping a Confirm whose edge is
-first seen on the poll after an arrival (`Hud.onArrival`), and `carried-confirm.ts`, which
-cancels the keydown, repeats, keypress and keyup of any Enter or Space whose press began at or
-before the latest arrival, judged by the event's own `timeStamp` against an arrival stamped on
-the same clock. It only `preventDefault`s, so `input.ts` still sees a held Space released.
-A match's outcome, the one surface the game opens itself, adds a 250 ms reaction window
-(`OUTCOME_CONFIRM_GRACE_MS`) to both rules: `Hud.onArrival` hands it to `route-host.ts`, and
-the keyboard stamp moves that far forward, so a mine or a mashed A in the moment the match ends
-cannot press Next Level, Retry or Rematch. A danger control's arming stamps the keyboard guard
-too, so a held Enter cannot both arm "Really reset?" and answer it with its auto-repeat.
+**An arrival lands on the primary action, and a Confirm from the screen before cannot press it
+(issue #919).** Each layer's `LayerRow.primary` (required, so a new layer must decide) and each
+panel state's `PANEL_PRIMARY` declare the candidates in preference order; `focusArrival` puts
+focus on the first that `arrivalTarget` (`focusable.ts`) finds focusable, else the container,
+and `followPanelArrival` keeps the Main Menu's arrival on Continue or Start Campaign while
+`route-host.ts` repaints the run after the surface. Both focus through `focusInView`
+(`focusable.ts`): no browser focus scroll, then a scroll only when the target's layout box
+(`offsetTop`, which ignores the entrance's 16px rise) is outside its scroller. The browser's
+own scroll judged the risen box and moved Versus Setup 4px under a Start already in view.
+Landing on a control means the press that opened the screen must not press it too, which three
+guards cover: the gamepad poller's one-shot Confirm (a held A never fires again),
+`route-host.ts` dropping a Confirm whose edge is first seen on the poll after an arrival
+(`Hud.onArrival`), and `carried-confirm.ts`, which cancels the keydown, repeats, keypress and
+keyup of any Enter or Space whose press began at or before the latest arrival, judged by the
+event's own `timeStamp` against an arrival stamped on the same clock. It only
+`preventDefault`s, so `input.ts` still sees a held Space released. A match's outcome, the one
+surface the game opens itself, adds a 250 ms reaction window (`OUTCOME_CONFIRM_GRACE_MS`) to
+both rules: `Hud.onArrival` hands it to `route-host.ts`, and the keyboard stamp moves that far
+forward, so a mine or a mashed A in the moment the match ends cannot press Next Level, Retry or
+Rematch. A danger control's arming stamps the keyboard guard too, so a held Enter cannot both
+arm "Really reset?" and answer it with its auto-repeat.
 A direction is spatial (issue #495): `src/game/spatial-focus.ts` derives rows from the
 controls' rectangles at the moment of the move (vertical overlap makes a row, left edge
 orders it), Left/Right wrap within the row, Up/Down land on the nearest column of the
