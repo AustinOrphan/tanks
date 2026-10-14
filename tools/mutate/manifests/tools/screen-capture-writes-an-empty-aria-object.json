@@ -1,0 +1,15 @@
+{
+  "id": "screen-capture-writes-an-empty-aria-object",
+  "file": "tools/screens/capture.mjs",
+  "find": "      ...(Object.keys(aria).length > 0 ? { aria } : {}),",
+  "replace": "      aria,",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/capture.aria.test.ts"
+  ],
+  "killedBy": [
+    "capture.mjs: the aria object each measured element carries (issue #937) omits the aria object for an element with none of the nine, and records nothing unlisted",
+    "capture.mjs: the aria object each measured element carries (issue #937) writes the keys in the list's order and puts aria before style"
+  ],
+  "why": "Writes an aria key on every measured element, empty or not. The committed baseline then grows an \"aria\": {} block on every element without attributes, which makes the whole-baseline accept diff noisy, and an element that lost all its attributes reads as a changed object rather than the plain absence a reviewer scans for."
+}

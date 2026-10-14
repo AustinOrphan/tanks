@@ -1,0 +1,14 @@
+{
+  "id": "screen-capture-hands-the-page-no-aria-names",
+  "file": "tools/screens/capture.mjs",
+  "find": "  return page.evaluate(measureInPage, [selectors, [...WATCHED, ...extra], [...ARIA_ATTRIBUTES]]);",
+  "replace": "  return page.evaluate(measureInPage, [selectors, [...WATCHED, ...extra], []]);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/capture.aria.test.ts"
+  ],
+  "killedBy": [
+    "capture.mjs: the aria object each measured element carries (issue #937) is handed the nine names by measure, which is the call a real capture makes"
+  ],
+  "why": "Calls the in-page measurement with an empty attribute list. measureInPage is correct on its own, so a test of the function alone stays green; the capture records no aria for any element, the next whole-baseline accept writes baselines with none, and the required check compares nothing about roles or names from then on without any test or check failing. Pinned through measure() with a page whose evaluate runs the function in place."
+}

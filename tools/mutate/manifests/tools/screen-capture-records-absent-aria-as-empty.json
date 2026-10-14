@@ -1,0 +1,18 @@
+{
+  "id": "screen-capture-records-absent-aria-as-empty",
+  "file": "tools/screens/capture.mjs",
+  "find": "      if (value !== null) aria[name] = value;",
+  "replace": "      aria[name] = value ?? '';",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/capture.aria.test.ts"
+  ],
+  "killedBy": [
+    "capture.mjs: the aria object each measured element carries (issue #937) records each listed attribute the element carries, as its raw string",
+    "capture.mjs: the aria object each measured element carries (issue #937) records an EMPTY attribute as an empty string, distinct from no attribute",
+    "capture.mjs: the aria object each measured element carries (issue #937) omits the aria object for an element with none of the nine, and records nothing unlisted",
+    "capture.mjs: the aria object each measured element carries (issue #937) writes the keys in the list's order and puts aria before style",
+    "capture.mjs: the aria object each measured element carries (issue #937) is handed the nine names by measure, which is the call a real capture makes"
+  ],
+  "why": "Records every one of the nine attributes on every element, writing an empty string for the ones it lacks. An absent attribute then becomes indistinguishable from aria-label=\"\", which is a different accessible name, and every measured element grows nine keys of noise that bury the attributes that exist."
+}

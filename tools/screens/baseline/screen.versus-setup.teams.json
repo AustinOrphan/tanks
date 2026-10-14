@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Versus Setup\n      \n        Mode\n        FFATeams\n        \n        \n      \n      \n        Players\n        234\n      \n      \n        Map\n        Arena 12/3/4 players · FFA and TeamsSparse destructibles",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-versus-setup-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -54,6 +58,10 @@
         "h": 128
       },
       "text": "Arena 12/3/4 players · FFA and TeamsSparse destructibles on a mid-size board; cover is mostly permanent, lanes stay stable.",
+      "aria": {
+        "aria-describedby": "hud-versus-map-intent-arena-01",
+        "aria-pressed": "false"
+      },
       "style": {
         "display": "grid",
         "opacity": "1",

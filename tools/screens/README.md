@@ -169,8 +169,8 @@ fatal page is the same screen `screen.startup.unsupported-render` already captur
 
 A screenshot named `records.stats` proves the page did not crash and nothing else. Two
 states that render identically produce two files a reviewer has to eyeball. So each capture
-records the bounding box, trimmed text and watched computed properties of the elements the
-state names, into `producer.json` beside the frame.
+records the bounding box, trimmed text, role and aria attributes, and watched computed
+properties of the elements the state names, into `producer.json` beside the frame.
 
 That half is deterministic in a way pixels are not, and it is the half that has caught
 things: the campaign-complete screen's two tally lines sat 24px apart where 8px was
@@ -207,12 +207,36 @@ rather than re-litigating it.
 ### What it asserts
 
 **The measurements block, and never pixels.** Each state's `metadata.screen.measurements`
-entry carries `present`, `visible`, the element `box`, its `text`, and seven watched computed
-properties — `display`, `opacity`, `color`, `background-color`, `font-size`, `margin-top`,
-`margin-bottom`. That already covers most of what a pixel diff would catch, on the selectors a
-state names, and it is deterministic across CI images in a way font rasterisation is not.
+entry carries `present`, `visible`, the element `box`, its `text`, an `aria` object, and seven
+watched computed properties — `display`, `opacity`, `color`, `background-color`, `font-size`,
+`margin-top`, `margin-bottom`. That already covers most of what a pixel diff would catch, on
+the selectors a state names, and it is deterministic across CI images in a way font
+rasterisation is not.
 
 PNGs are still captured, and uploaded on failure as human evidence. They are never compared.
+
+**Roles and accessible names (issue #937, owner ruling 2026-10-13).** The `aria` object holds
+the element's `role`, `aria-label`, `aria-labelledby`, `aria-describedby`, `aria-live`,
+`aria-modal`, `aria-expanded`, `aria-pressed` and `aria-current`, each as the raw attribute
+string, omitting the ones the element lacks; an element with none has no `aria` key. They are
+compared exactly, with no tolerance and no trimming, so a dialog that lost its role or a control
+whose label changed fails the check, and the failure line names the state, the selector and
+the attribute (`.hud-confirm aria.role: expected "alertdialog", got undefined`). The line
+shortens each value, collapsing whitespace; when that would print two identical values, as for
+a change only in whitespace, it prints both in full instead (`expected "Level 1", got "Level 1 "
+(in full; the short forms match)`).
+
+What this does NOT prove, so nobody reads it as a screen-reader gate:
+
+- **Attributes as written, not the computed tree.** There is no per-state `ariaSnapshot` and no
+  computed role, because Chromium derives both and the derivation can shift between browser
+  versions inside a required check. A native role is therefore invisible: a `<button>` carries no
+  `role` attribute, so one replaced by a `<div>` shows up only if its text, box or style moved.
+- **Only the measured elements.** A state's `measure` list names a handful of selectors, first
+  match only. Attributes elsewhere on the screen are not recorded.
+- **Nothing is announced.** No screen reader is driven, and no accessible name is computed from
+  content or from the elements an `aria-labelledby` points at; the id reference itself is what
+  is compared.
 
 The one state that would most reward a pixel baseline is the 3D board, and it is exactly the
 one where pixels are least trustworthy: measured at **1660 KB** against 40–80 KB for a menu
@@ -244,11 +268,16 @@ subset's argument for excluding them is cost alone.
 | | Budget | Measured |
 |---|---|---|
 | wall clock | 180 s | 127 s for 36 states, a fresh browser each |
-| committed baseline | 100 KB | 53 KB of JSON |
+| committed baseline | 100 KB | 115 KB of JSON (115,174 bytes over 50 files, 2026-10-13) |
 | failure artifacts | 25 MB, 14-day retention | 13 MB if every state failed at once |
 
 The headroom is for the runner being slower than a developer machine, and for `sweep.mjs`'s
 shared browser not being adopted yet.
+
+**The baseline row is over its budget, and was before #937.** The figure first written here was
+53 KB; the 50 files measured 108,250 bytes at `ba8f7085`, before the `aria` objects were added,
+and 115,174 after (67 objects holding 124 attributes, 258 added lines). Nothing enforces the
+budget, so whether to raise it or trim the measured selectors is still an open decision.
 
 ### Where it runs
 

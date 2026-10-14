@@ -1,0 +1,14 @@
+{
+  "id": "screen-baseline-confirm-records-a-plain-dialog",
+  "file": "tools/screens/baseline/screen.confirm.new-campaign.json",
+  "find": "\"role\": \"alertdialog\"",
+  "replace": "\"role\": \"dialog\"",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the committed baselines carry roles and accessible names (issue #937) records the new-campaign confirm as a modal alertdialog, named and described by its own text"
+  ],
+  "why": "The committed new-campaign confirm reads role=\"dialog\" instead of \"alertdialog\". The two are announced differently: an alertdialog tells a screen reader the content is urgent and reads its description at once, which is what a confirm that discards a campaign needs. The screens gate compares a capture against whatever was last accepted, so an accept can bless this loss as easily as a moved box; this test makes the loss take a test edit too."
+}

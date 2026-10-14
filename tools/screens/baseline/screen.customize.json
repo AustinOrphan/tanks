@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Customize\n      \n      \n      \n      \n        \n        \n        \n        \n      \n      \n        Hull\n        \n      \n      \n        Skin\n        SolidRacing stripesCamoCloudsCheckerplateFlowTwo-tone\n ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-customize-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -33,6 +37,9 @@
         "h": 190
       },
       "text": "",
+      "aria": {
+        "aria-label": "Tank preview. Drag to turn the hull, or use the left and right arrow keys. Move the pointer over it to aim the turret, or hold shift with the arrow keys."
+      },
       "style": {
         "display": "block",
         "opacity": "1",

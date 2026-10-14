@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Tanks! could not load.Part of the game couldn't load. Check your connection, then reload.Reload",
+      "aria": {
+        "role": "alert",
+        "aria-live": "assertive"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

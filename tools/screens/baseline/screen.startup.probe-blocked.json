@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "This browser cannot run Tanks!Something stopped the game from checking whether this browser can draw it — often an extension, or a privacy mode that blocks graphics access. Try disabling extensions fo",
+      "aria": {
+        "role": "alert",
+        "aria-live": "assertive"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

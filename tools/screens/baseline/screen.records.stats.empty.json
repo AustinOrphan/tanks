@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Records\n      \n        Stats\n        Achievements\n      \n      \n      No matches played yet.\n      Statistics, lifetime and this level attemptLifetimeLevel attemptShell kills00Mine kills00Deaths00Self",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-stats-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
