@@ -9,5 +9,8 @@
     "src/game/route-host.test.ts"
   ],
   "why": "A browser drops focus to <body> from a control that is hidden under it, and the Main Menu's arrival hides Continue when the run turns out to be over (issue #919). The follow must treat a dropped focus as unmoved and put it on the control the arrival would pick now, or a keyboard or pad player is left with no position on the menu.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) the Main Menu arrival follow picks up a focus the browser dropped to <body>"
+  ]
 }

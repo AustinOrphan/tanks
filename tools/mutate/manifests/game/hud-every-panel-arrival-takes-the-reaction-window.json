@@ -8,5 +8,10 @@
     "src/game/route-host.test.ts"
   ],
   "why": "Only the outcome, which the game opens itself, has a reaction window (issue #919). Pause and the Main Menu are opened by the player, so a fresh press on them is meant for them and must be taken at once, not a quarter-second later.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a screen the player opened takes a fresh press at once: only the outcome has a reaction window",
+    "createRouteHost: the gamepad menu poller (issue #494) a held A across a Resume does not confirm again, so the pad that resumed the round is silent at the next Pause",
+    "createRouteHost: the gamepad menu poller (issue #494) drops a Confirm first seen on the poll after an arrival, and takes the next press (issue #919)"
+  ]
 }

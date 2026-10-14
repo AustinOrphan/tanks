@@ -8,5 +8,8 @@
     "src/game/hud.reachability.test.ts"
   ],
   "why": "The arrival's reaction window reaches the gamepad route through `onArrival` (issue #919). Withheld, the keyboard waits out the outcome's window but an A pressed in the moment the match ends presses the outcome.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) drops a fresh Confirm inside the outcome's reaction window, and takes one after it (issue #919)"
+  ]
 }

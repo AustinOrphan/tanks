@@ -7,5 +7,8 @@
     "src/game/hud.navigation.test.ts"
   ],
   "why": "Arming a two-press danger control asks a new question, so the press that armed it must not answer it (issue #919). A held Enter auto-repeats and every repeat clicks: unstamped, one held Enter arms and fires Reset progress.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a held Enter that arms a two-press reset cannot fire it with its own auto-repeat"
+  ]
 }

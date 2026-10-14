@@ -8,5 +8,11 @@
     "src/game/route-host.test.ts"
   ],
   "why": "A layer opens because the player asked for it, so its arrival carries no reaction window (issue #919): a fresh press on Level Select or Versus Setup is meant for it and must be taken at once.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a screen the player opened takes a fresh press at once: only the outcome has a reaction window",
+    "createRouteHost: the gamepad menu poller (issue #494) rebinds Fire onto B from a controller alone, and the B that completes it does not also back out (issue #754)",
+    "createRouteHost: the gamepad menu poller (issue #494) Back moved onto X does not back out while X is still held from choosing it (issue #754)",
+    "createRouteHost: the gamepad menu poller (issue #494) an A held from the press that opened Versus Setup does not press Start until it is released and pressed again (issue #919)"
+  ]
 }

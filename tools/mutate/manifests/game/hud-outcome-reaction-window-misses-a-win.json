@@ -8,5 +8,8 @@
     "src/game/route-host.test.ts"
   ],
   "why": "Both outcomes are surfaces the game opens on its own (issue #919), so both carry the reaction window. Without it on a win, a press in the moment of the winning kill presses Next Level or Rematch unseen.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter pressed in the moment a match is won cannot press the outcome, and one after can"
+  ]
 }

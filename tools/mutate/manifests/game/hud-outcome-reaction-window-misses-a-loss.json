@@ -8,5 +8,9 @@
     "src/game/route-host.test.ts"
   ],
   "why": "Both outcomes are surfaces the game opens on its own (issue #919), so both carry the reaction window. Without it on a loss, a mine laid in the moment of the final death presses Retry unseen.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space pressed in the moment a match is lost cannot press the outcome, and one after can",
+    "createRouteHost: the gamepad menu poller (issue #494) drops a fresh Confirm inside the outcome's reaction window, and takes one after it (issue #919)"
+  ]
 }

@@ -9,5 +9,8 @@
     "src/game/route-host.test.ts"
   ],
   "why": "The Main Menu's arrival follow (issue #919) moves focus only while the menu is the surface on top. Without the check, a repaint of the run while a pane is open and focus has fallen to <body> puts focus on a menu button hidden under the pane: `focusableControls` judges the controls, never the container that holds them.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) the Main Menu arrival follow never reaches under an open pane, even from <body>"
+  ]
 }

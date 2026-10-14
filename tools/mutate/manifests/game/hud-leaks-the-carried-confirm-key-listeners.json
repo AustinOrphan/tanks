@@ -7,5 +7,15 @@
     "src/game/hud.navigation.test.ts"
   ],
   "why": "The carried-Confirm guard listens at window capture for keydown, keypress and keyup (issue #919), and dispose must remove all three. A leaked keypress or keyup listener outlives its HUD and keeps cancelling Enter and Space against that HUD's last arrival.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) removes every capture-phase window key listener it added, by reference, on dispose",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space held through the end of a match cannot press Retry with its repeats or its release",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space pressed in the moment a match is lost cannot press the outcome, and one after can",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter pressed in the moment a match is won cannot press the outcome, and one after can",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a screen the player opened takes a fresh press at once: only the outcome has a reaction window",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a held Enter that arms a two-press reset cannot fire it with its own auto-repeat",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a keydown queued behind an arrival cannot press the new primary"
+  ]
 }

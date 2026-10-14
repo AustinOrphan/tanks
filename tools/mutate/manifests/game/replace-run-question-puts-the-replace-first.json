@@ -8,5 +8,8 @@
     "src/game/hud.reachability.test.ts"
   ],
   "why": "The replace-run question keeps its SAFE answer first (issue #226), and #919 did not retire that order: focus that escapes the dialog is parked on its container (onModalFocusIn), and a pad Confirm there lands on the first control. With the replace first, that Confirm lands on the deletion of a run and the next one fires it.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) arrives on the safe answer, so a blind Confirm keeps the run (issue #919)"
+  ]
 }
