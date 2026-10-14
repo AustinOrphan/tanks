@@ -97,7 +97,9 @@ export function arrivalTarget(container: HTMLElement, primary: readonly HTMLElem
  * element's stuck offset (measured in Chromium, both), so summing it up the offset-parent
  * chain gives `el`'s position in its scroller's content, as it will stand once the entrance
  * ends. Every surface is `position: absolute`, so the surface is on that chain. A scroller
- * that is not positioned is not, and is left alone; no surface has one.
+ * that is not positioned is not, and is left alone. MEASURED over the screen catalogue: every
+ * scroller around an arrival's primary is on the chain, and the one focused control inside an
+ * unpositioned scroller (`.hud-controller-rows`) is in Controllers, which arrives on its pane.
  *
  * Vertical only: no surface scrolls sideways.
  */
