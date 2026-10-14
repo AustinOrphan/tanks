@@ -1,7 +1,7 @@
 {
   "id": "hud-arrival-skips-the-carried-confirm-stamp",
   "file": "src/game/hud.ts",
-  "find": "    carriedConfirm.arrive();\n    const target = arrivalTarget(container, primary);",
+  "find": "    carriedConfirm.arrive(graceMs);\n    const target = arrivalTarget(container, primary);",
   "replace": "    const target = arrivalTarget(container, primary);",
   "tests": [
     "src/game/hud.navigation.test.ts",

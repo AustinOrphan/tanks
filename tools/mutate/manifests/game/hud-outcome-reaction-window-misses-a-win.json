@@ -1,0 +1,12 @@
+{
+  "id": "hud-outcome-reaction-window-misses-a-win",
+  "file": "src/game/hud.ts",
+  "find": "    const graceMs = s === 'outcome-win' || s === 'outcome-lose' ? OUTCOME_CONFIRM_GRACE_MS : 0;",
+  "replace": "    const graceMs = s === 'outcome-lose' ? OUTCOME_CONFIRM_GRACE_MS : 0;",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Both outcomes are surfaces the game opens on its own (issue #919), so both carry the reaction window. Without it on a win, a press in the moment of the winning kill presses Next Level or Rematch unseen.",
+  "expect": "killed"
+}

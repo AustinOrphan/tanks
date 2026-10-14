@@ -3881,6 +3881,137 @@ describe('hud: arrival lands on the primary action, and a Confirm from the scree
     }
   });
 
+  // The outcome is the one surface the GAME opens, on the frame the match ends, so a fresh press
+  // in its first quarter-second (`OUTCOME_CONFIRM_GRACE_MS`) was made for the match. Both
+  // outcomes, each spelled out, one with each Confirm key.
+  it('a Space pressed in the moment a match is lost cannot press the outcome, and one after can', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { hud: h, root } = mount();
+      let restarts = 0;
+      h.onStartRestart(() => {
+        restarts += 1;
+      });
+      at(1_000);
+      h.setState('main-menu');
+      h.setState('playing');
+      at(5_000);
+      h.setState('outcome-lose'); // the frame of the final death
+      expect(document.activeElement, 'the end screen did not arrive on its action').toBe(q(root, '.hud-action'));
+      at(5_100); // a mine laid a tenth of a second later
+      expect(browserKey('keydown', ' '), 'a press 100ms after the match ended reached the outcome').toBe(true);
+      expect(browserKey('keyup', ' '), 'its release reached the outcome').toBe(true);
+      expect(restarts, 'a Space pressed for the match pressed the outcome\'s action').toBe(0);
+      // NEGATIVE CONTROL: the same Space 400ms after the arrival, past the window, presses it once.
+      at(5_400);
+      expect(browserKey('keydown', ' ')).toBe(false);
+      expect(browserKey('keyup', ' ')).toBe(false);
+      expect(restarts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('an Enter pressed in the moment a match is won cannot press the outcome, and one after can', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { hud: h, root } = mount();
+      let restarts = 0;
+      h.onStartRestart(() => {
+        restarts += 1;
+      });
+      at(1_000);
+      h.setState('main-menu');
+      h.setState('playing');
+      at(5_000);
+      h.setState('outcome-win'); // the frame of the winning kill
+      expect(document.activeElement, 'the end screen did not arrive on its action').toBe(q(root, '.hud-action'));
+      at(5_100);
+      expect(browserKey('keydown', 'Enter'), 'a press 100ms after the match ended reached the outcome').toBe(true);
+      expect(browserKey('keypress', 'Enter'), 'its keypress reached the outcome').toBe(true);
+      expect(restarts, 'an Enter pressed for the match pressed the outcome\'s action').toBe(0);
+      // NEGATIVE CONTROL: the same Enter 400ms after the arrival, past the window, presses it once.
+      at(5_400);
+      expect(browserKey('keydown', 'Enter')).toBe(false);
+      expect(browserKey('keypress', 'Enter')).toBe(false);
+      expect(restarts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a screen the player opened takes a fresh press at once: only the outcome has a reaction window', () => {
+    // NEGATIVE CONTROL for the two cases above, on a panel state and on a layer: the same
+    // press, 10ms after the arrival, is the player's.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { hud: h, root } = mount();
+      let restarts = 0;
+      h.onStartRestart(() => {
+        restarts += 1;
+      });
+      const picks: number[] = [];
+      h.onLevelSelect((i) => picks.push(i));
+      h.setLevelSelect(3, 5);
+      at(1_000);
+      h.setState('main-menu');
+      h.setState('playing');
+      at(2_000);
+      h.setState('paused');
+      expect(document.activeElement, 'Pause did not arrive on Resume').toBe(q(root, '.hud-action'));
+      at(2_010);
+      expect(browserKey('keydown', 'Enter'), 'a press 10ms after Pause arrived was cancelled').toBe(false);
+      expect(browserKey('keypress', 'Enter')).toBe(false);
+      expect(restarts, 'a fresh Enter on Resume did not press it').toBe(1);
+
+      h.setState('main-menu');
+      at(3_000);
+      q(root, '.hud-levelselect-open').click(); // a pointer opens it: no key is down
+      expect(document.activeElement, 'Level Select did not arrive on Level 1').toBe(
+        q(root, '.hud-level-btn[aria-label="Level 1"]'),
+      );
+      at(3_010);
+      expect(browserKey('keydown', ' '), 'a press 10ms after Level Select arrived was cancelled').toBe(false);
+      expect(browserKey('keyup', ' ')).toBe(false);
+      expect(picks, 'a fresh Space on Level 1 did not start it').toEqual([0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a held Enter that arms a two-press reset cannot fire it with its own auto-repeat', () => {
+    // The armed "Really reset?" is a new question; a held Enter clicks on every repeat.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { hud: h, root } = mount();
+      let resets = 0;
+      h.onResetProgress(() => {
+        resets += 1;
+      });
+      at(1_000);
+      h.setState('main-menu');
+      q(root, '.hud-settings-open').click();
+      const reset = q(root, '.hud-reset-progress');
+      reset.focus();
+      at(2_000);
+      expect(browserKey('keydown', 'Enter'), 'a fresh press on the reset was cancelled').toBe(false);
+      expect(browserKey('keypress', 'Enter'), 'the press did not reach the reset').toBe(false);
+      expect(reset.textContent, 'the first press did not arm the reset').toBe('Really reset?');
+      at(2_500); // the same key, still held, auto-repeats on the armed control
+      expect(browserKey('keydown', 'Enter', true), 'a repeat reached the armed reset').toBe(true);
+      expect(browserKey('keypress', 'Enter', true), 'a repeat\'s keypress reached the armed reset').toBe(true);
+      expect(browserKey('keyup', 'Enter')).toBe(true);
+      expect(resets, 'one held Enter both armed and fired the reset').toBe(0);
+      // NEGATIVE CONTROL: a second press, made on the armed control, fires the reset once.
+      at(3_000);
+      expect(browserKey('keydown', 'Enter')).toBe(false);
+      expect(browserKey('keypress', 'Enter')).toBe(false);
+      expect(resets).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a keydown queued behind an arrival cannot press the new primary', () => {
     // Pressed while the frame that opened the screen was running, delivered after it.
     vi.useFakeTimers({ toFake: ['Date'] });

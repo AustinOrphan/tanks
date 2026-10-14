@@ -1320,8 +1320,10 @@ export interface Hud {
    * container (issue #919) -- every pane and overlay opening, every panel state, and the
    * destination of a Back. `route-host.ts` uses it to drop a gamepad Confirm first seen on
    * the poll after an arrival, which was pressed before the player could see the screen.
+   * `graceMs` is the arrival's reaction window, 0 except on a match's outcome: a Confirm
+   * pressed within it was pressed for the match too (`OUTCOME_CONFIRM_GRACE_MS`).
    */
-  onArrival(cb: () => void): void;
+  onArrival(cb: (graceMs: number) => void): void;
   dispose(): void;
 }
 
@@ -4112,6 +4114,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return;
     }
     disarmReset();
+    // The armed control asks a new question, so the press that armed it is carried like one
+    // that opened a screen (issue #919's guard): a held Enter auto-repeats, every repeat is
+    // another click, and the first would answer "Really reset?" for the player. A fresh press
+    // still confirms. The pad needs nothing here: its Confirm is one-shot while held.
+    carriedConfirm.arrive();
     btn.textContent = armedLabel;
     btn.classList.add('hud-danger--armed');
     armedReset = { btn, timer: setTimeout(disarmReset, 4000) };
@@ -4751,14 +4758,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * Confirm already down -- the one that opened this screen, or one held across it -- is
    * cancelled on the primary it is about to reach. The subscribers are told after, and the
    * gamepad route uses that to drop a Confirm first seen on the next poll (`route-host.ts`).
+   * `graceMs` reaches both: the arrival's reaction window, which only an outcome has.
    *
    * Returns the element focused, which the panel uses to follow its own affordances.
    */
-  function focusArrival(container: HTMLElement, primary: readonly HTMLElement[]): HTMLElement {
-    carriedConfirm.arrive();
+  function focusArrival(
+    container: HTMLElement,
+    primary: readonly HTMLElement[],
+    graceMs = 0,
+  ): HTMLElement {
+    carriedConfirm.arrive(graceMs);
     const target = arrivalTarget(container, primary);
     target.focus();
-    for (const cb of arrivalCbs) cb();
+    for (const cb of arrivalCbs) cb(graceMs);
     return target;
   }
 
@@ -4775,7 +4787,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const carriedConfirm = createCarriedConfirmGuard();
   const onCarriedConfirmKey = (e: KeyboardEvent): void => carriedConfirm.onKey(e);
   /** `onArrival` subscribers -- see `focusArrival`. */
-  const arrivalCbs: Array<() => void> = [];
+  const arrivalCbs: Array<(graceMs: number) => void> = [];
 
   /**
    * The window-level keydown handler that drives roving focus. Bound at `window` in the
@@ -5099,9 +5111,25 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /** Where the latest panel arrival put focus, for `followPanelArrival`. */
   let panelArrival: { state: PanelSurface; target: HTMLElement } | null = null;
 
+  /**
+   * How long after a match's outcome arrives a FRESH Confirm still counts as pressed for the
+   * match (issue #919), in milliseconds.
+   *
+   * Every other surface arrives because the player asked for it, so a press begun after its
+   * arrival is meant for it. The outcome is the one the GAME opens, on the frame of the winning
+   * kill or the final death, with focus on Next Level, Retry or Rematch, while the player may
+   * still be pressing for the match: Space lays a mine, and the panel is still fading in. A
+   * press in the first quarter-second, the low end of a visual reaction time, cannot be an
+   * answer to a result the player has not yet seen, so it is cancelled like one held across
+   * the arrival (`carried-confirm.ts`, and `route-host.ts` for a pad). After it, one press
+   * takes the screen. Every outcome arrival has it, a Back to one included.
+   */
+  const OUTCOME_CONFIRM_GRACE_MS = 250;
+
   /** The panel's arrival in state `s` -- see `focusArrival`. */
   function arrivePanel(s: PanelSurface): void {
-    panelArrival = { state: s, target: focusArrival(panel, PANEL_PRIMARY[s]()) };
+    const graceMs = s === 'outcome-win' || s === 'outcome-lose' ? OUTCOME_CONFIRM_GRACE_MS : 0;
+    panelArrival = { state: s, target: focusArrival(panel, PANEL_PRIMARY[s](), graceMs) };
   }
 
   /**
@@ -8772,7 +8800,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     back,
     act,
-    onArrival(cb: () => void): void {
+    onArrival(cb: (graceMs: number) => void): void {
       arrivalCbs.push(cb);
     },
     dispose(): void {

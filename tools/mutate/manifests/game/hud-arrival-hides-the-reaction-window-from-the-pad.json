@@ -1,0 +1,12 @@
+{
+  "id": "hud-arrival-hides-the-reaction-window-from-the-pad",
+  "file": "src/game/hud.ts",
+  "find": "    for (const cb of arrivalCbs) cb(graceMs);",
+  "replace": "    for (const cb of arrivalCbs) cb(0);",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "The arrival's reaction window reaches the gamepad route through `onArrival` (issue #919). Withheld, the keyboard waits out the outcome's window but an A pressed in the moment the match ends presses the outcome.",
+  "expect": "killed"
+}

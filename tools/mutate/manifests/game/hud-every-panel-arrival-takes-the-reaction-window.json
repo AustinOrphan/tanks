@@ -1,0 +1,12 @@
+{
+  "id": "hud-every-panel-arrival-takes-the-reaction-window",
+  "file": "src/game/hud.ts",
+  "find": "    const graceMs = s === 'outcome-win' || s === 'outcome-lose' ? OUTCOME_CONFIRM_GRACE_MS : 0;",
+  "replace": "    const graceMs = OUTCOME_CONFIRM_GRACE_MS;",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Only the outcome, which the game opens itself, has a reaction window (issue #919). Pause and the Main Menu are opened by the player, so a fresh press on them is meant for them and must be taken at once, not a quarter-second later.",
+  "expect": "killed"
+}

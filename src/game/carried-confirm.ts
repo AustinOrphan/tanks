@@ -22,6 +22,12 @@
  * ever. This is the keyboard twin of the gamepad poller's edge rule (`gamepad-menu.ts`), under
  * which a held Confirm never fires again and a button must be released and pressed anew.
  *
+ * A REACTION WINDOW, for a screen nobody asked for. An arrival may carry `graceMs`, which moves
+ * "the arrival" that far past the moment focus moved, so a press begun inside the window is
+ * cancelled too. `hud.ts` passes one only for a match's outcome, the surface the game opens on
+ * its own on the frame the match ends: a press there in the first moments was made for the
+ * match, before the player could have seen the result. A screen the player opened has none.
+ *
  * TIMES, NOT A COUNTER. "Began before the arrival" is read off the press's own `keydown`
  * `timeStamp`, which the browser sets from the input itself, so a `keydown` queued behind the
  * arrival's frame is still judged by when the key went down. An arrival counter could judge
@@ -46,8 +52,11 @@
 import { keyToUiAction } from '../input/ui-actions';
 
 export interface CarriedConfirmGuard {
-  /** A surface has just taken focus: every Confirm press begun until now belongs to the screen before. */
-  arrive(): void;
+  /**
+   * A surface has just taken focus: every Confirm press begun until now belongs to the screen
+   * before, and with `graceMs`, every press begun within that many milliseconds after it.
+   */
+  arrive(graceMs?: number): void;
   /** The window-capture listener for `keydown`, `keypress` and `keyup`. */
   onKey(e: KeyboardEvent): void;
 }
@@ -64,8 +73,8 @@ export function createCarriedConfirmGuard(now: () => number = eventClock): Carri
   /** When each Confirm key's current press began, by lowercased `key`. */
   const pressedAt = new Map<string, number>();
   return {
-    arrive(): void {
-      arrivedAt = now();
+    arrive(graceMs = 0): void {
+      arrivedAt = now() + graceMs;
     },
     onKey(e: KeyboardEvent): void {
       if (keyToUiAction(e.key) !== 'confirm') return;

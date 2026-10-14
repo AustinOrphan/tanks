@@ -1,8 +1,8 @@
 {
   "id": "route-host-menu-actions-reach-a-simulating-session",
   "file": "src/game/route-host.ts",
-  "find": "    if (sm.isSimulating && action !== 'pause') return;\n    if (action === 'confirm' && arrivedSincePoll) return; // pressed for the screen before",
-  "replace": "    if (action === 'confirm' && arrivedSincePoll) return; // pressed for the screen before",
+  "find": "    if (sm.isSimulating && action !== 'pause') return;\n    // Pressed for the screen before: in the frame it arrived in, or inside its reaction window.\n    if (action === 'confirm' && (arrivedSincePoll || deps.now() < confirmDroppedUntil)) return;",
+  "replace": "    // Pressed for the screen before: in the frame it arrived in, or inside its reaction window.\n    if (action === 'confirm' && (arrivedSincePoll || deps.now() < confirmDroppedUntil)) return;",
   "tests": [
     "src/game/route-host.test.ts"
   ],

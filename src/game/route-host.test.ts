@@ -2276,6 +2276,45 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     f.root.remove();
   });
 
+  it('drops a fresh Confirm inside the outcome\'s reaction window, and takes one after it (issue #919)', () => {
+    // The outcome is the one surface the GAME opens, on the frame the match ends, so an A
+    // pressed in its first quarter-second was pressed for the match: dropped, and held. The
+    // empty poll after the arrival puts this press outside `arrivedSincePoll`'s frame, so only
+    // the window can drop it. NEGATIVE CONTROL for the window's reach: the Pause case above,
+    // where the player opened the screen, takes a fresh A on the second poll.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    const slot = f.host.attach(CAMPAIGN);
+    let restarts = 0;
+    slot.onStartRestart(() => {
+      restarts += 1;
+    });
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    f.pads.push(pad());
+    frame(f, 0);
+    f.advance(1_000);
+    f.host.sm.onEvents([{ type: 'lose' }]); // the final death
+    expect(f.host.sm.hasOutcome, 'the fixture did not reach an outcome').toBe(true);
+    expect(document.activeElement, 'the outcome did not arrive on its action').toBe(
+      f.root.querySelector('.hud-action'),
+    );
+    frame(f, 16); // the first poll since the outcome arrived: nothing pressed
+    f.advance(100);
+    f.pads[0] = pad(0);
+    frame(f, 32); // a fresh A, 100ms after the match ended
+    expect(restarts, 'an A pressed 100ms after the match ended pressed the outcome').toBe(0);
+    f.advance(300);
+    frame(f, 48); // still held, now past the window: not a new press either
+    expect(restarts, 'the dropped A fired once it was held past the window').toBe(0);
+    // NEGATIVE CONTROL: released and pressed again past the window, the A presses the action once.
+    f.pads[0] = pad();
+    frame(f, 64);
+    f.pads[0] = pad(0);
+    frame(f, 80);
+    expect(restarts, 'a fresh A past the window did not press the outcome once').toBe(1);
+    f.host.dispose();
+    f.root.remove();
+  });
+
   it('disposal cancels the queued frame, and a frame that fires anyway emits nothing', () => {
     const f = fixture({ launchDismissed: true });
     f.host.attach(CAMPAIGN);

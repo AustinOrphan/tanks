@@ -240,6 +240,11 @@ first seen on the poll after an arrival (`Hud.onArrival`), and `carried-confirm.
 cancels the keydown, repeats, keypress and keyup of any Enter or Space whose press began at or
 before the latest arrival, judged by the event's own `timeStamp` against an arrival stamped on
 the same clock. It only `preventDefault`s, so `input.ts` still sees a held Space released.
+A match's outcome, the one surface the game opens itself, adds a 250 ms reaction window
+(`OUTCOME_CONFIRM_GRACE_MS`) to both rules: `Hud.onArrival` hands it to `route-host.ts`, and
+the keyboard stamp moves that far forward, so a mine or a mashed A in the moment the match ends
+cannot press Next Level, Retry or Rematch. A danger control's arming stamps the keyboard guard
+too, so a held Enter cannot both arm "Really reset?" and answer it with its auto-repeat.
 A direction is spatial (issue #495): `src/game/spatial-focus.ts` derives rows from the
 controls' rectangles at the moment of the move (vertical overlap makes a row, left edge
 orders it), Left/Right wrap within the row, Up/Down land on the nearest column of the

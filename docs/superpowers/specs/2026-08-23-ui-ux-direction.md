@@ -421,7 +421,7 @@ the player UI, while its isolated persistence and clean capture surface remain s
 | Action | Contract |
 | --- | --- |
 | Back | Remove exactly one overlay, otherwise one route; restore origin, focus, and meaningful scroll. Never mutate configuration or simulation. |
-| Confirm | Activate the focused primary meaning once. A valid Start enters play; it never opens another Start screen. A Confirm pressed for the previous screen -- held across the change, auto-repeating, or delivered after it -- never activates the new one. |
+| Confirm | Activate the focused primary meaning once. A valid Start enters play; it never opens another Start screen. A Confirm begun before the screen changed -- held across the change, auto-repeating, or queued and delivered after it -- never activates the new screen; a press begun after the change is the new screen's. A match's outcome, the one screen the game opens on its own, also ignores a Confirm begun in its first 250 ms: that press was made for the match, before the result could be seen. The second press of a two-press confirmation must likewise be a new press. |
 | Cancel | Close/discard the current staged or blocking layer without applying changes. Ordinary immediate settings do not pretend to need Cancel. |
 | Pause | From gameplay, open Pause. From Pause with no deeper overlay, resume. Never leak into application routes. |
 | Quit | Avoid generic wording. Replace with Return to Main Menu, End Practice, or Change Setup. |
@@ -429,7 +429,7 @@ the player UI, while its isolated persistence and clean capture surface remain s
 | Rematch | Same VS configuration, fresh seed/resolved Random choice, direct gameplay. |
 | Change Setup | Return to retained VS Setup without creating a match or consuming RNG. |
 | Main Menu | Return directly to the application root; clear transient gameplay presentation, preserve documented durable state. |
-| Focus | Arrival focuses the screen's primary action as its section above names it, so a screen takes one Confirm; a destructive confirmation's primary is its safe answer. A screen with no primary action (Settings, Customize, Records, About & Legal, Controllers, Developer Tools) focuses itself, where Confirm only moves focus to its first control. Use logical DOM order for accessibility and spatial movement for keyboard/controller grids. Only blocking overlays trap focus. |
+| Focus | Arrival focuses the screen's primary action as its section above names it, so a screen takes one Confirm; a destructive confirmation's primary is its safe answer. A screen with no primary action (Settings, Customize, Records, About & Legal, Controllers, Developer Tools) focuses itself: there a controller Confirm only moves focus to its first control, a keyboard Enter or Space does nothing, and the first direction enters at the first control. Use logical DOM order for accessibility and spatial movement for keyboard/controller grids. Only blocking overlays trap focus. |
 | Remembered selection | Restore prior route selection/focus; persist player preferences and stable VS choices; never persist a stale physical controller index. |
 
 Central UI actions normalize keyboard and gamepad input before screen handling. Pointer/touch

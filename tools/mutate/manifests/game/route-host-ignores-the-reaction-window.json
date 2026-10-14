@@ -1,0 +1,11 @@
+{
+  "id": "route-host-ignores-the-reaction-window",
+  "file": "src/game/route-host.ts",
+  "find": "    if (action === 'confirm' && (arrivedSincePoll || deps.now() < confirmDroppedUntil)) return;",
+  "replace": "    if (action === 'confirm' && arrivedSincePoll) return;",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "A pad Confirm first seen inside an arrival's reaction window was pressed for the screen before (issue #919): the outcome's, for an A pressed as the match ended. Taken, it presses Next Level, Retry or Rematch before the result is seen.",
+  "expect": "killed"
+}

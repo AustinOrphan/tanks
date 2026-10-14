@@ -105,6 +105,23 @@ describe('createCarriedConfirmGuard (issue #919)', () => {
     expect(key(g, 'keydown', 'Enter', 10.001), 'the press a moment later is fresh').toBe(false);
   });
 
+  it('extends an arrival by its reaction window, so a press begun inside it is cancelled too', () => {
+    // A match's outcome arrives with one (`hud.ts`): a press in its first moments was made for
+    // the match, before the player could have seen the result.
+    const g = guard();
+    clock = 10;
+    g.arrive(250);
+    expect(key(g, 'keydown', ' ', 110), 'a press inside the window got through').toBe(true);
+    expect(key(g, 'keyup', ' ', 150), 'the release of a press begun inside the window got through').toBe(true);
+    expect(key(g, 'keydown', 'Enter', 260), 'a press at the window\'s last instant got through').toBe(true);
+    // NEGATIVE CONTROL: a press begun after the window is fresh...
+    expect(key(g, 'keydown', 'Enter', 260.5), 'a press after the window was cancelled').toBe(false);
+    // ...and so is the press at 110 after an arrival that carries no window.
+    const plain = guard();
+    plain.arrive();
+    expect(key(plain, 'keydown', ' ', 110), 'an arrival with no window cancelled a later press').toBe(false);
+  });
+
   it('cancels the events of a press whose start it never saw', () => {
     // A key already down when the page took focus: its repeats and release are not this screen's.
     const g = guard();
