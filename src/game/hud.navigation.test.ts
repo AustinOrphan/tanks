@@ -1687,24 +1687,36 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     );
   });
 
-  it('removes its own capture-phase window keydown listener on dispose', () => {
+  it('removes every capture-phase window key listener it added, by reference, on dispose', () => {
     const addSpy = vi.spyOn(window, 'addEventListener');
     const removeSpy = vi.spyOn(window, 'removeEventListener');
     const root = document.createElement('div');
     document.body.appendChild(root);
     const h = createHud(root);
 
-    const added = addSpy.mock.calls.find(
-      (c) => c[0] === 'keydown' && c[2] === true,
-    );
-    expect(added, 'no capture-phase keydown listener was registered at window').toBeDefined();
+    // Every window `keydown`/`keypress`/`keyup` registration the HUD makes, capture or not:
+    // the carried-Confirm guard's three (issue #919), bound first, then the roving walk's
+    // `onNavKeyDown`. All four at capture, and four distinct registrations, so a dispose that
+    // drops any one of them leaves a listener that outlives its HUD.
+    const added = addSpy.mock.calls.filter((c) => ['keydown', 'keypress', 'keyup'].includes(c[0]));
+    expect(
+      added.map((c) => [c[0], c[2]]),
+      'the HUD registered a different set of window key listeners',
+    ).toEqual([
+      ['keydown', true],
+      ['keypress', true],
+      ['keyup', true],
+      ['keydown', true],
+    ]);
 
     h.dispose();
 
-    const removed = removeSpy.mock.calls.find(
-      (c) => c[0] === 'keydown' && c[1] === added![1] && c[2] === true,
-    );
-    expect(removed, 'dispose did not remove the capture-phase keydown listener it added').toBeDefined();
+    // The SAME function reference and the same capture flag: `removeEventListener` with any
+    // other is a silent no-op. Named with its index, because two of the four are keydowns.
+    added.forEach(([type, listener], i) => {
+      const removed = removeSpy.mock.calls.some((c) => c[0] === type && c[1] === listener && c[2] === true);
+      expect(removed, `dispose did not remove window key listener ${i} (${type})`).toBe(true);
+    });
 
     addSpy.mockRestore();
     removeSpy.mockRestore();
@@ -2485,8 +2497,12 @@ describe('hud: the replace-run confirmation (issue #226)', () => {
     // freshly arrived pane rather than activate it, so the first control was what a hurried
     // player reached and the destructive answer was put second. The arrival now lands on
     // the dialog's declared primary action, which is that SAFE answer, so one blind Confirm
-    // activates Keep playing: the question closes and the run survives. The destructive
-    // answer is still second, so the first ArrowDown from a container never reaches it.
+    // activates Keep playing: the question closes and the run survives.
+    //
+    // The ORDER still matters after #919: focus that escapes the dialog is parked on its
+    // CONTAINER by the modal trap (`onModalFocusIn`), and a Confirm there lands on the first
+    // control. With the destructive answer first, that Confirm would put focus on it and the
+    // next would replace the run.
     const { hud: h, root } = mount();
     const starts: number[] = [];
     h.onNewGame(() => starts.push(1));
@@ -2497,6 +2513,16 @@ describe('hud: the replace-run confirmation (issue #226)', () => {
     expect(document.activeElement, 'the arrival did not land on the safe answer').toBe(
       q(root, '.hud-confirm-cancel'),
     );
+    // Focus escapes to the page behind, and the trap parks it on the dialog itself.
+    q(root, '.hud-new-game').focus();
+    expect(document.activeElement, 'the trap did not park escaped focus on the dialog').toBe(
+      q(root, '.hud-confirm'),
+    );
+    expect(h.act('confirm'), 'the dialog did not take Confirm on its container').toBe(true);
+    expect(document.activeElement, 'Confirm on the dialog container did not land on the safe answer').toBe(
+      q(root, '.hud-confirm-cancel'),
+    );
+    expect(starts, 'Confirm on the dialog container replaced the run').toEqual([]);
     expect(h.act('confirm'), 'the pane did not take the action').toBe(true);
     expect(starts, 'a single blind Confirm replaced the run').toEqual([]);
     // Answered, not merely ignored: the question is off the stack and focus is back on the
@@ -3726,6 +3752,35 @@ describe('hud: arrival lands on the primary action, and a Confirm from the scree
     versus.focus();
     h.setContinueAvailable(true);
     expect(document.activeElement, 'a repaint moved the player back to the primary').toBe(versus);
+  });
+
+  it('the Main Menu arrival follow picks up a focus the browser dropped to <body>', () => {
+    // A browser takes focus off a control it is about to hide, so the Continue that a finished
+    // run hides leaves <body> focused; jsdom never does this itself, so the case blurs. A
+    // dropped focus is one the player did not move, so the follow still places it.
+    // NEGATIVE CONTROL: the next case, where the same dropped focus under an open pane is left.
+    const { hud: h, root } = mount();
+    h.setContinueAvailable(true);
+    h.setState('main-menu');
+    expect(document.activeElement).toBe(q(root, '.hud-continue'));
+    (document.activeElement as HTMLElement).blur();
+    h.setContinueAvailable(false);
+    expect(document.activeElement, 'a dropped focus was left on <body>').toBe(q(root, '.hud-new-game'));
+  });
+
+  it('the Main Menu arrival follow never reaches under an open pane, even from <body>', () => {
+    // A click on empty space drops focus to <body> while Settings is open; a repaint of the run
+    // must not then put focus on a menu button the pane hides.
+    // NEGATIVE CONTROL: the previous case, where a dropped focus on the menu itself is placed.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    q(root, '.hud-settings-open').click();
+    expect(document.activeElement, 'Settings did not arrive on its container').toBe(q(root, '.hud-settings'));
+    (document.activeElement as HTMLElement).blur();
+    h.setContinueAvailable(true);
+    expect(document.activeElement, 'a repaint pulled focus onto the menu under an open pane').toBe(
+      document.body,
+    );
   });
 
   it('the match-failure alert arrives on Retry when one is offered, and on its way out when none is', () => {
