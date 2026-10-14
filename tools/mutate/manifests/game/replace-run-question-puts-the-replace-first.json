@@ -1,0 +1,12 @@
+{
+  "id": "replace-run-question-puts-the-replace-first",
+  "file": "src/game/hud.ts",
+  "find": "        <button class=\"ui-btn ui-btn--slab hud-confirm-cancel\" type=\"button\">Keep playing</button>\n        <button class=\"ui-btn ui-btn--slab ui-btn--danger hud-confirm-accept\" type=\"button\">Start new campaign</button>",
+  "replace": "        <button class=\"ui-btn ui-btn--slab ui-btn--danger hud-confirm-accept\" type=\"button\">Start new campaign</button>\n        <button class=\"ui-btn ui-btn--slab hud-confirm-cancel\" type=\"button\">Keep playing</button>",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "The replace-run question keeps its SAFE answer first (issue #226), and #919 did not retire that order: focus that escapes the dialog is parked on its container (onModalFocusIn), and a pad Confirm there lands on the first control. With the replace first, that Confirm lands on the deletion of a run and the next one fires it.",
+  "expect": "killed"
+}
