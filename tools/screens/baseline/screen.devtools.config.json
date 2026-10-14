@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Configuration\n      Every developer parameter this build knows, and what the URL you are building would actually do. Nothing here applies until you press Apply and Reload.\n      PlaytestArmed Sandbox2",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-devcfg-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

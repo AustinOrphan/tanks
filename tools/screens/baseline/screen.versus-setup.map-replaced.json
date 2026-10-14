@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Versus Setup\n      \n        Mode\n        FFATeams\n        \n        \n      \n      \n        Players\n        234\n      \n      \n        Map\n        Arena 12/3/4 players · FFA and TeamsSparse destructibles",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-versus-setup-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -54,6 +58,9 @@
         "h": 18
       },
       "text": "Pinwheel is not available with 3 players. Random selected.",
+      "aria": {
+        "role": "status"
+      },
       "style": {
         "display": "block",
         "opacity": "0.7",

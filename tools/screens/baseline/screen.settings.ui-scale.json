@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Settings\n      \n        Audio\n        \n          Mute (M)\n          \n          \n        \n      \n      \n        Controls\n        \n          \n          Aim: Stick\n          \n          Fire: Tap to fire\n",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-settings-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

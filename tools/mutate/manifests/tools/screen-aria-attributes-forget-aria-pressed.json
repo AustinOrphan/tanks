@@ -1,0 +1,17 @@
+{
+  "id": "screen-aria-attributes-forget-aria-pressed",
+  "file": "tools/screens/baseline.mjs",
+  "find": "  'aria-expanded', 'aria-pressed', 'aria-current',\n]);",
+  "replace": "  'aria-expanded', 'aria-current',\n]);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts",
+    "tools/screens/capture.aria.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) records exactly the nine attributes the owner ruled on, in this order",
+    "capture.mjs: the aria object each measured element carries (issue #937) records an EMPTY attribute as an empty string, distinct from no attribute",
+    "capture.mjs: the aria object each measured element carries (issue #937) is handed the nine names by measure, which is the call a real capture makes"
+  ],
+  "why": "Drops aria-pressed from the list both the capture and the comparator read. Every settings toggle reports its state through aria-pressed, so a toggle whose pressed state stopped being exposed would stop being recorded at all -- and an attribute nobody records cannot fail a check. The list is tied to a literal copy of the owner's ruling, and the jsdom capture test records a real aria-pressed through it."
+}

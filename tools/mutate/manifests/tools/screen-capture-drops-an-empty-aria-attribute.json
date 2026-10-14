@@ -1,0 +1,15 @@
+{
+  "id": "screen-capture-drops-an-empty-aria-attribute",
+  "file": "tools/screens/capture.mjs",
+  "find": "      if (value !== null) aria[name] = value;",
+  "replace": "      if (value) aria[name] = value;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/capture.aria.test.ts"
+  ],
+  "killedBy": [
+    "capture.mjs: the aria object each measured element carries (issue #937) records an EMPTY attribute as an empty string, distinct from no attribute",
+    "capture.mjs: the aria object each measured element carries (issue #937) is handed the nine names by measure, which is the call a real capture makes"
+  ],
+  "why": "Tests the attribute's truthiness instead of its presence, so aria-label=\"\" is silently not recorded. An empty accessible name is exactly the defect a reviewer most needs to see -- it blanks the name of a control that has visible text -- and the capture would hide it as if the attribute were not there."
+}

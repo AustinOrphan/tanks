@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-aria-trims-values",
+  "file": "tools/screens/baseline.mjs",
+  "find": "      if (ev !== av) changes.push({ selector, field: `aria.${name}`, expected: ev, actual: av });",
+  "replace": "      if (ev?.trim() !== av?.trim()) changes.push({ selector, field: `aria.${name}`, expected: ev, actual: av });",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a renamed accessible name, and does not trim a value to make it match"
+  ],
+  "why": "Trims each attribute before comparing, so a value that changed only in whitespace reads as unchanged. The gate compares the app's own string, exactly like text: box geometry gets a tolerance because rasterisers differ, and an attribute is not a rasteriser reading. Whether a given whitespace change is audible is not decided here (an id list is split on whitespace, and the computed accessible name is trimmed); the gate reports the DOM change and leaves that judgement to the reader of the diff."
+}

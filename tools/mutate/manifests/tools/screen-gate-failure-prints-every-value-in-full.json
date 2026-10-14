@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-failure-prints-every-value-in-full",
+  "file": "tools/screens/baseline.mjs",
+  "find": "    const values = expected === actual",
+  "replace": "    const values = true",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: what a diff says (issue #846) prints both values in full when their short forms would read as equal"
+  ],
+  "why": "The negative control for the branch above: prints every value in full, so a panel text of hundreds of characters of markup whitespace fills the terminal and hides the line that says what changed. The full form is only for the case the summary would erase."
+}

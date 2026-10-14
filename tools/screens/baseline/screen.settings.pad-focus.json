@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Settings\n      \n        Audio\n        \n          Mute\n          \n          \n        \n      \n      \n        Controls\n        \n          \n          Aim: Stick\n          \n          Fire: Tap to fire\n    ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-settings-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -37,6 +41,9 @@
         "h": 44
       },
       "text": "Haptics: On",
+      "aria": {
+        "aria-label": "Haptic feedback: Haptics: On. Firing, losing a life and nearby mine blasts pulse the device, where supported. Tap to switch to Haptics: Off."
+      },
       "style": {
         "display": "block",
         "opacity": "1",

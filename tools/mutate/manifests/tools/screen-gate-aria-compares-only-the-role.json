@@ -1,0 +1,24 @@
+{
+  "id": "screen-gate-aria-compares-only-the-role",
+  "file": "tools/screens/baseline.mjs",
+  "find": "    const attributes = new Set([...Object.keys(e.aria ?? {}), ...Object.keys(a.aria ?? {})]);",
+  "replace": "    const attributes = new Set(['role']);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-label",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-labelledby",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-describedby",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-live",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-modal",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-expanded",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-pressed",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a capture that lost aria-current",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) fails a renamed accessible name, and does not trim a value to make it match",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) tells an empty attribute from an absent one",
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) gives an attribute no tolerance, even beside a box change that has one"
+  ],
+  "why": "Compares role and nothing else of the nine attributes the owner ruled on. role is the one everybody remembers; aria-label, aria-labelledby and aria-describedby are what give a control its name and description, and aria-pressed, aria-expanded and aria-current carry its state. A toggle whose aria-pressed stopped updating, or a panel that lost the aria-labelledby that names it, would pass the required check. The per-attribute cases are spelled out literally so each one dies on its own name."
+}

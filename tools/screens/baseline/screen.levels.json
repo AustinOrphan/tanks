@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Levels\n      12\n      \n      Clear a level to add it here.\n      Back",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-levelselect-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

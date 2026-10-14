@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Controller Layout\n      Choose an action, then press the controller button you want for it. A button another action uses swaps with it.\n      Standard controllerNo controller is visible yet. A browser",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-layout-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
@@ -54,6 +58,9 @@
         "h": 44
       },
       "text": "Sticks: Recommended",
+      "aria": {
+        "aria-label": "Sticks: Recommended. The controller's own stick layout."
+      },
       "style": {
         "display": "block",
         "opacity": "1",

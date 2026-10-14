@@ -1,0 +1,14 @@
+{
+  "id": "screen-gate-aria-missing-object-throws",
+  "file": "tools/screens/baseline.mjs",
+  "find": "    const attributes = new Set([...Object.keys(e.aria ?? {}), ...Object.keys(a.aria ?? {})]);",
+  "replace": "    const attributes = new Set([...Object.keys(e.aria), ...Object.keys(a.aria)]);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "killedBy": [
+    "the screen baseline: role and aria attributes are compared exactly (issue #937) reads an entry with no aria object as one with no attributes, without throwing"
+  ],
+  "why": "Drops the default that reads a measurement with no aria object as one with no attributes. A capture omits the object for every element that carries none of the nine, and baselines written before issue #937 have none at all, so the comparator throws and screens:check crashes instead of reporting a verdict. The ordinary no-aria fixtures die too; the compatibility case is named so the reason survives a fixture change."
+}

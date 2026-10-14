@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Records\n      \n        Stats\n        Achievements\n      \n      \n      No matches played yet.\n      Statistics, lifetime and this level attemptLifetimeLevel attemptShell kills630Mine kills110Deaths90Se",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-stats-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

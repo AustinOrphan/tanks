@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Controller Self-Test\n      Every gamepad this page can see, exactly as the browser reports it — no mapping applied. Move a stick or press a button and the row for it moves.\n      A controller does not",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-selftest-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

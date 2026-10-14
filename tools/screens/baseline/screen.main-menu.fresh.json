@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "TANKS!\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Continue Campaign\n      Start Campaign\n      \n      \n      Choose Level\n      \n      Practice This Level\n     ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-panel-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

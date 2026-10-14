@@ -12,6 +12,12 @@
         "h": 800
       },
       "text": "Start a new campaign?\n      Mission 3 -- 2 lives left. Starting a new campaign replaces it. This cannot be undone.\n      \n        Keep playing\n        Start new campaign",
+      "aria": {
+        "role": "alertdialog",
+        "aria-labelledby": "hud-confirm-title",
+        "aria-describedby": "hud-confirm-body",
+        "aria-modal": "true"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",

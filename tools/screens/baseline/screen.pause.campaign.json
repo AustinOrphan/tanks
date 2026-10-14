@@ -12,6 +12,10 @@
         "h": 800
       },
       "text": "Paused\n      The arena waits.\n      \n      \n      \n      \n      \n      \n      \n      \n      \n      \n      Continue Campaign\n      Start Campaign\n      Resume\n      \n      Choose Level\n      \n      Pra",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-panel-title"
+      },
       "style": {
         "display": "flex",
         "opacity": "1",
