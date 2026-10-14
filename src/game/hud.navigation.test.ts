@@ -833,7 +833,10 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
     );
     expect(document.activeElement, 'the step after Back did not reach Start').toBe(startBtn(root));
-  });
+    // A RAISED BUDGET, for the reason the issue #115 title-screen walk has one: 0.45s in CI
+    // before jsdom 30.1.2 and 4.0s after, because every ArrowDown re-derives the pane's
+    // controls after jsdom empties its computed-style cache on the previous focus move.
+  }, 20_000);
 });
 
 describe('hud: the versus action bar and its arm (issue #668)', () => {
