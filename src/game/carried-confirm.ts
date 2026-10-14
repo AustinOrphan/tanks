@@ -53,7 +53,8 @@ import { keyToUiAction } from '../input/ui-actions';
 
 export interface CarriedConfirmGuard {
   /**
-   * A surface has just taken focus: every Confirm press begun until now belongs to the screen
+   * A surface has just taken focus, or a control has just asked a new question (a danger
+   * control arming, in `hud.ts`): every Confirm press begun until now belongs to what came
    * before, and with `graceMs`, every press begun within that many milliseconds after it.
    */
   arrive(graceMs?: number): void;
