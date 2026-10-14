@@ -7,5 +7,8 @@
     "src/game/hud.navigation.test.ts"
   ],
   "why": "Turning the browser's focus scroll off is half of the arrival's focus (issue #919); without `focusInView`'s own scroll, a primary out of its pane's view takes focus where the player cannot see it.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) Versus Setup scrolls its pane to a Start out of view, and leaves one in view where it is"
+  ]
 }

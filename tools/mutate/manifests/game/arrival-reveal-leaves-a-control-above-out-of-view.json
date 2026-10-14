@@ -8,5 +8,8 @@
     "src/game/hud.navigation.test.ts"
   ],
   "why": "A scroller left scrolled down holds its primary above the view, and with the browser's focus scroll turned off (issue #919) only this brings it back into view.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "focusInView (issue #919) scrolls back just far enough to show a control above the view"
+  ]
 }

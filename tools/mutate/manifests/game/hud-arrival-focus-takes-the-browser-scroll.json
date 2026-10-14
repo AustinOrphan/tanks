@@ -7,5 +7,9 @@
     "src/game/hud.navigation.test.ts"
   ],
   "why": "Every arrival focuses through `focusInView` (issue #919). A plain `focus()` takes the browser's scroll, judged on the box the entrance holds 16px low, which moved Versus Setup 4px under a Start already in view and failed the screens gate on CI.",
-  "expect": "killed"
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an arrival, and the Main Menu arrival's follow, focus without the browser's focus scroll",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) Versus Setup scrolls its pane to a Start out of view, and leaves one in view where it is"
+  ]
 }
