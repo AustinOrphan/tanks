@@ -182,8 +182,8 @@ describe('createHud does not keep keyboard focus after a pointer interaction', (
   // not rendered -- browsers always did, jsdom does from 30.1.2 -- and on the hidden pane the
   // two "drops focus" cases passed with focus never having arrived: with the blur listener
   // deleted they still passed under jsdom 30.1.2 (measured), so they asserted nothing.
-  // Negative control for each precondition: drop the `openSettings` call, and under jsdom
-  // 30.1.2 the precondition fails before the action runs.
+  // Negative control for each precondition: drop the `.hud-settings-open` click inside
+  // `openSettings`, and under jsdom 30.1.2 the precondition fails before the action runs.
   const openSettings = (): HTMLElement => {
     const { hud: h, root } = mount();
     h.setState('main-menu');
