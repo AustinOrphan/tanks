@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
-  "why": "A keyboard activation (click detail 0) drops focus as a pointer click does, so a player tabbing through Settings loses their place on every Enter or Space. The negative control for 'keeps focus when the mute button is activated from the keyboard', which now checks that focus landed before the press."
+  "why": "A keyboard activation (click detail 0) drops focus as a pointer click does, so a player tabbing through Settings loses their place on every Enter or Space. The negative control for 'keeps focus when the mute button is activated from the keyboard', which now checks that focus landed before the press.",
+  "killedBy": [
+    "createHud does not keep keyboard focus after a pointer interaction keeps focus when the mute button is activated from the keyboard"
+  ]
 }

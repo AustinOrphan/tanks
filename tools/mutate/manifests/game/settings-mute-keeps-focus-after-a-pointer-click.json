@@ -7,5 +7,8 @@
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
-  "why": "Settings' Mute keeps focus after a mouse click, so a mouse player's arrows and Space go to the button instead of the tank. This survived under jsdom 30.1.2 while the case focused Mute on the hidden Settings pane: focus() refused the hidden button, and 'focus is not on Mute' held with no blur at all (measured while PR #1080 bumped jsdom). The case now opens Settings and checks focus landed first."
+  "why": "Settings' Mute keeps focus after a mouse click, so a mouse player's arrows and Space go to the button instead of the tank. This survived under jsdom 30.1.2 while the case focused Mute on the hidden Settings pane: focus() refused the hidden button, and 'focus is not on Mute' held with no blur at all (measured while PR #1080 bumped jsdom). The case now opens Settings and checks focus landed first.",
+  "killedBy": [
+    "createHud does not keep keyboard focus after a pointer interaction drops focus from the mute button when it is clicked with the mouse"
+  ]
 }
