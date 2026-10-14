@@ -1,0 +1,11 @@
+{
+  "id": "hud-arrival-focus-takes-the-browser-scroll",
+  "file": "src/game/hud.ts",
+  "find": "    focusInView(target);\n    for (const cb of arrivalCbs) cb(graceMs);",
+  "replace": "    target.focus();\n    for (const cb of arrivalCbs) cb(graceMs);",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "Every arrival focuses through `focusInView` (issue #919). A plain `focus()` takes the browser's scroll, judged on the box the entrance holds 16px low, which moved Versus Setup 4px under a Start already in view and failed the screens gate on CI.",
+  "expect": "killed"
+}

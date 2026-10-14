@@ -1,0 +1,12 @@
+{
+  "id": "arrival-focus-takes-the-browser-focus-scroll",
+  "file": "src/game/focusable.ts",
+  "find": "  el.focus({ preventScroll: true });",
+  "replace": "  el.focus();",
+  "tests": [
+    "src/game/focusable.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "An arrival focuses inside its surface's open, while the entrance still holds the surface's content 16px low, and the browser judges its focus scroll on that box: it scrolled Versus Setup 4px under a Start already in view, which moved every row above Start and failed the screens gate on CI (issue #919).",
+  "expect": "killed"
+}
