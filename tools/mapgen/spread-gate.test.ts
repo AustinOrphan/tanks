@@ -66,5 +66,9 @@ describe('the 3-player spread gate (issue #820)', () => {
       THREE_PLAYER_SPREAD_CEILING,
       `the ceiling no longer matches its rule: ${max.id} defines the N=3 maximum at ${max.m.pathSpread}`,
     ).toBe(ceilingFor(max.m.pathSpread));
-  });
+    // A RAISED BUDGET, not a hung test: it measures every board offered at three players, which
+    // takes ~1.6s on a fast machine and ran past vitest's 5s default on a loaded CI mutation
+    // shard (main at f03a3123, a 6.6s baseline run), failing all four spread-gate entries as
+    // baseline-red.
+  }, 30_000);
 });
