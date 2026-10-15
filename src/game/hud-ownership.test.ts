@@ -218,7 +218,11 @@ describe('HUD ownership boundary (issue #324)', () => {
     // GAMEPLAY rather than route because the session picks the owner palette once, for its
     // renderer and its stock chips together; a page push could repaint the chips mid-match,
     // which the issue rules out.
-    expect(frame.size + route.size + gameplay.size).toBe(92);
+    //
+    // Issue #919 adds ONE, frame-owned: `onArrival`. 92 -> 93. FRAME for `act`'s reason: the
+    // route host's gamepad dispatch reads it to drop a Confirm first seen on the poll after a
+    // surface arrived, and arrivals belong to whatever surface is showing, not to one route.
+    expect(frame.size + route.size + gameplay.size).toBe(93);
     expect(gameplay.size, 'what a live match may write').toBe(11);
   });
 

@@ -1984,17 +1984,17 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     expect(f.frames.length, 'exactly one page frame should be queued').toBe(1);
     f.frames.shift()!(now);
   };
-  /** The first control hud.ts's roving walk would land on: enabled and not inside a hidden subtree. */
-  const firstControl = (container: HTMLElement): HTMLElement => {
+  /** The controls hud.ts's roving walk visits, in order: enabled and not inside a hidden subtree. */
+  const rovingControls = (container: HTMLElement): HTMLElement[] => {
     const hidden = (el: HTMLElement): boolean => {
       for (let n: HTMLElement | null = el; n && n !== container; n = n.parentElement) {
         if (getComputedStyle(n).display === 'none') return true;
       }
       return false;
     };
-    return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).find(
+    return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
       (el) => !(el instanceof HTMLButtonElement && el.disabled) && !hidden(el),
-    )!;
+    );
   };
 
   it('polls on a page frame loop from construction: one frame queued, and each frame queues the next', () => {
@@ -2032,7 +2032,9 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
     (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
     (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
-    f.pads.push(pad(0)); // A: confirm
+    f.pads.push(pad());
+    frame(f, -16); // a poll after Settings arrived, so the A below is a press made on it (issue #919)
+    f.pads[0] = pad(0); // A: confirm
     frame(f, 0);
     const pane = f.root.querySelector('.hud-layout') as HTMLElement;
     expect(pane.classList.contains('hud-layout--hidden'), 'Confirm did not open the pane').toBe(false);
@@ -2069,7 +2071,9 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
     (f.root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
     (f.root.querySelector('.hud-settings-layout') as HTMLElement).focus();
-    f.pads.push(pad(0)); // A: confirm
+    f.pads.push(pad());
+    frame(f, -16); // a poll after Settings arrived, so the A below is a press made on it (issue #919)
+    f.pads[0] = pad(0); // A: confirm
     frame(f, 0);
     const pane = f.root.querySelector('.hud-layout') as HTMLElement;
     f.pads[0] = pad();
@@ -2103,10 +2107,16 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
   it('a direction walks the real HUD and Back pops its layer', () => {
     const f = fixture({ launchDismissed: true, realHud: true });
     const panel = f.root.querySelector('.hud-panel') as HTMLElement;
-    expect(document.activeElement).toBe(panel);
+    // The Main Menu's arrival lands on its primary action (issue #919): no run, so Start Campaign.
+    const primary = f.root.querySelector('.hud-new-game') as HTMLElement;
+    expect(document.activeElement).toBe(primary);
     f.pads.push(pad(13)); // D-pad Down
     frame(f, 0);
-    expect(document.activeElement, 'Down did not move focus into the panel').toBe(firstControl(panel));
+    // jsdom lays nothing out, so the spatial walk falls back to document order.
+    const order = rovingControls(panel);
+    expect(document.activeElement, 'Down did not move focus on from the primary action').toBe(
+      order[order.indexOf(primary) + 1],
+    );
     f.pads[0] = pad(); // released
     frame(f, 16);
     (f.root.querySelector('.hud-customize-open') as HTMLElement).focus();
@@ -2133,9 +2143,10 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     // hand stands in for a future gameplay HUD with focusable controls (issue #324), and
     // a direction must still move nothing while the round runs.
     f.host.hud.setState('main-menu');
-    const panel = f.root.querySelector('.hud-panel') as HTMLElement;
     const focusBefore = document.activeElement;
-    expect(focusBefore, 'the pushed surface focused its container').toBe(panel);
+    expect(focusBefore, 'the pushed surface focused its primary action (issue #919)').toBe(
+      f.root.querySelector('.hud-new-game'),
+    );
     f.pads.push(pad(13, 0, 1)); // Down, A and B all held mid-play
     frame(f, 0);
     expect(f.host.sm.isSimulating, 'a menu action reached a simulating session').toBe(true);
@@ -2194,13 +2205,112 @@ describe('createRouteHost: the gamepad menu poller (issue #494)', () => {
     const action = f.root.querySelector('.hud-action') as HTMLElement;
     expect(action.textContent).toBe('Resume');
     action.focus();
-    f.pads.push(pad(0));
+    f.pads.push(pad());
+    frame(f, -16); // a poll after Pause arrived, so the A below is a press made on it (issue #919)
+    f.pads[0] = pad(0);
     frame(f, 0);
     expect(f.host.sm.isSimulating, 'Confirm on Resume did not resume').toBe(true);
     f.host.sm.pause();
     action.focus();
     frame(f, 16); // A still held
     expect(f.host.sm.isPaused, 'a held A re-confirmed at the next Pause').toBe(true);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  /*
+   * ISSUE #919: a pad Confirm pressed for one screen cannot press the next screen's primary.
+   * Arrivals now land on the primary action, so the two ways a Confirm could carry over are
+   * pinned here through the real poller and the real HUD: a button HELD across the arrival
+   * (the poller's one-shot edge), and a press first seen on the poll after an arrival (the
+   * route host's `arrivedSincePoll`).
+   */
+  it('an A held from the press that opened Versus Setup does not press Start until it is released and pressed again (issue #919)', () => {
+    const f = fixture({ launchDismissed: true, realHud: true });
+    (f.root.querySelector('.hud-versus-open') as HTMLElement).focus();
+    f.pads.push(pad(0)); // A, on the Versus button
+    frame(f, 0);
+    const start = f.root.querySelector('.hud-versus-start') as HTMLButtonElement;
+    expect(document.activeElement, 'Versus Setup did not arrive on Start').toBe(start);
+    for (const now of [16, 32, 48, 400, 800]) frame(f, now); // A still held, well past any repeat delay
+    expect(f.startRequests, 'the A that opened Versus Setup also pressed Start').toEqual([]);
+    // NEGATIVE CONTROL: released and pressed again, the same A on the same Start starts the match.
+    f.pads[0] = pad();
+    frame(f, 816);
+    f.pads[0] = pad(0);
+    frame(f, 832);
+    expect(f.startRequests.map((r) => r.kind), 'a fresh A on Start did not start the match once').toEqual([
+      'versus',
+    ]);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('drops a Confirm first seen on the poll after an arrival, and takes the next press (issue #919)', () => {
+    // Pause arrives from the session, not from the pad, with focus on Resume. An A whose
+    // edge the very next poll is the first to see was pressed before the player could see
+    // Pause -- a round ending while A is mashed is the real case -- so it is dropped, and,
+    // like a Confirm dropped mid-play, it still counts as held.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    const slot = f.host.attach(CAMPAIGN);
+    slot.onStartRestart(() => {
+      if (f.host.sm.isPaused) f.host.sm.resume();
+    });
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    f.pads.push(pad());
+    frame(f, 0);
+    f.host.sm.pause();
+    expect(document.activeElement, 'Pause did not arrive on Resume').toBe(f.root.querySelector('.hud-action'));
+    f.pads[0] = pad(0);
+    frame(f, 16); // the first poll since Pause arrived
+    expect(f.host.sm.isPaused, 'an A first seen on the poll after Pause arrived pressed Resume').toBe(true);
+    frame(f, 32); // still held: not a new press either
+    expect(f.host.sm.isPaused, 'the dropped A fired once it was held').toBe(true);
+    // NEGATIVE CONTROL: the next press, made on the screen the player can now see, resumes.
+    f.pads[0] = pad();
+    frame(f, 48);
+    f.pads[0] = pad(0);
+    frame(f, 64);
+    expect(f.host.sm.isSimulating, 'a fresh A on Resume did not resume').toBe(true);
+    f.host.dispose();
+    f.root.remove();
+  });
+
+  it('drops a fresh Confirm inside the outcome\'s reaction window, and takes one after it (issue #919)', () => {
+    // The outcome is the one surface the GAME opens, on the frame the match ends, so an A
+    // pressed in its first quarter-second was pressed for the match: dropped, and held. The
+    // empty poll after the arrival puts this press outside `arrivedSincePoll`'s frame, so only
+    // the window can drop it. NEGATIVE CONTROL for the window's reach: the Pause case above,
+    // where the player opened the screen, takes a fresh A on the second poll.
+    const f = fixture({ launchDismissed: true, realHud: true });
+    const slot = f.host.attach(CAMPAIGN);
+    let restarts = 0;
+    slot.onStartRestart(() => {
+      restarts += 1;
+    });
+    f.host.sm.enterGameplay({ descriptor: { kind: 'campaign' }, seed: 1, arenaId: 'arena-01' });
+    f.pads.push(pad());
+    frame(f, 0);
+    f.advance(1_000);
+    f.host.sm.onEvents([{ type: 'lose' }]); // the final death
+    expect(f.host.sm.hasOutcome, 'the fixture did not reach an outcome').toBe(true);
+    expect(document.activeElement, 'the outcome did not arrive on its action').toBe(
+      f.root.querySelector('.hud-action'),
+    );
+    frame(f, 16); // the first poll since the outcome arrived: nothing pressed
+    f.advance(100);
+    f.pads[0] = pad(0);
+    frame(f, 32); // a fresh A, 100ms after the match ended
+    expect(restarts, 'an A pressed 100ms after the match ended pressed the outcome').toBe(0);
+    f.advance(300);
+    frame(f, 48); // still held, now past the window: not a new press either
+    expect(restarts, 'the dropped A fired once it was held past the window').toBe(0);
+    // NEGATIVE CONTROL: released and pressed again past the window, the A presses the action once.
+    f.pads[0] = pad();
+    frame(f, 64);
+    f.pads[0] = pad(0);
+    frame(f, 80);
+    expect(restarts, 'a fresh A past the window did not press the outcome once').toBe(1);
     f.host.dispose();
     f.root.remove();
   });
@@ -2311,5 +2421,47 @@ describe('createRouteHost: prompts follow the input the player is using (issue #
     f.advance(MODALITY_SWITCH_MS);
     pointer(f, 'touch');
     expect(f.hud.argsOf('setState').length, 'a modality change re-rendered a surface').toBe(before);
+  });
+});
+
+describe('createRouteHost: the keystroke that leaves Launch cannot press the Main Menu (issue #919)', () => {
+  /**
+   * The browser's own activation, for the one key this case is about: Enter clicks a button on
+   * the `keypress` that follows its `keydown`, aimed at whatever holds focus by then, unless the
+   * event was cancelled. jsdom performs no activation of its own, so the case does what the
+   * browser would and reports whether it clicked.
+   */
+  function keypressEnter(at?: number): { cancelled: boolean } {
+    const target = document.activeElement as HTMLElement;
+    const e = new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true });
+    if (at !== undefined) Object.defineProperty(e, 'timeStamp', { value: at });
+    target.dispatchEvent(e);
+    if (!e.defaultPrevented && target instanceof HTMLButtonElement) target.click();
+    return { cancelled: e.defaultPrevented };
+  }
+
+  it('cancels the keypress of the Enter that dismissed the splash, so Start Campaign is not pressed', () => {
+    const f = fixture({ realHud: true });
+    expect(f.host.sm.atLaunch).toBe(true);
+    // The browser's order: the HUD's window-capture guard sees the keydown first, then the
+    // page's own listener dismisses Launch on it and the Main Menu arrives on its primary.
+    const down = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(down);
+    f.fireHost('keydown', down);
+    expect(f.host.sm.atMainMenu, 'Enter did not dismiss Launch').toBe(true);
+    expect(document.activeElement, 'the Main Menu did not arrive on Start Campaign').toBe(
+      f.root.querySelector('.hud-new-game'),
+    );
+    expect(keypressEnter().cancelled, 'the keystroke that dismissed Launch reached Start Campaign').toBe(true);
+    expect(f.startRequests, 'one Enter both left Launch and started a campaign').toEqual([]);
+    // NEGATIVE CONTROL: the next Enter, pressed on the Main Menu, starts the campaign.
+    const later = Date.now() + 60_000;
+    const again = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(again, 'timeStamp', { value: later });
+    document.activeElement!.dispatchEvent(again);
+    expect(keypressEnter(later).cancelled).toBe(false);
+    expect(f.startRequests).toEqual([{ kind: 'campaign-new' }]);
+    f.host.dispose();
+    f.root.remove();
   });
 });

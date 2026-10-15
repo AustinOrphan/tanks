@@ -1,0 +1,18 @@
+{
+  "id": "carried-confirm-ignores-the-reaction-window",
+  "file": "src/game/carried-confirm.ts",
+  "find": "      arrivedAt = now() + graceMs;",
+  "replace": "      arrivedAt = now();",
+  "tests": [
+    "src/game/carried-confirm.test.ts",
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "An arrival's reaction window moves the keyboard guard's arrival that far forward (issue #919): a match's outcome opens on the frame the match ends, and a Space laid as a mine a moment later was pressed for the match. Ignored, that press activates Next Level, Retry or Rematch before the player has seen the result.",
+  "expect": "killed",
+  "killedBy": [
+    "createCarriedConfirmGuard (issue #919) extends an arrival by its reaction window, so a press begun inside it is cancelled too",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space pressed in the moment a match is lost cannot press the outcome, and one after can",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter pressed in the moment a match is won cannot press the outcome, and one after can"
+  ]
+}

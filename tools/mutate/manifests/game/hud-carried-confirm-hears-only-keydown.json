@@ -1,0 +1,18 @@
+{
+  "id": "hud-carried-confirm-hears-only-keydown",
+  "file": "src/game/hud.ts",
+  "find": "  for (const type of ['keydown', 'keypress', 'keyup'] as const) {\n    window.addEventListener(type, onCarriedConfirmKey, true);",
+  "replace": "  for (const type of ['keydown'] as const) {\n    window.addEventListener(type, onCarriedConfirmKey, true);",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Enter activates on keypress and Space on keyup, so the guard has to hear both (issue #919). Bound to keydown alone, it cancels a held key's repeats but lets the keypress of the keystroke that dismissed Launch, and a held Space's release, press the new primary.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space held through the end of a match cannot press Retry with its repeats or its release",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a keydown queued behind an arrival cannot press the new primary",
+    "createRouteHost: the keystroke that leaves Launch cannot press the Main Menu (issue #919) cancels the keypress of the Enter that dismissed the splash, so Start Campaign is not pressed"
+  ]
+}

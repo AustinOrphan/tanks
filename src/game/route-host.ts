@@ -1003,12 +1003,39 @@ export function createRouteHost(
   deps.host.addEventListener('keydown', onHostKey);
 
   /**
+   * Whether a surface arrived since the last poll finished (issue #919).
+   *
+   * An arrival puts focus on the new screen's primary action, so a Confirm that reaches it
+   * activates it. A Confirm held across the arrival never does -- the poller fires a press
+   * once and then only on a new one -- but a press whose edge is FIRST SEEN on the poll after
+   * an arrival was made while the player was still looking at the screen before: the poll
+   * samples the pad once a frame, so all it knows is that the button went down somewhere in
+   * the frame the new screen arrived in. A match ending while A is mashed is the case. That
+   * Confirm is dropped, and like a Confirm dropped mid-play it still counts as held, so the
+   * player presses again for the screen they can now see. A press made deliberately after the
+   * arrival loses one frame at most.
+   */
+  let arrivedSincePoll = false;
+  /**
+   * Until when, on `deps.now`, a Confirm is still the screen before's: the arrival's reaction
+   * window, which only a match's outcome has (`hud.ts`'s `OUTCOME_CONFIRM_GRACE_MS`). A fresh
+   * press inside it was made for the match before the player could have seen the result, so
+   * it is dropped and counts as held, exactly like the press `arrivedSincePoll` drops. Strictly
+   * before the end, so an arrival with no window (0) drops nothing by this rule.
+   */
+  let confirmDroppedUntil = -Infinity;
+  hud.onArrival((graceMs) => {
+    arrivedSincePoll = true;
+    confirmDroppedUntil = deps.now() + graceMs;
+  });
+
+  /**
    * The gamepad's route into the same verbs (issue #494). One poller for the page, over
    * the union of connected pads, on the page's own frame loop from construction to
    * `dispose()` -- and DISPATCHING only while nothing simulates, except Start, which is
    * how a pad pauses. A direction, Confirm or Back pressed mid-play is dropped here but
-   * still counted as held by the poller, so the A that was firing when Start landed does
-   * not confirm the Pause panel's first control on the next frame. The gameplay readers
+   * still counted as held by the poller, so an A held when Start landed does not confirm
+   * Resume, which the Pause panel arrives on, on the next frame. The gameplay readers
    * never see this poller's edges and it never sees theirs; `loop.ts` resyncs them on
    * every entry into play.
    *
@@ -1028,6 +1055,8 @@ export function createRouteHost(
     // the press that completes a capture is a held button, not a new one, on the next frame.
     if (routeUi.capturingBinding()) return;
     if (sm.isSimulating && action !== 'pause') return;
+    // Pressed for the screen before: in the frame it arrived in, or inside its reaction window.
+    if (action === 'confirm' && (arrivedSincePoll || deps.now() < confirmDroppedUntil)) return;
     if (hud.act(action)) return;
     if (action === 'pause') {
       if (sm.isPaused) sm.resume();
@@ -1045,6 +1074,8 @@ export function createRouteHost(
   const pollFrame = (now: number): void => {
     cancelFrame = null;
     menuPoller.poll(now);
+    // After the poll, so an arrival this poll's own Confirm made is not held against the next.
+    arrivedSincePoll = false;
     // The Controller Layout capture, on the same frame (issue #754): see `RouteUi.pollBindingCapture`.
     routeUi.pollBindingCapture();
     if (polling) cancelFrame = deps.requestFrame(pollFrame);

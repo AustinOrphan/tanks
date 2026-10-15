@@ -1,8 +1,8 @@
 {
   "id": "route-host-start-cannot-pause",
   "file": "src/game/route-host.ts",
-  "find": "    if (sm.isSimulating && action !== 'pause') return;\n    if (hud.act(action)) return;",
-  "replace": "    if (sm.isSimulating) return;\n    if (hud.act(action)) return;",
+  "find": "    if (sm.isSimulating && action !== 'pause') return;\n    // Pressed for the screen before: in the frame it arrived in, or inside its reaction window.\n    if (action === 'confirm' && (arrivedSincePoll || deps.now() < confirmDroppedUntil)) return;",
+  "replace": "    if (sm.isSimulating) return;\n    // Pressed for the screen before: in the frame it arrived in, or inside its reaction window.\n    if (action === 'confirm' && (arrivedSincePoll || deps.now() < confirmDroppedUntil)) return;",
   "tests": [
     "src/game/route-host.test.ts"
   ],

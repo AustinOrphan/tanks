@@ -1,0 +1,14 @@
+{
+  "id": "route-host-takes-a-confirm-pressed-before-the-arrival",
+  "file": "src/game/route-host.ts",
+  "find": "    if (action === 'confirm' && (arrivedSincePoll || deps.now() < confirmDroppedUntil)) return;",
+  "replace": "    if (action === 'confirm' && deps.now() < confirmDroppedUntil) return;",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "A pad Confirm whose edge is first seen on the poll after an arrival was pressed before the player could see the new screen (issue #919), and the arrival has put focus on that screen's primary action. Taken, a round that ends while A is mashed presses Retry or Next Mission blind.",
+  "expect": "killed",
+  "killedBy": [
+    "createRouteHost: the gamepad menu poller (issue #494) drops a Confirm first seen on the poll after an arrival, and takes the next press (issue #919)"
+  ]
+}

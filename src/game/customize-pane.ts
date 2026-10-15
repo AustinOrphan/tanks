@@ -131,7 +131,10 @@ export const CUSTOMIZE_BODY = `
     `;
 
 /** The host members this pane calls: its shared-state cost. Pinned by `pane-host.test.ts`. */
-export type CustomizeHost = Pick<PaneHost, 'enterSurface' | 'closeSurface' | 'isSurfaceOpen' | 'open' | 'back'>;
+export type CustomizeHost = Pick<
+  PaneHost,
+  'enterSurface' | 'closeSurface' | 'isSurfaceOpen' | 'open' | 'arrive' | 'back'
+>;
 
 export interface CustomizePane extends Omit<CustomizeChoices, 'renderSelection'> {
   /**
@@ -188,7 +191,8 @@ export function createCustomizePane(
     if (open) {
       host.enterSurface(surface, () => {
         choices.renderSelection();
-        root.focus(); // the pane, not the canvas: the roving focus starts from the container
+        // Customize declares no primary action, so this lands on the pane, not the canvas.
+        host.arrive();
         if (!wasOpen) for (const cb of openCbs) cb();
       });
     } else {

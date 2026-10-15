@@ -1,0 +1,15 @@
+{
+  "id": "hud-menu-arrival-prefers-start-new-campaign",
+  "file": "src/game/hud.ts",
+  "find": "    'main-menu': () => [continueBtn, newGameBtn],",
+  "replace": "    'main-menu': () => [newGameBtn, continueBtn],",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "With a run, the Main Menu arrives on Continue Campaign (issue #919; the spec's Campaign action). Listing New Game first would land a returning player on Start New Campaign, the tertiary label for replacing their run.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Main Menu with a run arrives on Continue Campaign, never on the Start New Campaign beside it",
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone"
+  ]
+}

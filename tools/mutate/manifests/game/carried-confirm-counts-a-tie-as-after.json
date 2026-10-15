@@ -1,0 +1,14 @@
+{
+  "id": "carried-confirm-counts-a-tie-as-after",
+  "file": "src/game/carried-confirm.ts",
+  "find": "      if (began === undefined || began <= arrivedAt) e.preventDefault();",
+  "replace": "      if (began === undefined || began < arrivedAt) e.preventDefault();",
+  "tests": [
+    "src/game/carried-confirm.test.ts"
+  ],
+  "why": "Two stamps coarsened to one tick cannot say which came first, so a press stamped at the arrival's own instant must count as before it (issue #919). Browsers coarsen event and performance clocks to the same resolution, so a keydown that triggers an arrival within one tick would otherwise hand its keypress to the new primary.",
+  "expect": "killed",
+  "killedBy": [
+    "createCarriedConfirmGuard (issue #919) counts a press stamped at the arrival's own instant as before it"
+  ]
+}

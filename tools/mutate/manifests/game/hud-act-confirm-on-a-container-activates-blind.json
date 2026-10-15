@@ -6,9 +6,9 @@
   "tests": [
     "src/game/hud.navigation.test.ts"
   ],
-  "why": "Confirm the instant a panel arrives must land focus on the first control, not activate it: a gamepad Confirm at a Main Menu with no run would otherwise start a New Game blind.",
+  "why": "Confirm on a focused CONTAINER must land focus on the first control, not activate it -- the half of issue #919's ruling that stays: a pane with no primary action arrives on its container, and focus can fall back to one, and a gamepad Confirm there would otherwise fire whatever happens to be first (New Game, on a Main Menu with no run).",
   "expect": "killed",
   "killedBy": [
-    "hud: the semantic action dispatcher (issue #494) confirm on a fresh panel lands on the first control instead of activating it; confirm on a focused control activates it once"
+    "hud: the semantic action dispatcher (issue #494) confirm on a focused container lands on the first control instead of activating it; confirm on the arrival's primary activates it once"
   ]
 }

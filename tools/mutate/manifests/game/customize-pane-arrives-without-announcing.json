@@ -1,0 +1,14 @@
+{
+  "id": "customize-pane-arrives-without-announcing",
+  "file": "src/game/customize-pane.ts",
+  "find": "        host.arrive();",
+  "replace": "        root.focus();",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "An extracted pane arrives through its host (issue #919), which stamps the carried-Confirm guard and announces the arrival the gamepad route drops a first-seen Confirm on. Focusing its own root lands in the same place and does neither.",
+  "expect": "killed",
+  "killedBy": [
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside customize"
+  ]
+}

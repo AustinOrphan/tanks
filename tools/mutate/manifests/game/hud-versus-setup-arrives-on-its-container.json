@@ -1,0 +1,18 @@
+{
+  "id": "hud-versus-setup-arrives-on-its-container",
+  "file": "src/game/hud.ts",
+  "find": "      primary: () => [versusStartBtn],",
+  "replace": "      primary: NO_PRIMARY,",
+  "tests": [
+    "src/game/hud.reachability.test.ts",
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Versus Setup arrives on Start (issue #919), which is what makes the spec's first VS match three confirmations -- Launch, Versus, Start -- rather than five.",
+  "expect": "killed",
+  "killedBy": [
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside versus-setup",
+    "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) roving tabindex reaches Back, then Start -- the two controls the task brief names explicitly",
+    "createRouteHost: the gamepad menu poller (issue #494) an A held from the press that opened Versus Setup does not press Start until it is released and pressed again (issue #919)"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "carried-confirm-forgets-when-a-press-began",
+  "file": "src/game/carried-confirm.ts",
+  "find": "      if (e.type === 'keydown' && !e.repeat) pressedAt.set(key, e.timeStamp);\n      const began = pressedAt.get(key);",
+  "replace": "      const began = pressedAt.get(key);",
+  "tests": [
+    "src/game/carried-confirm.test.ts",
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The guard judges a press by when its first keydown was stamped (issue #919). Never recording it makes every press look unseen, so every Enter and Space is cancelled: the keyboard could no longer press any menu button at all.",
+  "expect": "killed",
+  "killedBy": [
+    "createCarriedConfirmGuard (issue #919) leaves an Enter pressed after the arrival alone, repeats and all",
+    "createCarriedConfirmGuard (issue #919) leaves a Space pressed after the arrival alone, repeats and all",
+    "createCarriedConfirmGuard (issue #919) cancels the events of a press whose start it never saw",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter"
+  ]
+}

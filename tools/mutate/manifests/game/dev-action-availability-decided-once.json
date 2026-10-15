@@ -1,8 +1,8 @@
 {
   "id": "dev-action-availability-decided-once",
   "file": "src/game/hud.ts",
-  "find": "      refreshDevActions();\n      refreshNamespace();\n      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());",
-  "replace": "      refreshNamespace();\n      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());",
+  "find": "      refreshDevActions();\n      refreshNamespace();\n      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => arriveAt('developer-tools'));",
+  "replace": "      refreshNamespace();\n      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => arriveAt('developer-tools'));",
   "expect": "killed",
   "tests": [
     "src/game/hud.diagnostics.test.ts"

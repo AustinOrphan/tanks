@@ -3,7 +3,7 @@ status: active
 date: 2026-08-23
 last-reviewed: 2026-10-13
 scope: Authoritative Public Prototype 1.0 UI architecture, navigation, interaction, responsive, accessibility, and visual-system direction
-implementation-issues: [117, 226, 227, 228, 230, 234, 238, 240, 258, 260, 261, 267, 268, 269, 274, 276, 279, 281, 289, 290, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 916]
+implementation-issues: [117, 226, 227, 228, 230, 234, 238, 240, 258, 260, 261, 267, 268, 269, 274, 276, 279, 281, 289, 290, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 916, 919]
 implementation-prs: [329]
 supersedes: ["docs/superpowers/specs/2026-07-31-main-menu-design.md", "docs/superpowers/specs/2026-07-31-pause-design.md", "docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md"]
 superseded-by: []
@@ -212,8 +212,9 @@ Developer Tools is conditional; About & Legal lives in a footer/utility region.
 and restores the invoking control. Main Menu from gameplay always returns here directly.
 
 **Device behavior:** desktop/TV keeps all primary choices in the first view. Phone may scroll
-utilities, but Campaign/Versus/Practice remain immediately reachable. Controller default focus is
-the Campaign action.
+utilities, but Campaign/Versus/Practice remain immediately reachable. Arrival focus, for every
+input, is the Campaign action: Continue Campaign when a run exists, otherwise Start Campaign --
+never the tertiary Start New Campaign.
 
 ### Campaign entry and progression
 
@@ -239,7 +240,8 @@ and VS do not replenish or advance it.
 generic disabled button.
 
 **Layout:** card/list on phone; preview-plus-list on desktop/TV. Remember the last highlighted
-level. Back returns to Main Menu and does not modify the campaign.
+level; until that is remembered, arrival focus is the first level offered. Back returns to Main
+Menu and does not modify the campaign.
 
 ### VS Setup
 
@@ -419,7 +421,7 @@ the player UI, while its isolated persistence and clean capture surface remain s
 | Action | Contract |
 | --- | --- |
 | Back | Remove exactly one overlay, otherwise one route; restore origin, focus, and meaningful scroll. Never mutate configuration or simulation. |
-| Confirm | Activate the focused primary meaning once. A valid Start enters play; it never opens another Start screen. |
+| Confirm | Activate the focused primary meaning once. A valid Start enters play; it never opens another Start screen. A Confirm begun before the screen changed -- held across the change, auto-repeating, or queued and delivered after it -- never activates the new screen; a press begun after the change is the new screen's. A match's outcome, the one screen the game opens on its own, also ignores a Confirm begun in its first 250 ms: that press was made for the match, before the result could be seen. The second press of a two-press confirmation must likewise be a new press. |
 | Cancel | Close/discard the current staged or blocking layer without applying changes. Ordinary immediate settings do not pretend to need Cancel. |
 | Pause | From gameplay, open Pause. From Pause with no deeper overlay, resume. Never leak into application routes. |
 | Quit | Avoid generic wording. Replace with Return to Main Menu, End Practice, or Change Setup. |
@@ -427,7 +429,7 @@ the player UI, while its isolated persistence and clean capture surface remain s
 | Rematch | Same VS configuration, fresh seed/resolved Random choice, direct gameplay. |
 | Change Setup | Return to retained VS Setup without creating a match or consuming RNG. |
 | Main Menu | Return directly to the application root; clear transient gameplay presentation, preserve documented durable state. |
-| Focus | Use logical DOM order for accessibility and spatial movement for keyboard/controller grids. Only blocking overlays trap focus. |
+| Focus | Arrival focuses the screen's primary action as its section above names it, so a screen takes one Confirm; a destructive confirmation's primary is its safe answer. A screen with no primary action (Settings, Customize, Records, About & Legal, Controllers, Developer Tools) focuses itself: there a controller Confirm only moves focus to its first control, a keyboard Enter or Space does nothing, and the first direction enters at the first control. Use logical DOM order for accessibility and spatial movement for keyboard/controller grids. Only blocking overlays trap focus. |
 | Remembered selection | Restore prior route selection/focus; persist player preferences and stable VS choices; never persist a stale physical controller index. |
 
 Central UI actions normalize keyboard and gamepad input before screen handling. Pointer/touch
@@ -641,10 +643,11 @@ opened from Pause returns to Pause; Main Menu always returns to the root without
 6. Change Setup returns to the retained setup; Start returns directly to gameplay.
 7. Main Menu returns directly to the root.
 
-The common first VS match drops from **five confirmations to three**: Launch, Versus, Start. A
-rematch drops from as many as **four actions to one**. From Pause, changing configuration becomes
-Pause → Change Setup rather than Quit → title/menu → Versus → setup. Every removed action was an
-implementation artifact, not a meaningful player decision.
+The common first VS match drops from **five confirmations to three**: Launch, Versus, Start --
+VS Setup arrives with Start focused. A rematch drops from as many as **four actions to one**.
+From Pause, changing configuration becomes Pause → Change Setup rather than Quit → title/menu →
+Versus → setup. Every removed action was an implementation artifact, not a meaningful player
+decision.
 
 ## Final direction
 

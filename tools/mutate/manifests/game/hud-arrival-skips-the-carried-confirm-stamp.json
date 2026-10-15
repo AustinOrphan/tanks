@@ -1,0 +1,20 @@
+{
+  "id": "hud-arrival-skips-the-carried-confirm-stamp",
+  "file": "src/game/hud.ts",
+  "find": "    carriedConfirm.arrive(graceMs);\n    const target = arrivalTarget(container, primary);",
+  "replace": "    const target = arrivalTarget(container, primary);",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Every arrival stamps the carried-Confirm guard before it moves focus (issue #919). Without the stamp the guard never learns a screen changed, so a held or same-keystroke Enter presses the primary the arrival just focused.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space held through the end of a match cannot press Retry with its repeats or its release",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space pressed in the moment a match is lost cannot press the outcome, and one after can",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter pressed in the moment a match is won cannot press the outcome, and one after can",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a keydown queued behind an arrival cannot press the new primary",
+    "createRouteHost: the keystroke that leaves Launch cannot press the Main Menu (issue #919) cancels the keypress of the Enter that dismissed the splash, so Start Campaign is not pressed"
+  ]
+}

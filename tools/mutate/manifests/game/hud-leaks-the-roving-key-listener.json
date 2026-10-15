@@ -1,0 +1,17 @@
+{
+  "id": "hud-leaks-the-roving-key-listener",
+  "file": "src/game/hud.ts",
+  "find": "      window.removeEventListener('keydown', onNavKeyDown, true);",
+  "replace": "      void onNavKeyDown;",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The roving-focus keydown listener is bound at window capture, so a leaked one outlives its HUD and keeps claiming arrows and Escape for a panel that is gone.",
+  "expect": "killed",
+  "killedBy": [
+    "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",
+    "createHud roving-tabindex focus navigation (issue #115) does not intercept arrow keys while playing, so input.ts still drives the tank",
+    "createHud roving-tabindex focus navigation (issue #115) leaves ArrowLeft/ArrowRight on the preview canvas for its own rotation scheme",
+    "createHud roving-tabindex focus navigation (issue #115) removes every capture-phase window key listener it added, by reference, on dispose"
+  ]
+}

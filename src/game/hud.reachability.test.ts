@@ -21,6 +21,14 @@ import { ZERO_STATS } from './stats';
  * mechanism: the omission becomes a build error at the moment it is introduced, rather than a
  * silence nobody is looking for. `activePanelContainer` in `hud.ts` reads the same `LAYERS`
  * record for the same reason.
+ *
+ * WHERE EACH ARRIVAL LANDS (issue #919) is pinned in the same two records: every row names the
+ * control its surface's arrival must focus, or `null` for a surface with no primary action,
+ * whose container takes focus instead. Spelled out literally rather than read from `hud.ts`'s
+ * `LAYERS`/`PANEL_PRIMARY`, so a primary that moves in production fails here instead of
+ * moving the expectation with it. 19 surfaces: 15 layers, 4 of them with a primary action
+ * (levelselect, versus-setup, confirm-new-campaign, match-failed) and 11 without; and the
+ * panel's 4 states, all with one (main-menu, paused, outcome-win, outcome-lose).
  */
 
 let hud: Hud | null = null;
@@ -53,6 +61,11 @@ const click = (root: HTMLElement, sel: string): void => {
 interface LayerReach {
   /** The container `activePanelContainer` should hand the keyboard while this layer is open. */
   readonly selector: string;
+  /**
+   * The control the layer's arrival focuses, inside `selector` (issue #919), or `null` when the
+   * layer declares no primary action and its container takes focus.
+   */
+  readonly primary: string | null;
   /** The path a player actually takes to it, by the same clicks and calls they would make. */
   readonly open: (h: Hud, root: HTMLElement) => void;
   /**
@@ -63,18 +76,24 @@ interface LayerReach {
 }
 
 const LAYER_REACH: Record<HudLayerId, LayerReach> = {
-  stats: { selector: '.hud-stats', open: (_h, root) => click(root, '.hud-records-open') },
+  stats: { selector: '.hud-stats', primary: null, open: (_h, root) => click(root, '.hud-records-open') },
   achievements: {
     selector: '.hud-achievements',
+    primary: null,
     // The two Records tabs are separate layer ids (hud.ts:32), so the tab press is the open.
     open: (_h, root) => {
       click(root, '.hud-records-open');
       click(root, '.hud-records-tab-achievements');
     },
   },
-  customize: { selector: '.hud-customize', open: (_h, root) => click(root, '.hud-customize-open') },
+  customize: {
+    selector: '.hud-customize',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-customize-open'),
+  },
   levelselect: {
     selector: '.hud-levelselect',
+    primary: '.hud-level-btn[aria-label="Level 1"]',
     // 3 of 5 unlocked, so the pane holds both a reachable level and a locked one the walk must
     // skip rather than land on -- `focusableControls` drops a disabled button.
     open: (h, root) => {
@@ -82,9 +101,14 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
       click(root, '.hud-levelselect-open');
     },
   },
-  controllers: { selector: '.hud-controllers', open: (_h, root) => click(root, '.hud-controllers-open') },
+  controllers: {
+    selector: '.hud-controllers',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-controllers-open'),
+  },
   'versus-setup': {
     selector: '.hud-versus-setup',
+    primary: '.hud-versus-start',
     // The Versus button is a bare click passthrough: `loop.ts` decides, so the test wires the
     // same one-liner rather than reaching past the button.
     open: (h, root) => {
@@ -92,18 +116,28 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
       click(root, '.hud-versus-open');
     },
   },
-  settings: { selector: '.hud-settings', open: (_h, root) => click(root, '.hud-settings-open') },
-  about: { selector: '.hud-about', open: (_h, root) => click(root, '.hud-about-open') },
+  settings: {
+    selector: '.hud-settings',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-settings-open'),
+  },
+  about: { selector: '.hud-about', primary: null, open: (_h, root) => click(root, '.hud-about-open') },
   'controller-layout': {
     selector: '.hud-layout',
+    primary: null,
     open: (_h, root) => {
       click(root, '.hud-settings-open');
       click(root, '.hud-settings-layout');
     },
   },
-  'developer-tools': { selector: '.hud-devtools', open: (_h, root) => click(root, '.hud-devtools-open') },
+  'developer-tools': {
+    selector: '.hud-devtools',
+    primary: null,
+    open: (_h, root) => click(root, '.hud-devtools-open'),
+  },
   'developer-config': {
     selector: '.hud-devcfg',
+    primary: null,
     open: (_h, root) => {
       click(root, '.hud-devtools-open');
       click(root, '.hud-devcfg-open');
@@ -111,6 +145,7 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
   },
   'developer-gallery': {
     selector: '.hud-gallery',
+    primary: null,
     open: (_h, root) => {
       click(root, '.hud-devtools-open');
       click(root, '.hud-gallery-open');
@@ -118,6 +153,7 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
   },
   'controller-selftest': {
     selector: '.hud-selftest',
+    primary: null,
     open: (_h, root) => {
       click(root, '.hud-devtools-open');
       click(root, '.hud-selftest-open');
@@ -126,6 +162,8 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
   },
   'confirm-new-campaign': {
     selector: '.hud-confirm',
+    // The SAFE answer: a question that can delete a run arrives on Keep playing.
+    primary: '.hud-confirm-cancel',
     // Only a run that would be LOST is worth asking about, so the dialog needs a run to lose.
     open: (h, root) => {
       h.setContinueAvailable(true);
@@ -134,6 +172,7 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
   },
   'match-failed': {
     selector: '.hud-alert',
+    primary: '.hud-alert-retry',
     // With a retry, because Retry is the control the overlay exists for and the one a pad
     // could not reach before #912. Without it the overlay has a single button and the walk
     // would not prove a pad can choose between them.
@@ -141,16 +180,21 @@ const LAYER_REACH: Record<HudLayerId, LayerReach> = {
   },
 };
 
-/** A surface with no active panel is a decided design, not an omission; it says which and why. */
-type SurfaceReach = { readonly selector: string } | { readonly noPanel: string };
+/**
+ * A surface with no active panel is a decided design, not an omission; it says which and why.
+ * A surface with one names the control its arrival focuses (issue #919).
+ */
+type SurfaceReach = { readonly selector: string; readonly primary: string } | { readonly noPanel: string };
 
 const SURFACE_REACH: Record<HudSurface, SurfaceReach> = {
   launch: { noPanel: 'the splash: the panel, topbar and touch row are all hidden behind it' },
   playing: { noPanel: 'a live match: the arrows and the stick drive the tank, not a menu' },
-  'main-menu': { selector: '.hud-panel' },
-  paused: { selector: '.hud-panel' },
-  'outcome-win': { selector: '.hud-panel' },
-  'outcome-lose': { selector: '.hud-panel' },
+  // No run in this fixture, so Start Campaign; with one it is Continue Campaign, pinned in
+  // the arrival cases below.
+  'main-menu': { selector: '.hud-panel', primary: '.hud-new-game' },
+  paused: { selector: '.hud-panel', primary: '.hud-action' }, // Resume
+  'outcome-win': { selector: '.hud-panel', primary: '.hud-action' }, // Next Level
+  'outcome-lose': { selector: '.hud-panel', primary: '.hud-action' }, // the campaign-over action
 };
 
 /** A campaign-shaped ending, in the shape `pushOutcome` really hands the HUD. */
@@ -161,18 +205,34 @@ const outcome = (kind: 'mission-clear' | 'campaign-over'): GameplayOutcome => ({
   typedOutcome: { kind },
 });
 
-/** Walk `container`'s controls with the PAD verb, which is the path a D-pad takes. */
-function walkWithPad(h: Hud, container: HTMLElement, label: string): HTMLElement[] {
-  expect(document.activeElement, `${label} did not take focus as a container when it opened`).toBe(container);
+/**
+ * Assert where `container`'s arrival put focus -- `primary`, a selector inside it, or the
+ * container itself when `primary` is null (issue #919) -- then walk every control with the
+ * PAD verb, which is the path a D-pad takes, from there round to there.
+ */
+function walkWithPad(h: Hud, container: HTMLElement, primary: string | null, label: string): HTMLElement[] {
+  const arrival = primary === null ? container : q(container, primary);
+  expect(
+    document.activeElement,
+    primary === null
+      ? `${label} declares no primary action, so its container should have taken focus`
+      : `${label}'s arrival did not land on its primary action ${primary}`,
+  ).toBe(arrival);
   const controls = focusableControls(container);
   expect(controls.length, `${label} exposed no reachable controls`).toBeGreaterThan(0);
+  const start = controls.indexOf(arrival); // -1 for the container: the first Down enters at [0]
+  expect(primary === null || start >= 0, `${label}'s primary is not a control the walk reaches`).toBe(true);
   for (let i = 0; i < controls.length; i++) {
     expect(h.act('down'), `${label}: the pad's Down was refused at step ${i}`).toBe(true);
-    expect(document.activeElement, `${label}: step ${i} landed on the wrong control`).toBe(controls[i]);
+    expect(document.activeElement, `${label}: step ${i} landed on the wrong control`).toBe(
+      controls[(start + 1 + i) % controls.length],
+    );
   }
   // One more proves the order is a closed CYCLE rather than a line that runs out.
   h.act('down');
-  expect(document.activeElement, `${label}: the control order is not a cycle`).toBe(controls[0]);
+  expect(document.activeElement, `${label}: the control order is not a cycle`).toBe(
+    controls[(start + 1) % controls.length],
+  );
   return controls;
 }
 
@@ -195,11 +255,19 @@ describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', (
         const { hud: h, root } = mount();
         h.setState('main-menu');
         vi.advanceTimersByTime(1000);
+        // What each arrival had focused when it was announced (issue #919): the gamepad route
+        // drops a Confirm first seen on the poll after an announced arrival, so an arrival that
+        // focuses without announcing itself leaves that pane open to a carried press.
+        const announced: (Element | null)[] = [];
+        h.onArrival(() => announced.push(document.activeElement));
         reach.open(h, root);
         vi.advanceTimersByTime(1000); // let the crossfade finish; a LEAVING surface is not active
 
         const container = q(root, reach.selector);
         expect(getComputedStyle(container).display, `${id} did not open`).not.toBe('none');
+        expect(announced.at(-1), `${id}'s own arrival was not the last one announced`).toBe(
+          reach.primary === null ? container : q(container, reach.primary),
+        );
 
         if (reach.padSuppressed === true) {
           // THE ONE DECIDED EXCEPTION (issue #599). The self-test's whole subject is which
@@ -216,7 +284,7 @@ describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', (
           return;
         }
 
-        const controls = walkWithPad(h, container, id);
+        const controls = walkWithPad(h, container, reach.primary, id);
         // And Confirm ACTS, which is the half the gallery and the alert both failed: with the
         // pane open, `act('confirm')` returned false and landed nowhere.
         expect(h.act('confirm'), `${id}: the pad's Confirm did nothing`).toBe(true);
@@ -263,10 +331,15 @@ describe('every HUD surface hands the pad a panel, or says why it does not (issu
         // tally its summary line reads and the controls under test are never built.
         if (surface === 'outcome-win') h.setOutcome(outcome('mission-clear'));
         if (surface === 'outcome-lose') h.setOutcome(outcome('campaign-over'));
+        const announced: (Element | null)[] = [];
+        h.onArrival(() => announced.push(document.activeElement));
         h.setState(surface);
         vi.advanceTimersByTime(1000);
         const panel = q(root, '.hud-panel');
-        walkWithPad(h, panel, `.hud-panel at ${surface}`);
+        expect(announced, `${surface}'s arrival was not announced exactly once`).toEqual([
+          q(panel, reach.primary),
+        ]);
+        walkWithPad(h, panel, reach.primary, `.hud-panel at ${surface}`);
       } finally {
         vi.useRealTimers();
       }

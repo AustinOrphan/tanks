@@ -76,17 +76,18 @@ describe('createHud panel', () => {
 
   it('leaves the menu hotkeys alive after the title screen is dismissed', () => {
     // REGRESSION, found in a browser and invisible to all 1351 tests before this one:
-    // handing focus to the Start button on dismissal killed M and Escape at the menu.
-    // isMuteHotkey/isPauseHotkey deliberately ignore any key whose target sits inside
-    // input/button/select/textarea -- keys typed at a control belong to the control --
-    // so whatever receives focus here decides whether the hotkeys work at all.
+    // handing focus to the Start button on dismissal killed M and Escape at the menu,
+    // because isMuteHotkey/isPauseHotkey then ignored any key whose target sat inside a
+    // button. Their guard now asks `consumesKey`, under which a button keeps Space and
+    // Enter and nothing else -- and since issue #919 the dismissal DOES hand focus to
+    // the Start button, so this is the case that proves the narrowing made that legal.
     //
     // Asserted through the real predicates rather than by checking the tag name, so
     // this keeps meaning what it says if that guard's selector ever changes.
     const { hud: h } = mount();
     h.setState('main-menu'); // splash -> title: the focus handoff
     const active = document.activeElement as HTMLElement;
-    expect(active.className, 'focus went somewhere unexpected').toContain('hud-panel');
+    expect(active.className, 'focus went somewhere unexpected').toContain('hud-new-game');
     const ev = (key: string): KeyboardEvent =>
       ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
     expect(isMuteHotkey(ev('m')), 'M is dead at the menu').toBe(true);

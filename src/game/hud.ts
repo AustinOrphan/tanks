@@ -15,6 +15,9 @@ export type HudSurface =
   | 'outcome-win'
   | 'outcome-lose';
 
+/** The surfaces that ARE the menu panel, each with its own primary action (issue #919). */
+type PanelSurface = Exclude<HudSurface, 'launch' | 'playing'>;
+
 /**
  * The layers that open OVER a surface (issue #318), by the name each has carried in its
  * classes since it was added. Recorded on the HUD's layer stack together with the surface
@@ -304,7 +307,8 @@ import {
 } from '../presentation/identity-marker';
 import { createHistoryMirror, createLayerStack, type HistoryHost, type LayerEntry } from './navigation';
 import type { HullColorId, SkinId, AccentId } from '../presentation/customization';
-import { captureFocus, focusableControls, isHiddenWithin } from './focusable';
+import { createCarriedConfirmGuard } from './carried-confirm';
+import { arrivalTarget, captureFocus, focusableControls, focusInView, isHiddenWithin } from './focusable';
 import { createCustomizePane, CUSTOMIZE_BODY } from './customize-pane';
 import { createControllersPane, CONTROLLERS_BODY } from './controllers-pane';
 import type { Surface } from './pane-host';
@@ -1311,6 +1315,15 @@ export interface Hud {
    * the keyboard reaches the same verbs through the window-capture key handler.
    */
   act(action: UiAction): boolean;
+  /**
+   * Called each time a surface arrives and focus is put on its primary action or its
+   * container (issue #919) -- every pane and overlay opening, every panel state, and the
+   * destination of a Back. `route-host.ts` uses it to drop a gamepad Confirm first seen on
+   * the poll after an arrival, which was pressed before the player could see the screen.
+   * `graceMs` is the arrival's reaction window, 0 except on a match's outcome: a Confirm
+   * pressed within it was pressed for the match too (`OUTCOME_CONFIRM_GRACE_MS`).
+   */
+  onArrival(cb: (graceMs: number) => void): void;
   dispose(): void;
 }
 
@@ -1351,6 +1364,9 @@ export type HudFrameKey =
   | 'setUiScale'
   | 'back'
   | 'act'
+  // The arrival signal that dispatch reads (issue #919): `route-host.ts` drops a pad Confirm
+  // first seen on the poll after a surface arrived. Frame for `act`'s reason.
+  | 'onArrival'
   | 'dispose'
   // The toast stack. The frame owns the element; a session is LENT the writer -- see
   // `GameplayHudKey`, the one member deliberately in two roles.
@@ -2016,9 +2032,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     <div class="hud-toasts" aria-live="polite">
       <p class="hud-announce ui-sr-only"></p>
     </div>
-    <!-- tabindex="-1" for the same reason .hud-panel carries one: it is what lets
-         showAchievements(true) focus the PANE on arrival rather than a control inside it
-         (see .hud-panel's own note on why arrivals land on the container). -->
+    <!-- tabindex="-1" for the same reason .hud-panel carries one: Records declares no
+         primary action, so its arrival lands on the PANE rather than on a control inside it
+         (see .hud-panel's own note). -->
     <div class="hud-achievements hud-achievements--hidden" role="region" tabindex="-1" aria-labelledby="hud-achievements-title">
       <h1 id="hud-achievements-title">Records</h1>
       <!-- The Records tab row (issue #226). Both tabs appear in BOTH panes and each
@@ -2180,17 +2196,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <button class="ui-btn ui-btn--slab hud-stats-back" type="button">Back</button>
       </div>
     </div>
-    <!-- tabindex="-1" so the menu can RECEIVE focus on every panel-open transition
-         (setState('main-menu'/'paused'/'outcome-win'/'outcome-lose')) without joining the
-         tab order. An ARRIVAL lands on this container and not on a button inside it
-         (Start, Resume, ...): nothing invoked the surface, so there is no control to
-         return to, and moveFocus's first ArrowDown reaches control[0] from here as if
-         focus had started there. A BACK is different since issue #318: it restores the
-         control that opened the layer, which is only workable because loop.ts's
-         isMuteHotkey/isPauseHotkey stopped treating a button as a control that consumes
-         M, P and Escape -- the broader guard was why an earlier "land already on a
-         control" version of this went dead the moment the panel opened, and was
-         reverted. -->
+    <!-- tabindex="-1" so a container can RECEIVE focus without joining the tab order. Since
+         issue #919 an ARRIVAL at this panel lands on its primary action (Continue or Start
+         Campaign, Resume, the outcome's action -- PANEL_PRIMARY), and the container is the
+         fallback when that control cannot take focus; every pane carries the same attribute,
+         and a pane with no primary action arrives on its container. A BACK restores the
+         control that opened the layer (issue #318). Both are workable only because loop.ts's
+         isMuteHotkey/isPauseHotkey stopped treating a button as a control that consumes M,
+         P and Escape -- the broader guard was why an earlier "land already on a control"
+         version of this went dead the moment the panel opened, and was reverted. -->
     <!-- aria-labelledby on all seven focus-target containers (six as of the controller
          assignment panel, docs/superpowers/plans/2026-08-17-controller-assignment.md;
          seven as of the versus setup pane below): a bare tabindex="-1" div's
@@ -2482,9 +2496,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          question the player has not answered. Everything else is the pane mechanism every
          other layer already uses, including Back.
 
-         The DESTRUCTIVE choice is the second button and the safe one is first, so a
-         gamepad Confirm on arrival (which lands focus on the first control rather than
-         activating it -- see 'act') cannot be one press from deleting a run. -->
+         The DESTRUCTIVE choice is the second button and the safe one is first. The safe one
+         is also the dialog's declared primary action (issue #919), so the arrival lands on
+         Keep playing and one Confirm keeps the run: the replace is never one press away. -->
     <div class="hud-confirm hud-confirm--hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="hud-confirm-title" aria-describedby="hud-confirm-body">
       <h1 id="hud-confirm-title">Start a new campaign?</h1>
       <p class="hud-confirm-body" id="hud-confirm-body"></p>
@@ -2982,6 +2996,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       closeSurface,
       isSurfaceOpen,
       open: (opener) => openLayer('customize', opener),
+      arrive: () => arriveAt('customize'),
       back,
     },
     CUSTOMIZE_SURFACE,
@@ -3725,6 +3740,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       closeSurface,
       isSurfaceOpen,
       open: (opener) => openLayer('controllers', opener),
+      arrive: () => arriveAt('controllers'),
       back,
     },
     CONTROLLERS_SURFACE,
@@ -4098,6 +4114,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       return;
     }
     disarmReset();
+    // The armed control asks a new question, so the press that armed it is carried like one
+    // that opened a screen (issue #919's guard): a held Enter auto-repeats, every repeat is
+    // another click, and the first would answer "Really reset?" for the player. A fresh press
+    // still confirms. The pad needs nothing here: its Confirm is one-shot while held.
+    carriedConfirm.arrive();
     btn.textContent = armedLabel;
     btn.classList.add('hud-danger--armed');
     armedReset = { btn, timer: setTimeout(disarmReset, 4000) };
@@ -4125,9 +4146,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       swapSurface(openSurface(), STATS_SURFACE, () => {
         paintRecords();
         renderStatsTable();
-        // The PANE, not its first button -- see the roving-focus doc comment below on why
-        // every panel-open transition focuses the container rather than a control.
-        statsView.focus();
+        // After the render, so the arrival is judged against the table the pane will show --
+        // see `focusArrival` for where it lands.
+        arriveAt('stats');
       });
     } else {
       closeSurface(STATS_SURFACE);
@@ -4186,7 +4207,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       swapSurface(openSurface(), ACH_SURFACE, () => {
         paintRecords();
         renderAchievements();
-        achView.focus();
+        arriveAt('achievements');
       });
     } else {
       closeSurface(ACH_SURFACE);
@@ -4197,7 +4218,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // context the way Customize does), and no re-render on open -- setLevelSelect already
   // keeps `.hud-levels` current regardless of visibility ("REPLACE, never append").
   function showLevelSelect(show: boolean): void {
-    if (show) swapSurface(openSurface(), LEVELSELECT_SURFACE, () => levelSelectView.focus());
+    if (show) swapSurface(openSurface(), LEVELSELECT_SURFACE, () => arriveAt('levelselect'));
     else closeSurface(LEVELSELECT_SURFACE);
   }
 
@@ -4247,7 +4268,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (show) {
       swapSurface(openSurface(), SETTINGS_SURFACE, () => {
         refreshSettingsSections();
-        settingsView.focus();
+        arriveAt('settings');
       });
       if (!settingsOpen) {
         settingsOpen = true;
@@ -4270,7 +4291,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * re-render on open instead of keeping their scroll position across a visit.
    */
   function showAbout(show: boolean): void {
-    if (show) swapSurface(openSurface(), ABOUT_SURFACE, () => aboutView.focus());
+    if (show) swapSurface(openSurface(), ABOUT_SURFACE, () => arriveAt('about'));
     else {
       closeSurface(ABOUT_SURFACE);
       collapseLegalDocuments(legalDisclosures);
@@ -4286,7 +4307,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // hidden for the whole page. Whether a round exists changes underneath a shut pane.
       refreshDevActions();
       refreshNamespace();
-      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => devToolsView.focus());
+      swapSurface(openSurface(), DEVTOOLS_SURFACE, () => arriveAt('developer-tools'));
       // The pane's modules load on its first open (issue #1014), after the arrival focus as the
       // self-test's body does, and the actions are revealed once their catalogue is there;
       // after that, the refresh above is what decides them.
@@ -4378,7 +4399,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * losing it because Back was pressed to check something would make the menu hostile.
    */
   function showDevConfig(show: boolean): void {
-    if (show) swapSurface(openSurface(), DEVCFG_SURFACE, () => devCfgView.focus());
+    if (show) swapSurface(openSurface(), DEVCFG_SURFACE, () => arriveAt('developer-config'));
     else closeSurface(DEVCFG_SURFACE);
   }
 
@@ -4402,7 +4423,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (show === selfTestOpen) return;
     selfTestOpen = show;
     if (show) {
-      swapSurface(openSurface(), SELFTEST_SURFACE, () => selfTestView.focus());
+      swapSurface(openSurface(), SELFTEST_SURFACE, () => arriveAt('controller-selftest'));
       if (selfTest === null) loadSelfTestBody();
       for (const cb of selfTestOpenCbs) cb();
     } else {
@@ -4461,7 +4482,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (show === layoutOpen) return;
     layoutOpen = show;
     if (show) {
-      swapSurface(openSurface(), LAYOUT_SURFACE, () => layoutView.focus());
+      swapSurface(openSurface(), LAYOUT_SURFACE, () => arriveAt('controller-layout'));
       for (const cb of layoutOpenCbs) cb();
     } else {
       closeSurface(LAYOUT_SURFACE);
@@ -4490,7 +4511,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (show === galleryOpen) return;
     if (show) {
       galleryOpen = true;
-      swapSurface(openSurface(), GALLERY_SURFACE, () => galleryView.focus());
+      swapSurface(openSurface(), GALLERY_SURFACE, () => arriveAt('developer-gallery'));
       for (const cb of galleryOpenCbs) cb();
     } else {
       closeSurface(GALLERY_SURFACE);
@@ -4518,7 +4539,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (show) {
       swapSurface(openSurface(), CONFIRM_SURFACE, () => {
         confirmBodyEl.textContent = confirmNewCampaignBody();
-        confirmView.focus();
+        arriveAt('confirm-new-campaign');
       });
     } else {
       closeSurface(CONFIRM_SURFACE);
@@ -4551,8 +4572,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
           alertBodyEl.textContent = pendingAlert.detail;
           alertDismissBtn.textContent = pendingAlert.action;
         }
+        // Before the arrival: whether Retry is offered decides whether it takes focus.
         alertRetryBtn.classList.toggle('hud-alert-retry--hidden', pendingRetry === null);
-        alertView.focus();
+        arriveAt('match-failed');
       });
     } else {
       closeSurface(ALERT_SURFACE);
@@ -4586,23 +4608,32 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * and fighting that here would break the slider rather than extend it. A slider stays
    * reachable by Tab, exactly as it was before this file existed.
    *
-   * EVERY panel-open transition focuses the CONTAINER, never a control inside it --
-   * `showStats`/Customize's `show`/`showAchievements`/`showLevelSelect`/the Controllers pane's `show`/
-   * `showVersusSetup` above and setState's paused/win/lose/title branches below all
-   * call `.focus()` on the pane itself, which is exactly what `.hud-panel`'s own
-   * pre-existing `tabindex="-1"` did for the one transition this file used to handle
-   * (splash -> title) -- the other six panes now carry the same attribute for the same
-   * reason. Nothing invoked the surface on an arrival, so there is no control to return
-   * to, and `moveFocus`'s `idx < 0` branch makes the container free: the first ArrowDown
-   * from it lands on control[0] exactly as it would have if focus had started there.
+   * EVERY ARRIVAL LANDS ON THE SURFACE'S PRIMARY ACTION (issue #919, owner ruling
+   * 2026-10-13), so a screen takes one press: Continue or Start Campaign on the Main Menu,
+   * Resume at Pause, the outcome's own action, Start in Versus Setup, and so on -- each
+   * layer's `primary` in `LAYERS` and each panel state's in `PANEL_PRIMARY` are the one
+   * declaration, and `focusArrival` is the one place focus is put. A surface with no
+   * primary action (Settings, Records, About and the rest, where nothing is safe to press
+   * blind) still takes focus on its CONTAINER, which is what every pane's `tabindex="-1"`
+   * is for; from there `moveFocus` enters at the first control, and Confirm only lands
+   * focus (`act`).
    *
-   * A BACK is the other case (issue #318): `restoreFocus` puts focus on the control that
-   * opened the layer, when it still exists. An EARLIER version of this file focused each
-   * pane's first CONTROL on arrival too, and was reverted because loop.ts's
+   * Until #919 every arrival focused the container, so a pad needed two presses where the
+   * direction spec promised one. That rule began as a workaround: an earlier version of
+   * this file focused each pane's first CONTROL and was reverted because loop.ts's
    * `isMuteHotkey`/`isPauseHotkey` then ignored any key whose target was inside a
    * `button`, which made Escape-to-resume and M-to-mute go dead the moment a panel
    * opened. That guard now names `input,select,textarea` only -- a button consumes Space
-   * and Enter and nothing else -- which is what makes restoring a button legal.
+   * and Enter and nothing else (`consumesKey`) -- which is what makes a focused button
+   * legal on arrival as well as on a Back.
+   *
+   * The cost of landing on a control is that the press that opened the screen must not
+   * also press it. A pad's Confirm is one-shot while held (`gamepad-menu.ts`), and a
+   * Confirm first seen on the poll after an arrival is dropped (`route-host.ts`); a
+   * keyboard Confirm begun before the arrival is cancelled by `carried-confirm.ts`.
+   *
+   * A BACK is the other case (issue #318): the destination arrives as above, then
+   * `restoreFocus` puts focus on the control that opened the layer, when it still exists.
    */
   function activePanelContainer(): HTMLElement | null {
     // DERIVED FROM `LAYERS`, not listed beside it (issue #914). This was a hand-kept array of
@@ -4648,10 +4679,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * what happens with no layout to follow. Shared by the arrow keys and the gamepad's
    * D-pad through `act`, so every panel inherits one traversal.
    *
-   * Focus on the panel CONTAINER (just after `panel.focus()`, tabindex -1) or on
-   * something this sweep does not track (the topbar's own Mute button) enters at the
-   * first control going forward and the last going backward -- a reasonable default for
-   * either case rather than a special error path.
+   * Focus on the panel CONTAINER (a surface with no primary action arrives there, tabindex
+   * -1) or on something this sweep does not track (the topbar's own Mute button) enters at
+   * the first control going forward and the last going backward -- a reasonable default
+   * for either case rather than a special error path.
    */
   function moveFocus(container: HTMLElement, direction: Direction): void {
     const list = focusableControls(container);
@@ -4674,10 +4705,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * activates the focused control through its own click handler -- `HTMLElement.click()`
    * dispatches a click with `detail === 0`, which `blurIfPointer` treats as a keyboard
    * activation, so focus survives the activation the way it does for Enter. With no
-   * control focused (a panel just arrived, focus on its container) `confirm` lands
-   * focus on the first control INSTEAD of activating it: a blind activation of whatever
-   * happens to be first is how a gamepad accidentally starts a New Game. `back` is
-   * `Hud.back()`. `pause` is never the HUD's -- the page's state machine owns it -- so
+   * control focused -- the container of a surface with no primary action, or focus lost
+   * to `<body>` -- `confirm` lands focus on the first control INSTEAD of activating it
+   * (issue #919's ruling keeps this): a blind activation of whatever happens to be first
+   * is how a gamepad accidentally starts a New Game. A surface WITH a primary action
+   * arrives with it focused (`focusArrival`), so there one Confirm activates it. `back`
+   * is `Hud.back()`. `pause` is never the HUD's -- the page's state machine owns it -- so
    * it reports unconsumed and the page toggles.
    *
    * Returns whether the action was consumed here, so the page knows when to fall through
@@ -4714,6 +4747,50 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     if (controls.length > 0) controls[0].focus();
     return true;
   }
+
+  /**
+   * Put focus where an arriving surface wants it (issue #919): its first primary action that
+   * can take focus right now, else the container (`arrivalTarget`). Every arrival goes
+   * through here -- the fifteen layers through `arriveAt`, the panel's four states through
+   * `arrivePanel` -- and nothing else moves focus onto a surface that has just opened.
+   *
+   * THE GUARD FIRST. `carriedConfirm.arrive()` is stamped before focus moves, so a keyboard
+   * Confirm already down -- the one that opened this screen, or one held across it -- is
+   * cancelled on the primary it is about to reach. The subscribers are told after, and the
+   * gamepad route uses that to drop a Confirm first seen on the next poll (`route-host.ts`).
+   * `graceMs` reaches both: the arrival's reaction window, which only an outcome has.
+   *
+   * `focusInView`, not `focus()`: the browser's focus scroll runs while the entrance still holds
+   * the surface's content 16px low, and moved Versus Setup 4px under a Start already in view.
+   *
+   * Returns the element focused, which the panel uses to follow its own affordances.
+   */
+  function focusArrival(
+    container: HTMLElement,
+    primary: readonly HTMLElement[],
+    graceMs = 0,
+  ): HTMLElement {
+    carriedConfirm.arrive(graceMs);
+    const target = arrivalTarget(container, primary);
+    focusInView(target);
+    for (const cb of arrivalCbs) cb(graceMs);
+    return target;
+  }
+
+  /** A layer's arrival: its own container and its own declared `primary`. */
+  function arriveAt(id: HudLayerId): void {
+    focusArrival(LAYERS[id].container, LAYERS[id].primary());
+  }
+
+  /**
+   * Cancels a keyboard Confirm begun before the latest arrival -- see `carried-confirm.ts`.
+   * Its listeners are bound at `window` capture beside `onNavKeyDown`, and before it, so it
+   * sees every Enter and Space before anything that could move focus on one.
+   */
+  const carriedConfirm = createCarriedConfirmGuard();
+  const onCarriedConfirmKey = (e: KeyboardEvent): void => carriedConfirm.onKey(e);
+  /** `onArrival` subscribers -- see `focusArrival`. */
+  const arrivalCbs: Array<(graceMs: number) => void> = [];
 
   /**
    * The window-level keydown handler that drives roving focus. Bound at `window` in the
@@ -4779,6 +4856,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     e.stopPropagation();
     moveFocus(container, action);
   };
+  for (const type of ['keydown', 'keypress', 'keyup'] as const) {
+    window.addEventListener(type, onCarriedConfirmKey, true);
+  }
   window.addEventListener('keydown', onNavKeyDown, true);
   document.addEventListener('focusin', onModalFocusIn, true);
 
@@ -4843,7 +4923,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   type HudLayer = LayerEntry<HudLayerId, HudSurface, HudRestore>;
   interface LayerRow {
     readonly container: HTMLElement;
-    /** Today's `showX(true)` body, unchanged: one transition, focus on the pane. */
+    /**
+     * The layer's PRIMARY ACTION, where focus lands when it opens (issue #919), as candidates
+     * in preference order; `arrivalTarget` takes the first that can be focused right now, and
+     * the container when none can. `NO_PRIMARY` is a surface whose purpose is not one press
+     * -- a set of settings, a table to read -- so nothing is pressed blind and Confirm only
+     * lands focus there.
+     *
+     * REQUIRED, not optional, for #914's reason: `LAYERS` is exhaustive, so a new layer that
+     * has not decided where its arrival lands is a compile error rather than a silent
+     * container. `PANEL_PRIMARY` is the same declaration for the panel's four states.
+     */
+    primary(): readonly HTMLElement[];
+    /** Today's `showX(true)` body, unchanged: one transition, then `arriveAt`. */
     open(initial?: VersusConfig | null): void;
     /** Today's ANIMATED `showX(false)`, so close callbacks fire through their guards. */
     close(): void;
@@ -4870,20 +4962,44 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     /** `'already-top'`: re-render in place, no transition. */
     refresh?(initial?: VersusConfig | null): void;
   }
+  /** A layer with no primary action -- see `LayerRow.primary`. */
+  const NO_PRIMARY = (): readonly HTMLElement[] => [];
   const LAYERS: Record<HudLayerId, LayerRow> = {
-    stats: { container: statsView, open: () => showStats(true), close: () => showStats(false) },
+    stats: {
+      container: statsView,
+      primary: NO_PRIMARY,
+      open: () => showStats(true),
+      close: () => showStats(false),
+    },
     customize: {
       container: customizeView,
+      // Selection applies the moment a swatch is pressed (the spec's Customize section), so
+      // there is no action to press and the first swatch must not be one blind press away.
+      primary: NO_PRIMARY,
       open: () => customize.show(true),
       close: () => customize.show(false),
       // The pane's subscribers own a live `TankPreview`: a WebGL context and its listeners.
       // `customize-pane.ts` releases them only when the pane was on screen.
       release: () => customize.release(),
     },
-    achievements: { container: achView, open: () => showAchievements(true), close: () => showAchievements(false) },
-    levelselect: { container: levelSelectView, open: () => showLevelSelect(true), close: () => showLevelSelect(false) },
+    achievements: {
+      container: achView,
+      primary: NO_PRIMARY,
+      open: () => showAchievements(true),
+      close: () => showAchievements(false),
+    },
+    levelselect: {
+      container: levelSelectView,
+      // Picking a level IS the pane's action (the spec: "select an unlocked mission and Start
+      // Practice directly"), so the first level the grid offers takes focus and one Confirm
+      // starts it. Practice touches no campaign run, which is what makes one press safe here.
+      primary: () => Array.from(levelsRow.querySelectorAll<HTMLElement>('.hud-level-btn')),
+      open: () => showLevelSelect(true),
+      close: () => showLevelSelect(false),
+    },
     controllers: {
       container: controllersView,
+      primary: NO_PRIMARY,
       open: () => controllers.show(true),
       close: () => controllers.show(false),
       /** Same shape as `customize` above: the pane's subscribers own the pad listeners. */
@@ -4893,16 +5009,26 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     'versus-setup': {
       container: versusSetupView,
+      // Start, the spec's one primary here. A setup Start refuses is disabled, so the pane
+      // then arrives on its container and the refusal reason is read from there.
+      primary: () => [versusStartBtn],
       open: (initial) => openVersusPane(initial),
       close: () => closeVersusPane(),
       refresh: (initial) => seedAndRenderVersus(initial),
       /** The pane's subscribers own the pad hotplug listeners (issue #785). */
       release: closeVersusSetupSubscribers,
     },
-    settings: { container: settingsView, open: () => showSettings(true), close: () => showSettings(false) },
-    about: { container: aboutView, open: () => showAbout(true), close: () => showAbout(false) },
+    settings: {
+      container: settingsView,
+      // Settings apply immediately, and its first control is Mute: a blind press would flip one.
+      primary: NO_PRIMARY,
+      open: () => showSettings(true),
+      close: () => showSettings(false),
+    },
+    about: { container: aboutView, primary: NO_PRIMARY, open: () => showAbout(true), close: () => showAbout(false) },
     'developer-tools': {
       container: devToolsView,
+      primary: NO_PRIMARY,
       open: () => showDeveloperTools(true),
       close: () => showDeveloperTools(false),
       // Replaced, most often from three of its own buttons (Configuration, the Self-Test, the
@@ -4917,11 +5043,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     'controller-selftest': {
       container: selfTestView,
+      // A pad's Confirm is the readout's here (`act`), so only the keyboard could press one.
+      primary: NO_PRIMARY,
       open: () => showControllerSelfTest(true),
       close: () => showControllerSelfTest(false),
     },
     'controller-layout': {
       container: layoutView,
+      primary: NO_PRIMARY,
       open: () => showControllerLayout(true),
       close: () => showControllerLayout(false),
       // Replaced by a sibling: the incoming pane fades this one out, and the subscribers still
@@ -4934,11 +5063,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     'developer-config': {
       container: devCfgView,
+      primary: NO_PRIMARY,
       open: () => showDevConfig(true),
       close: () => showDevConfig(false),
     },
     'developer-gallery': {
       container: galleryView,
+      primary: NO_PRIMARY,
       open: () => showGallery(true),
       close: () => showGallery(false),
       // Replaced by a sibling (its own Developer Tools button): the incoming pane fades this
@@ -4947,15 +5078,90 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     'match-failed': {
       container: alertView,
+      // Retry when the caller can rerun what failed, else the one way out it names -- the
+      // spec's "blocking states always provide a valid Retry ... or Main Menu action".
+      primary: () => [alertRetryBtn, alertDismissBtn],
       open: () => showAlert(true),
       close: () => showAlert(false),
     },
     'confirm-new-campaign': {
       container: confirmView,
+      // The SAFE answer. A question that can delete a run defaults to keeping it, so the one
+      // press it takes on arrival is Keep playing, never the replace.
+      primary: () => [confirmCancelBtn],
       open: () => showConfirmNewCampaign(true),
       close: () => showConfirmNewCampaign(false),
     },
   };
+  /**
+   * The panel's own primary action in each of its four states (issue #919) -- the twin of
+   * `LayerRow.primary` for the one container that is not a layer, and exhaustive over
+   * `PanelSurface` for the same reason that field is required.
+   *
+   * MAIN MENU: Continue Campaign when a run exists, otherwise New Game, which then reads
+   * Start Campaign (or Start Match for a versus session) -- the spec's "Controller default
+   * focus is the Campaign action". With a run, New Game is the tertiary Start New Campaign
+   * and Continue is listed first, so the destructive label is never where focus lands.
+   * PAUSE: Resume. BOTH OUTCOMES: the one action button, whatever the outcome labelled it
+   * -- Next Level, Retry, Play Again, Rematch.
+   */
+  const PANEL_PRIMARY: Record<PanelSurface, () => readonly HTMLElement[]> = {
+    'main-menu': () => [continueBtn, newGameBtn],
+    paused: () => [actionBtn],
+    'outcome-win': () => [actionBtn],
+    'outcome-lose': () => [actionBtn],
+  };
+  /** Where the latest panel arrival put focus, for `followPanelArrival`. */
+  let panelArrival: { state: PanelSurface; target: HTMLElement } | null = null;
+
+  /**
+   * How long after a match's outcome arrives a FRESH Confirm still counts as pressed for the
+   * match (issue #919), in milliseconds.
+   *
+   * Every other surface arrives because the player asked for it, so a press begun after its
+   * arrival is meant for it. The outcome is the one the GAME opens, on the frame of the winning
+   * kill or the final death, with focus on Next Level, Retry or Rematch, while the player may
+   * still be pressing for the match: Space lays a mine, and the panel is still fading in. A
+   * press in the first quarter-second, the low end of a visual reaction time, cannot be an
+   * answer to a result the player has not yet seen, so it is cancelled like one held across
+   * the arrival (`carried-confirm.ts`, and `route-host.ts` for a pad). After it, one press
+   * takes the screen. Every outcome arrival has it, a Back to one included.
+   */
+  const OUTCOME_CONFIRM_GRACE_MS = 250;
+
+  /** The panel's arrival in state `s` -- see `focusArrival`. */
+  function arrivePanel(s: PanelSurface): void {
+    const graceMs = s === 'outcome-win' || s === 'outcome-lose' ? OUTCOME_CONFIRM_GRACE_MS : 0;
+    panelArrival = { state: s, target: focusArrival(panel, PANEL_PRIMARY[s](), graceMs) };
+  }
+
+  /**
+   * Keep the Main Menu's arrival on its primary action when the menu's shape changes AFTER
+   * the arrival and before the player has moved (issue #919).
+   *
+   * It does change: `route-host.ts` repaints whether a run exists on every arrival at the
+   * Main Menu, after `setState` has already focused it, and a session's detach resets the
+   * menu to the page's shape. An arrival that picked Start Campaign before Continue appeared
+   * would then sit on what had just become Start New Campaign; one that picked Continue
+   * before the run was found to be over would sit on a hidden button. Either way focus
+   * follows to the control the arrival would pick now.
+   *
+   * Only while focus is still where the arrival put it, or nowhere (a browser drops focus
+   * from a control that has just been hidden): once the player has moved, the menu changing
+   * under them must not move them back. No new arrival is stamped: the press that opened
+   * the menu was judged against the arrival it opened, which is still this one.
+   */
+  function followPanelArrival(): void {
+    if (panelArrival === null || shownState !== panelArrival.state) return;
+    if (activePanelContainer() !== panel) return; // a pane is over the menu: not its focus to move
+    const active = document.activeElement;
+    if (active !== panelArrival.target && active !== document.body && active !== null) return;
+    const target = arrivalTarget(panel, PANEL_PRIMARY[panelArrival.state]());
+    if (target === active) return;
+    panelArrival = { state: panelArrival.state, target };
+    focusInView(target);
+  }
+
   /**
    * Which layers are BLOCKING (issue #226). Every pane in this file is a full-screen
    * route except the replace-run confirmation, which is an overlay so `navigation.ts`
@@ -5050,7 +5256,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * "Versus Setup" reopen -- `route-ui.ts`'s `openVersusSetup`, reached through the route
    * host's slot -- where no control invoked the pane; recording the opener only around
    * the button's own callback loop is what keeps that reopen's Back landing on the
-   * container rather than on a button nobody pressed.
+   * destination's own arrival rather than on a button nobody pressed.
    */
   let versusOpener: HTMLElement | null = null;
 
@@ -5140,10 +5346,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
   /**
    * Focus the control that opened the layer, when it still exists. Runs AFTER `setState`
-   * has already focused the destination container, so the container is the fallback for
-   * a programmatic open (no opener), a torn-down node, a disabled button, or an opener
-   * the surface no longer shows -- `applyTitleAffordances` and `setLevelSelect` hide
-   * openers, and a session's detach reshapes the menu.
+   * has already made the destination's arrival (its primary action since issue #919), so
+   * that arrival is the fallback for a programmatic open (no opener), a torn-down node, a
+   * disabled button, or an opener the surface no longer shows -- `applyTitleAffordances`
+   * and `setLevelSelect` hide openers, and a session's detach reshapes the menu.
    */
   function restoreFocus(layer: HudLayer): void {
     const opener = layer.restore.opener;
@@ -5171,8 +5377,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * handlers pass `recordsOpenBtn` as the opener rather than the tab that was clicked,
    * which is what makes Back land on the Main Menu control the player actually used --
    * the tab they pressed lives inside the pane they are leaving, so restoring it would
-   * mean restoring a control the destination does not show (`restoreFocus` would fall
-   * back to the container and silently lose the player's place).
+   * mean restoring a control the destination does not show (`restoreFocus` would refuse
+   * it and leave the Main Menu's own arrival, losing the player's place).
    *
    * Switching tabs REPLACES the top layer (`openLayer`'s different-id branch), carrying
    * the replaced layer's `origin` forward, so Stats and Achievements are siblings over
@@ -6171,6 +6377,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', !atTitle || !levelChoice || versusKind);
     campaignOpenBtn.classList.toggle('hud-campaign-open--hidden', !atTitle || !versusKind);
     renderRunSummary();
+    followPanelArrival();
   }
 
   /**
@@ -6630,9 +6837,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * The opener recorded is the MAIN MENU's Practice button, not this one: `openLayer`
    * stamps the surface the layer opened over (the Main Menu, by the time the quit above
    * has been dispatched), and Back must restore a control that surface actually shows.
-   * `restoreFocus` already refuses a hidden opener and falls back to the container, so a
-   * HUD with no quit subscriber -- every unit fixture -- degrades to the container rather
-   * than to a wrong control.
+   * `restoreFocus` already refuses a hidden opener and leaves the destination's own arrival
+   * standing, so a HUD with no quit subscriber -- every unit fixture -- degrades to that
+   * arrival rather than to a wrong control.
    */
   const handleChooseLevel = (): void => {
     quitInto('levelselect', levelSelectOpenBtn);
@@ -7509,7 +7716,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function openVersusPane(initial?: VersusConfig | null): void {
     swapSurface(openSurface(), VERSUS_SETUP_SURFACE, () => {
       seedAndRenderVersus(initial);
-      versusSetupView.focus();
+      // After the render, which decides whether Start is enabled and so whether it takes focus.
+      arriveAt('versus-setup');
     });
     if (!versusSetupOpen) {
       versusSetupOpen = true;
@@ -7597,6 +7805,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     // Recorded FIRST and unconditionally, unlike `shownState` further down --
     // see this variable's own doc comment for why the two differ.
     currentSurface = s;
+    // A surface change ends the last panel arrival; this one makes its own at the end.
+    panelArrival = null;
     // Any state change closes the stats and customize pages FIRST -- including the
     // playing early-return below, or an overlay opened on the Main Menu would
     // sit over the live game. They are Main-Menu affairs.
@@ -7903,21 +8113,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       titleEl.textContent = 'Paused';
       setSubtitle('The arena waits.');
       actionBtn.textContent = 'Resume';
-      // The PANEL, not actionBtn -- see the tabindex note on the element and the
-      // roving-focus doc comment above `activePanelContainer`: an arrival lands on the
-      // container. (A Back from a layer opened over Pause then restores its opener --
-      // `restoreFocus`, issue #318 -- after this call.)
-      panel.focus();
+      // Resume, after its label is written -- see `PANEL_PRIMARY`. (A Back from a layer
+      // opened over Pause then restores its opener -- `restoreFocus`, issue #318 -- after
+      // this call.)
+      arrivePanel('paused');
       return; // do NOT fall through: the final else renders a Game Over corpse screen
     }
-    // The panel, NOT actionBtn/Continue/New Game -- see the tabindex note on the element
-    // and the roving-focus doc comment above `activePanelContainer`. Without this,
-    // `document.activeElement` is still <body> when the menu appears (leaving the Launch
-    // route with nothing focused), or -- on a route back from a subpanel's Back button --
-    // whatever the subpanel's own container last held, in both cases stranding a
-    // keyboard-only player with no visible position and a screen reader announcing
-    // nothing.
-    panel.focus();
     if (atMainMenu) {
       titleEl.textContent = 'TANKS!';
       setSubtitle('');
@@ -7939,6 +8140,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
        */
       renderOutcomeCopy();
     }
+    // The surface's primary action (issue #919), LAST: after `applyTitleAffordances` has
+    // decided whether Continue is offered and after the copy has labelled the button, so
+    // the control focus lands on is the one on screen and is announced by its final name.
+    // Without an arrival here `document.activeElement` is still <body> when the menu
+    // appears (leaving the Launch route with nothing focused), or -- on a route back from a
+    // subpanel's Back button -- whatever the subpanel last held, in both cases stranding a
+    // keyboard-only player with no visible position and a screen reader announcing nothing.
+    arrivePanel(atMainMenu ? 'main-menu' : s === 'outcome-win' ? 'outcome-win' : 'outcome-lose');
   }
 
   // The boot state, and it must match the state machine's own initial state
@@ -8269,10 +8478,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       pendingAlert = failure;
       pendingRetry = retry ?? null;
       // Opened with NO opener element: there is no button that "led here" -- the player
-      // pressed Start and the match failed -- so `restoreFocus` falls through to the
-      // surface's own container focus, which is what `openLayer` already does for a
-      // programmatic open. Passing the Start button would send focus back to a control
-      // that may no longer be shown.
+      // pressed Start and the match failed -- so on dismissal `restoreFocus` leaves the
+      // destination's own arrival standing, as it does for any programmatic open. Passing
+      // the Start button would send focus back to a control that may no longer be shown.
       openLayer('match-failed', null);
     },
     onQuitToTitle(cb: () => void): void {
@@ -8595,6 +8803,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     },
     back,
     act,
+    onArrival(cb: (graceMs: number) => void): void {
+      arrivalCbs.push(cb);
+    },
     dispose(): void {
       // SETTLES the outstanding transition rather than dropping it -- see
       // `TransitionRunner.dispose`. A HUD torn down mid-crossfade would otherwise leave a
@@ -8605,6 +8816,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       disarmReset(); // a pending confirm timer must not outlive the HUD
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();
+      for (const type of ['keydown', 'keypress', 'keyup'] as const) {
+        window.removeEventListener(type, onCarriedConfirmKey, true);
+      }
       window.removeEventListener('keydown', onNavKeyDown, true);
       document.removeEventListener('focusin', onModalFocusIn, true);
       mirror.dispose(); // the popstate listener, on the same page-teardown path

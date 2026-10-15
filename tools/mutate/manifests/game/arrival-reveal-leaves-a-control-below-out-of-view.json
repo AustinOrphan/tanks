@@ -1,0 +1,16 @@
+{
+  "id": "arrival-reveal-leaves-a-control-below-out-of-view",
+  "file": "src/game/focusable.ts",
+  "find": "      else if (bottom > scrollTop + clientHeight) parent.scrollTop = bottom - clientHeight;\n      return;",
+  "replace": "      return;",
+  "tests": [
+    "src/game/focusable.test.ts",
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "With the browser's focus scroll turned off (issue #919), nothing else brings a primary below the view into it: focus would land on a control the player cannot see.",
+  "expect": "killed",
+  "killedBy": [
+    "focusInView (issue #919) scrolls just far enough to show a control below the view, measured through every offset parent",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) Versus Setup scrolls its pane to a Start out of view, and leaves one in view where it is"
+  ]
+}

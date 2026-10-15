@@ -1,0 +1,23 @@
+{
+  "id": "carried-confirm-never-cancels",
+  "file": "src/game/carried-confirm.ts",
+  "find": "      if (began === undefined || began <= arrivedAt) e.preventDefault();",
+  "replace": "      if (began === undefined || began <= arrivedAt) return;",
+  "tests": [
+    "src/game/carried-confirm.test.ts",
+    "src/game/hud.navigation.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "A keyboard Confirm pressed for one screen must not activate the next screen's primary action (issue #919): the arrival now focuses that primary, and Enter and Space activate it natively. With the cancel gone, a held Enter's repeats, the keypress of the keystroke that dismissed Launch, and a Space released after a match all press the new screen.",
+  "expect": "killed",
+  "killedBy": [
+    "createCarriedConfirmGuard (issue #919) cancels every event of an Enter held across an arrival: repeats, keypress and keyup",
+    "createCarriedConfirmGuard (issue #919) cancels every event of a Space held across an arrival: repeats, keypress and keyup",
+    "createCarriedConfirmGuard (issue #919) cancels the keypress and keyup of the very keydown that made the arrival",
+    "createCarriedConfirmGuard (issue #919) cancels a keydown stamped before the arrival though it is delivered after it (a queued press)",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space held through the end of a match cannot press Retry with its repeats or its release",
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a keydown queued behind an arrival cannot press the new primary",
+    "createRouteHost: the keystroke that leaves Launch cannot press the Main Menu (issue #919) cancels the keypress of the Enter that dismissed the splash, so Start Campaign is not pressed"
+  ]
+}

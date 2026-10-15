@@ -1,0 +1,14 @@
+{
+  "id": "hud-menu-arrival-follow-takes-the-browser-scroll",
+  "file": "src/game/hud.ts",
+  "find": "    panelArrival = { state: panelArrival.state, target };\n    focusInView(target);",
+  "replace": "    panelArrival = { state: panelArrival.state, target };\n    target.focus();",
+  "tests": [
+    "src/game/hud.navigation.test.ts"
+  ],
+  "why": "The Main Menu arrival's follow places the arrival's focus again (issue #919), so it focuses the way the arrival does: through `focusInView`, never the browser's own focus scroll.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an arrival, and the Main Menu arrival's follow, focus without the browser's focus scroll"
+  ]
+}

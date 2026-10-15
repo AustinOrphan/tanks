@@ -1,0 +1,16 @@
+{
+  "id": "hud-replace-run-question-arrives-on-the-replace",
+  "file": "src/game/hud.ts",
+  "find": "      primary: () => [confirmCancelBtn],",
+  "replace": "      primary: () => [confirmAcceptBtn],",
+  "tests": [
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.reachability.test.ts"
+  ],
+  "why": "The replace-run question arrives on its SAFE answer (issue #919), so the one press it takes keeps the run. Arriving on the accept would put the deletion of a campaign one blind Confirm away.",
+  "expect": "killed",
+  "killedBy": [
+    "hud: the replace-run confirmation (issue #226) arrives on the safe answer, so a blind Confirm keeps the run (issue #919)",
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside confirm-new-campaign"
+  ]
+}
