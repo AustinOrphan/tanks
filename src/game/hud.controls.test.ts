@@ -177,33 +177,50 @@ describe('createHud mute button', () => {
 });
 
 describe('createHud does not keep keyboard focus after a pointer interaction', () => {
+  // Mute and the slider live in Settings -> Audio (issue #226), so each case opens Settings
+  // first and checks that focus LANDED before it acts. `focus()` refuses an element that is
+  // not rendered -- browsers always did, jsdom does from 30.1.2 -- and on the hidden pane the
+  // two "drops focus" cases passed with focus never having arrived: with the blur listener
+  // deleted they still passed under jsdom 30.1.2 (measured), so they asserted nothing.
+  // Negative control for each precondition: drop the `.hud-settings-open` click inside
+  // `openSettings`, and under jsdom 30.1.2 the precondition fails before the action runs.
+  const openSettings = (): HTMLElement => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    (root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
+    return root;
+  };
+
   it('drops focus from the mute button when it is clicked with the mouse', () => {
     // A focused HUD control legitimately claims Space/Enter/arrows, so a mouse player who
     // clicks Mute would silently lose arrow-key driving and the Space mine-drop until they
     // clicked elsewhere. Keyboard activation reports detail 0 and must KEEP focus, so
     // anyone tabbing through the HUD still has it work.
-    const { root } = mount();
+    const root = openSettings();
     const btn = root.querySelector('.hud-settings-mute') as HTMLButtonElement;
 
     btn.focus();
+    expect(document.activeElement, 'precondition: focus did not land on Mute').toBe(btn);
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
     expect(document.activeElement).not.toBe(btn);
   });
 
   it('keeps focus when the mute button is activated from the keyboard', () => {
-    const { root } = mount();
+    const root = openSettings();
     const btn = root.querySelector('.hud-settings-mute') as HTMLButtonElement;
 
     btn.focus();
+    expect(document.activeElement, 'precondition: focus did not land on Mute').toBe(btn);
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
     expect(document.activeElement).toBe(btn);
   });
 
   it('drops focus from the volume slider when the drag ends', () => {
-    const { root } = mount();
+    const root = openSettings();
     const slider = volumeSlider(root);
 
     slider.focus();
+    expect(document.activeElement, 'precondition: focus did not land on the slider').toBe(slider);
     slider.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     expect(document.activeElement).not.toBe(slider);
   });

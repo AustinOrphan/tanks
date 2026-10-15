@@ -837,7 +837,10 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
     );
     expect(document.activeElement, 'the step after Back did not reach Start').toBe(startBtn(root));
-  });
+    // A RAISED BUDGET, for the reason the issue #115 title-screen walk has one: 0.45s in CI
+    // before jsdom 30.1.2 and 4.0s after, because every ArrowDown re-derives the pane's
+    // controls after jsdom empties its computed-style cache on the previous focus move.
+  }, 20_000);
 });
 
 describe('hud: the versus action bar and its arm (issue #668)', () => {
@@ -1344,7 +1347,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
-  });
+    // A RAISED BUDGET, not a hung test. Every ArrowDown re-derives the active panel's controls
+    // through `getComputedStyle`, and since jsdom 30.1.2 empties its computed-style cache on
+    // each focus move, every step re-runs the cascade for the whole panel: 0.97s in CI before
+    // that bump, 7.3s after, against the 5s default.
+  }, 20_000);
 
   it('steps through every button the Levels panel draws, because none of them is inert', () => {
     // Was "skips locked level buttons". Issue #555 stopped drawing them, so the walk has
@@ -3052,16 +3059,21 @@ describe('hud: the semantic action dispatcher (issue #494)', () => {
     // The product-visible half of issue #494's ruling: the slider consumes only the keys
     // that move it. ArrowDown is the negative control -- the same handler, a key the
     // slider DOES keep, so the roving focus must not take it.
+    //
+    // SETTINGS, where the slider lives (issue #226). This case opened Customize until the
+    // jsdom 30.1.2 bump and focused the slider on the hidden Settings pane, which only an
+    // older jsdom allowed; `focus()` now refuses an element that is not rendered, as
+    // browsers do, and the precondition below is what caught it.
     const { hud: h, root } = mount();
     h.setState('main-menu');
-    click(q(root, '.hud-customize-open'));
+    click(q(root, '.hud-settings-open'));
     const slider = q(root, '.hud-settings-volume') as HTMLInputElement;
     slider.focus();
-    expect(document.activeElement).toBe(slider);
+    expect(document.activeElement, 'precondition: focus did not land on the slider').toBe(slider);
     press('ArrowDown');
     expect(document.activeElement, 'the roving focus took an arrow the slider consumes').toBe(slider);
     press('Escape');
-    expect(q(root, '.hud-customize').classList.contains('ui-surface--leaving'), 'Escape at a slider did not pop the layer').toBe(true);
+    expect(q(root, '.hud-settings').classList.contains('ui-surface--leaving'), 'Escape at a slider did not pop the layer').toBe(true);
   });
 
   it('focus survives a Controllers re-render: the same candidate when it still exists, the same row when it does not', () => {
@@ -3229,7 +3241,9 @@ describe('hud: spatial focus follows the drawn layout (issue #495)', () => {
     expect(visited.size, 'the walk did not cover the pane').toBe(population.length);
     // 29 since issue #1035: the Map row gains vs-tri-01 and vs-quad-01 at two players.
     expect(population.length, 'the population this walk covers').toBe(29);
-  });
+    // A RAISED BUDGET, for the reason the title-screen walk above has one: 0.5s in CI before
+    // jsdom 30.1.2 and 6.8s after, because jsdom now recomputes every style per focus move.
+  }, 20_000);
 
   it('negative control: with jsdom\'s empty rects the same Right leaves the segment in document order', () => {
     const { hud: h, root } = mount();

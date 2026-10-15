@@ -17,7 +17,6 @@
     "hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md) onControllersOpen/onControllersClose fire once per ACTUAL transition, matching onCustomizeOpen/Close's own contract",
     "hud: the browser-history mirror (issue #318) opening a pane pushes one entry, Back retires it with one back(), and a browser Back closes the pane through its own chokepoint",
     "hud: the paint shop fires onCustomizeOpen/onCustomizeClose exactly on the Back-button round trip",
-    "hud: the semantic action dispatcher (issue #494) Escape is Back with a volume slider focused, while ArrowDown stays with the slider (the consume model)",
     "hud: the semantic action dispatcher (issue #494) back pops the layer and reports whether it did; pause is never the HUD's"
   ]
 }

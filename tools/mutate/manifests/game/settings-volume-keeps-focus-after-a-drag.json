@@ -1,0 +1,14 @@
+{
+  "id": "settings-volume-keeps-focus-after-a-drag",
+  "file": "src/game/hud.ts",
+  "find": "  settingsVolumeEl.addEventListener('mouseup', blurAfterDrag);",
+  "replace": "  void blurAfterDrag;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The volume slider keeps focus after a mouse drag, and a focused range input owns all four arrow keys, so the player's next arrow press moves the volume instead of the tank. Survived under jsdom 30.1.2 for the same reason as settings-mute-keeps-focus-after-a-pointer-click: the slider sat on the hidden Settings pane and was never focused.",
+  "killedBy": [
+    "createHud does not keep keyboard focus after a pointer interaction drops focus from the volume slider when the drag ends"
+  ]
+}
