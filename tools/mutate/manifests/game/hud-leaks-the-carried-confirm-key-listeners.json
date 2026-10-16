@@ -4,12 +4,13 @@
   "find": "      for (const type of ['keydown', 'keypress', 'keyup'] as const) {\n        window.removeEventListener(type, onCarriedConfirmKey, true);",
   "replace": "      for (const type of ['keydown'] as const) {\n        window.removeEventListener(type, onCarriedConfirmKey, true);",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.dispose.test.ts"
   ],
   "why": "The carried-Confirm guard listens at window capture for keydown, keypress and keyup (issue #919), and dispose must remove all three. A leaked keypress or keyup listener outlives its HUD and keeps cancelling Enter and Space against that HUD's last arrival.",
   "expect": "killed",
   "killedBy": [
-    "createHud roving-tabindex focus navigation (issue #115) removes every capture-phase window key listener it added, by reference, on dispose",
+    "createHud dispose removes every capture-phase window key listener it added, by reference, on dispose",
     "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter",
     "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space held through the end of a match cannot press Retry with its repeats or its release",
     "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space pressed in the moment a match is lost cannot press the outcome, and one after can",

@@ -4,15 +4,13 @@
   "find": "    paused: () => [actionBtn],",
   "replace": "    paused: () => [],",
   "tests": [
-    "src/game/hud.reachability.test.ts",
     "src/game/hud.navigation.test.ts",
     "src/game/route-host.test.ts"
   ],
-  "why": "Pause arrives on Resume (issue #919; the spec's \"Resume is the default and one Confirm returns to play\").",
+  "why": "Pause arrives on Resume (issue #919; the spec's \"Resume is the default and one Confirm returns to play\"). Not scoped to `hud.reachability.test.ts`, whose paused walk also fails: that file's developer-config walk alone takes 87s on a CI shard under jsdom 30.1.2, and with the three files together the mutated run passed the harness's 180s kill there. The two killers here assert the arrival directly.",
   "expect": "killed",
   "killedBy": [
     "createHud roving-tabindex focus navigation (issue #115) focuses Resume on entering pause, and Escape-to-resume and M-to-mute stay live there (issue #919)",
-    "every HUD surface hands the pad a panel, or says why it does not (issue #914) walks .hud-panel at paused, whose control set is its own",
     "createRouteHost: the gamepad menu poller (issue #494) drops a Confirm first seen on the poll after an arrival, and takes the next press (issue #919)"
   ]
 }
