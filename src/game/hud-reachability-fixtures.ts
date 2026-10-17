@@ -16,11 +16,15 @@ import { focusableControls } from './focusable';
  * for the baseline and once for the mutant, and a pair reached 293s.
  *
  * ONE RECORD, so the type still does the work: `LAYER_REACH` is `Record<HudLayerId, ...>`, and a
- * layer added without saying how to reach it does not compile, whichever file walks it.
- * `hud.reachability.test.ts` checks that a layer it skips is walked in the file named for it.
+ * layer added without saying how to reach it does not compile, whichever file walks it. And ONE
+ * LIST of the layers walked apart, `WALKED_IN_OWN_FILE`, which `hud.reachability.test.ts` skips
+ * and `hud.reachability.devconfig.test.ts` walks, so the split cannot leave a layer unwalked.
  *
  * A test-only module: nothing in production imports it.
  */
+
+/** The layers `hud.reachability.devconfig.test.ts` walks; `hud.reachability.test.ts` walks the rest. */
+export const WALKED_IN_OWN_FILE: readonly HudLayerId[] = ['developer-config'];
 
 let hud: Hud | null = null;
 

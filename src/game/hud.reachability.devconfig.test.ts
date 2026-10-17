@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe } from 'vitest';
 
-import { layerReachCase, unmount } from './hud-reachability-fixtures';
+import { layerReachCase, unmount, WALKED_IN_OWN_FILE } from './hud-reachability-fixtures';
 
 /**
  * The developer-config layer's walk (issue #914), split from `hud.reachability.test.ts` so the
  * mutation entries scoped to that file stop paying for it (`hud-reachability-fixtures.ts` says
- * why). That file checks this one still registers the walk below.
+ * why). Driven by `WALKED_IN_OWN_FILE`, the same list that file skips.
  */
 
 afterEach(unmount);
@@ -29,5 +29,5 @@ describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', (
   // mutation run of this file is killed whole, before Vitest writes any report, at
   // tools/mutate/run.mjs's SUBPROCESS_TIMEOUT_MS (180s). So this budget cannot usefully exceed
   // about 150s: past that, a slowing walk shows up as a harness timeout, not as a named failure.
-  layerReachCase('developer-config', 150_000);
+  for (const id of WALKED_IN_OWN_FILE) layerReachCase(id, 150_000);
 });

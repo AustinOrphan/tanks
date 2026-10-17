@@ -2,9 +2,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameplayOutcome, HudLayerId, HudSurface } from './hud';
-import { LAYER_REACH, layerReachCase, mount, q, unmount, walkWithPad } from './hud-reachability-fixtures';
+import {
+  LAYER_REACH,
+  layerReachCase,
+  mount,
+  q,
+  unmount,
+  WALKED_IN_OWN_FILE,
+  walkWithPad,
+} from './hud-reachability-fixtures';
 import { ZERO_STATS } from './stats';
-import devconfigWalkSource from './hud.reachability.devconfig.test.ts?raw';
 
 /**
  * Every pane and every surface, reachable by arrows and by a D-pad (issue #914).
@@ -24,8 +31,8 @@ import devconfigWalkSource from './hud.reachability.devconfig.test.ts?raw';
  * `activePanelContainer` in `hud.ts` reads the same `LAYERS` record for the same reason.
  *
  * ONE LAYER IS WALKED ELSEWHERE: `developer-config`, in `hud.reachability.devconfig.test.ts`,
- * for the mutation harness's sake (the fixtures module says why). The first describe block
- * below checks that a layer skipped here is walked in the file named for it.
+ * for the mutation harness's sake (the fixtures module says why). Both files read the one list
+ * of layers walked apart, `WALKED_IN_OWN_FILE`: this one skips them and that one walks them.
  *
  * WHERE EACH ARRIVAL LANDS (issue #919) is pinned in the same two records: every row names the
  * control its surface's arrival must focus, or `null` for a surface with no primary action,
@@ -37,14 +44,6 @@ import devconfigWalkSource from './hud.reachability.devconfig.test.ts?raw';
  */
 
 afterEach(unmount);
-
-/**
- * The layers another file walks, with that file's source. Each must register its layer's walk
- * on a line of its own; a commented-out call does not match.
- */
-const WALKED_ELSEWHERE: Partial<Record<HudLayerId, string>> = {
-  'developer-config': devconfigWalkSource,
-};
 
 /**
  * A surface with no active panel is a decided design, not an omission; it says which and why.
@@ -73,7 +72,7 @@ const outcome = (kind: 'mission-clear' | 'campaign-over'): GameplayOutcome => ({
 
 describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', () => {
   const ids = Object.keys(LAYER_REACH) as HudLayerId[];
-  const walkedHere = ids.filter((id) => !(id in WALKED_ELSEWHERE));
+  const walkedHere = ids.filter((id) => !WALKED_IN_OWN_FILE.includes(id));
 
   it('covers every layer id, with no entry for a layer that does not exist', () => {
     // The record is exhaustive by its type; this is the other direction -- an entry left behind
@@ -82,16 +81,13 @@ describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', (
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('walks every layer, here or in the file named for it', () => {
-    // The split is for the mutation harness, and it must not cost a layer its walk: every layer
-    // is skipped here only if it is named for another file, and that file really registers its
-    // walk. (A layer walked in both files costs time, not coverage, and this cannot see it.)
-    const elsewhere = Object.keys(WALKED_ELSEWHERE) as HudLayerId[];
-    expect([...walkedHere, ...elsewhere].sort(), 'a layer is walked in neither file').toEqual([...ids].sort());
-    for (const id of elsewhere) {
-      const call = new RegExp(`^\\s*layerReachCase\\('${id}',`, 'm');
-      expect(WALKED_ELSEWHERE[id], `the file named for ${id} does not register its walk`).toMatch(call);
-    }
+  it('walks every layer here except the ones hud.reachability.devconfig.test.ts walks', () => {
+    // The split is for the mutation harness, and it must not cost a layer its walk: a layer is
+    // skipped here only if it is on the list that file walks. Compared against every layer id
+    // rather than the filter above, so a filter that drops one more layer fails here.
+    expect([...walkedHere, ...WALKED_IN_OWN_FILE].sort(), 'a layer is walked in neither file').toEqual(
+      [...ids].sort(),
+    );
   });
 
   // 30s each, as before the split: the jsdom 30.1.2 slowdown that made developer-config's walk
