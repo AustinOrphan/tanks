@@ -6,7 +6,8 @@ import { layerReachCase, unmount, WALKED_IN_OWN_FILE } from './hud-reachability-
 /**
  * The developer-config layer's walk (issue #914), split from `hud.reachability.test.ts` so the
  * mutation entries scoped to that file stop paying for it (`hud-reachability-fixtures.ts` says
- * why). Driven by `WALKED_IN_OWN_FILE`, the same list that file skips.
+ * why). Driven by `WALKED_IN_OWN_FILE`, the same list that file skips. Nothing else walks
+ * developer-config: deleting or skipping this file drops that layer from the sweep.
  */
 
 afterEach(unmount);

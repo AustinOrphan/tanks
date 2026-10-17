@@ -84,7 +84,8 @@ describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', (
   it('walks every layer here except the ones hud.reachability.devconfig.test.ts walks', () => {
     // The split is for the mutation harness, and it must not cost a layer its walk: a layer is
     // skipped here only if it is on the list that file walks. Compared against every layer id
-    // rather than the filter above, so a filter that drops one more layer fails here.
+    // rather than the filter above, so a filter that drops one more layer fails here. It cannot
+    // see that file itself: deleting or skipping it drops its walk with nothing failing.
     expect([...walkedHere, ...WALKED_IN_OWN_FILE].sort(), 'a layer is walked in neither file').toEqual(
       [...ids].sort(),
     );

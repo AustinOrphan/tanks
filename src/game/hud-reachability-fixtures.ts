@@ -11,14 +11,16 @@ import { focusableControls } from './focusable';
  * WHY TWO FILES. A mutation entry runs its scoped test files whole, and the harness kills a run
  * at 180s (`tools/mutate/run.mjs`, `SUBPROCESS_TIMEOUT_MS`). The developer-config walk is 163
  * pad steps, and since jsdom 30.1.2 empties its computed-style cache on every focus move, each
- * step re-runs the cascade: about 87s of the old file's 98s on a CI shard. 14 entries were
- * scoped to that file and none was killed by that walk, yet every one paid for it twice, once
- * for the baseline and once for the mutant, and a pair reached 293s.
+ * step re-runs the cascade: about 87s of the old file's 98s on a CI shard (#1080's run). 14
+ * entries were scoped to that file and none was killed by that walk, yet every one paid for it
+ * twice, once for the baseline and once for the mutant, and a pair reached 293s (#1090's run).
  *
  * ONE RECORD, so the type still does the work: `LAYER_REACH` is `Record<HudLayerId, ...>`, and a
  * layer added without saying how to reach it does not compile, whichever file walks it. And ONE
  * LIST of the layers walked apart, `WALKED_IN_OWN_FILE`, which `hud.reachability.test.ts` skips
- * and `hud.reachability.devconfig.test.ts` walks, so the split cannot leave a layer unwalked.
+ * and `hud.reachability.devconfig.test.ts` walks, so the two files cannot disagree about which
+ * layers that is. What no check covers: deleting or skipping the devconfig file drops its walk,
+ * as skipping the walk in one file always could.
  *
  * A test-only module: nothing in production imports it.
  */
