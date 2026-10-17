@@ -6,9 +6,7 @@
   "tests": [
     "src/game/hud.navigation.test.ts"
   ],
-  "expect": "killed",
-  "why": "Back focuses an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up, or any title-only opener after a detach reshaped the menu. A hidden focused element strands a keyboard player with no visible position, which is the case the destination's own arrival covers -- the container until issue #919, its primary action since. hud.navigation.test.ts: \"Back falls back to the menu's own arrival when the opener was hidden while the pane was up\" (retitled by #919 from \"...falls back to the panel container...\"). Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
-  "killedBy": [
-    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Back falls back to the menu's own arrival when the opener was hidden while the pane was up"
-  ]
+  "expect": "survives",
+  "why": "EQUIVALENT since jsdom 30.1.2, and measured: it was `killed` under 30.1.1 and SURVIVED the bump (0 of 152). Without the guard, Back calls `focus()` on an opener the surface no longer shows -- the Levels button after `setLevelSelect(1, 1)` hid it while the pane was up. `isHiddenWithin` tests only `display: none` up to the HUD root, and an element under `display: none` is not focusable: browsers always refused it, and jsdom does from 30.1.2. So the refused `focus()` leaves focus where `setState` already put it, on the destination's own arrival (its primary action since issue #919), which is what \"Back falls back to the menu's own arrival when the opener was hidden while the pane was up\" asserts. The guard stays: it states the rule in the code rather than leaving it to the platform, and widening `isHiddenWithin` to a hiding the platform still focuses (zero opacity, off-screen) is what would flip this back to killed.",
+  "equivalent": true
 }
