@@ -1,0 +1,14 @@
+{
+  "id": "reachability-skips-a-layer-walked-nowhere",
+  "file": "src/game/hud.reachability.test.ts",
+  "find": "  const walkedHere = ids.filter((id) => !WALKED_IN_OWN_FILE.includes(id));",
+  "replace": "  const walkedHere = ids.filter((id) => !WALKED_IN_OWN_FILE.includes(id) && id !== 'settings');",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The layer sweep skips more than `WALKED_IN_OWN_FILE`, the list `hud.reachability.devconfig.test.ts` walks, so `settings` is walked in neither file. Its walk test simply stops existing, which fails nothing by itself; the split check compares the layers walked here plus that list against every layer id.",
+  "killedBy": [
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) walks every layer here except the ones hud.reachability.devconfig.test.ts walks"
+  ]
+}
