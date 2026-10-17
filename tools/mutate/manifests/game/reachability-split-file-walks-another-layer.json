@@ -1,0 +1,14 @@
+{
+  "id": "reachability-split-file-walks-another-layer",
+  "file": "src/game/hud.reachability.devconfig.test.ts",
+  "find": "  layerReachCase('developer-config', 150_000);",
+  "replace": "  layerReachCase('settings', 150_000);",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The developer-config walk was split into its own file for the mutation harness, and `hud.reachability.test.ts` skips that layer on the strength of the other file's name. If that file walks some other layer, developer-config is walked nowhere and every suite stays green. The split guard reads the file's source and requires a call naming the layer it was split for.",
+  "killedBy": [
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) walks every layer, here or in the file named for it"
+  ]
+}
