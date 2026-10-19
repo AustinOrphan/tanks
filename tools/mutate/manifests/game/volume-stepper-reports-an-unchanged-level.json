@@ -2,7 +2,7 @@
   "id": "volume-stepper-reports-an-unchanged-level",
   "file": "src/game/hud.ts",
   "find": "    if (Object.is(next, current)) return;\n",
-  "replace": "",
+  "replace": "    // a press that changed nothing reports anyway\n",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],

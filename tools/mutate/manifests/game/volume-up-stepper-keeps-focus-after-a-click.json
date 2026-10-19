@@ -2,7 +2,7 @@
   "id": "volume-up-stepper-keeps-focus-after-a-click",
   "file": "src/game/hud.ts",
   "find": "  settingsVolumeUpBtn.addEventListener('click', blurIfPointer);\n",
-  "replace": "",
+  "replace": "  // the + stepper's pointer blur is not registered\n",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],

@@ -2,7 +2,7 @@
   "id": "volume-stepper-never-reports",
   "file": "src/game/hud.ts",
   "find": "    for (const cb of volumeCbs) cb(next);\n",
-  "replace": "",
+  "replace": "    // the new level is reported to nobody\n",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],

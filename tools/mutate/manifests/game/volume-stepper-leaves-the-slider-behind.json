@@ -2,7 +2,7 @@
   "id": "volume-stepper-leaves-the-slider-behind",
   "file": "src/game/hud.ts",
   "find": "    settingsVolumeEl.value = String(next);\n",
-  "replace": "",
+  "replace": "    // the slider is left at the old level\n",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
