@@ -144,6 +144,30 @@ general form: a test combining several calls with one assertion at the end is bl
 any defect a LATER call's own no-op path happens to undo: `run.test.ts`'s
 `describe('createRunStore: no run yet', ...)` block carries the repaired version.
 
+## Accessibility exceptions
+
+Issue #327's first criterion accepts "documented manual exceptions" to its keyboard checks.
+They are one register: `accessibilityException` in `src/game/accessibility-exceptions.ts`
+(#915), which returns a reason per excepted subject or null, in `hitSweepExclusion`'s shape.
+`src/game/accessibility-exceptions.test.ts` folds every subject into a literal reason map: the
+15 layers, the 6 surfaces, every control outside every pane, and the crossfade. It also holds
+each entry to the mounted HUD, so an exception that stops being true fails.
+
+- **An exception needs a ruling.** The volume slider's missing pad route was put forward as one
+  and ruled a defect (#915, 2026-10-13), then fixed by #918's steppers. A gap that can be fixed
+  is a defect, not an exception.
+- **An entry is three things:** its clause; a truth assertion that fails when the HUD stops
+  needing it; and two mutation entries, one deleting the clause and one making the truth false
+  in production. The truth assertion lives in the register's test, or in a reachability case
+  that the register's test ties to the entry.
+- **An entry that stops being true is deleted, not reworded.** The truth assertions' messages
+  say so. A reason rewritten to fit new behaviour turns the register back into the scattered
+  comments it replaced.
+- **The reachability records mark, the register explains.** `LAYER_REACH`'s `padSuppressed`
+  and `SURFACE_REACH`'s `noPanel` (`src/game/hud-reachability-fixtures.ts`) say which members
+  are excepted. The reasons live only in the register, and one test holds the marks and the
+  register to each other in both directions.
+
 ## CI-pending execution
 
 Local candidate verification and authoritative CI/merge verification are separate gates.

@@ -2,7 +2,7 @@
 status: active
 date: 2026-09-23
 scope: The manual accessibility review sitting for PP1 - which surfaces to visit per area, how to reach each, what counts as a pass, and where verdicts are recorded
-implementation-issues: [935]
+implementation-issues: [915, 935]
 supersedes: []
 superseded-by: []
 ---
@@ -37,6 +37,7 @@ who doubts a row can run it rather than re-inspect by eye.
 | A measured element's `role` and its `aria-label`, `-labelledby`, `-describedby`, `-live`, `-modal`, `-expanded`, `-pressed` and `-current` attributes match a committed baseline, exactly (#937) | same | the elements each state measures, not the whole screen |
 | A captured screen raises no uncaught page error | same — page errors fail on their own, outside the measurement hash | same |
 | The board paints, is not a flat fill, and fills its viewport | `tools/visual/verify.mjs` | 4 viewports |
+| Each of the five accepted keyboard and pad exceptions in part 5 is still true (#915) | `src/game/accessibility-exceptions.test.ts` | the HUD mounted in jsdom |
 
 The sweep's four viewports are 320x568, 390x844, 1280x800 and 1280x800 at 200% zoom. On
 `main` it covers 32 surfaces; #956 takes it to 34 by adding the two branded startup-failure
@@ -179,7 +180,10 @@ a pointer; a disconnect is announced with a way forward.
 
 **Expected, not a defect:** the session is **silent** until the first pointer or key, because
 audio unlocks on that gesture and the engine self-heals afterwards (issue #494). Do not file
-it.
+it. The same goes for the two pad exceptions the register in part 5 accepts: inside the
+controller self-test every pad press but Back goes to the readout rather than the menu, and
+the splash and a live match offer the pad no menu to walk (a direction there is the page's,
+not the HUD's).
 
 ### 4.6 Couch-distance TV
 
@@ -209,6 +213,18 @@ One row per surface visited, per area. Copy this table into the sitting's issue 
 `n/a` needs a reason. A **documented manual exception** is a fail the project accepts on
 purpose: record it as `fail` with the reason and a link to the issue or ruling that accepts
 it, never as a pass. A verdict with no note is only meaningful when it is a clean pass.
+
+The accepted keyboard and pad exceptions are a register, `accessibilityException` in
+`src/game/accessibility-exceptions.ts` (#915), whose test fails when one stops being true. It
+holds five: the controller self-test's pad suppression, Launch and a live match having no menu
+for the pad, the DEV badge belonging to no menu's walk (Tab and a pointer reach it; a pad
+opens Developer Tools from the Main Menu or Pause instead), and a crossfade's outgoing screen
+staying in the Tab order until its fade settles. A keyboard reviewer who sees Tab land on the
+DEV badge or on a screen that is fading out has met the last two. Record a fail one of them
+explains with the entry's reason and a link to #915. Not in it, by ruling: the volume slider,
+whose missing pad route was a defect that #918's − and + buttons fixed. Not in it either: the
+three read-only developer text fields, which sit outside the pad walk because a walk button
+fills each and their text is for copying (#918).
 
 A sitting is complete when every area has at least one row and every `fail` has either a
 filed issue or a linked exception.
