@@ -153,9 +153,10 @@ They are one register: `accessibilityException` in `src/game/accessibility-excep
 15 layers, the 6 surfaces, every control outside every pane, and the crossfade. It also holds
 each entry to the mounted HUD, so an exception that stops being true fails.
 
-- **An exception needs a ruling.** The volume slider's missing pad route was put forward as one
-  and ruled a defect (#915, 2026-10-13), then fixed by #918's steppers. A gap that can be fixed
-  is a defect, not an exception.
+- **An exception needs an owner ruling.** Issue #915's ruling (2026-10-13) is the precedent in
+  both directions: the volume slider's missing pad route was put forward as one and ruled a
+  defect, which #918's steppers fixed; the crossfade's briefly tabbable leaving surface was
+  ruled an exception because it is transient.
 - **An entry is three things:** its clause; a truth assertion that fails when the HUD stops
   needing it; and two mutation entries, one deleting the clause and one making the truth false
   in production. The truth assertion lives in the register's test, or in a reachability case
@@ -165,8 +166,9 @@ each entry to the mounted HUD, so an exception that stops being true fails.
   comments it replaced.
 - **The reachability records mark, the register explains.** `LAYER_REACH`'s `padSuppressed`
   and `SURFACE_REACH`'s `noPanel` (`src/game/hud-reachability-fixtures.ts`) say which members
-  are excepted. The reasons live only in the register, and one test holds the marks and the
-  register to each other in both directions.
+  are excepted. Each reason is written once, in the register, and its test pins the text as a
+  literal, as `hit-sweep.test.ts` does; one case holds the marks and the register to each other
+  in both directions.
 
 ## CI-pending execution
 
