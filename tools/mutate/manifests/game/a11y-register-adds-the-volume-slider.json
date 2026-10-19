@@ -1,0 +1,14 @@
+{
+  "id": "a11y-register-adds-the-volume-slider",
+  "file": "src/game/accessibility-exceptions.ts",
+  "find": "  return null;\n}\n",
+  "replace": "  if (subject.kind === 'control' && subject.selector === '.hud-settings-volume') {\n    return 'the volume slider: Tab-reachable but outside the spatial walk';\n  }\n  return null;\n}\n",
+  "expect": "killed",
+  "why": "Issue #915's ruling, 2026-10-13: the volume slider's missing spatial arrival is a criterion-2 defect, fixed by #918's − and + steppers, so it is NOT an exception. This registers it anyway, as the issue's original list did. Killed by the slider case, the register's negative control. The fold cannot see it: the slider is inside the Settings pane, so it is not in the out-of-pane population the fold asks about.",
+  "tests": [
+    "src/game/accessibility-exceptions.test.ts"
+  ],
+  "killedBy": [
+    "the accessibility exception register (issue #915) does not register the volume slider: the owner ruled its missing pad arrival a defect (2026-10-13)"
+  ]
+}

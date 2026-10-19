@@ -1,0 +1,16 @@
+{
+  "id": "a11y-records-stop-marking-the-selftest",
+  "file": "src/game/hud-reachability-fixtures.ts",
+  "find": "    padSuppressed: true,\n",
+  "replace": "    // the pad-suppression mark removed\n",
+  "expect": "killed",
+  "why": "Issue #915. `LAYER_REACH` stops marking the controller self-test `padSuppressed`: the records' side of their agreement with the register, which still excepts a layer the records now say to walk. Killed by the agreement case, and by the self-test's own reachability case, which then walks the pane and meets the suppression -- the mark is what routes that layer to its suppression assertions.",
+  "tests": [
+    "src/game/accessibility-exceptions.test.ts",
+    "src/game/hud.reachability.test.ts"
+  ],
+  "killedBy": [
+    "the accessibility exception register (issue #915) excepts exactly the layers and surfaces the reachability records mark decided, both ways",
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside controller-selftest"
+  ]
+}

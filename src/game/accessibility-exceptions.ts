@@ -68,7 +68,10 @@ export function accessibilityException(subject: A11ySubject): string | null {
   // class off until the fade settles, so it can be seen fading, and `.ui-surface--leaving` takes
   // it out of hit testing only: it is not inert, so Tab can still land on it. The arrows and the
   // pad already walk the arriving one (`activePanelContainer` skips a leaving surface). Ruled an
-  // exception rather than a defect because it lasts one fade.
+  // exception rather than a defect because it lasts one fade. Whoever ends it should know that
+  // an `inert` set in `transitionTo` does not survive: `applyModalIsolation` runs after the
+  // transition has begun, on every layer change and surface change, and rewrites `inert` on
+  // every child of the HUD root.
   if (subject.kind === 'transient' && subject.id === 'crossfade-leaving-surface') {
     return "a crossfade's leaving surface stays tabbable until its fade settles; the arrows and the pad already walk the arriving one";
   }

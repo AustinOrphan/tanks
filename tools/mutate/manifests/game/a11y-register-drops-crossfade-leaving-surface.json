@@ -1,0 +1,14 @@
+{
+  "id": "a11y-register-drops-crossfade-leaving-surface",
+  "file": "src/game/accessibility-exceptions.ts",
+  "find": "  if (subject.kind === 'transient' && subject.id === 'crossfade-leaving-surface') {\n    return \"a crossfade's leaving surface stays tabbable until its fade settles; the arrows and the pad already walk the arriving one\";\n  }\n",
+  "replace": "  // this exception removed\n",
+  "expect": "killed",
+  "why": "Issue #915. The register stops excepting a crossfade's leaving surface, the transient exception the owner's ruling of 2026-10-13 added. Killed by the fold. The crossfade case still passes: it is the entry's truth, not its reason.",
+  "tests": [
+    "src/game/accessibility-exceptions.test.ts"
+  ],
+  "killedBy": [
+    "the accessibility exception register (issue #915) registers exactly five exceptions, each for its reason"
+  ]
+}

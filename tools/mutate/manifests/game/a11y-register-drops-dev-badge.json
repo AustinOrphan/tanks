@@ -1,0 +1,14 @@
+{
+  "id": "a11y-register-drops-dev-badge",
+  "file": "src/game/accessibility-exceptions.ts",
+  "find": "  if (subject.kind === 'control' && subject.selector === '.hud-devbadge') {\n    return 'the DEV badge floats over every surface and belongs to no panel; a pad opens Developer Tools from the Main Menu or Pause';\n  }\n",
+  "replace": "  // this exception removed\n",
+  "expect": "killed",
+  "why": "Issue #915. The register stops excepting the DEV badge, so the one control outside every pane has no reason on record. Killed by the fold. The badge case still passes, because the badge is still where it was: that case is the entry's truth, not its reason.",
+  "tests": [
+    "src/game/accessibility-exceptions.test.ts"
+  ],
+  "killedBy": [
+    "the accessibility exception register (issue #915) registers exactly five exceptions, each for its reason"
+  ]
+}

@@ -168,11 +168,15 @@ describe('the accessibility exception register (issue #915)', () => {
       records.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       // No timer has run since the press, so the fade is in progress. Each of these failing
-      // means the exception is no longer true: delete the crossfade clause.
+      // means the exception is no longer true: delete the crossfade clause. Negative controls:
+      // `a11y-leaving-surface-goes-inert` fails the inert line and
+      // `a11y-leaving-surface-hides-from-view` the visibility line, and no other HUD test reads
+      // a leaving surface's visibility. The display line fails when the leaving surface is
+      // hidden as its fade begins (`classList.add(LEAVING, surface.hidden)` in `transitionTo`),
+      // measured with a scratch mutant rather than an entry, since ten existing transition
+      // cases already fail on that one.
       const gone = "exception no longer true: delete the crossfade clause from accessibility-exceptions.ts";
       expect(panel.classList.contains('ui-surface--leaving'), `no crossfade any more; ${gone}`).toBe(true);
-      // Negative control: `a11y-leaving-surface-goes-inert`, which makes the leaving surface
-      // inert for the fade.
       expect(panel.closest('[inert]'), gone).toBeNull();
       expect(getComputedStyle(panel).display, gone).not.toBe('none');
       expect(getComputedStyle(panel).visibility, gone).not.toBe('hidden');
@@ -186,7 +190,8 @@ describe('the accessibility exception register (issue #915)', () => {
       );
 
       // And it is transient: once the fade settles the menu is out of the layout, and so out
-      // of the Tab order.
+      // of the Tab order. Negative control, measured with a scratch mutant: a settle that only
+      // drops `--leaving` and never adds `--hidden` (84 existing HUD cases fail on it too).
       vi.advanceTimersByTime(1000);
       expect(getComputedStyle(panel).display, 'the leaving surface outlived its fade').toBe('none');
     } finally {

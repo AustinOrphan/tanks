@@ -1,0 +1,15 @@
+{
+  "id": "a11y-register-drops-playing-no-panel",
+  "file": "src/game/accessibility-exceptions.ts",
+  "find": "  if (subject.kind === 'surface' && subject.id === 'playing') {\n    return 'a live match: the arrows and the stick drive the tank, not a menu';\n  }\n",
+  "replace": "  // this exception removed\n",
+  "expect": "killed",
+  "why": "Issue #915. The register stops excepting a live match, so `SURFACE_REACH`'s `noPanel` mark on `playing` has no reason behind it, and the `leaves playing ... on purpose --` title in `hud.reachability.test.ts` would end in 'null' with that file still green. Killed by the fold and by the agreement case.",
+  "tests": [
+    "src/game/accessibility-exceptions.test.ts"
+  ],
+  "killedBy": [
+    "the accessibility exception register (issue #915) registers exactly five exceptions, each for its reason",
+    "the accessibility exception register (issue #915) excepts exactly the layers and surfaces the reachability records mark decided, both ways"
+  ]
+}

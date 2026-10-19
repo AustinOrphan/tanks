@@ -1,0 +1,15 @@
+{
+  "id": "a11y-act-claims-a-pad-with-no-panel",
+  "file": "src/game/hud.ts",
+  "find": "    if (!container) return false;",
+  "replace": "    if (!container) return true;",
+  "expect": "killed",
+  "why": "Issue #915. `act` claims a pad action when no panel is active, so the register's two `no active panel` entries -- Launch and a live match -- stand on a refusal that no longer happens. One mutation for both, because the refusal is the one line both share: with no panel displayed, `activePanelContainer` returns null at either surface. Killed by the two `leaves ... on purpose` cases, which assert the pad Down is refused rather than silently consumed.",
+  "tests": [
+    "src/game/hud.reachability.test.ts"
+  ],
+  "killedBy": [
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) leaves launch without an active panel on purpose -- the splash: the panel, topbar and touch row are all hidden behind it",
+    "every HUD surface hands the pad a panel, or says why it does not (issue #914) leaves playing without an active panel on purpose -- a live match: the arrows and the stick drive the tank, not a menu"
+  ]
+}
