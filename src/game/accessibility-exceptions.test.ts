@@ -48,7 +48,11 @@ const EXPECTED: Record<string, string[]> = {
   ],
 };
 
-/** Every element shape a browser can put in the Tab order; a negative `tabindex` takes one out. */
+/**
+ * The element shapes a browser puts in the Tab order on its own, plus anything with a `tabindex`;
+ * a negative one takes an element out. Editable regions, media controls and frames are not
+ * listed because nothing under `src/game` builds one.
+ */
 const TABBABLE = 'button, a[href], input:not([type=hidden]), select, textarea, summary, [tabindex]';
 
 /** The containers a pad walks: the menu panel, whose four states share it, then every layer's. */
@@ -80,8 +84,12 @@ function outsidePanes(root: HTMLElement): { controls: string[]; driving: string[
 /** The register's whole population, each subject labelled the way `EXPECTED` names it. */
 function subjects(root: HTMLElement): (readonly [string, A11ySubject])[] {
   return [
-    ...(Object.keys(LAYER_REACH) as HudLayerId[]).map((id) => [`layer ${id}`, { kind: 'layer', id }] as const),
-    ...(Object.keys(SURFACE_REACH) as HudSurface[]).map((id) => [`surface ${id}`, { kind: 'surface', id }] as const),
+    ...(Object.keys(LAYER_REACH) as HudLayerId[]).map(
+      (id) => [`layer ${id}`, { kind: 'layer', id }] as const,
+    ),
+    ...(Object.keys(SURFACE_REACH) as HudSurface[]).map(
+      (id) => [`surface ${id}`, { kind: 'surface', id }] as const,
+    ),
     ...outsidePanes(root).controls.map(
       (selector) => [`control ${selector}`, { kind: 'control', selector }] as const,
     ),
@@ -93,8 +101,9 @@ describe('the accessibility exception register (issue #915)', () => {
   it('registers exactly five exceptions, each for its reason', () => {
     // Negative controls, one per clause: deleting any of the five in `accessibilityException`
     // drops that subject from the fold and this map no longer matches
-    // (`a11y-register-drops-*`, one entry each). A subject the register answers that is not in
-    // the population cannot show up here, which is what the two truth cases below are for.
+    // (`a11y-register-drops-*`, one entry each). What the fold cannot see is a subject outside
+    // the population that the register answers; the slider is the one such subject pinned, by
+    // its own case below, because it is the one the issue proposed.
     const { root } = mount();
     const actual: Record<string, string[]> = {};
     for (const [label, subject] of subjects(root)) {

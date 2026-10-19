@@ -28,8 +28,9 @@ import { ZERO_STATS } from './stats';
  *
  * The two records are `Record<HudLayerId, ...>` (`LAYER_REACH`) and `Record<HudSurface, ...>`
  * (`SURFACE_REACH`), both in `hud-reachability-fixtures.ts`, so adding a member to either union
- * without saying how to reach it does not compile. That is the whole mechanism: the omission becomes a build error at
- * the moment it is introduced, rather than a silence nobody is looking for.
+ * without saying how to reach it does not compile. That is the whole mechanism: the omission
+ * becomes a build error at the moment it is introduced, rather than a silence nobody is looking
+ * for.
  * `activePanelContainer` in `hud.ts` reads the same `LAYERS` record for the same reason.
  *
  * ONE LAYER IS WALKED ELSEWHERE: `developer-config`, in `hud.reachability.devconfig.test.ts`,
