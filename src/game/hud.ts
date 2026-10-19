@@ -735,7 +735,8 @@ export interface Hud {
    */
   setModality(modality: Modality): void;
   /**
-   * Reflect the effective master volume in BOTH sliders.
+   * Reflect the effective master volume in the Settings slider, which is also the level the
+   * − and + steppers (issue #918) step from.
    *
    * The markup carries NO `value` (issue #324), so the slider has nothing to say until
    * this is called. It used to render at `DEFAULT_VOLUME`, which was the truth while

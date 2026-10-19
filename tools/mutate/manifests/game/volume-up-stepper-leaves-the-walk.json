@@ -1,0 +1,14 @@
+{
+  "id": "volume-up-stepper-leaves-the-walk",
+  "file": "src/game/hud.ts",
+  "find": "hud-settings-volume-up\" type=\"button\" aria-label=\"Raise volume\">",
+  "replace": "hud-settings-volume-up\" type=\"button\" tabindex=\"-1\" aria-label=\"Raise volume\">",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The + stepper takes a negative tabindex, which `focusableControls` excludes, so a pad can lower the volume but never raise it: the gap issue #918 closed, back for one direction.",
+  "killedBy": [
+    "the volume steppers: a controller reaches the level (issue #918) a pad walks onto both steppers in Settings and its Confirm raises the level"
+  ]
+}

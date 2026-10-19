@@ -1,0 +1,14 @@
+{
+  "id": "developer-output-joins-the-walk",
+  "file": "src/game/hud.ts",
+  "find": "<textarea class=\"hud-diag-out hud-diag-out--hidden\" readonly",
+  "replace": "<textarea class=\"hud-diag-out hud-diag-out--hidden\" tabindex=\"0\" readonly",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The session-diagnostics output enters the roving walk, so a pad stops on a field it cannot copy from. Issue #918 checked the three read-only developer outputs and kept them out: each is filled by a button that is in the walk.",
+  "killedBy": [
+    "the volume steppers: a controller reaches the level (issue #918) keeps the three read-only developer outputs out of the walk, and a pad Down out of one re-enters it"
+  ]
+}

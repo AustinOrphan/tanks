@@ -1,0 +1,14 @@
+{
+  "id": "volume-stepper-reports-an-unchanged-level",
+  "file": "src/game/hud.ts",
+  "find": "    if (Object.is(next, current)) return;\n",
+  "replace": "",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A press at either end reports the level it already had, a write to the stored setting for a press that changed nothing (issue #918).",
+  "killedBy": [
+    "the volume steppers: a controller reaches the level (issue #918) a press at either end reports nothing, since the level did not change"
+  ]
+}

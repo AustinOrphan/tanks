@@ -495,7 +495,9 @@ the dedicated composition, offer a remembered suggestion rather than a blocking 
 - **Keyboard/mouse:** arrows/WASD where appropriate for spatial navigation, Enter/Space Confirm,
   Escape Back/Cancel/Pause by context, pointer hover/click, and input-relevant shortcut prompts.
 - **Controller:** D-pad/stick spatial navigation, A/Cross Confirm, B/Circle Back, Start/Menu Pause,
-  press-to-join or explicit assignment where applicable, actionable disconnect handling.
+  press-to-join or explicit assignment where applicable, actionable disconnect handling. A control
+  a pad cannot operate in place (a range slider consumes the arrows) keeps its pointer form and
+  gains stepper buttons in the walk beside it, as Settings' volume does with − and + (issue #918).
 - **Touch:** direct controls with at least 44 px targets, no hover dependency, reachable Pause,
   safe-area and gesture-zone spacing, and stable arena/control separation.
 - **Hybrid:** capabilities determine available settings; last-active input may change transient
