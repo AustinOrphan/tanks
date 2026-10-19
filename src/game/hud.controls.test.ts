@@ -188,24 +188,28 @@ describe('the volume steppers: a controller reaches the level (issue #918)', () 
     }
   });
 
-  it('drops focus from a stepper clicked with the mouse, as every HUD button does', () => {
-    // A focused control claims the arrows and Space; a mouse player who clicks + must not be
-    // left with them claimed. `blurIfPointer`, the rule every other button here follows.
-    // Negative control: the pad case above, where the same press is a keyboard activation.
+  it('drops focus from either stepper clicked with the mouse, as every HUD button does', () => {
+    // A focused control claims the arrows and Space; a mouse player who clicks a stepper must
+    // not be left with them claimed. `blurIfPointer`, the rule every other button here
+    // follows. Both steppers spelled out, since each registers its own listener. Negative
+    // control: the pad case above, where the same press is a keyboard activation.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     (root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
-    up(root).focus();
-    expect(document.activeElement, 'precondition: focus did not land on +').toBe(up(root));
-    up(root).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
-    expect(document.activeElement).not.toBe(up(root));
+    for (const [name, btn] of [['−', down(root)], ['+', up(root)]] as const) {
+      btn.focus();
+      expect(document.activeElement, `precondition: focus did not land on ${name}`).toBe(btn);
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      expect(document.activeElement, `the ${name} stepper kept focus after a mouse click`).not.toBe(btn);
+    }
   });
 
   it('keeps the three read-only developer outputs out of the walk, and a pad Down out of one re-enters it', () => {
     // #918's other criterion. Each <textarea> holds text to copy, which a pad cannot do, and
-    // is filled by a button that is in the walk; filling one focuses it, so the next pad Down
-    // has to land back on a control rather than nowhere. Shown here by lifting the hidden
-    // class, which is all the code that fills them does to their visibility.
+    // is filled by a button that is in the walk; a Copy press focuses its field, so the next
+    // pad Down has to land back on a control rather than nowhere -- shown for the diagnostics
+    // output (the self-test pane takes the pad off the menu, so only Back answers there).
+    // Revealed by lifting the hidden class, which is all the filling code does to visibility.
     vi.useFakeTimers();
     try {
       const root = document.createElement('div');

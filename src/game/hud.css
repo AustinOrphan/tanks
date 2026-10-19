@@ -3607,8 +3607,9 @@
 /* A lone − or + at the small button's text size read as a speck beside "Mute (M)", most of all
  * at the couch distance these exist for, so the glyph takes the level tiles' size and weight
  * (`.hud-level-btn`), which scale with the UI scale. Type only: the padding and corners stay
- * `--sm`'s, which one guard holds every small control to, and one glyph inside that padding
- * still fits the 44 px floor `.ui-btn` sets, so the box stays square. */
+ * `--sm`'s, which one guard holds every small control to. At the default UI scale one glyph
+ * inside that padding fits the 44 px floor `.ui-btn` sets, so the box is square; a larger
+ * scale widens it a little around the bigger glyph. */
 .hud-settings-volume-step {
   font-size: var(--hud-type-5);
   font-weight: var(--hud-weight-strong);

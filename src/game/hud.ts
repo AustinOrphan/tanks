@@ -1856,11 +1856,10 @@ export const VOLUME_STEP_PERCENT = 10;
  * `VOLUME_STEP_PERCENT` in `direction`, clamped to [0, 1]. A level between two multiples --
  * where a slider drag left it -- moves to the nearer one in that direction rather than by a
  * full step, so the steppers walk one grid however the level was set. Worked in whole
- * percent, so 0.7 stepped up is 0.8, where 0.7 + 0.1 is 0.7999999999999999. A non-finite
- * level is returned unchanged, which the caller reads as "nothing to report".
+ * percent, so 0.7 stepped up is 0.8, where 0.7 + 0.1 is 0.7999999999999999. A NaN level
+ * comes back NaN, which the caller reads as "nothing to report".
  */
 export function steppedVolume(current: number, direction: 1 | -1): number {
-  if (!Number.isFinite(current)) return current;
   const percent = Math.round(current * 100);
   const target = direction > 0
     ? Math.floor(percent / VOLUME_STEP_PERCENT) * VOLUME_STEP_PERCENT + VOLUME_STEP_PERCENT
@@ -4643,9 +4642,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * (issue #918) are buttons in the walk, so a pad reaches the level without it. The three
    * read-only `<textarea>` outputs in the developer panes are outside the walk too (checked
    * in #918's pass): each holds text to copy, which a pad cannot do, and is filled by a
-   * button that IS in the walk. Filling one focuses and selects it so a keyboard can copy;
-   * a pad's next Down then re-enters the walk at the pane's first control (Up at its last),
-   * because `spatialNext` reads focus outside the list as no position.
+   * button that IS in the walk. A Copy press focuses and selects its field so a keyboard can
+   * copy; in Developer Tools and Configuration a pad's next Down then re-enters the walk at
+   * the pane's first control (Up at its last), because `spatialNext` reads focus outside the
+   * list as no position. The self-test takes the pad off the menu altogether (`act`), so
+   * there only Back answers it.
    *
    * EVERY ARRIVAL LANDS ON THE SURFACE'S PRIMARY ACTION (issue #919, owner ruling
    * 2026-10-13), so a screen takes one press: Continue or Start Campaign on the Main Menu,
@@ -4927,7 +4928,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
   // The steppers report through the same subscribers as the slider, and move the slider
   // first so it shows the new level before the page's push comes back. A press at either
-  // end reports nothing: the level did not change.
+  // end reports nothing: the level did not change. Mute is left alone, as the slider leaves
+  // it: + while muted stores a louder level and stays silent until Mute is turned off.
   const stepSettingsVolume = (direction: 1 | -1): void => {
     const current = Number(settingsVolumeEl.value);
     const next = steppedVolume(current, direction);

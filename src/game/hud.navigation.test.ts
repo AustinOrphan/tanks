@@ -1234,9 +1234,9 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // swatches, SKINS.length 7 skin buttons, ACCENTS.length 5 accent swatches, Back) + 3
     // (Stats: Reset stats, Reset progress, Back) + 1 (Achievements: Back -- the list
     // itself is plain divs, not focusable) + 4 (Levels: the 3 unlocked buttons this
-    // test's own `setLevelSelect(3, 5)` leaves reachable, plus Back). The two volume
-    // sliders and the topbar's own Mute are excluded by design -- see the roving-focus
-    // doc comment in hud.ts.
+    // test's own `setLevelSelect(3, 5)` leaves reachable, plus Back). The volume slider is
+    // excluded by design -- see the roving-focus doc comment in hud.ts -- and its − and +
+    // steppers (issue #918) are counted, at 91 below.
     // 42 since the haptics toggle (issue #112's deferred HUD control) landed: 41 + the
     // toggle beside the fire-mode toggle in the title panel's settings row.
     // 44 since the controller assignment panel landed (docs/superpowers/plans/
