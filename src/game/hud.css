@@ -3595,6 +3595,16 @@
   height: var(--hud-control-min);
 }
 
+/* The − and + steppers and the slider they step (issue #918), held on one row: the Audio
+ * section's controls wrap on a narrow pane, and a stepper wrapped away from its slider would
+ * read as a control of its own. The steppers are plain `.ui-btn--sm`, whose 44 px floor makes
+ * them square around a single glyph. */
+.hud-settings-volume-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hud-space-1);
+}
+
 /* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */
 
 .hud-shells {

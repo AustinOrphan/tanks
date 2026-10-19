@@ -1303,7 +1303,9 @@ describe('hud.css is syntactically whole', () => {
     // (Quarters) is offered at three players, so this fixture's `versusMapChoices(3, 'teams')`
     // row gains its card. 159 -> 160. It is the same `.ui-btn.ui-selectable.hud-versus-option-btn`
     // as the cards beside it, so `unstyled` stays empty.
-    expect(buttons.length).toBe(160 + 2 + devMenuButtons());
+    // Issue #918 adds TWO: Settings' volume steppers, − and + either side of the slider.
+    // 160 -> 162. Static markup, and both carry `.ui-btn--sm`, so `unstyled` stays empty.
+    expect(buttons.length).toBe(162 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1437,7 +1439,9 @@ describe('hud.css is syntactically whole', () => {
     // `.ui-btn--sm` and the pane's Back by `.ui-btn--slab`.
     // Issue #1035 adds ONE, the same Quarters map card as the button sweep above: 143 -> 144,
     // sized by the rule its sibling cards share.
-    expect(controls.length).toBe(144 + 2 + devMenuButtons());
+    // Issue #918 adds TWO, the same volume steppers as the button sweep above: 144 -> 146,
+    // each sized by `.ui-btn--sm`.
+    expect(controls.length).toBe(146 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {

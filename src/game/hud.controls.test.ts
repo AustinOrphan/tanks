@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type GameplayStatus, type Hud } from './hud';
+import { createHud, steppedVolume, type GameplayStatus, type Hud } from './hud';
+import { focusableControls } from './focusable';
 import { SKINS, ACCENTS } from '../presentation/customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
@@ -92,6 +93,150 @@ describe('createHud volume control', () => {
     slider.dispatchEvent(new Event('input'));
 
     expect(seen).toEqual([0.3]);
+  });
+});
+
+describe('the volume steppers: a controller reaches the level (issue #918)', () => {
+  // The owner's ruling of 2026-10-13: − and + buttons beside the slider, in the button walk,
+  // with the slider kept as the pointer control and still outside that walk.
+  const down = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-settings-volume-down') as HTMLButtonElement;
+  const up = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-settings-volume-up') as HTMLButtonElement;
+
+  it('steps to the next tenth in its direction, snapping a level between tenths', () => {
+    // Literal cases rather than a loop over a computed grid, so each one fails by name.
+    expect(steppedVolume(0.5, 1)).toBe(0.6);
+    expect(steppedVolume(0.5, -1)).toBe(0.4);
+    // Off the grid, where a slider drag leaves it: the NEARER tenth that way, not a full step.
+    expect(steppedVolume(0.37, 1)).toBe(0.4);
+    expect(steppedVolume(0.37, -1)).toBe(0.3);
+    // Whole percent, not float addition: 0.7 + 0.1 is 0.7999999999999999.
+    expect(steppedVolume(0.7, 1)).toBe(0.8);
+    expect(steppedVolume(0.3, -1)).toBe(0.2);
+  });
+
+  it('stops at either end of the range', () => {
+    expect(steppedVolume(1, 1)).toBe(1);
+    expect(steppedVolume(0.95, 1)).toBe(1);
+    expect(steppedVolume(0, -1)).toBe(0);
+    expect(steppedVolume(0.05, -1)).toBe(0);
+  });
+
+  it('a press moves the slider and reports the new level, through the slider\'s own subscribers', () => {
+    const { hud: h, root } = mount();
+    h.setVolume(0.5);
+    const seen: number[] = [];
+    h.onVolumeChange((v) => seen.push(v));
+
+    up(root).click();
+    expect(seen, 'the + press reported no level').toEqual([0.6]);
+    expect(volumeSlider(root).value, 'the slider did not move with the + press').toBe('0.6');
+
+    down(root).click();
+    down(root).click();
+    expect(seen).toEqual([0.6, 0.5, 0.4]);
+    expect(volumeSlider(root).value).toBe('0.4');
+  });
+
+  it('a press at either end reports nothing, since the level did not change', () => {
+    // Negative control for the case above: the same press, at a bound.
+    const { hud: h, root } = mount();
+    const seen: number[] = [];
+    h.onVolumeChange((v) => seen.push(v));
+
+    h.setVolume(1);
+    up(root).click();
+    h.setVolume(0);
+    down(root).click();
+    expect(seen).toEqual([]);
+  });
+
+  it('a pad walks onto both steppers in Settings and its Confirm raises the level', () => {
+    // The point of the ruling: before #918 nothing in Settings changed the volume for a
+    // player holding only a controller. Entered the way a pad enters it -- the pane's
+    // container takes the arrival, and Down walks -- rather than by focusing a button.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      h.setVolume(0.5);
+      (root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
+      vi.advanceTimersByTime(1000);
+      const pane = root.querySelector('.hud-settings') as HTMLElement;
+      const controls = focusableControls(pane);
+      expect(controls, 'the − stepper is not in the walk').toContain(down(root));
+      expect(controls, 'the + stepper is not in the walk').toContain(up(root));
+      expect(controls, 'the slider joined the walk; it is the pointer control').not.toContain(
+        volumeSlider(root),
+      );
+
+      const seen: number[] = [];
+      h.onVolumeChange((v) => seen.push(v));
+      for (let i = 0; i < controls.length && document.activeElement !== up(root); i++) h.act('down');
+      expect(document.activeElement, 'the pad never reached the + stepper').toBe(up(root));
+      expect(h.act('confirm')).toBe(true);
+      expect(seen, 'the pad\'s Confirm on + did not raise the level').toEqual([0.6]);
+      // A pad's Confirm is a keyboard activation (`click()` reports detail 0), so focus stays
+      // on the stepper and the next press steps again -- ten presses cross the whole range.
+      expect(document.activeElement, 'the Confirm took focus off the stepper').toBe(up(root));
+      h.act('confirm');
+      expect(seen).toEqual([0.6, 0.7]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops focus from a stepper clicked with the mouse, as every HUD button does', () => {
+    // A focused control claims the arrows and Space; a mouse player who clicks + must not be
+    // left with them claimed. `blurIfPointer`, the rule every other button here follows.
+    // Negative control: the pad case above, where the same press is a keyboard activation.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    (root.querySelector('.hud-settings-open') as HTMLButtonElement).click();
+    up(root).focus();
+    expect(document.activeElement, 'precondition: focus did not land on +').toBe(up(root));
+    up(root).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    expect(document.activeElement).not.toBe(up(root));
+  });
+
+  it('keeps the three read-only developer outputs out of the walk, and a pad Down out of one re-enters it', () => {
+    // #918's other criterion. Each <textarea> holds text to copy, which a pad cannot do, and
+    // is filled by a button that is in the walk; filling one focuses it, so the next pad Down
+    // has to land back on a control rather than nowhere. Shown here by lifting the hidden
+    // class, which is all the code that fills them does to their visibility.
+    vi.useFakeTimers();
+    try {
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      const h = createHud(root, { developerMode: true });
+      hud = h;
+      for (const [field, pane] of [
+        ['.hud-diag-out', '.hud-devtools'],
+        ['.hud-devcfg-copyfield', '.hud-devcfg'],
+        ['.hud-selftest-report', '.hud-selftest'],
+      ] as const) {
+        const out = root.querySelector(field) as HTMLTextAreaElement;
+        out.className = out.className.replace(/\S+--hidden/, '');
+        expect(focusableControls(root.querySelector(pane) as HTMLElement), `${field} joined the walk`).not.toContain(out);
+      }
+
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      (root.querySelector('.hud-devtools-open') as HTMLButtonElement).click();
+      vi.advanceTimersByTime(1000);
+      const devtools = root.querySelector('.hud-devtools') as HTMLElement;
+      const diag = root.querySelector('.hud-diag-out') as HTMLTextAreaElement;
+      diag.focus();
+      expect(document.activeElement, 'precondition: the output did not take focus').toBe(diag);
+      expect(h.act('down')).toBe(true);
+      expect(document.activeElement, 'a pad Down from the output did not re-enter the walk').toBe(
+        focusableControls(devtools)[0],
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -1343,7 +1343,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // players gains two cards, vs-tri-01 and vs-quad-01, the dedicated boards now offered at
     // the lower counts they measure suitable at. Seven Map controls become nine (Random,
     // five campaign boards, vs-duel-01, and the two), so that pane goes from 27 to 29.
-    expect(totalControls, 'recount the panels above if this moves').toBe(89);
+    //
+    // 91 since issue #918: Settings' Audio section gains the − and + volume steppers, the
+    // controller's path to the level. The slider between them still does not count; it is an
+    // `<input type="range">`, outside the walk on purpose.
+    expect(totalControls, 'recount the panels above if this moves').toBe(91);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
