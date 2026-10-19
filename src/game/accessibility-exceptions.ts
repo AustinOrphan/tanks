@@ -42,10 +42,10 @@ export function accessibilityException(subject: A11ySubject): string | null {
   // Issue #599. The self-test's whole subject is which physical control is which index, so a
   // Confirm pressed in it has to show up in the readout rather than activate whatever is
   // focused, and a stick push has to move an axis bar rather than the focus ring. `act` consumes
-  // and drops every pad action while it is open, except Back, so a tester holding nothing but a
-  // controller is never trapped. The keyboard is untouched.
+  // and drops every pad action while it is open except Back, so a tester holding nothing but a
+  // controller is never trapped, and Pause, which is the page's. The keyboard is untouched.
   if (subject.kind === 'layer' && subject.id === 'controller-selftest') {
-    return 'the controller self-test: a pad press has to reach its readout, so every pad action but Back is consumed';
+    return 'the controller self-test: a pad press has to reach its readout, so every pad action but Back and Pause is consumed';
   }
   // Nothing on the splash is a menu: any key or press dismisses it, and `act` refuses a pad
   // direction there so the press falls through to the page.
@@ -68,10 +68,11 @@ export function accessibilityException(subject: A11ySubject): string | null {
   // class off until the fade settles, so it can be seen fading, and `.ui-surface--leaving` takes
   // it out of hit testing only: it is not inert, so Tab can still land on it. The arrows and the
   // pad already walk the arriving one (`activePanelContainer` skips a leaving surface). Ruled an
-  // exception rather than a defect because it lasts one fade. Whoever ends it should know that
-  // an `inert` set in `transitionTo` does not survive: `applyModalIsolation` runs after the
-  // transition has begun, on every layer change and surface change, and rewrites `inert` on
-  // every child of the HUD root.
+  // exception rather than a defect because it lasts one fade. Whoever ends it should make the
+  // change in `applyModalIsolation`, which rewrites `inert` on every child of the HUD root: it
+  // runs after the transition has begun when a layer opens or is popped (`openLayer`, `back`),
+  // so an `inert` set in `transitionTo` is stripped there at once. `setState` runs it just
+  // before its own transition.
   if (subject.kind === 'transient' && subject.id === 'crossfade-leaving-surface') {
     return "a crossfade's leaving surface stays tabbable until its fade settles; the arrows and the pad already walk the arriving one";
   }

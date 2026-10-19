@@ -161,9 +161,11 @@ each entry to the mounted HUD, so an exception that stops being true fails.
   needing it; and two mutation entries, one deleting the clause and one making the truth false
   in production. The truth assertion lives in the register's test, or in a reachability case
   that the register's test ties to the entry.
-- **An entry that stops being true is deleted, not reworded.** The truth assertions' messages
-  say so. A reason rewritten to fit new behaviour turns the register back into the scattered
-  comments it replaced.
+- **An entry that stops being true is deleted, not reworded.** The register's own truth cases
+  (the DEV badge and the crossfade) say so in their failure messages; a failure in the
+  self-test walk or the launch and playing cases means the same for that entry's clause. A
+  reason rewritten to fit new behaviour turns the register back into the scattered comments it
+  replaced.
 - **The reachability records mark, the register explains.** `LAYER_REACH`'s `padSuppressed`
   and `SURFACE_REACH`'s `noPanel` (`src/game/hud-reachability-fixtures.ts`) say which members
   are excepted. Each reason is written once, in the register, and its test pins the text as a

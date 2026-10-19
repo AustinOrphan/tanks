@@ -1,7 +1,7 @@
 {
   "id": "a11y-register-drops-selftest-pad-suppression",
   "file": "src/game/accessibility-exceptions.ts",
-  "find": "  if (subject.kind === 'layer' && subject.id === 'controller-selftest') {\n    return 'the controller self-test: a pad press has to reach its readout, so every pad action but Back is consumed';\n  }\n",
+  "find": "  if (subject.kind === 'layer' && subject.id === 'controller-selftest') {\n    return 'the controller self-test: a pad press has to reach its readout, so every pad action but Back and Pause is consumed';\n  }\n",
   "replace": "  // this exception removed\n",
   "expect": "killed",
   "why": "Issue #915. The register stops excepting the controller self-test, so the one layer whose pad suppression is decided has no reason on record. Killed by the fold, which loses the self-test's reason, and by the agreement case, because `LAYER_REACH` still marks the layer `padSuppressed`. The suppression itself is `hud-selftest-stops-eating-pad-actions`'s to pin.",

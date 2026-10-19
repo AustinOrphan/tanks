@@ -180,8 +180,8 @@ a pointer; a disconnect is announced with a way forward.
 
 **Expected, not a defect:** the session is **silent** until the first pointer or key, because
 audio unlocks on that gesture and the engine self-heals afterwards (issue #494). Do not file
-it. The same goes for the two pad exceptions the register in part 5 accepts: inside the
-controller self-test every pad press but Back goes to the readout rather than the menu, and
+it. The same goes for the pad exceptions the register in part 5 accepts: inside the
+controller self-test every pad press but Back and Pause goes to the readout rather than the menu, and
 the splash and a live match offer the pad no menu to walk (a direction there is the page's,
 not the HUD's).
 

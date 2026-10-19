@@ -10,9 +10,9 @@ import { LAYER_REACH, mount, q, SURFACE_REACH, unmount } from './hud-reachabilit
  * true fails rather than rotting -- the shape `hit-sweep.test.ts` gives `hitSweepExclusion`.
  *
  * THE POPULATION the register is asked about: the 15 layers (`LAYER_REACH`), the 6 surfaces
- * (`SURFACE_REACH`), every control outside every pane in the mounted HUD (1, the DEV badge,
- * measured by `outsidePanes` below), and the 1 transient state, the crossfade's leaving surface.
- * 23 subjects; 5 are exceptions and 18 are held to the full sweep.
+ * (`SURFACE_REACH`), every tabbable control outside every pane in the mounted HUD (4, measured by
+ * `outsidePanes` below: the DEV badge and the touch row's three driving controls), and the 1
+ * transient state, the crossfade's leaving surface. 26 subjects; 5 are exceptions and 21 are not.
  *
  * WHAT EACH EXCEPTION'S TRUTH RESTS ON. Each entry is held to the HUD as well as to its reason,
  * so the register cannot keep an entry the HUD has stopped needing:
@@ -35,7 +35,7 @@ afterEach(unmount);
  * tails of two `hud.reachability.test.ts` titles that mutation entries name.
  */
 const EXPECTED: Record<string, string[]> = {
-  'the controller self-test: a pad press has to reach its readout, so every pad action but Back is consumed': [
+  'the controller self-test: a pad press has to reach its readout, so every pad action but Back and Pause is consumed': [
     'layer controller-selftest',
   ],
   'the splash: the panel, topbar and touch row are all hidden behind it': ['surface launch'],
@@ -65,8 +65,8 @@ const probeOf = (el: Element): string => `.${Array.from(el.classList).find((c) =
  * Every tabbable element in the mounted HUD that no pane contains, split by the one exclusion:
  * `.hud-touch`, the on-screen driving controls. They are not menu targets -- the rule
  * `hit-sweep.mjs`'s collector applies to them for the same reason -- and they show only in a
- * live match, which is the `playing` entry. The rest are `controls`, and the register is asked
- * about each.
+ * live match, which is the `playing` entry, so they are not an exception of their own. The rest
+ * are `controls`. The register is asked about both halves.
  *
  * Read from the markup rather than from what this mount happens to show, so a control a session
  * hides (the badge is hidden outside developer mode) is still counted where it lives.
@@ -90,7 +90,9 @@ function subjects(root: HTMLElement): (readonly [string, A11ySubject])[] {
     ...(Object.keys(SURFACE_REACH) as HudSurface[]).map(
       (id) => [`surface ${id}`, { kind: 'surface', id }] as const,
     ),
-    ...outsidePanes(root).controls.map(
+    // Both halves of `outsidePanes`: the driving controls are asked too, and must come back
+    // null, so a clause written for one of them changes the fold below.
+    ...[...outsidePanes(root).controls, ...outsidePanes(root).driving].map(
       (selector) => [`control ${selector}`, { kind: 'control', selector }] as const,
     ),
     ['transient crossfade-leaving-surface', { kind: 'transient', id: 'crossfade-leaving-surface' }] as const,
