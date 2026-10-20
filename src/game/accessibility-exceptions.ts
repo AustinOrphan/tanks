@@ -23,6 +23,15 @@ import type { HudLayerId, HudSurface } from './hud';
  * walk; the ruling made its missing pad arrival a defect, fixed by issue #918's − and + steppers,
  * which are buttons in the walk. A negative control pins its absence.
  *
+ * WHAT EARNS AN ENTRY (owner, 2026-10-20). A control a pad can never land on is an exception only
+ * when nothing beside it does its job. Inside a pane, a button in the walk that does the job
+ * leaves nothing to except: the volume slider (its − and + steppers) and the three read-only
+ * developer outputs (their Copy buttons write the clipboard themselves; the field is the
+ * keyboard's fallback when the clipboard is refused). Outside every pane there is no such
+ * neighbour, so the control is excepted: by its own entry when it shows over every surface (the
+ * DEV badge), or by its surface's entry when it shows on one (the touch row's driving controls,
+ * which exist only in a live match, under `playing`).
+ *
  * A test-only module: nothing in production imports it, as with `hud-reachability-fixtures.ts`.
  * It lives in `src/game` rather than `tools/` because its subjects are `hud.ts`'s own types, so a
  * layer or surface renamed there is a compile error here.

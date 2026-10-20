@@ -157,6 +157,14 @@ each entry to the mounted HUD, so an exception that stops being true fails.
   both directions: the volume slider's missing pad route was put forward as one and ruled a
   defect, which #918's steppers fixed; the crossfade's briefly tabbable leaving surface was
   ruled an exception because it is transient.
+- **What earns an entry (owner, 2026-10-20):** a control a pad can never land on is an exception
+  only when nothing beside it does its job.
+  - Inside a pane, a button in the walk that does the job leaves nothing to except. That covers
+    the volume slider beside its − and + steppers, and the developer outputs beside their Copy
+    buttons.
+  - Outside every pane there is no such neighbour. A control shown over every surface takes its
+    own entry (the DEV badge); one shown on a single surface falls under that surface's entry
+    (the touch row's driving controls, under `playing`).
 - **An entry is three things:** its clause; a truth assertion that fails when the HUD stops
   needing it; and two mutation entries, one deleting the clause and one making the truth false
   in production. The truth assertion lives in the register's test, or in a reachability case
