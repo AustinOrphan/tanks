@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, steppedVolume, type GameplayStatus, type Hud } from './hud';
+import { createHud, steppedVolume, VOLUME_ANNOUNCE_MS, type GameplayStatus, type Hud } from './hud';
 import { focusableControls } from './focusable';
 import { SKINS, ACCENTS } from '../presentation/customization';
 import { ACHIEVEMENTS } from './achievements';
@@ -238,6 +238,94 @@ describe('the volume steppers: a controller reaches the level (issue #918)', () 
       expect(document.activeElement, 'a pad Down from the output did not re-enter the walk').toBe(
         focusableControls(devtools)[0],
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('what a screen reader hears of the volume (follow-up to issue #918)', () => {
+  // The slider's own value is 0..1; `aria-valuetext` is what a screen reader says instead. A
+  // stepper press leaves focus on the button, so the result is announced through the page's
+  // one live region (`.hud-announce`), once the presses stop.
+  const valueText = (root: HTMLElement): string | null => volumeSlider(root).getAttribute('aria-valuetext');
+  const announced = (root: HTMLElement): string =>
+    (root.querySelector('.hud-announce') as HTMLElement).textContent ?? '';
+  const up = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-settings-volume-up') as HTMLButtonElement;
+
+  it('the slider speaks its level as a percentage, wherever the level moves', () => {
+    // Three writers, one case each: the page's push, a stepper press and a slider drag.
+    const { hud: h, root } = mount();
+    h.setVolume(0.6);
+    expect(valueText(root), 'the page push left the slider reading its raw value').toBe('60%');
+    up(root).click();
+    expect(valueText(root), 'a stepper press left the old percentage').toBe('70%');
+    volumeSlider(root).value = '0.33';
+    volumeSlider(root).dispatchEvent(new Event('input'));
+    expect(valueText(root), 'a drag left the old percentage').toBe('33%');
+  });
+
+  it('a stepper press announces the level it ended on, once the presses stop', () => {
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setVolume(0.5);
+      up(root).click();
+      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS - 150);
+      up(root).click();
+      // The first press's wait has run out by now, so an announcer that did not restart its
+      // wait on the second press would already have spoken "Volume 60%".
+      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS - 100);
+      expect(announced(root), 'a press spoke before the burst ended').toBe('');
+      vi.advanceTimersByTime(100);
+      expect(announced(root)).toBe('Volume 70%');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a slider drag announces nothing: the focused slider speaks its own value', () => {
+    // Negative control for the case above: the same level change, from the slider.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setVolume(0.5);
+      volumeSlider(root).value = '0.8';
+      volumeSlider(root).dispatchEvent(new Event('input'));
+      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS * 4);
+      expect(announced(root)).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a press at either end announces nothing, since the level did not change', () => {
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setVolume(1);
+      up(root).click();
+      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS * 4);
+      expect(announced(root)).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pending announcement does not outlive the HUD', () => {
+    // A HUD disposed inside the wait must not leave a timer writing into the region it
+    // discarded -- the leak rule every other HUD timer follows.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const region = root.querySelector('.hud-announce') as HTMLElement;
+      h.setVolume(0.5);
+      up(root).click();
+      h.dispose();
+      hud = null;
+      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS * 4);
+      expect(region.textContent, 'the announcement fired after dispose').toBe('');
     } finally {
       vi.useRealTimers();
     }

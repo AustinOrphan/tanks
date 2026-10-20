@@ -1,0 +1,14 @@
+{
+  "id": "volume-text-never-painted",
+  "file": "src/game/hud.ts",
+  "find": "    settingsVolumeEl.setAttribute('aria-valuetext', volumePercent(Number(settingsVolumeEl.value)));\n",
+  "replace": "    // the slider's percentage is not painted\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The slider keeps no `aria-valuetext`, so a screen reader reads its raw 0..1 value: \"0.6\" where a person would say 60 percent. (Follow-up to issue #918.)",
+  "killedBy": [
+    "what a screen reader hears of the volume (follow-up to issue #918) the slider speaks its level as a percentage, wherever the level moves"
+  ]
+}

@@ -1852,6 +1852,13 @@ export interface DeveloperDownloads {
 export const VOLUME_STEP_PERCENT = 10;
 
 /**
+ * How long the volume steppers wait after a press before announcing the level, so a burst of
+ * presses speaks once, at the level it ended on (follow-up to issue #918). Long enough to cover
+ * a held repeat or a quick double press, short enough that the answer still follows the press.
+ */
+export const VOLUME_ANNOUNCE_MS = 250;
+
+/**
  * The level one press of a volume stepper moves to (issue #918): the next multiple of
  * `VOLUME_STEP_PERCENT` in `direction`, clamped to [0, 1]. A level between two multiples --
  * where a slider drag left it -- moves to the nearer one in that direction rather than by a
@@ -4924,7 +4931,34 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   // subscribers, which is the coupling that disappears when a setting has one home.
   const handleSettingsVolume = (): void => {
     const v = Number(settingsVolumeEl.value);
+    paintVolumeText();
     for (const cb of volumeCbs) cb(v);
+  };
+  /*
+   * WHAT A SCREEN READER HEARS OF THE LEVEL (follow-up to issue #918).
+   *
+   * The slider's raw value is 0..1, so on its own it reads as "0.6". `aria-valuetext` is the
+   * attribute ARIA gives a slider whose number is not what a person would say (the APG slider
+   * pattern), so it carries the level as a percentage, repainted wherever the value moves.
+   *
+   * A stepper press keeps focus on the button while the slider moves, so a screen reader would
+   * hear nothing of the result; that is a status message in WCAG 2.2's sense (4.1.3), and it
+   * goes through the page's one live region, `announce`. It names the resulting level rather
+   * than the action, and it waits until the presses stop (`VOLUME_ANNOUNCE_MS`), so a burst
+   * of presses speaks once, at the level it ended on. A slider drag announces nothing: a focused
+   * slider already speaks its own value, so a second voice would repeat it.
+   */
+  const volumePercent = (v: number): string => `${Math.round(v * 100)}%`;
+  const paintVolumeText = (): void => {
+    settingsVolumeEl.setAttribute('aria-valuetext', volumePercent(Number(settingsVolumeEl.value)));
+  };
+  let volumeAnnounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const announceVolumeSoon = (level: number): void => {
+    if (volumeAnnounceTimer !== null) clearTimeout(volumeAnnounceTimer);
+    volumeAnnounceTimer = setTimeout(() => {
+      volumeAnnounceTimer = null;
+      announce(`Volume ${volumePercent(level)}`);
+    }, VOLUME_ANNOUNCE_MS);
   };
   // The steppers report through the same subscribers as the slider, and move the slider
   // first so it shows the new level before the page's push comes back. A press at either
@@ -4935,6 +4969,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const next = steppedVolume(current, direction);
     if (Object.is(next, current)) return;
     settingsVolumeEl.value = String(next);
+    paintVolumeText();
+    announceVolumeSoon(next);
     for (const cb of volumeCbs) cb(next);
   };
   const handleVolumeDown = (): void => stepSettingsVolume(-1);
@@ -8292,6 +8328,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function setVolume(v: number): void {
     const text = String(v);
     if (settingsVolumeEl.value !== text) settingsVolumeEl.value = text;
+    paintVolumeText();
   }
 
   // Same reasoning as `applyStatus`'s lastLives/lastEnemies memo, plus a second job: it
@@ -8873,6 +8910,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       disarmReset(); // a pending confirm timer must not outlive the HUD
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();
+      if (volumeAnnounceTimer !== null) clearTimeout(volumeAnnounceTimer);
       for (const type of ['keydown', 'keypress', 'keyup'] as const) {
         window.removeEventListener(type, onCarriedConfirmKey, true);
       }

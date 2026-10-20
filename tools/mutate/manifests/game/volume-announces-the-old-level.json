@@ -1,0 +1,14 @@
+{
+  "id": "volume-announces-the-old-level",
+  "file": "src/game/hud.ts",
+  "find": "    announceVolumeSoon(next);\n",
+  "replace": "    announceVolumeSoon(current);\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The announcement names the level before the press, so it is always one step behind the slider. (Follow-up to issue #918.)",
+  "killedBy": [
+    "what a screen reader hears of the volume (follow-up to issue #918) a stepper press announces the level it ended on, once the presses stop"
+  ]
+}
