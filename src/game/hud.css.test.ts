@@ -591,8 +591,11 @@ describe('hud.css is syntactically whole', () => {
       // hiding renders as a heading over nothing.
       '.hud-settings', '.hud-settings--hidden', '.hud-settings-section',
       '.hud-settings-section--hidden', '.hud-settings-controls',
-      '.hud-settings-volume', // the audio slider; its buttons are `.ui-btn--sm`
-                              // now and have no rule of their own to be present
+      '.hud-settings-volume', // the audio slider; Mute beside it is `.ui-btn--sm`
+                              // and has no rule of its own to be present
+      // Issue #918: the row holding the − and + steppers beside the slider, and the
+      // steppers' glyph size.
+      '.hud-settings-volume-group', '.hud-settings-volume-step',
       // About & Legal (issue #226): the pane, its hidden rule, and the prose measure.
       '.hud-about', '.hud-about--hidden', '.hud-about-line',
       // The legal document surface (issue #117). Every class the generated data reaches:
@@ -1303,7 +1306,9 @@ describe('hud.css is syntactically whole', () => {
     // (Quarters) is offered at three players, so this fixture's `versusMapChoices(3, 'teams')`
     // row gains its card. 159 -> 160. It is the same `.ui-btn.ui-selectable.hud-versus-option-btn`
     // as the cards beside it, so `unstyled` stays empty.
-    expect(buttons.length).toBe(160 + 2 + devMenuButtons());
+    // Issue #918 adds TWO: Settings' volume steppers, − and + either side of the slider.
+    // 160 -> 162. Static markup, and both carry `.ui-btn--sm`, so `unstyled` stays empty.
+    expect(buttons.length).toBe(162 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -1437,7 +1442,9 @@ describe('hud.css is syntactically whole', () => {
     // `.ui-btn--sm` and the pane's Back by `.ui-btn--slab`.
     // Issue #1035 adds ONE, the same Quarters map card as the button sweep above: 143 -> 144,
     // sized by the rule its sibling cards share.
-    expect(controls.length).toBe(144 + 2 + devMenuButtons());
+    // Issue #918 adds TWO, the same volume steppers as the button sweep above: 144 -> 146,
+    // each sized by `.ui-btn--sm`.
+    expect(controls.length).toBe(146 + 2 + devMenuButtons());
 
     const sizeless = controls
       .filter((el) => {
@@ -1610,7 +1617,10 @@ describe('hud.css is syntactically whole', () => {
       // `--sm`'s padding would have quietly failed to guarantee. The team and difficulty
       // buttons were `--sm` all along and were simply never listed -- the same omission that
       // let the role button ship sizeless, one step less harmful.
-      '.hud-versus-role-btn', '.hud-versus-team-btn', '.hud-versus-difficulty-btn'];
+      '.hud-versus-role-btn', '.hud-versus-team-btn', '.hud-versus-difficulty-btn',
+      // Issue #918's − and + volume steppers, beside Mute in the Audio row. Their own rule
+      // changes only the glyph's type, so they keep the shape listed here.
+      '.hud-settings-volume-down', '.hud-settings-volume-up'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
     for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));
     // Without this the two loops above would both pass on a stylesheet that gave every

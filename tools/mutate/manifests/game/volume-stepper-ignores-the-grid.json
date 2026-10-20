@@ -1,0 +1,14 @@
+{
+  "id": "volume-stepper-ignores-the-grid",
+  "file": "src/game/hud.ts",
+  "find": "  const target = direction > 0\n    ? Math.floor(percent / VOLUME_STEP_PERCENT) * VOLUME_STEP_PERCENT + VOLUME_STEP_PERCENT\n    : Math.ceil(percent / VOLUME_STEP_PERCENT) * VOLUME_STEP_PERCENT - VOLUME_STEP_PERCENT;\n",
+  "replace": "  const target = percent + direction * VOLUME_STEP_PERCENT;\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A press steps a full tenth from wherever a slider drag left the level, so the steppers walk 37, 47, 57 instead of the one grid of tenths (issue #918). On-grid levels step the same either way, which is why only the off-grid cases catch it.",
+  "killedBy": [
+    "the volume steppers: a controller reaches the level (issue #918) steps to the next tenth in its direction, snapping a level between tenths"
+  ]
+}

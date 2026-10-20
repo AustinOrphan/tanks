@@ -1,0 +1,15 @@
+{
+  "id": "volume-stepper-leaves-the-slider-behind",
+  "file": "src/game/hud.ts",
+  "find": "    settingsVolumeEl.value = String(next);\n",
+  "replace": "    // the slider is left at the old level\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A stepper press reports the new level but leaves the slider where it was, so the control shows the old level until the page's push comes back, and a second press steps from the stale value instead of the new one (issue #918).",
+  "killedBy": [
+    "the volume steppers: a controller reaches the level (issue #918) a press moves the slider and reports the new level, through the slider's own subscribers",
+    "the volume steppers: a controller reaches the level (issue #918) a pad walks onto both steppers in Settings and its Confirm raises the level"
+  ]
+}

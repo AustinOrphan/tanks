@@ -735,7 +735,8 @@ export interface Hud {
    */
   setModality(modality: Modality): void;
   /**
-   * Reflect the effective master volume in BOTH sliders.
+   * Reflect the effective master volume in the Settings slider, which is also the level the
+   * − and + steppers (issue #918) step from.
    *
    * The markup carries NO `value` (issue #324), so the slider has nothing to say until
    * this is called. It used to render at `DEFAULT_VOLUME`, which was the truth while
@@ -1847,6 +1848,25 @@ export interface DeveloperDownloads {
   saveCanvas(image: HTMLCanvasElement, fileName: string): Promise<void>;
 }
 
+/** One press of a Settings volume stepper, in whole percent (issue #918). */
+export const VOLUME_STEP_PERCENT = 10;
+
+/**
+ * The level one press of a volume stepper moves to (issue #918): the next multiple of
+ * `VOLUME_STEP_PERCENT` in `direction`, clamped to [0, 1]. A level between two multiples --
+ * where a slider drag left it -- moves to the nearer one in that direction rather than by a
+ * full step, so the steppers walk one grid however the level was set. Worked in whole
+ * percent, so 0.7 stepped up is 0.8, where 0.7 + 0.1 is 0.7999999999999999. A NaN level
+ * comes back NaN, which the caller reads as "nothing to report".
+ */
+export function steppedVolume(current: number, direction: 1 | -1): number {
+  const percent = Math.round(current * 100);
+  const target = direction > 0
+    ? Math.floor(percent / VOLUME_STEP_PERCENT) * VOLUME_STEP_PERCENT + VOLUME_STEP_PERCENT
+    : Math.ceil(percent / VOLUME_STEP_PERCENT) * VOLUME_STEP_PERCENT - VOLUME_STEP_PERCENT;
+  return Math.min(100, Math.max(0, target)) / 100;
+}
+
 export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const el = document.createElement('div');
   el.className = 'hud';
@@ -2369,12 +2389,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         <h2 id="hud-settings-audio">Audio</h2>
         <div class="hud-settings-controls">
           <button class="ui-btn ui-btn--sm hud-settings-mute" type="button">Mute (M)</button>
-          <!-- autocomplete="off": Firefox restores form-control values across a soft
-               reload and bfcache restore. Without this the slider comes back at the
-               user's last position while a freshly-built engine boots at DEFAULT_VOLUME,
-               and no 'input' event fires to reconcile them -- reopening the exact
-               "slider is lying" bug the retired topbar slider was fixed for. -->
-          <input class="hud-settings-volume" type="range" min="0" max="1" step="0.01" autocomplete="off" aria-label="Volume" />
+          <!-- THE VOLUME STEPPERS (issue #918, owner ruling 2026-10-13). The slider is outside
+               the roving walk on purpose (see 'onNavKeyDown'), which left volume with no
+               controller path at all. These two buttons are that path: they join the walk
+               like any button, and each press moves the level one step of 'steppedVolume'.
+               The slider stays the pointer control. One group, so a wrap on a narrow pane
+               never strands a stepper on a row away from the slider it steps. -->
+          <span class="hud-settings-volume-group">
+            <button class="ui-btn ui-btn--sm hud-settings-volume-step hud-settings-volume-down" type="button" aria-label="Lower volume">−</button>
+            <!-- autocomplete="off": Firefox restores form-control values across a soft
+                 reload and bfcache restore. Without this the slider comes back at the
+                 user's last position while a freshly-built engine boots at DEFAULT_VOLUME,
+                 and no 'input' event fires to reconcile them -- reopening the exact
+                 "slider is lying" bug the retired topbar slider was fixed for. -->
+            <input class="hud-settings-volume" type="range" min="0" max="1" step="0.01" autocomplete="off" aria-label="Volume" />
+            <button class="ui-btn ui-btn--sm hud-settings-volume-step hud-settings-volume-up" type="button" aria-label="Raise volume">+</button>
+          </span>
         </div>
       </section>
       <section class="hud-settings-section" data-section="controls" aria-labelledby="hud-settings-controls-h">
@@ -2798,6 +2828,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   ) as HTMLElement[];
   const settingsMuteBtn = el.querySelector('.hud-settings-mute') as HTMLButtonElement;
   const settingsVolumeEl = el.querySelector('.hud-settings-volume') as HTMLInputElement;
+  const settingsVolumeDownBtn = el.querySelector('.hud-settings-volume-down') as HTMLButtonElement;
+  const settingsVolumeUpBtn = el.querySelector('.hud-settings-volume-up') as HTMLButtonElement;
   const settingsControllersBtn = el.querySelector('.hud-settings-controllers') as HTMLButtonElement;
   const settingsAboutBtn = el.querySelector('.hud-settings-about') as HTMLButtonElement;
   const rumbleToggleBtn = el.querySelector('.hud-rumble-toggle') as HTMLButtonElement;
@@ -4602,11 +4634,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * itself, so a button added to a panel and never wired into this sweep cannot happen:
    * it is swept by construction, not by a maintained list. `input[type=range]` never
    * matches either selector (no default `tabindex` attribute, and it is not a
-   * `<button>`), which is what keeps the two volume sliders out of the roving order --
+   * `<button>`), which is what keeps the volume slider out of the roving order --
    * input.ts's own `WIDGET_KEYS` already gives a focused slider full ownership of all
    * four arrow keys (see its doc comment on Right Arrow strafing instead of moving one),
-   * and fighting that here would break the slider rather than extend it. A slider stays
-   * reachable by Tab, exactly as it was before this file existed.
+   * and fighting that here would break the slider rather than extend it. The slider stays
+   * reachable by Tab, exactly as it was before this file existed, and its − and + steppers
+   * (issue #918) are buttons in the walk, so a pad reaches the level without it. The three
+   * read-only `<textarea>` outputs in the developer panes are outside the walk too (checked
+   * in #918's pass): each holds text to copy, which a pad cannot do, and is filled by a
+   * button that IS in the walk. A Copy press focuses and selects its field so a keyboard can
+   * copy; in Developer Tools and Configuration a pad's next Down then re-enters the walk at
+   * the pane's first control (Up at its last), because `spatialNext` reads focus outside the
+   * list as no position. The self-test takes the pad off the menu altogether (`act`), so
+   * there only Back answers it.
    *
    * EVERY ARRIVAL LANDS ON THE SURFACE'S PRIMARY ACTION (issue #919, owner ruling
    * 2026-10-13), so a screen takes one press: Continue or Start Campaign on the Main Menu,
@@ -4886,6 +4926,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const v = Number(settingsVolumeEl.value);
     for (const cb of volumeCbs) cb(v);
   };
+  // The steppers report through the same subscribers as the slider, and move the slider
+  // first so it shows the new level before the page's push comes back. A press at either
+  // end reports nothing: the level did not change. Mute is left alone, as the slider leaves
+  // it: + while muted stores a louder level and stays silent until Mute is turned off.
+  const stepSettingsVolume = (direction: 1 | -1): void => {
+    const current = Number(settingsVolumeEl.value);
+    const next = steppedVolume(current, direction);
+    if (Object.is(next, current)) return;
+    settingsVolumeEl.value = String(next);
+    for (const cb of volumeCbs) cb(next);
+  };
+  const handleVolumeDown = (): void => stepSettingsVolume(-1);
+  const handleVolumeUp = (): void => stepSettingsVolume(1);
   const handleAction = (): void => {
     for (const cb of startRestartCbs) cb();
   };
@@ -6015,6 +6068,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   settingsMuteBtn.addEventListener('click', blurIfPointer);
   settingsVolumeEl.addEventListener('input', handleSettingsVolume);
   settingsVolumeEl.addEventListener('mouseup', blurAfterDrag);
+  settingsVolumeDownBtn.addEventListener('click', handleVolumeDown);
+  settingsVolumeDownBtn.addEventListener('click', blurIfPointer);
+  settingsVolumeUpBtn.addEventListener('click', handleVolumeUp);
+  settingsVolumeUpBtn.addEventListener('click', blurIfPointer);
 
   // The aim-scheme toggle: one button, two states, cycling between them like a mute
   // button rather than offering two radio buttons for a binary choice. Labelled with
@@ -8936,6 +8993,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       settingsMuteBtn.removeEventListener('click', blurIfPointer);
       settingsVolumeEl.removeEventListener('input', handleSettingsVolume);
       settingsVolumeEl.removeEventListener('mouseup', blurAfterDrag);
+      settingsVolumeDownBtn.removeEventListener('click', handleVolumeDown);
+      settingsVolumeDownBtn.removeEventListener('click', blurIfPointer);
+      settingsVolumeUpBtn.removeEventListener('click', handleVolumeUp);
+      settingsVolumeUpBtn.removeEventListener('click', blurIfPointer);
       actionBtn.removeEventListener('click', handleAction);
       actionBtn.removeEventListener('click', blurIfPointer);
       el.remove();

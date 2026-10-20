@@ -1,0 +1,15 @@
+{
+  "id": "volume-stepper-never-reports",
+  "file": "src/game/hud.ts",
+  "find": "    for (const cb of volumeCbs) cb(next);\n",
+  "replace": "    // the new level is reported to nobody\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A stepper press moves the slider but reports to nobody, so the level the page plays and stores never changes (issue #918). Distinct from the slider's own report, `cb(v)` in handleSettingsVolume, which this leaves alone.",
+  "killedBy": [
+    "the volume steppers: a controller reaches the level (issue #918) a press moves the slider and reports the new level, through the slider's own subscribers",
+    "the volume steppers: a controller reaches the level (issue #918) a pad walks onto both steppers in Settings and its Confirm raises the level"
+  ]
+}

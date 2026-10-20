@@ -1,0 +1,14 @@
+{
+  "id": "volume-down-stepper-keeps-focus-after-a-click",
+  "file": "src/game/hud.ts",
+  "find": "  settingsVolumeDownBtn.addEventListener('click', blurIfPointer);\n",
+  "replace": "  // the − stepper's pointer blur is not registered\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "The − stepper keeps focus after a mouse click, so a mouse player who clicks it is left with a focused control claiming the arrows and Space. Each stepper registers its own `blurIfPointer`, so the + entry beside this one says nothing about this listener (issue #918).",
+  "killedBy": [
+    "the volume steppers: a controller reaches the level (issue #918) drops focus from either stepper clicked with the mouse, as every HUD button does"
+  ]
+}

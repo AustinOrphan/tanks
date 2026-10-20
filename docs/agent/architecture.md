@@ -219,7 +219,11 @@ first covering layer).
 only the keys it consumes (text entry everything; a slider or select Space, Enter, the
 arrows and Home/End; a button only Space and Enter, because the arrows are the roving
 focus's), and `input.ts`, the session's hotkey guards and the HUD's roving-focus handler
-all ask it, so Escape with a volume slider focused is Back or Pause, never lost. `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
+all ask it, so Escape with a volume slider focused is Back or Pause, never lost. The slider
+stays outside the roving walk, because it consumes the arrows itself, so Settings' Audio row
+gives a pad the level through − and + steppers beside it (issue #918): two buttons in the
+walk, each moving the level to the next multiple of 10 percent (`steppedVolume`) and
+reporting through the slider's own subscribers. `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
 panel, `confirm` activates the focused control through its own click handler (or lands on
 the first control when only a container is focused -- a pane with no primary action, or focus
 fallen to one -- so a blind Confirm cannot fire whatever is first), `back` is `Hud.back()`,

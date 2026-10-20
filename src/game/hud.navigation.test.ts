@@ -1234,9 +1234,9 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // swatches, SKINS.length 7 skin buttons, ACCENTS.length 5 accent swatches, Back) + 3
     // (Stats: Reset stats, Reset progress, Back) + 1 (Achievements: Back -- the list
     // itself is plain divs, not focusable) + 4 (Levels: the 3 unlocked buttons this
-    // test's own `setLevelSelect(3, 5)` leaves reachable, plus Back). The two volume
-    // sliders and the topbar's own Mute are excluded by design -- see the roving-focus
-    // doc comment in hud.ts.
+    // test's own `setLevelSelect(3, 5)` leaves reachable, plus Back). The volume slider is
+    // excluded by design -- see the roving-focus doc comment in hud.ts -- and its − and +
+    // steppers (issue #918) are counted, at 91 below.
     // 42 since the haptics toggle (issue #112's deferred HUD control) landed: 41 + the
     // toggle beside the fire-mode toggle in the title panel's settings row.
     // 44 since the controller assignment panel landed (docs/superpowers/plans/
@@ -1343,7 +1343,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // players gains two cards, vs-tri-01 and vs-quad-01, the dedicated boards now offered at
     // the lower counts they measure suitable at. Seven Map controls become nine (Random,
     // five campaign boards, vs-duel-01, and the two), so that pane goes from 27 to 29.
-    expect(totalControls, 'recount the panels above if this moves').toBe(89);
+    //
+    // 91 since issue #918: Settings' Audio section gains the − and + volume steppers, the
+    // controller's path to the level. The slider between them still does not count; it is an
+    // `<input type="range">`, outside the walk on purpose.
+    expect(totalControls, 'recount the panels above if this moves').toBe(91);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );

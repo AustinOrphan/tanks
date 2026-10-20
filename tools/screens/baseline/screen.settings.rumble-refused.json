@@ -11,7 +11,7 @@
         "w": 1280,
         "h": 800
       },
-      "text": "Settings\n      \n        Audio\n        \n          Mute (M)\n          \n          \n        \n      \n      \n        Controls\n        \n          \n          Aim: Stick\n          \n          Fire: Tap to fire\n",
+      "text": "Settings\n      \n        Audio\n        \n          Mute (M)\n          \n          \n            −\n            \n            \n            +\n          \n        \n      \n      \n        Controls\n        \n      ",
       "aria": {
         "role": "region",
         "aria-labelledby": "hud-settings-title"

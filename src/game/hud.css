@@ -3595,6 +3595,26 @@
   height: var(--hud-control-min);
 }
 
+/* The − and + steppers and the slider they step (issue #918), held on one row: the Audio
+ * section's controls wrap on a narrow pane, and a stepper wrapped away from its slider would
+ * read as a control of its own. */
+.hud-settings-volume-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hud-space-1);
+}
+
+/* A lone − or + at the small button's text size read as a speck beside "Mute (M)", most of all
+ * at the couch distance these exist for, so the glyph takes the level tiles' size and weight
+ * (`.hud-level-btn`), which scale with the UI scale. Type only: the padding and corners stay
+ * `--sm`'s, which one guard holds every small control to. At the default UI scale one glyph
+ * inside that padding fits the 44 px floor `.ui-btn` sets, so the box is square; a larger
+ * scale widens it a little around the bigger glyph. */
+.hud-settings-volume-step {
+  font-size: var(--hud-type-5);
+  font-weight: var(--hud-weight-strong);
+}
+
 /* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */
 
 .hud-shells {
