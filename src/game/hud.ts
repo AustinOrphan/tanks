@@ -4941,12 +4941,18 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * attribute ARIA gives a slider whose number is not what a person would say (the APG slider
    * pattern), so it carries the level as a percentage, repainted wherever the value moves.
    *
-   * A stepper press keeps focus on the button while the slider moves, so a screen reader would
-   * hear nothing of the result; that is a status message in WCAG 2.2's sense (4.1.3), and it
-   * goes through the page's one live region, `announce`. It names the resulting level rather
-   * than the action, and it waits until the presses stop (`VOLUME_ANNOUNCE_MS`), so a burst
-   * of presses speaks once, at the level it ended on. A slider drag announces nothing: a focused
-   * slider already speaks its own value, so a second voice would repeat it.
+   * A keyboard or pad press on a stepper keeps focus on the button while the slider moves, so a
+   * screen reader would hear nothing of the result; that is a status message in WCAG 2.2's sense
+   * (4.1.3), and it goes through the page's one live region, `announce`. It names the resulting
+   * level rather than the action, and it waits until the presses stop (`VOLUME_ANNOUNCE_MS`), so
+   * a burst of presses speaks once, at the level it ended on; a press at either end speaks the
+   * level it stayed at. A slider drag announces nothing: a focused slider already speaks its own
+   * value, so a second voice would repeat it. A press that leaves Settings inside the wait is
+   * still spoken, since the region is exempt from modal isolation.
+   *
+   * KNOWN LIMIT, shared with every `announce` caller: the region is written, never cleared, so
+   * a press that ends on the very sentence already in it (+ to 70%, a drag to 60%, + to 70%) may
+   * not be re-read by every screen reader.
    */
   const volumePercent = (v: number): string => `${Math.round(v * 100)}%`;
   const paintVolumeText = (): void => {
@@ -4967,7 +4973,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const stepSettingsVolume = (direction: 1 | -1): void => {
     const current = Number(settingsVolumeEl.value);
     const next = steppedVolume(current, direction);
-    if (Object.is(next, current)) return;
+    if (Object.is(next, current)) {
+      // At an end the level does not move, so nothing is reported -- but the press is still
+      // answered with the level, or a screen-reader user hears silence exactly at the limit.
+      announceVolumeSoon(current);
+      return;
+    }
     settingsVolumeEl.value = String(next);
     paintVolumeText();
     announceVolumeSoon(next);

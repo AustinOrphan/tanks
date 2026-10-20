@@ -300,14 +300,25 @@ describe('what a screen reader hears of the volume (follow-up to issue #918)', (
     }
   });
 
-  it('a press at either end announces nothing, since the level did not change', () => {
+  it('a press at either end speaks the level it stayed at, and reports nothing', () => {
+    // Silence at the limit would leave a screen-reader user unsure the press landed. The level
+    // did not move, so the subscribers hear nothing -- only the reader is answered. Both ends,
+    // spelled out, since each is reached by its own button.
     vi.useFakeTimers();
     try {
       const { hud: h, root } = mount();
+      const down = root.querySelector('.hud-settings-volume-down') as HTMLButtonElement;
+      const seen: number[] = [];
+      h.onVolumeChange((v) => seen.push(v));
       h.setVolume(1);
       up(root).click();
-      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS * 4);
-      expect(announced(root)).toBe('');
+      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS);
+      expect(announced(root), 'a + press at full volume went unanswered').toBe('Volume 100%');
+      h.setVolume(0);
+      down.click();
+      vi.advanceTimersByTime(VOLUME_ANNOUNCE_MS);
+      expect(announced(root), 'a − press at silence went unanswered').toBe('Volume 0%');
+      expect(seen, 'a press at an end reported a level that did not change').toEqual([]);
     } finally {
       vi.useRealTimers();
     }

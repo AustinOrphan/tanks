@@ -1,14 +1,15 @@
 {
   "id": "volume-stepper-reports-an-unchanged-level",
   "file": "src/game/hud.ts",
-  "find": "    if (Object.is(next, current)) return;\n",
-  "replace": "    // a press that changed nothing reports anyway\n",
+  "find": "    if (Object.is(next, current)) {\n      // At an end the level does not move, so nothing is reported -- but the press is still\n      // answered with the level, or a screen-reader user hears silence exactly at the limit.\n      announceVolumeSoon(current);\n      return;\n    }\n",
+  "replace": "    // the unchanged level is reported anyway\n",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
   "expect": "killed",
   "why": "A press at either end reports the level it already had, a write to the stored setting for a press that changed nothing (issue #918).",
   "killedBy": [
-    "the volume steppers: a controller reaches the level (issue #918) a press at either end reports nothing, since the level did not change"
+    "the volume steppers: a controller reaches the level (issue #918) a press at either end reports nothing, since the level did not change",
+    "what a screen reader hears of the volume (follow-up to issue #918) a press at either end speaks the level it stayed at, and reports nothing"
   ]
 }
