@@ -218,22 +218,19 @@ describe('the Configuration body loads when its pane first opens (issue #1015)',
   const children = (root: HTMLElement): string[] => Array.from(body(root).children, (c) => c.className);
 
   it('an ordinary page builds no body, even after every import has settled', async () => {
-    // Negative control: a load started at construction, as the build ran before #1015. Settled
-    // FIRST, so a build deferred past construction by a tick is caught too. The HUD is left on
-    // the surface it was built on: every `setState` spends the load's generation, so a load
-    // started at construction would be dropped by the first surface change, and only a page
-    // that has not changed surface lets it land where this can see it. The download such a
-    // load costs is the browser probe's to see, not this file's.
+    // Negative control: a load started at construction, as the build ran there before #1015.
+    // Settled FIRST, so a build deferred past construction by a tick is caught too.
     const root = document.createElement('div');
     document.body.appendChild(root);
     hud = createHud(root, {});
+    hud.setState('main-menu');
     await settled();
     expect(body(root).childElementCount).toBe(0);
   });
 
   it('a developer page builds no body until Configuration opens', async () => {
-    // Negative control: the Developer Tools open loading the Configuration menu too. The
-    // developer entry is not what loads it.
+    // Negative controls: a load started at construction, and the Developer Tools open loading
+    // the Configuration menu too. The developer entry is not what loads it.
     const { root } = mount();
     q<HTMLButtonElement>(root, '.hud-devtools-open').click();
     await settled();
@@ -251,8 +248,8 @@ describe('the Configuration body loads when its pane first opens (issue #1015)',
   });
 
   it('a close during the load builds no body into the closed pane', async () => {
-    // Negative controls: the resolved load ignoring the generation, and a surface change (which
-    // `back()` ends in) that does not spend one.
+    // Negative controls: the resolved load ignoring the generation, and a close that does not
+    // spend one.
     const { hud: h, root } = mount();
     open(root);
     h.back();
@@ -361,7 +358,8 @@ describe('the Configuration body loads when its pane first opens (issue #1015)',
     });
 
     it('after the pane closed reports nothing into it', async () => {
-      // Negative control: the failure path ignoring the generation.
+      // Negative controls: the failure path ignoring the generation, and a close that does not
+      // spend one.
       const { hud: h, root } = mount();
       await failLoads();
       open(root);

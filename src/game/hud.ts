@@ -3115,8 +3115,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    */
   let devCfgBuilt = false;
   /**
-   * Taken by every load and spent by every surface change (which every close passes through),
-   * replace and teardown; see `loadDevConfigMenu`.
+   * Taken by every load and spent by every close, replace, surface change and teardown; see
+   * `loadDevConfigMenu`.
    */
   let devCfgGeneration = 0;
   const layoutOpenCbs: Array<() => void> = [];
@@ -4458,14 +4458,16 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * losing it because Back was pressed to check something would make the menu hostile.
    *
    * The body is loaded on the first open (issue #1015), after the arrival focus, as the
-   * self-test's is. The close spends no generation here: every close of this pane is
-   * `back()`'s, which goes on into `setState`, and `setState`'s close-all spends it.
+   * self-test's is.
    */
   function showDevConfig(show: boolean): void {
     if (show) {
       swapSurface(openSurface(), DEVCFG_SURFACE, () => arriveAt('developer-config'));
       if (!devCfgBuilt) loadDevConfigMenu();
-    } else closeSurface(DEVCFG_SURFACE);
+    } else {
+      devCfgGeneration += 1; // a load still in flight now builds nothing into a closed pane
+      closeSurface(DEVCFG_SURFACE);
+    }
   }
 
   /**
@@ -4476,11 +4478,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * moved.
    *
    * WHY THE GENERATION. The imports span at least one turn of the event loop, and the pane can
-   * be closed, closed and reopened, replaced, or torn down inside it. Every load takes a
-   * generation, and every surface change (which every close passes through), every replace
-   * (the layer's `release`) and `dispose` spends one, so a load that is no longer current
-   * builds nothing -- no body in a closed pane, and no second body beside the reopen's. The
-   * modules register listeners only on the nodes they create, so no body means no listener.
+   * be closed, closed and reopened, replaced, taken away by a surface change, or torn down
+   * inside it. Every load takes a generation, and every close, every replace (the layer's
+   * `release`), every surface change that finds the pane open and `dispose` spends one, so a
+   * load that is no longer current builds nothing -- no body in a closed pane, and no second
+   * body beside the reopen's. The modules register listeners only on the nodes they create, so
+   * no body means no listener.
    *
    * A FAILED LOAD (offline, or a chunk name a deploy made stale) is reported in the pane rather
    * than left as an unhandled rejection, which `boot.ts` treats as the match failing whenever a
@@ -8039,10 +8042,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     closeSettingsSubscribers();
     cleanupHide(aboutView, 'hud-about--hidden');
     cleanupHide(devToolsView, 'hud-devtools--hidden');
+    // A surface change never runs `showDevConfig(false)`, so when it finds the Configuration
+    // pane open -- when the bare class add below is what closes it -- it spends the load's
+    // generation itself (issue #1015). A pane `back()` is closing is already leaving here, and
+    // that close spent one.
+    if (isSurfaceOpen(DEVCFG_SURFACE)) devCfgGeneration += 1;
     cleanupHide(devCfgView, 'hud-devcfg--hidden');
-    // Every close of the Configuration pane is `back()`'s, which goes on into this function, so
-    // this one line covers a close and a surface change alike (issue #1015).
-    devCfgGeneration += 1; // a Configuration load still in flight now builds nothing
     // The self-test is the one pane here with a subscriber whose resource must stop, so a
     // surface change goes through its close function rather than the bare class add its
     // siblings use -- `route-ui.ts`'s per-frame poll would otherwise outlive the pane.
