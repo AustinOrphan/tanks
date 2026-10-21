@@ -876,24 +876,27 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 // only splittable if nothing on an ordinary path imports it for VALUE, so this counts those
 // imports and pins the count. The number must only ever go DOWN.
 //
-// WHY A PINNED INVENTORY rather than a flat ban: `hud.ts` holds three of them today, one edge
-// per module, and they are the developer surface it still renders inline -- the developer
-// menu (`devtools-menu`, `dev-config-menu`, `dev-config`). #946's route out is to load each
-// pane's body-building module on demand, as the gallery workbench's, the controller
-// self-test's and the Developer Tools pane's own controls' already are, while `hud.ts` keeps
-// the pane's container, its layer entry, its markup and its open/close order; the slices
-// under #946 take them one pane at a time. An inventory fails on a NEW edge while recording
-// what the remaining ones wait on, which `toBe(0)` could not do.
+// WHY A PINNED INVENTORY rather than a flat ban: while edges remained, an inventory failed on a
+// NEW edge while recording what the remaining ones waited on, which `toBe(0)` could not do.
+// #946's route out was to load each pane's body-building module on demand, as the gallery
+// workbench's, the controller self-test's, the Developer Tools pane's own controls' and the
+// Configuration menu's now are, while `hud.ts` keeps the pane's container, its layer entry,
+// its markup and its open/close order. No edge remains (issue #1015), so the pin is empty;
+// #1016 replaces it with a flat ban.
 //
 // `arena-schematic` is NOT on the list, though it once was (issue #1012): `hud.ts` draws the
 // Versus Setup map cards with it at construction on every page (issue #274), so it is
 // player-facing code that can never leave the ordinary bundle without removing the previews.
 //
-// EXACT equality, not `<=`, AND THAT IS THIS GUARD'S NON-VACUITY CHECK. The scan below is a
-// text match like the layer scan above, so it can stop matching; unlike the layer scan it
-// needs no fixture suite to notice, because the pinned counts are non-zero. A regex that
-// went blind, or a developer module renamed out of the list, drives the count to zero and
-// fails here -- where `<=` would pass while measuring nothing.
+// EXACT equality, not `<=`, and while the pinned counts were non-zero THAT WAS THIS GUARD'S
+// NON-VACUITY CHECK: a regex that went blind, or a developer module renamed out of the list,
+// drove a count to zero and failed here. WITH THE PIN EMPTY (issue #1015) IT IS GONE. The scan
+// below is a text match like the layer scan above, so it can stop matching, and an empty
+// inventory now passes whether nothing imports a developer module or the scan sees nothing;
+// a module dropped from `DEV_ONLY_MODULES` passes too (the mutation entry
+// `dev-module-ratchet-list-drops-a-module` is a disclosed survivor for that reason). The pin
+// test stays in place; #1016 replaces it with a flat ban and planted-import fixtures, which
+// give the scan its non-vacuity check back. The existence check below still catches a rename.
 //
 // TYPE-ONLY IMPORTS ARE FREE and are not counted: `import type { X } from './dev-x'` emits
 // no runtime edge and does not put the module in the bundle. A LEADING `import type` is the
@@ -924,6 +927,10 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 // Issue #1014 took it from 6 to 3: the actions, diagnostics and exports behind the Developer
 // Tools pane's own controls load when the pane opens, so `hud.ts` names `dev-actions`,
 // `dev-diagnostics` and `dev-exports` only through leading `import type`s.
+//
+// Issue #1015 took it from 3 to 0: the Configuration menu's three modules load when its pane
+// first opens, so `hud.ts` names them only through leading `import type`s and
+// `typeof import(...)` in a type.
 // ---------------------------------------------------------------------------
 
 /** The developer-only modules #946 names, by basename: the developer surface, then gallery. */
@@ -939,10 +946,7 @@ const DEV_ONLY_MODULES: readonly string[] = [
  * lower a count here: adding one means an ordinary module started pulling a developer module
  * into the bundle, which is the thing #946 exists to stop.
  */
-const DEV_VALUE_EDGES: Readonly<Record<string, number>> = {
-  // The developer surfaces hud.ts still renders inline; see the note above.
-  './game/hud.ts': 3,
-};
+const DEV_VALUE_EDGES: Readonly<Record<string, number>> = {};
 
 describe('developer modules stay off ordinary paths (issue #946)', () => {
   /** Value imports of a developer module, by importing file. Type-only and dynamic are free. */

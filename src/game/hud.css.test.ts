@@ -7,7 +7,7 @@
 // Both were invisible to `npm test` and to `tsc`. This is the cheapest guard that would
 // have caught either.
 // @vitest-environment jsdom
-import { afterEach, describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import css from './hud.css?raw';
 import { devControls, DEV_PRESETS } from './dev-config';
 import { isMultiset } from './dev-config-menu';
@@ -171,7 +171,7 @@ function resolved(el: Element, prop: keyof CSSStyleDeclaration & string): string
 }
 
 /** Every button the mounted HUD can show, with each subtree-rebuilding setter driven. */
-function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
+async function mountEveryButton(): Promise<{ root: HTMLElement; dispose: () => void }> {
   // No <style> injection here on purpose. `hud.ts` does `import './hud.css'`, and
   // vitest applies it at module scope, so the real stylesheet is already live. An
   // earlier draft injected the text itself, which LOOKED harmless and was not:
@@ -182,6 +182,22 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const hud = createHud(root);
+  // The Configuration menu's body is loaded when its pane first opens (issue #1015), so it is
+  // opened once through the real UI, the build awaited, and the HUD walked back to the surface
+  // it was built on before the setters below run. Without this the sweep silently loses the
+  // menu's buttons: every count below would fail by `devMenuButtons()`, and a sweep with no
+  // pinned count would pass while measuring none of them.
+  (root.querySelector('.hud-devtools-open') as HTMLButtonElement).click();
+  (root.querySelector('.hud-devcfg-open') as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector('.hud-devcfg-presets'), 'the Configuration body was never built')
+      .not.toBeNull();
+  }, { timeout: 5000 });
+  hud.back();
+  await vi.waitFor(() => {
+    expect(root.querySelector('.ui-surface--leaving, .ui-surface--entering'), 'a crossfade never settled')
+      .toBeNull();
+  });
   // The `createElement('button')` sites in hud.ts today are the hull-swatch row, the
   // skin row and the accent row (built during `createHud`), the level row (built
   // here), the controller-assignment row buttons, and -- as of the versus setup pane
@@ -881,7 +897,7 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
-  it('never centres the main axis of a pane that scrolls', () => {
+  it('never centres the main axis of a pane that scrolls', async () => {
     // `justify-content: center` on an `overflow-y: auto` flex column puts the overflow ABOVE
     // the scrollable area, where no scrollbar reaches it: the first screenful of a long
     // document is lost and cannot be scrolled back to. The About pane shipped exactly that --
@@ -891,7 +907,7 @@ describe('hud.css is syntactically whole', () => {
     // Measured through the real elements, not by reading the stylesheet: a rule that set
     // `center` inside an `@media` block, or a later rule that re-centred, is invisible to a
     // text search and lands here.
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const scrollers = Array.from(root.querySelectorAll<HTMLElement>('*')).filter(
       (el) => getComputedStyle(el).overflowY === 'auto',
     );
@@ -1046,14 +1062,14 @@ describe('hud.css is syntactically whole', () => {
     );
   });
 
-  it('centres a level button\'s number by giving its fixed 44x44 box no padding', () => {
+  it('centres a level button\'s number by giving its fixed 44x44 box no padding', async () => {
     // `.hud-level-btn` set only width and height, so the primitive's fallback `8px 20px`
     // above reached it: under `box-sizing: border-box` that left a 4px content box, and a
     // digit wider than its line box is START-aligned rather than centred. Measured in
     // Chromium on the built Levels pane: every number 3.41px right of centre, at 1280x800
     // and at 390x844. jsdom lays nothing out, so what this pins is the padding the cascade
     // gives a real level button, which is what that measurement depends on.
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const levels = Array.from(root.querySelectorAll<HTMLElement>('.hud-level-btn'));
     // `setLevelSelect(2, 4)` in the fixture draws the two levels unlocked so far.
     expect(levels.length).toBe(2);
@@ -1075,7 +1091,7 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
-  it('never lets a button fall through to browser default styling', () => {
+  it('never lets a button fall through to browser default styling', async () => {
     // `.hud-achievements-open` shipped with NO rule of its own -- only its `--hidden`
     // modifier -- so on the main menu it rendered as a stock grey browser button
     // beside three themed siblings, for as long as the feature existed.
@@ -1093,7 +1109,7 @@ describe('hud.css is syntactically whole', () => {
     // an `@media` that never matches. All of those resolve to a default-looking button
     // and all of them now fail here, because jsdom applies the cascade and the
     // question asked is what the user would see.
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const bare = document.createElement('button'); // same document: same UA defaults
     document.body.appendChild(bare);
 
@@ -1314,7 +1330,7 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
-  it('gives the legal surface one left edge that does not move with a font size', () => {
+  it('gives the legal surface one left edge that does not move with a font size', async () => {
     // A MEASURED regression, not a hypothetical. The shared measure was `72ch`, and `ch`
     // resolves against the element's OWN font: with the "Documents" heading at 18px and the
     // disclosure rows at the pane's 16px, one 72ch box came out 648px and the other 691px, so
@@ -1329,7 +1345,7 @@ describe('hud.css is syntactically whole', () => {
     // 960px -> 1240px on an <h2> taken to 31px), `43rem` and `688px` do not. Setting the
     // parent as well keeps this honest whether a unit resolves against the element's own
     // font or the one it inherits.
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const selectors = ['.hud-about-subtitle', '.hud-about-subline', '.hud-about-links', '.hud-legal'];
     const elements = selectors.map((sel) => {
       const el = root.querySelector<HTMLElement>(sel);
@@ -1357,7 +1373,7 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
-  it('gives every control in the kit a size: a modifier, or a rule of its own', () => {
+  it('gives every control in the kit a size: a modifier, or a rule of its own', async () => {
     // Issue #634. `.ui-btn` is deliberately sizeless -- its own comment says so, and size
     // comes from a `--slab`/`--sm` modifier -- so a control carrying the primitive and
     // nothing else is themed, clickable, and renders with ZERO padding.
@@ -1388,7 +1404,7 @@ describe('hud.css is syntactically whole', () => {
     const ownRule = (cls: string): boolean =>
       new RegExp(`(^|[,\\s])\\.${cls}\\s*(,|\\{)`, 'm').test(stripComments(css));
 
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const controls = Array.from(root.querySelectorAll<HTMLElement>('.ui-btn'));
     // Non-vacuity, and it is the denominator: a selector that matched nothing would make the
     // assertion below pass while measuring nothing. Exactly, not a floor, for the same reason
@@ -1465,14 +1481,14 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
-  it('themes the two outbound legal links, which are anchors and not buttons', () => {
+  it('themes the two outbound legal links, which are anchors and not buttons', async () => {
     // The sweep above selects `'button'`, so the About & Legal pane's two `<a class="ui-btn">`
     // links are outside it -- and an `.ui-btn` that no sweep in this file reaches is exactly
     // #634's defect ("the class is a handle with nothing behind it"), one tag name further
     // out. Measured the same way, against a BARE ANCHOR rather than a bare button, because
     // the browser's own link treatment (blue, underlined) is what falls through here, and a
     // bare `<button>` would not report it.
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const bare = document.createElement('a');
     bare.href = 'https://example.com';
     document.body.appendChild(bare);
@@ -1543,7 +1559,7 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
-  it('groups every button under a primitive, or names it as a deliberate exception', () => {
+  it('groups every button under a primitive, or names it as a deliberate exception', async () => {
     // What replaces "a new button joins by adding its selector to the group". The guard
     // above asks whether a button LOOKS themed; this one asks whether it is themed from
     // the shared source, which is the property that stops the next sibling drifting.
@@ -1552,7 +1568,7 @@ describe('hud.css is syntactically whole', () => {
     // each has a fill and a shape of its own that `.ui-btn` would hand it only to be
     // overridden. Listing them here is the point -- a fifth one has to be argued for in
     // this list rather than appearing by omission.
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const EXCEPTIONS = [
       'hud-swatch', // the colour circles: their background IS the colour they offer
       'hud-rotate-btn', // the preview's icon buttons: outlined, 34px, their own fill
@@ -1575,12 +1591,12 @@ describe('hud.css is syntactically whole', () => {
     dispose();
   });
 
-  it('keeps each size of quiet control to ONE size, which is what the modifier is for', () => {
+  it('keeps each size of quiet control to ONE size, which is what the modifier is for', async () => {
     // `.ui-btn` alone makes a button look themed, so the guard above stays green if a
     // control loses `--slab` or `--sm` -- only its padding and corner radius change, and
     // both of those come from the modifier. This measures the group against ITSELF
     // rather than against a number, so retuning a size is free and losing one is not.
-    const { root, dispose } = mountEveryButton();
+    const { root, dispose } = await mountEveryButton();
     const shape = (sel: string): string => {
       const el = root.querySelector(sel);
       expect(el, `${sel} is not in the fixture`).not.toBeNull();

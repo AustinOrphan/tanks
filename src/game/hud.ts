@@ -328,16 +328,10 @@ import {
   type ControllerLayoutView,
   type LayoutRequest,
 } from './controller-layout';
-import { renderDevConfigMenu, type DevConfigMenuView } from './devtools-menu';
-import {
-  devMenuView,
-  resetSelection,
-  setLiteral,
-  stepMultiset,
-  stepNumeric,
-  toggleField,
-} from './dev-config-menu';
-import { canonicalDevSearch, devControls, DEV_PRESETS, type DevSelection } from './dev-config';
+// The Configuration menu's three modules are named for their TYPES only: they are loaded when
+// its pane first opens (issue #1015) -- see `loadDevConfigMenu`.
+import type { DevConfigMenuView } from './devtools-menu';
+import type { DevSelection } from './dev-config';
 import type { PadDiagnostic } from '../input/gamepad-diagnostics';
 import type { RoundPhase } from '../sim/round';
 import { VERSUS_STOCK } from '../sim/constants';
@@ -384,7 +378,8 @@ import {
 } from './control-relevance';
 import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 // The three modules behind the Developer Tools pane's own controls are named for their TYPES
-// only: their values are loaded when the pane opens (issue #1014) -- see `loadDevTools`.
+// only: their values are loaded when the pane opens (issue #1014) -- see `loadDevTools`, which
+// also lands `dev-config` for Use Production Save (issue #1015).
 import type { DevActionId, DevActionPort } from './dev-actions';
 import type { DiagnosticsInput, SessionDiagnostics } from './dev-diagnostics';
 import type { BuildIdentity } from './build-identity';
@@ -395,7 +390,16 @@ interface DevToolsModules {
   readonly actions: typeof import('./dev-actions');
   readonly diagnostics: typeof import('./dev-diagnostics');
   readonly exports: typeof import('./dev-exports');
+  /** Use Production Save's canonical URL (issue #1015); `dev-diagnostics` imports it anyway. */
+  readonly config: typeof import('./dev-config');
 }
+
+/** What `loadDevConfigMenu` lands (issue #1015), in the order `buildDevConfigMenu` takes them. */
+type DevConfigModules = readonly [
+  typeof import('./devtools-menu'),
+  typeof import('./dev-config-menu'),
+  typeof import('./dev-config'),
+];
 
 /*
  * ---- WHAT EACH ENDING SAYS, AND WHAT IT OFFERS (issue #323) ----------------------
@@ -2642,7 +2646,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
          registry-derived control list, the six presets, the URL builder and the explainer --
          and reimplements none of it. The body is built by 'devtools-menu.ts' into the empty
          container below, because it is derived from 'FLAG_REGISTRY' and 'hud.ts' models none
-         of that.
+         of that. That module is loaded when the pane first opens (issue #1015), so the
+         container stays empty on a page that never opens it.
 
          Its own layer rather than more of the developer shell, for the reason the self-test
          is: seven groups of controls is taller than any viewport, and '.hud-devtools' still
@@ -3103,6 +3108,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * `whenDevTools`.
    */
   let devToolsGeneration = 0;
+  /**
+   * Whether the Configuration menu's body is built (issue #1015). Its three modules load the
+   * first time the pane opens, not at construction, so an ordinary page downloads none of them;
+   * the body is built once when that load lands and kept, as it was when it was built here.
+   */
+  let devCfgBuilt = false;
+  /**
+   * Taken by every load and spent by every surface change (which every close passes through),
+   * replace and teardown; see `loadDevConfigMenu`.
+   */
+  let devCfgGeneration = 0;
   const layoutOpenCbs: Array<() => void> = [];
   const layoutCloseCbs: Array<() => void> = [];
   const layoutRequestCbs: Array<(request: LayoutRequest) => void> = [];
@@ -4365,13 +4381,15 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   /**
    * Loads the three modules behind the Developer Tools pane's own controls -- `dev-actions`,
    * `dev-diagnostics` and `dev-exports` (issue #1014) -- in the shape `loadSelfTestBody` uses:
-   * dynamic imports, so an ordinary page downloads none of them.
+   * dynamic imports, so an ordinary page downloads none of them. A fourth, `dev-config`, rides
+   * along for Use Production Save (issue #1015); `dev-diagnostics` imports it statically, so
+   * naming it here adds no request to the open.
    *
-   * ONE LOAD FOR THE THREE, kept once it lands. Every control needs two of them -- Pin the
+   * ONE LOAD FOR THE FOUR, kept once it lands. Every control needs two of them -- Pin the
    * diagnostics, an action its catalogue and the diagnostics for its URL, an export its own
-   * module and the report it builds on -- so three loads would be three failure states for
-   * one pane. The open starts it and a press joins it; a press with no load in flight (after
-   * a failed one, or from a test that never opened the pane) starts it. The load builds
+   * module and the report it builds on -- so separate loads would be separate failure states
+   * for one pane. The open starts it and a press joins it; a press with no load in flight
+   * (after a failed one, or from a test that never opened the pane) starts it. The load builds
    * nothing and listens to nothing, so it is bound to no generation; what waits on it is.
    *
    * A FAILED LOAD is forgotten, so the next open or press tries again; `whenDevTools` reports
@@ -4382,8 +4400,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       import('./dev-actions'),
       import('./dev-diagnostics'),
       import('./dev-exports'),
+      import('./dev-config'),
     ]).then(
-      ([actions, diagnostics, exports]) => (devTools = { actions, diagnostics, exports }),
+      ([actions, diagnostics, exports, config]) =>
+        (devTools = { actions, diagnostics, exports, config }),
       (err: unknown) => {
         devToolsLoad = null;
         throw err;
@@ -4436,10 +4456,59 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    *
    * The selection survives a close, deliberately. Building a configuration is the slow part;
    * losing it because Back was pressed to check something would make the menu hostile.
+   *
+   * The body is loaded on the first open (issue #1015), after the arrival focus, as the
+   * self-test's is. The close spends no generation here: every close of this pane is
+   * `back()`'s, which goes on into `setState`, and `setState`'s close-all spends it.
    */
   function showDevConfig(show: boolean): void {
-    if (show) swapSurface(openSurface(), DEVCFG_SURFACE, () => arriveAt('developer-config'));
-    else closeSurface(DEVCFG_SURFACE);
+    if (show) {
+      swapSurface(openSurface(), DEVCFG_SURFACE, () => arriveAt('developer-config'));
+      if (!devCfgBuilt) loadDevConfigMenu();
+    } else closeSurface(DEVCFG_SURFACE);
+  }
+
+  /**
+   * Loads the Configuration menu's three modules -- `devtools-menu`, `dev-config-menu` and
+   * `dev-config` -- and builds its body into the empty `.hud-devcfg-body` (issue #1015), in the
+   * shape `loadSelfTestBody` uses: dynamic imports, so an ordinary page downloads none of them,
+   * behind a generation counter. `buildDevConfigMenu` is the construction-time build it was,
+   * moved.
+   *
+   * WHY THE GENERATION. The imports span at least one turn of the event loop, and the pane can
+   * be closed, closed and reopened, replaced, or torn down inside it. Every load takes a
+   * generation, and every surface change (which every close passes through), every replace
+   * (the layer's `release`) and `dispose` spends one, so a load that is no longer current
+   * builds nothing -- no body in a closed pane, and no second body beside the reopen's. The
+   * modules register listeners only on the nodes they create, so no body means no listener.
+   *
+   * A FAILED LOAD (offline, or a chunk name a deploy made stale) is reported in the pane rather
+   * than left as an unhandled rejection, which `boot.ts` treats as the match failing whenever a
+   * session exists. The next open tries again, but a browser may keep the failure for the life
+   * of the page, so the line asks for a reload. Only the imports are caught: a throw from the
+   * build itself is a bug, not a load failure.
+   */
+  function loadDevConfigMenu(): void {
+    const generation = (devCfgGeneration += 1);
+    devCfgBodyEl.replaceChildren(); // a previous attempt's failure line
+    void Promise.all([
+      import('./devtools-menu'),
+      import('./dev-config-menu'),
+      import('./dev-config'),
+    ]).then(
+      (modules) => {
+        if (generation !== devCfgGeneration) return;
+        buildDevConfigMenu(modules);
+      },
+      () => {
+        if (generation !== devCfgGeneration) return;
+        const failed = document.createElement('p');
+        failed.className = 'hud-devcfg-line hud-devcfg-failed';
+        failed.setAttribute('role', 'status');
+        failed.textContent = 'The Configuration menu could not be loaded. Reload the page to try again.';
+        devCfgBodyEl.append(failed);
+      },
+    );
   }
 
   /**
@@ -5166,6 +5235,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       primary: NO_PRIMARY,
       open: () => showDevConfig(true),
       close: () => showDevConfig(false),
+      // Replaced (the DEV badge opens Developer Tools over it): a load still in flight must not
+      // build into the pane that is leaving (issue #1015).
+      release: () => {
+        devCfgGeneration += 1;
+      },
     },
     'developer-gallery': {
       container: galleryView,
@@ -5555,98 +5629,113 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   };
 
   /*
-   * ONE DOCUMENT AT A TIME IS NOT ENFORCED, deliberately: a reader comparing the content
-   * licence against the code licence needs both open, and an accordion would close the one
-   * they just read. The pane scrolls, so the cost of two open documents is scroll length
-   * rather than lost content.
-   */
-  /*
-   * Built ONCE, like the legal documents: the container is the HUD's and the body is the
-   * self-test's, and nothing about the structure depends on a visit. What the pane shows
-   * is written by `setPadDiagnostics` from the frames `route-ui.ts` pushes while it is open.
-   */
-  /*
    * THE MENU'S OWN STATE, and the only mutable thing this pane has: which values the player
    * has chosen. Everything else shown -- the effective flags, every note, the namespace, the
    * URL -- is derived from it by `devMenuView` on each change, through the same parser the
-   * game boots with.
+   * game boots with. It lives here, for the HUD's lifetime, and not in the body, so a
+   * selection survives a close whenever the body was built.
    *
    * `devCfgBase` is the page's `location.search`, pushed in rather than read here, so the
    * non-developer half of a real URL (a deep link, a router's query) survives Apply.
    */
   let devCfgSelection: DevSelection = {};
   const devCfgBase = opts.developerSearch ?? '';
-  const devCfgControl = (field: string) => devControls().find((c) => c.field === field);
-  function repaintDevConfig(): void {
-    devCfgMenu.update(devMenuView(devCfgSelection, devCfgBase));
+  /**
+   * Builds the Configuration menu's body into `.hud-devcfg-body`, once, when
+   * `loadDevConfigMenu` lands its modules (issue #1015). Until then this was the build every
+   * page ran at construction; the handlers are unchanged, and take the modules' values from
+   * the parameter.
+   */
+  function buildDevConfigMenu([
+    { renderDevConfigMenu },
+    { devMenuView, resetSelection, setLiteral, stepMultiset, stepNumeric, toggleField },
+    { devControls, DEV_PRESETS },
+  ]: DevConfigModules): void {
+    const devCfgControl = (field: string) => devControls().find((c) => c.field === field);
+    function repaintDevConfig(): void {
+      devCfgMenu.update(devMenuView(devCfgSelection, devCfgBase));
+    }
+    const devCfgMenu: DevConfigMenuView = renderDevConfigMenu(
+      devCfgBodyEl,
+      {
+        onSet: (field, value) => {
+          const control = devCfgControl(field);
+          if (!control) return;
+          devCfgSelection = setLiteral(devCfgSelection, control, value);
+          repaintDevConfig();
+        },
+        onToggle: (field) => {
+          devCfgSelection = toggleField(devCfgSelection, field);
+          repaintDevConfig();
+        },
+        onStep: (field, step) => {
+          const control = devCfgControl(field);
+          if (!control) return;
+          // `bots` is the one valued flag whose first accepted value is 0; every other starts
+          // at 1. Asked of the model rather than tabulated -- `stepNumeric` refuses a value the
+          // parser rejects, so a wrong floor here costs one press, not a wrong URL.
+          devCfgSelection = stepNumeric(devCfgSelection, control, step, field === 'bots' ? 0 : 1, devCfgBase);
+          repaintDevConfig();
+        },
+        onStepValue: (field, value, step) => {
+          const control = devCfgControl(field);
+          if (!control) return;
+          devCfgSelection = stepMultiset(devCfgSelection, control, value, step, devCfgBase);
+          repaintDevConfig();
+        },
+        onPreset: (id) => {
+          const preset = DEV_PRESETS.find((p) => p.id === id);
+          if (!preset) return;
+          // A preset REPLACES the selection rather than merging into it: half of one preset
+          // over half of another is a configuration neither describes, and the preview would
+          // be accurate about something nobody chose.
+          devCfgSelection = { ...preset.selection };
+          repaintDevConfig();
+        },
+        onApply: () => {
+          opts.applyDeveloperConfig?.(devCfgMenu.search());
+        },
+        onReset: () => {
+          devCfgSelection = resetSelection();
+          repaintDevConfig();
+        },
+        onCopy: () => {
+          // Same shape as the self-test's Copy: the field is filled and selected, and the
+          // async Clipboard API attempted where it exists. Selection is the path that always
+          // works -- the API is origin- and permission-gated.
+          const text = devCfgMenu.search();
+          devCfgUrlField.value = text;
+          devCfgUrlField.classList.remove('hud-devcfg-copyfield--hidden');
+          devCfgUrlField.focus();
+          devCfgUrlField.select();
+          const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+          void clipboard?.writeText(text).catch(() => {});
+        },
+      },
+      // The FIRST view takes the base too. Constructing with an empty one and relying on a
+      // later repaint is how a page's own query silently vanishes from the menu until
+      // something else happens to touch it.
+      devMenuView({}, devCfgBase),
+    );
+    // Same rule as Exit Developer Mode: a button that cannot do its job is not offered. Reset
+    // and Copy stay -- they change the menu and the clipboard, neither of which needs
+    // `location`. Here rather than at construction since issue #1015, because it reaches into
+    // the body this function builds.
+    (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =
+      !opts.applyDeveloperConfig;
+    devCfgBuilt = true;
   }
-  const devCfgMenu: DevConfigMenuView = renderDevConfigMenu(
-    devCfgBodyEl,
-    {
-      onSet: (field, value) => {
-        const control = devCfgControl(field);
-        if (!control) return;
-        devCfgSelection = setLiteral(devCfgSelection, control, value);
-        repaintDevConfig();
-      },
-      onToggle: (field) => {
-        devCfgSelection = toggleField(devCfgSelection, field);
-        repaintDevConfig();
-      },
-      onStep: (field, step) => {
-        const control = devCfgControl(field);
-        if (!control) return;
-        // `bots` is the one valued flag whose first accepted value is 0; every other starts
-        // at 1. Asked of the model rather than tabulated -- `stepNumeric` refuses a value the
-        // parser rejects, so a wrong floor here costs one press, not a wrong URL.
-        devCfgSelection = stepNumeric(devCfgSelection, control, step, field === 'bots' ? 0 : 1, devCfgBase);
-        repaintDevConfig();
-      },
-      onStepValue: (field, value, step) => {
-        const control = devCfgControl(field);
-        if (!control) return;
-        devCfgSelection = stepMultiset(devCfgSelection, control, value, step, devCfgBase);
-        repaintDevConfig();
-      },
-      onPreset: (id) => {
-        const preset = DEV_PRESETS.find((p) => p.id === id);
-        if (!preset) return;
-        // A preset REPLACES the selection rather than merging into it: half of one preset
-        // over half of another is a configuration neither describes, and the preview would
-        // be accurate about something nobody chose.
-        devCfgSelection = { ...preset.selection };
-        repaintDevConfig();
-      },
-      onApply: () => {
-        opts.applyDeveloperConfig?.(devCfgMenu.search());
-      },
-      onReset: () => {
-        devCfgSelection = resetSelection();
-        repaintDevConfig();
-      },
-      onCopy: () => {
-        // Same shape as the self-test's Copy: the field is filled and selected, and the
-        // async Clipboard API attempted where it exists. Selection is the path that always
-        // works -- the API is origin- and permission-gated.
-        const text = devCfgMenu.search();
-        devCfgUrlField.value = text;
-        devCfgUrlField.classList.remove('hud-devcfg-copyfield--hidden');
-        devCfgUrlField.focus();
-        devCfgUrlField.select();
-        const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-        void clipboard?.writeText(text).catch(() => {});
-      },
-    },
-    // The FIRST view takes the base too. Constructing with an empty one and relying on a
-    // later repaint is how a page's own query silently vanishes from the menu until
-    // something else happens to touch it.
-    devMenuView({}, devCfgBase),
-  );
 
   const layoutBody: ControllerLayoutView = renderControllerLayout(layoutBodyEl);
   layoutBody.onRequest((request) => {
     for (const cb of layoutRequestCbs) cb(request);
   });
+  /*
+   * ONE DOCUMENT AT A TIME IS NOT ENFORCED, deliberately: a reader comparing the content
+   * licence against the code licence needs both open, and an accordion would close the one
+   * they just read. The pane scrolls, so the cost of two open documents is scroll length
+   * rather than lost content.
+   */
   const legalDisclosures = renderLegalDocuments(legalListEl);
   renderLegalLinks(aboutLinksEl);
   for (const disclosure of legalDisclosures) {
@@ -5968,7 +6057,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    *
    * Built from `developerSearch` through the same `canonicalDevSearch` the configuration menu
    * uses, so this URL is the one the model would produce for those flags, and a deep link or
-   * router query the page was opened with survives.
+   * router query the page was opened with survives. That module arrives with the pane's other
+   * modules (issue #1015): at once when they have landed, which is every press after the
+   * open's load; otherwise when they do, and not at all if the pane closes first.
    */
   const handleProdSave = (): void => {
     const apply = opts.applyDeveloperConfig;
@@ -5976,7 +6067,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const params = new URLSearchParams((opts.developerSearch ?? '').replace(/^\?/, ''));
     params.set('dev', '1');
     params.set('prodSave', '1');
-    apply(canonicalDevSearch(`?${params.toString()}`).search);
+    whenDevTools(({ config }) => apply(config.canonicalDevSearch(`?${params.toString()}`).search));
   };
 
   const handleDevReset = (): void => {
@@ -6107,10 +6198,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   prodSaveBtn.hidden = !opts.applyDeveloperConfig || opts.storageNamespace !== 'developer';
   devResetBtn.hidden = !opts.resetDeveloperData;
   refreshNamespace();
-  // Same rule as Exit above: a button that cannot do its job is not offered. Reset and Copy
-  // stay -- they change the menu and the clipboard, neither of which needs `location`.
-  (devCfgBodyEl.querySelector('.hud-devcfg-apply') as HTMLButtonElement).hidden =
-    !opts.applyDeveloperConfig;
   settingsMuteBtn.addEventListener('click', handleMute);
   settingsMuteBtn.addEventListener('click', blurIfPointer);
   settingsVolumeEl.addEventListener('input', handleSettingsVolume);
@@ -7953,6 +8040,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     cleanupHide(aboutView, 'hud-about--hidden');
     cleanupHide(devToolsView, 'hud-devtools--hidden');
     cleanupHide(devCfgView, 'hud-devcfg--hidden');
+    // Every close of the Configuration pane is `back()`'s, which goes on into this function, so
+    // this one line covers a close and a surface change alike (issue #1015).
+    devCfgGeneration += 1; // a Configuration load still in flight now builds nothing
     // The self-test is the one pane here with a subscriber whose resource must stop, so a
     // surface change goes through its close function rather than the bare class add its
     // siblings use -- `route-ui.ts`'s per-frame poll would otherwise outlive the pane.
@@ -9020,6 +9110,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // load still in flight must not build into the tree this teardown discards.
       selfTestGeneration += 1;
       devToolsGeneration += 1; // and a press still waiting on the developer modules writes nothing
+      devCfgGeneration += 1; // and a Configuration load still in flight builds nothing (issue #1015)
       settingsLayoutBtn.removeEventListener('click', handleSettingsLayoutOpen);
       settingsLayoutBtn.removeEventListener('click', blurIfPointer);
       layoutBackBtn.removeEventListener('click', handleLayoutBack);

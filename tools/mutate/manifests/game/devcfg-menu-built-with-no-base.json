@@ -1,8 +1,8 @@
 {
   "id": "devcfg-menu-built-with-no-base",
   "file": "src/game/hud.ts",
-  "find": "    devMenuView({}, devCfgBase),\n  );",
-  "replace": "    devMenuView({}, ''),\n  );",
+  "find": "      devMenuView({}, devCfgBase),\n    );",
+  "replace": "      devMenuView({}, ''),\n    );",
   "expect": "killed",
   "tests": [
     "src/game/hud.devconfig.test.ts"
@@ -10,5 +10,5 @@
   "killedBy": [
     "what a press does to the previewed URL carries the page\u2019s non-developer query through, so Apply does not drop a deep link"
   ],
-  "why": "MEASURED, not hypothetical: this is what the first version did. The menu opens showing a URL with the page's own query missing, and it stays missing until some unrelated repaint happens to run -- so what a player reads before pressing Apply is not what Apply would send."
+  "why": "MEASURED, not hypothetical: this is what the first version did. The menu opens showing a URL with the page's own query missing, and it stays missing until some unrelated repaint happens to run -- so what a player reads before pressing Apply is not what Apply would send. RE-POINTED for issue #1015: the menu is built when its pane first opens, inside `buildDevConfigMenu`, so the call moved two spaces deeper."
 }

@@ -430,9 +430,12 @@ describe('the persistence controls (issue #249)', () => {
     expect(out(root).value).toContain('production save was not touched');
   });
 
-  it('navigates to the production save ONLY on the second press', () => {
+  it('navigates to the production save ONLY on the second press', async () => {
     // "Enabling it requires a warning and deliberate confirmation immediately before reload."
     // The second press IS the reload, so there is no window between confirming and applying.
+    // The URL waits on `dev-config`, which loads with the pane's modules (issue #1015), so each
+    // press is settled before it is read: unsettled, the first-press absence would hold even
+    // for a press that navigated, because nothing it started had landed yet.
     const applied: string[] = [];
     const root = mountDev({
       developerPage: PAGE,
@@ -440,8 +443,10 @@ describe('the persistence controls (issue #249)', () => {
       applyDeveloperConfig: (s) => applied.push(s),
     });
     q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    await settled();
     expect(applied).toEqual([]);
     q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    await settled();
     expect(applied).toHaveLength(1);
     // The URL carries the gate AND the flag, canonicalised -- `selectStorageNamespace` needs
     // both, and a URL with the flag alone would be inert.
@@ -1065,8 +1070,8 @@ describe('the developer modules load when the pane opens (issue #1014)', () => {
     // `dev-exports` made to fail as a stale chunk name or a dropped connection would, mocked
     // per case and restored after, so no other case loads a failing module. Both the mock and
     // its removal are flushed by an import of their own before the pane opens: Vitest resolves
-    // a queued `doMock` on the next import, and the pane's three imports start together, so
-    // only the first would wait for it.
+    // a queued `doMock` on the next import, and the pane's four imports (three since issue
+    // #1014, and `dev-config` since #1015) start together, so only the first would wait for it.
     afterEach(async () => {
       vi.doUnmock('./dev-exports');
       vi.resetModules();
