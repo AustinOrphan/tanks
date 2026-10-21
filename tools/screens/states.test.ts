@@ -130,6 +130,20 @@ describe('the screen-state catalogue', () => {
     }
   });
 
+  it('waits for the Configuration body it measures, after the pane, since it loads on the first open (issue #1015)', () => {
+    // The body is built when the pane first opens, and the pane is visible before it, so a
+    // capture that waited only for `.hud-devcfg` could measure selectors that do not exist yet
+    // -- an absent measured selector fails only in a real capture. The body's nodes are
+    // appended together, so its first is the one waited for. Negative control: dropping the
+    // body wait.
+    const state = findScreenState('screen.devtools.config')!;
+    const waits = state.steps.filter((s: any) => 'waitVisible' in s).map((s: any) => s.waitVisible);
+    const pane = waits.indexOf('.hud-devcfg');
+    expect(pane, 'no wait for the pane').toBeGreaterThanOrEqual(0);
+    expect(waits.indexOf('.hud-devcfg-presets'), "no wait for the body after the pane's").toBeGreaterThan(pane);
+    expect(state.measure, 'the waited-for body node is not measured').toContain('.hud-devcfg-presets');
+  });
+
   it('measures something on every state, and never an empty selector', () => {
     // A capture with nothing measured is a picture with no caption: it proves the page did
     // not crash and nothing else. The measurement half is the part that has actually

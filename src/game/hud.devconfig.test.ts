@@ -198,3 +198,176 @@ describe('Copy Link', () => {
     expect(field.classList.contains('hud-devcfg-copyfield--hidden')).toBe(false);
   });
 });
+
+describe('the Configuration body loads when its pane first opens (issue #1015)', () => {
+  // `devtools-menu`, `dev-config-menu` and `dev-config` are loaded by dynamic imports on the
+  // pane's first open, so an ordinary page never downloads them. These cases pin what that must
+  // not change: nothing is built before an open, the open builds the body once and keeps it,
+  // and a close, replace, surface change or teardown during the load builds nothing. The
+  // modules register listeners only on the nodes they build, so "no listener behind" is "no
+  // body built".
+  const body = (root: HTMLElement): HTMLElement => q(root, '.hud-devcfg-body');
+  const BUILT = [
+    'hud-devcfg-presets',
+    'hud-devcfg-groups',
+    'ui-hint hud-devcfg-namespace',
+    'ui-hint hud-devcfg-unknown hud-devcfg-unknown--hidden',
+    'hud-devcfg-url',
+    'hud-devcfg-actions',
+  ];
+  const children = (root: HTMLElement): string[] => Array.from(body(root).children, (c) => c.className);
+
+  it('an ordinary page builds no body, even after every import has settled', async () => {
+    // Negative control: a load started at construction, as the build ran before #1015. Settled
+    // FIRST, so a build deferred past construction by a tick is caught too. The HUD is left on
+    // the surface it was built on: every `setState` spends the load's generation, so a load
+    // started at construction would be dropped by the first surface change, and only a page
+    // that has not changed surface lets it land where this can see it. The download such a
+    // load costs is the browser probe's to see, not this file's.
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, {});
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('a developer page builds no body until Configuration opens', async () => {
+    // Negative control: the Developer Tools open loading the Configuration menu too. The
+    // developer entry is not what loads it.
+    const { root } = mount();
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('THE CONTROL: the open loads the body, presets to actions, once it lands', async () => {
+    // Without this, the absences above could pass because the body is never built at all.
+    // Negative control: an open that does not start the load.
+    const { root } = mount();
+    open(root);
+    expect(body(root).childElementCount, 'the body is loaded, not built in the open itself').toBe(0);
+    await settled();
+    expect(children(root)).toEqual(BUILT);
+  });
+
+  it('a close during the load builds no body into the closed pane', async () => {
+    // Negative controls: the resolved load ignoring the generation, and a surface change (which
+    // `back()` ends in) that does not spend one.
+    const { hud: h, root } = mount();
+    open(root);
+    h.back();
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('a close and reopen during the load builds the body once, for the reopen', async () => {
+    // The superseded load and the reopen's both land; only the second may build. Negative
+    // control: the resolved load ignoring the generation, which builds two bodies side by side.
+    const { hud: h, root } = mount();
+    open(root);
+    h.back();
+    open(root);
+    await settled();
+    expect(body(root).querySelectorAll('.hud-devcfg-presets')).toHaveLength(1);
+    expect(children(root)).toEqual(BUILT);
+  });
+
+  it('a surface change during the load builds nothing into the pane it closed', async () => {
+    // A match starting under the pane closes it through `setState`'s close-all, not `back()`.
+    // Negative controls: a surface change that spends no generation, and the resolved load
+    // ignoring it.
+    const { hud: h, root } = mount();
+    open(root);
+    h.setState('playing');
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('a replace during the load builds nothing into the pane that is leaving', async () => {
+    // The DEV badge opens Developer Tools over the pane, which REPLACES it (the layer's
+    // `release`) rather than closing it. Negative controls: a replace that spends no
+    // generation, and the resolved load ignoring it.
+    const { root } = mount();
+    open(root);
+    q<HTMLButtonElement>(root, '.hud-devbadge').click();
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('builds the body once: a second visit keeps the same controls', async () => {
+    // As before #1015, when it was built once at construction. Negative control: an open that
+    // loads and builds whether or not a body exists, which throws the controls away (and,
+    // with them, the view of the selection the keep-across-a-close case reads).
+    const { hud: h, root } = mount();
+    await openLoaded(root);
+    const presets = q(root, '.hud-devcfg-presets');
+    h.back();
+    open(root);
+    await settled();
+    expect(q(root, '.hud-devcfg-presets')).toBe(presets);
+    expect(children(root)).toEqual(BUILT);
+  });
+
+  it('a teardown during the load builds nothing into the discarded tree', async () => {
+    // `dispose` never runs the pane's close or a surface change. Negative control: a teardown
+    // that does not spend the generation itself.
+    const { hud: h, root } = mount();
+    open(root);
+    const discarded = body(root);
+    h.dispose();
+    hud = null;
+    await settled();
+    expect(discarded.childElementCount).toBe(0);
+  });
+
+  describe('a load that fails', () => {
+    // `devtools-menu` made to fail as a stale chunk name or a dropped connection would, mocked
+    // per case and restored after, so no other case loads a failing module. Not `dev-config`:
+    // the Developer Tools open, which comes first, loads that one too. Both the mock and its
+    // removal are flushed by an import of their own before the pane opens: Vitest resolves a
+    // queued `doMock` on the next import, and the Developer Tools open starts four imports of
+    // its own just before Configuration's three.
+    afterEach(async () => {
+      vi.doUnmock('./devtools-menu');
+      vi.resetModules();
+      await import('./devtools-menu');
+    });
+    async function failLoads(): Promise<void> {
+      vi.doMock('./devtools-menu', () => {
+        throw new Error('offline');
+      });
+      vi.resetModules();
+      await import('./devtools-menu').catch(() => {});
+    }
+
+    it('is reported in the pane, and the next open builds the body in its place', async () => {
+      // Negative controls: no rejection handler (an unhandled rejection, and a pane that stays
+      // blank), and a retry that leaves the old failure line beside the new body.
+      const { hud: h, root } = mount();
+      await failLoads();
+      open(root);
+      await settled();
+      expect(children(root)).toEqual(['hud-devcfg-line hud-devcfg-failed']);
+      const failed = q(root, '.hud-devcfg-failed');
+      expect(failed.getAttribute('role')).toBe('status');
+      expect(failed.textContent).toContain('could not be loaded');
+      vi.doUnmock('./devtools-menu');
+      vi.resetModules();
+      await import('./devtools-menu');
+      h.back();
+      open(root);
+      await settled();
+      expect(children(root)).toEqual(BUILT);
+    });
+
+    it('after the pane closed reports nothing into it', async () => {
+      // Negative control: the failure path ignoring the generation.
+      const { hud: h, root } = mount();
+      await failLoads();
+      open(root);
+      h.back();
+      await settled();
+      expect(body(root).childElementCount).toBe(0);
+    });
+  });
+});

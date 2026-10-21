@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
 import { ZERO_STATS } from './stats';
@@ -26,6 +26,22 @@ afterEach(() => {
   hud = null;
   document.body.innerHTML = '';
 });
+
+/**
+ * Builds the Configuration menu's body the one way a page builds it: its pane opened through the
+ * real UI and the load awaited (issue #1015), then Back to the surface the HUD was on. An
+ * ordinary page never builds it, but the sweeps below are over every control the HUD can render,
+ * and the menu is about 160 of them; without this they would drop out of both sweeps silently.
+ */
+async function loadDevConfigBody(h: Hud, root: HTMLElement): Promise<void> {
+  (root.querySelector('.hud-devtools-open') as HTMLButtonElement).click();
+  (root.querySelector('.hud-devcfg-open') as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector('.hud-devcfg-presets'), 'the Configuration body was never built')
+      .not.toBeNull();
+  }, { timeout: 5000 });
+  h.back();
+}
 
 /**
  * An APPROXIMATION of the accessible name, and deliberately a narrow one: `aria-label`,
@@ -134,24 +150,29 @@ describe('HUD landmarks (issue #629)', () => {
 });
 
 describe('HUD control names (issue #629)', () => {
-  it('never names a control with a bare digit', () => {
+  it('never names a control with a bare digit', async () => {
     // THE MEASURED GAP: level-select buttons, the versus player-count row and the versus
     // stock row all shipped `textContent = String(n)` and nothing else, so a screen
     // reader tabbing them heard "1, 2, 3" with nothing saying what they set. The pane has
     // three such rows at once, which is what made it unusable rather than merely terse.
     const { hud: h, root } = mount();
+    await loadDevConfigBody(h, root);
     h.setLevelSelect(2, 4);
+    // Not vacuous over the Configuration menu: its body is in the sweep (issue #1015).
+    expect(root.querySelectorAll('.hud-devcfg-body button').length, 'the Configuration body is not in the sweep')
+      .toBeGreaterThan(0);
     const digits = Array.from(root.querySelectorAll('button'))
       .filter((b) => /^\d+$/.test(accessibleName(b)))
       .map((b) => `${b.className} -> '${accessibleName(b)}'`);
     expect(digits, 'controls whose entire accessible name is a number').toEqual([]);
   });
 
-  it('gives every rendered control a non-empty accessible name', () => {
+  it('gives every rendered control a non-empty accessible name', async () => {
     // Broader than the digit rule and catches the other half of the gap: the colour
     // swatches have NO text at all, and were named only by `title` -- a tooltip, which
     // some screen readers ignore outright and none of them promise.
     const { hud: h, root } = mount();
+    await loadDevConfigBody(h, root);
     h.setLevelSelect(2, 4);
     h.setAchievements(new Set());
     // `.hud-action` carries NO text in the markup -- its word is written by `setOutcome`
@@ -171,6 +192,9 @@ describe('HUD control names (issue #629)', () => {
     // carries none. Driven, not filtered, on exactly the precedent above.
     h.showMatchFailure({ title: 'That match could not start.', detail: 'Something went wrong.', action: 'Back to menu' });
 
+    // Not vacuous over the Configuration menu: its body is in the sweep (issue #1015).
+    expect(root.querySelectorAll('.hud-devcfg-body button').length, 'the Configuration body is not in the sweep')
+      .toBeGreaterThan(0);
     const unnamed = Array.from(root.querySelectorAll('button'))
       .filter((b) => accessibleName(b) === '')
       .map((b) => b.className);

@@ -13,6 +13,7 @@ import {
   type DevExportPort,
   type RoundDiagnostics,
 } from './dev-exports';
+import { canonicalDevSearch } from './dev-config';
 import { createRecordingInput, replayMetaFor } from './replay';
 import { arenaById, createWorldFor } from '../sim/arena';
 
@@ -452,6 +453,63 @@ describe('the persistence controls (issue #249)', () => {
     // both, and a URL with the flag alone would be inert.
     expect(applied[0]).toContain('dev=1');
     expect(applied[0]).toContain('prodSave=1');
+  });
+
+  /*
+   * Use Production Save's URL is built through `canonicalDevSearch`, which arrives with the
+   * Developer Tools pane's modules (issue #1015): a press after the pane's load answers at
+   * once, and a press before it -- here, on a HUD whose pane never opened -- when the load that
+   * press starts lands. The page's query is one the canonical form REORDERS, so a URL built
+   * without it differs: with a query it left unchanged, both would pass.
+   */
+  const PROD_SAVE_BASE = '?utm=x&aimRay=1';
+  const PROD_SAVE_RAW = '?utm=x&aimRay=1&dev=1&prodSave=1';
+  function mountProdSave(applied: string[]): HTMLElement {
+    return mountDev({
+      developerPage: PAGE,
+      storageNamespace: 'developer',
+      developerSearch: PROD_SAVE_BASE,
+      applyDeveloperConfig: (s) => applied.push(s),
+    });
+  }
+
+  it('builds its URL through the canonical form the Configuration menu previews, when the press starts the load (issue #1015)', async () => {
+    // Negative control: a URL handed over without the canonical form.
+    const canonical = canonicalDevSearch(PROD_SAVE_RAW).search;
+    expect(canonical, 'the fixture query must change under the canonical form').not.toBe(PROD_SAVE_RAW);
+    const applied: string[] = [];
+    const root = mountProdSave(applied);
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    await settled();
+    expect(applied).toEqual([canonical]);
+  });
+
+  it('builds the same canonical URL when the pane loaded its modules before the press (issue #1015)', async () => {
+    // Negative control: a URL handed over without the canonical form. Answered in the press's
+    // own task here, so it is read before any settle.
+    const canonical = canonicalDevSearch(PROD_SAVE_RAW).search;
+    const applied: string[] = [];
+    const root = mountProdSave(applied);
+    q2<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    await settled();
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    expect(applied).toEqual([canonical]);
+  });
+
+  it('a confirmed reload still waiting on the modules goes nowhere once the pane has closed (issue #1015)', async () => {
+    // The pane's rule for every press that waits on its load: a close drops the answer. Left
+    // to land, the reload would navigate from a pane the developer had already left. Negative
+    // control: an answer that ignores the generation.
+    const applied: string[] = [];
+    const root = mountProdSave(applied);
+    q2<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    q2<HTMLButtonElement>(root, '.hud-prodsave').click();
+    q2<HTMLButtonElement>(root, '.hud-devtools-back').click();
+    await settled();
+    expect(applied).toEqual([]);
   });
 
   it('does not offer Use Production Save on a session already on the production keys', () => {

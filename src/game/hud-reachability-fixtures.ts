@@ -77,6 +77,12 @@ interface LayerReach {
    * (`accessibility-exceptions.ts`).
    */
   readonly padSuppressed?: true;
+  /**
+   * A selector that exists only once a lazily loaded body is built, for a layer whose body loads
+   * when it first opens (issue #1015). The walk waits for it, so a loading pane is not walked as
+   * its shell alone -- which would pass over Back while measuring none of the body's controls.
+   */
+  readonly body?: string;
 }
 
 export const LAYER_REACH: Record<HudLayerId, LayerReach> = {
@@ -146,6 +152,7 @@ export const LAYER_REACH: Record<HudLayerId, LayerReach> = {
       click(root, '.hud-devtools-open');
       click(root, '.hud-devcfg-open');
     },
+    body: '.hud-devcfg-presets',
   },
   'developer-gallery': {
     selector: '.hud-gallery',
@@ -237,7 +244,7 @@ export function walkWithPad(h: Hud, container: HTMLElement, primary: string | nu
 export function layerReachCase(id: HudLayerId, budgetMs: number): void {
   const reach = LAYER_REACH[id];
 
-  it(`gives the pad the keyboard inside ${id}`, () => {
+  it(`gives the pad the keyboard inside ${id}`, async () => {
     vi.useFakeTimers();
     try {
       const { hud: h, root } = mount();
@@ -272,6 +279,12 @@ export function layerReachCase(id: HudLayerId, budgetMs: number): void {
         return;
       }
 
+      if (reach.body !== undefined) {
+        // `vi.waitFor` advances the fake timers itself. Bounded, so a body that never loads fails
+        // here by name instead of leaving the walk to pass over the shell.
+        const selector = reach.body;
+        await vi.waitFor(() => q(container, selector), { timeout: 10_000 });
+      }
       const controls = walkWithPad(h, container, reach.primary, id);
       // And Confirm ACTS, which is the half the gallery and the alert both failed: with the
       // pane open, `act('confirm')` returned false and landed nowhere.
