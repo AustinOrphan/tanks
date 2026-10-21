@@ -1,0 +1,21 @@
+{
+  "id": "mapgen-run-legs-hollow-block-reads-as-mass",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "  if (w >= 3 && h >= 3 && cells.length === w * h) return { mass: cells.length };\n",
+  "replace": "  if (w >= 3 && h >= 3) return { mass: cells.length };\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts",
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "A mass is read off the bounding box alone, without the cell count: a hollow ring, a T or an L with both legs at least 3 cells reads as a mass, so the run-length block loses its Ls and the mass sizes include shapes that hold no interior cell.",
+  "killedBy": [
+    "the mass read-back (issue #1066) reads a filled rectangle at least three cells each way as a mass, and a hollow ring or a slab two cells thick as other",
+    "runs: masses for cover and thin runs for circulation (issue #1066) THE CONTROL: masses disabled draws interior share 0 and thin share 1, boards the thickness gate refuses",
+    "runs: masses for cover and thin runs for circulation (issue #1066) builds every mass one module thick and two or three modules long, and every other wall component a straight run or an L",
+    "runs: masses for cover and thin runs for circulation (issue #1066) THE CONTROL: masses placed by their centre lines touch, and the read-back refuses the board",
+    "the run-length read-back (issue #1029) reads a straight run, and an L's longer leg as the run and its shorter leg less the corner as the arm",
+    "the run-length read-back (issue #1029) reads a block, a T and an L missing its corner cell as other",
+    "the run-length read-back (issue #1029) sums the components and summarises the lengths over a sample of boards"
+  ]
+}

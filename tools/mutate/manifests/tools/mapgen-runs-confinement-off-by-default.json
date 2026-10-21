@@ -7,10 +7,14 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The confinement exists but defaults off, so every default board is cut at the seam again while the option still reads as the fix. The switch is there only for measuring each cause alone; off by default it is the pre-#1029 generator with an extra knob.",
+  "why": "The confinement exists but defaults off, so every default board's thin pieces are cut at the seam again and, since issue #1066, so are its masses: fragments, cut masses read as no shape `runs` draws, and thin shares over the ceiling, while the option still reads as the fix.",
   "killedBy": [
     "runs: no wall component below 5 cells (issue #1029) draws no wall component below 5 cells, 8- or 4-connected, on any default board for seeds 1-100",
     "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 1: the old minRun 4, confinement still on, draws a 4-cell straight run",
-    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share",
+    "runs: masses for cover and thin runs for circulation (issue #1066) puts every default board for seeds 1-100 inside the interior band and at or under the thin ceiling, each with a mass and a thin component",
+    "runs: masses for cover and thin runs for circulation (issue #1066) THE CONTROL: no thin pieces draws boards with no thin component",
+    "runs: masses for cover and thin runs for circulation (issue #1066) builds every mass one module thick and two or three modules long, and every other wall component a straight run or an L",
+    "runs: masses for cover and thin runs for circulation (issue #1066) with masses off and #1029's 16 pieces, draws seeds 1-100 byte for byte as at #1029's merge"
   ]
 }

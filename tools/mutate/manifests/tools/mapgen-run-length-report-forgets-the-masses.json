@@ -1,0 +1,14 @@
+{
+  "id": "mapgen-run-length-report-forgets-the-masses",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "    masses.push(...legs.masses);\n",
+  "replace": "    // the masses are left out of the sample\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts"
+  ],
+  "why": "The sample report drops each board's masses, so the sweep's mass-size distribution is empty while every board's own read-back still has them.",
+  "killedBy": [
+    "the mass read-back (issue #1066) summarises the mass sizes over a sample of boards"
+  ]
+}

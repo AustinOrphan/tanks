@@ -1,0 +1,16 @@
+{
+  "id": "mapgen-runs-mass-clearance-from-the-centre-line",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "      for (let rr = r0 - 1; rr <= r1 + 1; rr++) {\n        for (let cc = c0 - 1; cc <= c1 + 1; cc++) if (cells[rr][cc] !== '.') return false;\n",
+  "replace": "      for (let rr = r0; rr <= r1; rr++) {\n        for (let cc = c0; cc <= c1; cc++) if (cells[rr][cc] !== '.') return false;\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "Clearance measured from a mass's centre line at its own half-width reaches only its edge, so a second mass on the next lattice slot may touch it: the two merge into one component that is no straight, L or mass, or into a block too thick for the interior band. The issue's named failure; the edge ring is what makes every lane between masses a module wide.",
+  "killedBy": [
+    "runs: masses for cover and thin runs for circulation (issue #1066) puts every default board for seeds 1-100 inside the interior band and at or under the thin ceiling, each with a mass and a thin component",
+    "runs: masses for cover and thin runs for circulation (issue #1066) builds every mass one module thick and two or three modules long, and every other wall component a straight run or an L",
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+  ]
+}

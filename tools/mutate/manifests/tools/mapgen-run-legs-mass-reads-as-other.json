@@ -1,0 +1,19 @@
+{
+  "id": "mapgen-run-legs-mass-reads-as-other",
+  "file": "tools/mapgen/sweep-report.mjs",
+  "find": "  if (w >= 3 && h >= 3 && cells.length === w * h) return { mass: cells.length };\n",
+  "replace": "  // a filled rectangle is not read as a mass\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/sweep-report.test.ts",
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "The read-back has no mass: a filled rectangle falls through to `other`, so the sweep's RUN LENGTHS block reports every mass as a shape `runs` never draws and states no mass-size distribution, and the mass-shape test can no longer tell a mass from two that merged.",
+  "killedBy": [
+    "the mass read-back (issue #1066) reads a filled rectangle at least three cells each way as a mass, and a hollow ring or a slab two cells thick as other",
+    "the mass read-back (issue #1066) summarises the mass sizes over a sample of boards",
+    "runs: masses for cover and thin runs for circulation (issue #1066) puts every default board for seeds 1-100 inside the interior band and at or under the thin ceiling, each with a mass and a thin component",
+    "runs: masses for cover and thin runs for circulation (issue #1066) builds every mass one module thick and two or three modules long, and every other wall component a straight run or an L",
+    "runs: masses for cover and thin runs for circulation (issue #1066) THE CONTROL: masses placed by their centre lines touch, and the read-back refuses the board"
+  ]
+}

@@ -7,8 +7,9 @@
   "tests": [
     "tools/mapgen/runs.test.ts"
   ],
-  "why": "The per-piece destructible chance drops to 0, so no board carries a destructible and the exception list has nothing to count. The test's non-vacuity guard (more than 50 of the 100 default boards for seeds 1-100 carry destructibles; 94 measured, 0 under this mutation) fails first, and the exact pin of the 26 boards over 30% of their wall mass would fail behind it.",
+  "why": "The per-piece destructible chance drops to 0, so no board carries a destructible and the empty exception list holds vacuously. The exact count of boards carrying destructibles is what makes that list non-vacuous, and the byte-identical #1029 control keeps the default chance.",
   "killedBy": [
-    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share",
+    "runs: masses for cover and thin runs for circulation (issue #1066) with masses off and #1029's 16 pieces, draws seeds 1-100 byte for byte as at #1029's merge"
   ]
 }

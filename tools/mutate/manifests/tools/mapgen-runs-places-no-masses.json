@@ -1,0 +1,15 @@
+{
+  "id": "mapgen-runs-places-no-masses",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "    masses = 3,\n",
+  "replace": "    masses = 0,\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "Issue #1066's mass step is switched off by default, so every default board is thin pieces alone again: interior share 0 and thin share 1, a board the thickness gate refuses, which is the generator the issue exists to replace. The mass-shape test holds vacuously with no mass, so the interior band, the mass count and the destructible pins are what see it.",
+  "killedBy": [
+    "runs: masses for cover and thin runs for circulation (issue #1066) puts every default board for seeds 1-100 inside the interior band and at or under the thin ceiling, each with a mass and a thin component",
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+  ]
+}
