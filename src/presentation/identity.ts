@@ -172,7 +172,7 @@ export interface OwnerPalette {
  * `presentation/quality.ts`'s presets. Issue #1057 threaded them: every owner colour is read
  * through `identityColor`, `teamColor` or `resolveOwnerColor` with a palette passed in, and
  * a session picks the palette once, from the `ownerPalette` dev flag or else the player's
- * stored Player colours setting. The palette is an ARGUMENT at every site rather than state
+ * stored Player colors setting. The palette is an ARGUMENT at every site rather than state
  * held here, so a test that draws in High contrast cannot leave the next file's tests
  * drawing in it too.
  */

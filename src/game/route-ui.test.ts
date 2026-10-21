@@ -330,7 +330,7 @@ function fixture(
 // place a layout is written.
 // Issue #785's pair: the versus setup pane reads the connected pads on open and holds
 // hotplug listeners while it is up, the Controllers panel's shape.
-// Issue #1058's `onOwnerPaletteChange` is the newest: the Player colours control, which
+// Issue #1058's `onOwnerPaletteChange` is the newest: the Player colors control, which
 // writes the settings store and nothing else, as `onQualityChange` does.
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllerLayoutClose', 'onControllerLayoutOpen', 'onControllerLayoutRequest',
@@ -421,7 +421,7 @@ describe('the application routes work with no gameplay session behind them', () 
     // ('classic'), and the store refuses an id outside OWNER_PALETTE_IDS.
     expect(
       f.deps.settings.snapshot().presentation.ownerPalette,
-      'the Player colours toggle did not reach the store',
+      'the Player colors toggle did not reach the store',
     ).toBe('high-contrast');
   });
 

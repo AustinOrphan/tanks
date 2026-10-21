@@ -115,14 +115,14 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 729,
+        "x": 733,
         "y": 355,
-        "w": 162,
+        "w": 154,
         "h": 44
       },
-      "text": "Player colours: Classic",
+      "text": "Player colors: Classic",
       "aria": {
-        "aria-label": "Player colours: Classic. The original ring and team colours that show which tank is whose. Takes effect when the next match starts. Tap to switch to Player colours: High contrast."
+        "aria-label": "Player colors: Classic. The original ring and team colors that show which tank is whose. Takes effect when the next match starts. Tap to switch to Player colors: High contrast."
       },
       "style": {
         "display": "block",

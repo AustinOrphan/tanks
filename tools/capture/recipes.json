@@ -2805,9 +2805,9 @@
       "events": [],
       "allowUnexpectedEvents": true
     },
-    "title": "Settings, Player colours set to High contrast",
-    "description": "The Settings pane for a player who chose High contrast player colours: the Accessibility row reads Player colours: High contrast, from the stored setting.",
-    "altText": "Screenshot of the Tanks! settings screen, with the Accessibility row reading Motion, Quality and Player colours: High contrast.",
+    "title": "Settings, Player colors set to High contrast",
+    "description": "The Settings pane for a player who chose High contrast player colors: the Accessibility row reads Player colors: High contrast, from the stored setting.",
+    "altText": "Screenshot of the Tanks! settings screen, with the Accessibility row reading Motion, Quality and Player colors: High contrast.",
     "timeoutMs": 60000,
     "outputBudgetBytes": 8000000
   },

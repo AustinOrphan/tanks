@@ -1348,7 +1348,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // controller's path to the level. The slider between them still does not count; it is an
     // `<input type="range">`, outside the walk on purpose.
     //
-    // 92 since issue #1058: Settings' Accessibility section gains the Player colours toggle,
+    // 92 since issue #1058: Settings' Accessibility section gains the Player colors toggle,
     // after Quality, so the Settings pane goes from 15 to 16. Not capability-gated, so a
     // relevance verdict would not take it out either.
     expect(totalControls, 'recount the panels above if this moves').toBe(92);

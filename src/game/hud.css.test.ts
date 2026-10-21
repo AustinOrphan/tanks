@@ -1324,7 +1324,7 @@ describe('hud.css is syntactically whole', () => {
     // as the cards beside it, so `unstyled` stays empty.
     // Issue #918 adds TWO: Settings' volume steppers, − and + either side of the slider.
     // 160 -> 162. Static markup, and both carry `.ui-btn--sm`, so `unstyled` stays empty.
-    // Issue #1058 adds ONE: Settings' Player colours toggle, after Quality in Accessibility.
+    // Issue #1058 adds ONE: Settings' Player colors toggle, after Quality in Accessibility.
     // 162 -> 163. Static markup carrying `.ui-btn--sm`, so `unstyled` stays empty.
     expect(buttons.length).toBe(163 + 2 + devMenuButtons());
     expect(unstyled).toEqual([]);
@@ -1462,7 +1462,7 @@ describe('hud.css is syntactically whole', () => {
     // sized by the rule its sibling cards share.
     // Issue #918 adds TWO, the same volume steppers as the button sweep above: 144 -> 146,
     // each sized by `.ui-btn--sm`.
-    // Issue #1058 adds ONE, the same Player colours toggle as the button sweep above:
+    // Issue #1058 adds ONE, the same Player colors toggle as the button sweep above:
     // 146 -> 147, sized by `.ui-btn--sm`.
     expect(controls.length).toBe(147 + 2 + devMenuButtons());
 
@@ -1641,7 +1641,7 @@ describe('hud.css is syntactically whole', () => {
       // Issue #918's − and + volume steppers, beside Mute in the Audio row. Their own rule
       // changes only the glyph's type, so they keep the shape listed here.
       '.hud-settings-volume-down', '.hud-settings-volume-up',
-      // Issue #1058's Player colours toggle, the third control in the Accessibility row.
+      // Issue #1058's Player colors toggle, the third control in the Accessibility row.
       '.hud-owner-palette-toggle'];
     for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
     for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));

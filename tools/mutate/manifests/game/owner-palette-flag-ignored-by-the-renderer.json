@@ -11,6 +11,6 @@
   "killedBy": [
     "startGameWith: dev flags stay off by default threads the ownerPalette dev flag to every reader, once per session (issue #1057) hands the renderer and the stock HUD the SAME palette the flag names, before any status",
     "startGameWith: dev flags stay off by default builds the session in the STORED owner palette when no flag is set (issue #1058)",
-    "startGameWith: the Player colours setting survives a reload (issue #1058) a High contrast choice made through the toggle reaches the next session's renderer and stock chips"
+    "startGameWith: the Player colors setting survives a reload (issue #1058) a High contrast choice made through the toggle reaches the next session's renderer and stock chips"
   ]
 }

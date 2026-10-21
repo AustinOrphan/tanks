@@ -566,7 +566,7 @@ export const SCREEN_STATES = Object.freeze([
     // Scoped to the pane: `measure` takes the FIRST DOM match, visible or not, and most of the
     // page's `.ui-hint`s are in closed panes.
     //
-    // `.hud-owner-palette-toggle` is the Player colours control (issue #1058): measured here so
+    // `.hud-owner-palette-toggle` is the Player colors control (issue #1058): measured here so
     // `screen.settings.owner-palette` below has a default-state label to differ from, and so
     // the UI-scale state holds the newest control in the row to the same 1.5x rule.
     measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint', '.hud-owner-palette-toggle'],
@@ -600,10 +600,10 @@ export const SCREEN_STATES = Object.freeze([
   }),
   state({
     id: 'screen.settings.owner-palette',
-    title: 'Settings, Player colours set to High contrast',
+    title: 'Settings, Player colors set to High contrast',
     description:
-      'The same pane for a player who chose High contrast player colours: the Accessibility '
-      + 'row reads Player colours: High contrast, from the stored setting.',
+      'The same pane for a player who chose High contrast player colors: the Accessibility '
+      + 'row reads Player colors: High contrast, from the stored setting.',
     // Issue #1058. The seed names only the field under test, the shape
     // `screen.settings.ui-scale` uses, and the reader defaults the rest. What makes this state
     // evidence rather than a copy of `screen.settings` is that something CONSUMES the seed: the

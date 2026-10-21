@@ -179,7 +179,7 @@ export interface PresentationSettings {
    */
   readonly quality: QualityPreset;
   /**
-   * Which owner palette -- the ring and team colours together -- a match is built with
+   * Which owner palette -- the ring and team colors together -- a match is built with
    * (issue #1058). Read once when a session is built, as `quality` is, so a change applies
    * from the next match. The ids come from `presentation/identity.ts`, which imports only
    * simulation types, so naming them here costs this module nothing.
