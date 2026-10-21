@@ -1,9 +1,9 @@
 ---
 status: proposed
 date: 2026-09-17
-last-reviewed: 2026-10-11
+last-reviewed: 2026-10-21
 scope: A three-tier rule set for generating versus maps -- generative rules, the shipped acceptance filter, and a new measured quality tier calibrated on shipped boards.
-implementation-issues: [819, 820, 821, 822, 1028, 1029, 1065]
+implementation-issues: [819, 820, 821, 822, 1028, 1029, 1065, 1066]
 implementation-prs: []
 supersedes: []
 superseded-by: []
@@ -527,8 +527,10 @@ come off and a board of 2x2 blocks offers almost none.
 
 `runs` implements both literally: carve a protected 3-cell circuit plus one spur, then place
 cover as one-cell-thick runs of 4 to 8 cells, drawing an L-bend for 45% of them. (Since
-issue #1029 the runs are 5 to 8 cells and kept inside the half the rotation copies; the table
-below and its 20 seeds describe the generator before that. See the section after this one.)
+issue #1029 the runs are 5 to 8 cells and kept inside the half the rotation copies, and since
+issue #1066 masses one 3x3 module thick are placed first and the default is 2 pieces a half, not
+16; the table below and its 20 seeds describe the generator before both. See the two sections
+after this one.)
 
 | ruleset | wall | legal | corr | open | neck | rout | long | sight | bank |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -608,8 +610,13 @@ per-board figure: at 0.10, 1 and 3 boards were still over. This issue changes on
 length and the confinement, and its criterion allows the boards over the cap as exceptions
 listed by seed, so they are listed below and the criterion is not claimed met. A trim that
 turns a board's destructible pieces solid, last placed first, until it is at or under 30% of
-its wall cells is on branch `feat/mapgen-runs-destructible-trim`, for the owner to take or
-drop: it moves no wall cell and changes only the 26 boards over the cap in seeds 1-100.
+its wall cells is on branch `feat/mapgen-runs-destructible-trim` (4c7761ac), held pending issue
+#1066 (ruled 2026-10-21): neither merged nor deleted, and reconsidered after #1066's masses land.
+Masses change the piece count and placement, so they move every population the trim pins, and
+its guard is `cellsConnected`, which can seal a spawn pocket only destructibles closed: over
+seeds 1-1000 it flips seed 961 at N=4 from accepted to refused (egress). A re-cut should guard
+on the acceptance rule instead. On this section's generator it moves no wall cell and changes
+only the 26 boards over the cap in seeds 1-100.
 
 **The result**, default `runs`, from `npx vite-node tools/mapgen/sweep.mjs --seeds 50` and the
 same with `--seed-offset 50`. Accepted of drawn, with every refusal named; N=3 is shown before
@@ -668,14 +675,219 @@ and after the spread gate (#820):
   candidate axis pair runs |r| 0.78-0.95, so a two-axis grid over them is close to
   one-dimensional and coverage is bounded by a diagonal band rather than by the ruleset.
 
-The piece-count knob is still dead at 16: `pieces=16` and `pieces=24` print identical rows in
-the variant sweep (N=4) on both samples. Interior share is not reported here: the pieces are one
-cell thick, so it is 0.00 by construction, and its gate is issue #1065's. The result tables
-are `sweep.mjs`'s own blocks, computed by `tools/mapgen/sweep-report.mjs`. In the per-cause
-table, the drawn and N=4 columns are the small-component block of `sweep.mjs --variants`, which
-adds those configurations to `runs`; that mode runs N=4 only, so the N=2 column was counted with
-the same `smallWallComponents` and the shipped acceptance tier in a one-off script. Nothing
-here has been played.
+On #1029's generator the piece-count knob is still dead at 16: `pieces=16` and `pieces=24`
+print identical rows in the variant sweep (N=4) on both samples. Interior share is not reported
+here: #1029's pieces are one cell thick, so it is 0.00 by construction, and its gate is issue
+#1065's. The result tables are `sweep.mjs`'s own blocks, computed by
+`tools/mapgen/sweep-report.mjs`. In the per-cause table, the drawn and N=4 columns are the
+small-component block of `sweep.mjs --variants` at #1029's merge (3ce9449b), which adds those
+configurations to `runs`; that mode runs N=4 only, so the N=2 column was counted with the same
+`smallWallComponents` and the shipped acceptance tier in a one-off script. (Since issue #1066
+those variant rows carry masses; the next section has their figures.) Nothing here has been
+played.
+
+### `runs` with masses for cover (issue #1066)
+
+Under #1029's generator every default `runs` board failed the thickness gate (#1065): over the
+100 boards drawn for seeds 1-100, interior share 0.000 and thin share 1.000 on every one, with
+13,424 wall cells (mean 134.2). Its pieces are one cell thick, so no wall cell has four walled
+neighbors. The thickness ruling on #821 (2026-10-09) asks for the shipped set's mix instead:
+masses for cover, thin runs and L-bends for circulation, the interior share inside the band the
+shipped boards span and the thin share a minority. The `thickness` note on `spines` had named the
+construction -- measure clearance from a thick piece's edge rather than its center line, and
+place thick pieces before thin ones -- and `runs` now follows it:
+
+1. **The circuit and its spur** are carved and protected as before.
+2. **Masses**, a new step. A mass is a filled bar one 3x3 module thick and two or three modules
+   long: 3x6, 6x3, 3x9 or 9x3 cells (18 or 27), always solid. Slots lie on a 3-cell lattice
+   anchored at the circuit's inner edge, in the half of the board the rotation copies, in a
+   shuffled order; each slot takes the first shape, also shuffled, that fits, until `masses`
+   (default 3) are placed. A shape fits when it is on the board, its far corner lies in the
+   rotated half (#1029's `confineToHalf`, extended to masses), none of its cells is protected or
+   beside the spawn anchor, and the ring one cell outside its edge is all floor. On a 3-cell
+   lattice two masses either touch or lie a whole module apart, so the ring is what makes every
+   lane between masses at least 3 cells wide; clearance from the center line at a mass's
+   half-width reaches only its own edge and admits two masses that touch.
+3. **Thin runs and L-bends** go down by #1029's rules, unchanged, at 2 pieces a half where #1029
+   placed up to 16. They keep their one-cell gap from the masses because the masses are already
+   wall.
+
+Two checks the thin pieces make are left out for masses because they cannot fire. A mass whose
+ring reaches its own rotated image would have to cover both the board's center row and its center
+column, and the spur protects one of them. A rectangle with a ring of floor around it, and its
+image with the same, cannot cut the floor in two. A scratch copy that kept both checks drew the
+same 1,000 boards for seeds 1-1000 as the generator without them, and neither check fired there,
+also with the confinement off and at `laneHalfWidth` 2.
+
+**In the band by construction; under the thin ceiling by measurement.** No ruleset imports the
+thickness gate, and nothing redraws. A mass's own interior share is 4/18 (0.222) or 7/27 (0.259)
+and a thin piece has none, so a board's interior share is at most 0.259, under 0.35. At least two
+masses fit per half -- measured, not proved: over seeds 1-1000, 2 a half on 493 boards and 3 on
+507, never fewer -- so a board carries at least 72 mass cells with 16 interior cells, and 2 thin
+pieces a half of at most 13 cells each (an 8-cell run and a 5-cell arm) are at most 52 thin
+cells. The interior share is then at least 16/124 (0.129), over 0.09; seeds 1-1000 measure 0.136
+to 0.215. The same worst case puts the thin share at 52/124 (0.419), so the 0.37 ceiling is NOT
+held by construction: no drawn board is over it on seeds 1-200, and 2 of seeds 1-1000 are (351 at
+0.379, 753 at 0.390).
+
+**The retune.** The thin share is T / (M + T), with M the masses' 72 to 162 cells, so the default
+piece count falls from 16 to 2. Drawn boards with a thin share over 0.37, by piece count:
+
+| pieces | seeds 1-100 | seeds 101-200 |
+| --- | ---: | ---: |
+| **2 (the default)** | **0** | **0** |
+| 3 | 8 (29, 32, 34, 35, 50, 59, 78, 80) | 4 (106, 146, 161, 162) |
+| 4 | 32 | 32 |
+| 10 and 16 | 88 | 84 |
+
+2 is the largest count with no board over. Beside the masses at most 10 thin pieces fit in a half
+on seeds 1-100 (4 to 10 at a request of 24), so 10, 16 and 24 draw the same 100 boards, and at
+that density the gate also refuses 7 of them for an interior share under 0.09. The mass count
+defaults to 3: 2 a half were placed on 44 of seeds 1-100 and 3 on 56.
+
+**Three judgment calls, not rulings**, made in this issue's pull request (2026-10-21):
+
+- **The control is `{ masses: 0, pieces: 16 }`.** The issue's control reads "masses disabled
+  reproduces #1029's merged `runs` byte for byte", but the piece default has to fall to 2 for the
+  thin ceiling, so `{ masses: 0 }` alone draws 2 pieces and cannot match. With the switch off the
+  mass step takes no draw, and with #1029's 16 pieces the 100 boards for seeds 1-100 match
+  #1029's byte for byte: SHA-256 `5904c31e805ab440816bac11e854b0e67a841ba0618eed3bb7966979d686a6d1`
+  over each grid's rows joined by a newline and the boards by a blank line, computed at
+  `origin/main` 2c750e9e, whose `runs()` is #1029's merge (3ce9449b) unchanged. Coupling the
+  defaults so that `{ masses: 0 }` restores 16 pieces was declined: it makes two options silently
+  change each other.
+- **Masses are always solid.** For: a destructible 3x9 pair is 54 cells of a board's roughly 123
+  wall cells and breaks the 30%-of-wall-mass cap on its own, and with solid masses no board is
+  over it. Against: every one of the 9 shipped boards has destructible cells in a wall component
+  that holds an interior cell, and the boards carrying any destructible fall from 94 to 49 of
+  seeds 1-100 drawn (median share 0.000), so mines have less to open.
+- **The vocabulary is the 18- and 27-cell bars**, narrower than vs-quad-02's masses of 9, 18, 36
+  and 72 cells. Measured on a scratch copy with the same placement, seeds 1-100 drawn: single
+  3x3 modules (1 interior cell of 9) dilute to an interior share of 0.056 to 0.081 and the gate
+  refuses 100 of 100; adding 2x2-module blocks (16 of 36, 0.444) puts 4 of 100 over 0.35.
+
+**The result**, default `runs`, from `npx vite-node tools/mapgen/sweep.mjs --seeds 50` and the
+same with `--seed-offset 50`. Accepted of drawn, with every refusal named:
+
+| N | seeds 1-50 | refused | seeds 51-100 | refused |
+| --- | ---: | --- | ---: | --- |
+| 2 | 50/50 | none | 50/50 | none |
+| 3, shipped tier (pre-gate) | 50/50 | none | 50/50 | none |
+| 3, after the spread gate | 48/50 | spread 2 (seeds 24, 47; 0.757 each) | 50/50 | none |
+| 4 | 42/50 | concealment 8 (seeds 9, 11, 13, 17, 20, 26, 45, 48) | 46/50 | concealment 4 (seeds 57, 69, 72, 81) |
+
+#1029's generator accepts 49 of 50 at N=4 in both samples, so the masses cost N=4 acceptance, all
+of it through concealment, on boards that are more open (the bands below). Acceptance is not
+tuned, since it is never a score.
+
+- **The thickness gate passes every accepted board** in both samples at every N, so neither
+  sample is a miss. Populations are the accepted counts above; the shipped row is the same report
+  over the 9 boards in `ARENA_DEFS`:
+
+| sample, N | passes | interior min / median / max | thin min / median / max | over 0.37 | pooled thin | any thin |
+| --- | ---: | --- | --- | ---: | --- | ---: |
+| 1-50, N=2 and 3 | 50/50 | 0.151 / 0.180 / 0.200 | 0.156 / 0.206 / 0.321 | 0 | 21.3% (1302/6126) | 50/50 |
+| 1-50, N=4 | 42/42 | 0.151 / 0.182 / 0.200 | 0.156 / 0.206 / 0.321 | 0 | 21.1% (1100/5222) | 42/42 |
+| 51-100, N=2 and 3 | 50/50 | 0.148 / 0.179 / 0.209 | 0.149 / 0.206 / 0.333 | 0 | 21.0% (1294/6172) | 50/50 |
+| 51-100, N=4 | 46/46 | 0.148 / 0.179 / 0.209 | 0.149 / 0.206 / 0.333 | 0 | 21.0% (1210/5764) | 46/46 |
+| the 9 shipped boards | 9/9 | 0.094 / 0.238 / 0.341 | 0.000 / 0.000 / 0.369 | 0 | 6.8% (96/1410) | 2/9 |
+
+  The thin share is a minority on every board and no board is over the ceiling, so there are no
+  exceptions to list. The mix is still thinner than the shipped set's: the pooled thin share is
+  about three times the shipped 6.8%, and every generated board has a thin component where 7 of
+  the 9 shipped boards have none. That is the ruled mix and not the shipped proportions; the
+  alternative, masses alone, is the option the ruling declined (`{ pieces: 0 }` draws no thin
+  component on any of seeds 1-100).
+- **Wall components below 5 cells: none** on any accepted board, 8- or 4-connected, in either
+  sample at any N, and none on the 100 drawn boards, whose smallest component is 5 cells.
+- **Destructibles over 30% of wall mass: none.** The masses are solid, so they dilute the thin
+  pieces' destructible cells. The largest share of wall cells on an accepted board is 0.163 (seed
+  20) at N=2 and 3 and 0.160 (seed 44) at N=4 for seeds 1-50, and 0.265 (seed 80) at every N for
+  seeds 51-100. Over the 100 drawn boards: 696 destructible cells of 12,298 wall cells (#1029's
+  generator: 2,964 of 13,424), 49 boards carrying any (94), and none over the cap (26); over
+  seeds 1-1000, none (252). The held trim above acts only on boards over the cap, so it would
+  change none of seeds 1-1000 on this generator. The hold itself is unchanged; reconsidering it is
+  its own decision.
+- **Shipped bands**: the median of the accepted boards and how many of them lie inside the band
+  (the row above, carried; an edge counts at two decimals), beside #1029's N=2 columns from the
+  section before this one:
+
+| band | #1029 1-50 N=2 | 1-50 N=2 | N=3 | N=4 | #1029 51-100 N=2 | 51-100 N=2 | N=3 | N=4 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| wall 0.08-0.37 | 0.15, 50/50 | 0.14, 50/50 | 0.14, 50/50 | 0.14, 42/42 | 0.15, 50/50 | 0.15, 50/50 | 0.15, 50/50 | 0.15, 46/46 |
+| legal 0.28-0.78 | 0.51, 50/50 | 0.62, 50/50 | 0.62, 50/50 | 0.62, 42/42 | 0.49, 50/50 | 0.61, 50/50 | 0.61, 50/50 | 0.61, 46/46 |
+| corr 0.01-0.84 | 0.16, 50/50 | 0.05, 50/50 | 0.05, 50/50 | 0.06, 42/42 | 0.18, 50/50 | 0.06, 49/50 | 0.06, 49/50 | 0.06, 45/46 |
+| open 0.01-0.57 | 0.16, 50/50 | 0.32, 50/50 | 0.32, 50/50 | 0.32, 42/42 | 0.14, 50/50 | 0.30, 50/50 | 0.30, 50/50 | 0.29, 46/46 |
+| neck 1.33-6.00 | 2.00, 50/50 | 3.33, 50/50 | 3.33, 50/50 | 3.33, 42/42 | 2.00, 50/50 | 3.33, 50/50 | 3.33, 50/50 | 3.33, 46/46 |
+| rout 1.00-2.33 | 2.00, 50/50 | 2.00, 50/50 | 2.00, 49/50 | 2.00, 41/42 | 2.00, 50/50 | 2.00, 50/50 | 2.00, 47/50 | 2.00, 44/46 |
+| long 0.60-0.82 | 0.71, 49/50 | 0.72, 47/50 | 0.72, 47/50 | 0.72, 39/42 | 0.71, 50/50 | 0.72, 50/50 | 0.72, 50/50 | 0.72, 46/46 |
+| sight 0.17-0.43 | 0.24, 50/50 | 0.34, 46/50 | 0.34, 46/50 | 0.34, 39/42 | 0.24, 50/50 | 0.34, 48/50 | 0.34, 48/50 | 0.32, 46/46 |
+| bank 0.09-0.29 | 0.22, 50/50 | 0.17, 50/50 | 0.17, 50/50 | 0.17, 42/42 | 0.22, 50/50 | 0.18, 49/50 | 0.18, 49/50 | 0.18, 45/46 |
+
+  Every median is inside its band and no band is a miss. The masses make the boards more open --
+  legal area 0.62 against 0.51, open ground 0.32 against 0.16, open sight 0.34 against 0.24 and a
+  bottleneck of 3.33 cells against 2.00 (seeds 1-50, N=2) -- and corridor share (0.05 against
+  0.16) and bank gain (0.17 against 0.22) fall. Boards outside a band, by seed: for seeds 1-50,
+  the longest sightline on 29 (0.901), 32 (0.910) and 46 (0.901) at every N, open sight on 12
+  (0.463), 32 (0.500) and 41 (0.451) at every N and on 20 (0.463) at N=2 and 3 (refused at N=4),
+  and the route count on 3 at N=3 and 50 at N=4 (2.67 each); for seeds 51-100, corridor share on
+  85 (0.001) and bank gain on 80 (0.076) at every N, open sight on 69 (0.449) and 72 (0.441) at
+  N=2 and 3 (both refused at N=4), and the route count on 66, 83 and 97 at N=3 (2.67 each) and on
+  62 (2.50) and 78 (2.83) at N=4.
+- **Run lengths and mass sizes**, read back off the accepted boards (`runLengthReport` reads a
+  filled rectangle at least 3 cells each way as a mass since #1066): straight runs 5 / 6 / 8 cells
+  (min / median / max), L-arms 2 / 3 / 4 and masses 18 / 18 / 27 cells, in both samples at every
+  N. At N=2, seeds 1-50 carry 452 components (188 straight, 12 L, 252 masses) and 51-100 carry
+  460 (182 straight, 18 L, 260 masses), none of any other shape; each piece appears twice under
+  the rotation. Over seeds 1-1000 drawn the masses are 4,306 of 18 cells and 708 of 27, each
+  counted in both halves. Ls are 6% and 9% of the thin components here, against 16% and 14% on
+  #1029's generator: at 2 pieces a half few Ls find room.
+- **Expressive range** on the default axes (wall fraction by open sight fraction): seeds 1-50
+  reach 8 of 64 cells (coverage 0.125, entropy 0.446 at N=2 and 3, 0.452 at N=4) with an axis
+  correlation of -0.720 (-0.731 at N=4); seeds 51-100 reach 7 of 64 (0.109, entropy 0.414 and
+  0.405 at N=4) at -0.787 (-0.743 at N=4). Read the correlation first, as the tool says: on the
+  shipped boards every candidate axis pair runs |r| 0.78-0.95, so a two-axis grid over them is
+  close to one-dimensional and coverage is bounded by a diagonal band rather than by the ruleset.
+- **The variant rows** (`sweep.mjs --variants`, N=4 only) carry the masses too, except
+  `masses=0 pieces=16`, which is #1029's generator and reproduces its default row: 49 of 50
+  accepted in both samples, refusing seed 28 (egress) and seed 74 (fatal escape), with the 11 and
+  14 destructible exceptions the section before this one lists. Accepted of 50 drawn, the
+  thickness gate's passes of those, the accepted boards over the thin ceiling, and the drawn
+  boards with a wall component below 5 cells (8-connected; 4-connected was identical):
+
+| `runs` variant | 1-50 accepted | passes | over 0.37 | below 5, drawn | 51-100 accepted | passes | over 0.37 | below 5, drawn |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **masses=3 pieces=2 (the default)** | **42/50** | **42/42** | **0** | **0/50** | **46/50** | **46/46** | **0** | **0/50** |
+| masses=0 pieces=16 (#1029) | 49/50 | 0/49 | 49 | 0/50 | 49/50 | 0/49 | 49 | 0/50 |
+| pieces=3 | 46/50 | 46/46 | 5 | 0/50 | 48/50 | 48/48 | 3 | 0/50 |
+| pieces=10, 16 and 24 | 48/50 | 44/48 | 40 | 0/50 | 49/50 | 46/49 | 45 | 0/50 |
+| run=6-12 | 46/50 | 46/46 | 1 | 0/50 | 45/50 | 45/45 | 2 | 0/50 |
+| lane=5cell | 34/50 | 34/34 | 0 | 0/50 | 31/50 | 31/31 | 0 | 0/50 |
+| minRun=4 confine=off | 44/50 | 44/44 | 5 | 30/50 | 48/50 | 48/48 | 0 | 31/50 |
+| minRun=4 | 42/50 | 42/42 | 0 | 20/50 | 47/50 | 47/47 | 0 | 25/50 |
+| confine=off | 45/50 | 45/45 | 5 | 19/50 | 49/50 | 49/49 | 0 | 15/50 |
+| run=6-12 confine=off | 46/50 | 46/46 | 5 | 20/50 | 48/50 | 48/48 | 1 | 17/50 |
+
+  #1029's two causes still leave fragments beside the masses: `minRun` 4 leaves a 4-cell run, and
+  with the confinement off the seam cuts thin pieces and masses alike (the read-back shows 9-cell
+  stubs of masses and `other` components). Every refusal in these rows is concealment except
+  #1029's row (above) and the `pieces=10`, `16` and `24` rows (egress 1 and fatal escape 1 on
+  seeds 1-50, fatal escape 1 on 51-100); `lane=5cell` loses 16 and 19 boards to concealment.
+- **The other four rulesets are byte-identical** for seeds 1-50 before and after: 200 of 200
+  per-board SHA-256 digests (`scatter`, `rooms`, `topology`, `spines`, 50 each) between
+  `origin/main` 2c750e9e and this change, and the same holds for their 19 declared variants.
+  `rotate180` and `lib.mjs` are unchanged, and `spines()` changed in comments only.
+
+`tools/mapgen/runs.test.ts` pins the default boards for seeds 1-100 inside the interior band, at
+or under the thin ceiling, each with a mass and a thin component, every mass 18 or 27 cells and no
+component of another shape, and the byte-identical control. Its named negative controls: masses
+disabled draws interior share 0 and thin share 1 on all 100 boards, which the gate refuses; masses
+that touch, as clearance from the center line would place them, read back as no shape `runs`
+draws (synthetic boards; the generator itself is reached by the mutation entry
+`mapgen-runs-mass-clearance-from-the-center-line`); no thin pieces draws no thin component; and
+13 pieces with the masses off moves the digest (14 and 15 do not, since no board for seeds 1-100
+places more than 14 thin pieces a half at 16). Nothing here has been played; whether the carved
+pathway now reads as a route is a person's judgment and stays on #821.
 
 ### Individual rules, swept one at a time
 
@@ -753,10 +965,12 @@ band, so none can redraw against it; and the band is a literal derived from the 
 limits travel with it: nine boards are not a sample of good boards; "thin" means no interior cell,
 not one cell thick (the literal one-cell-thick cells are 48 of the 1,410, on vs-duel-01 and
 vs-tri-01); and a junction, bend or diagonal step of runs two cells thick counts as interior, as
-the ruling defines it. At default settings it passes none of the boards the shipped tier accepts from any of the five
+the ruling defines it. At default settings it passed none of the boards the shipped tier accepts from any of the five
 rulesets, at N=2, 3 and 4 in both of `sweep.mjs`'s 50-seed samples (seeds 1-50 and 51-100):
 `topology`'s interior share starts at 0.354, over the maximum, and the other four measure 0.000.
-No other quality measure becomes a gate without its own ruling.
+That held until issue #1066 placed masses in `runs`, which now passes every board the shipped
+tier accepts in both samples at every N (see "`runs` with masses for cover"); the other four
+are unchanged. No other quality measure becomes a gate without its own ruling.
 
 **2. Pursue `runs` -- long bars, L-bends and carved pathways -- and not the other three**
 (issue #821). It is the only one of the four landing inside every shipped band, and the one
