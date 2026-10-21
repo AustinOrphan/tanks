@@ -1,0 +1,15 @@
+{
+  "id": "route-host-owner-palette-control-loses-the-stored-palette",
+  "file": "src/game/route-host.ts",
+  "find": "    hud.setOwnerPalette(effective.ownerPalette);",
+  "replace": "    hud.setOwnerPalette('classic');",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "`paintSettingsControls` is the single writer of the Settings display, so a constant here is the whole display (issue #1058; modelled on route-host-quality-control-loses-the-stored-preset): a returning player who chose High contrast opens Settings on Classic while their matches correctly draw High contrast, and the next tap moves them to the palette the button claims they are leaving.",
+  "killedBy": [
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED owner palette on a page with no session",
+    "createRouteHost: the Main Menu is painted from the stores by the page repaints the owner-palette control from the value the STORE accepted, with no session"
+  ]
+}

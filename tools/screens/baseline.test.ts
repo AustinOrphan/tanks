@@ -13,6 +13,7 @@ import { statesToAccept } from './accept.mjs';
 import { SCREEN_STATES } from './states.mjs';
 import settingsBaseline from './baseline/screen.settings.json';
 import uiScaleBaseline from './baseline/screen.settings.ui-scale.json';
+import ownerPaletteBaseline from './baseline/screen.settings.owner-palette.json';
 import confirmBaseline from './baseline/screen.confirm.new-campaign.json';
 import versusBaseline from './baseline/screen.versus-setup.json';
 
@@ -574,7 +575,7 @@ describe('the UI-scale capture shows the scale on every selector (issue #1031)',
     // The population is the selector list the scaled state measures, stated so a selector
     // dropped from it is a visible change here rather than one fewer thing checked.
     expect(scaled.map((e) => e.selector)).toEqual(
-      ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint'],
+      ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint', '.hud-owner-palette-toggle'],
     );
     expect(ratioFailures(read('screen.settings'), scaled, 1.5)).toEqual([]);
   });
@@ -604,5 +605,62 @@ describe('the UI-scale capture shows the scale on every selector (issue #1031)',
     const failures = ratioFailures([...base] as Measured[], [...scaled] as Measured[], 1.5);
     expect(failures, JSON.stringify(failures)).toHaveLength(1);
     expect(failures[0]).toMatch(message);
+  });
+});
+
+/**
+ * THE OWNER-PALETTE CAPTURE PHOTOGRAPHS THE STORED PALETTE (issue #1058).
+ *
+ * `screen.settings.owner-palette` seeds `presentation.ownerPalette: 'high-contrast'` and
+ * nothing else. The UI-scale state was once byte-identical to the default because nothing
+ * consumed its seed; this one is evidence only if the label it measures differs from the
+ * default capture's, and differs in that control ALONE.
+ */
+describe('the owner-palette capture photographs the stored palette (issue #1058)', () => {
+  type Measured = ReturnType<typeof m>;
+  const TOGGLE = '.hud-owner-palette-toggle';
+  const textOf = (baseline: { measurements: Measured[] }): string | undefined =>
+    baseline.measurements.find((e) => e.selector === TOGGLE)?.text;
+
+  /** Every selector other than the toggle whose measurement differs between two captures. */
+  function otherDifferences(base: Measured[], other: Measured[]): string[] {
+    const bySel = new Map(base.map((e) => [e.selector, e]));
+    const out: string[] = [];
+    for (const e of other) {
+      if (e.selector === TOGGLE) continue;
+      const b = bySel.get(e.selector);
+      if (b === undefined) out.push(`${e.selector} is not measured in the default state`);
+      else if (JSON.stringify(b) !== JSON.stringify(e)) out.push(`${e.selector} differs`);
+    }
+    return out;
+  }
+
+  it('reads High contrast where the default capture reads Classic', () => {
+    expect(textOf(settingsBaseline)).toBe('Player colours: Classic');
+    expect(textOf(ownerPaletteBaseline)).toBe('Player colours: High contrast');
+  });
+
+  it('differs from the default capture in that control alone', () => {
+    expect(otherDifferences(settingsBaseline.measurements, ownerPaletteBaseline.measurements)).toEqual([]);
+  });
+
+  it('measures the same selectors as screen.settings, as the catalogue declares them', () => {
+    const byId = (id: string) => SCREEN_STATES.find((s: { id: string }) => s.id === id)?.measure;
+    expect(byId('screen.settings.owner-palette')).toEqual(byId('screen.settings'));
+    expect(ownerPaletteBaseline.measurements.map((e) => e.selector)).toEqual(
+      settingsBaseline.measurements.map((e) => e.selector),
+    );
+  });
+
+  // THE NEGATIVE CONTROLS: synthetic known-bad pairs, each failing for the one reason it names.
+  it.each([
+    ['a Data button that moved', [m({ selector: '.hud-reset-stats' })],
+      [m({ selector: '.hud-reset-stats', box: { x: 0, y: 9, w: 10, h: 10 } })], /\.hud-reset-stats differs/],
+    ['a selector the default state does not measure', [m({ selector: '.a' })], [m({ selector: '.b' })],
+      /\.b is not measured in the default state/],
+  ] as const)('fails on %s', (_label, base, other, message) => {
+    const found = otherDifferences([...base] as Measured[], [...other] as Measured[]);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(message);
   });
 });

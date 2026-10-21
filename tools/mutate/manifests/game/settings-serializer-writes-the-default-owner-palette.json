@@ -1,0 +1,15 @@
+{
+  "id": "settings-serializer-writes-the-default-owner-palette",
+  "file": "src/game/settings.ts",
+  "find": "      ownerPalette: settings.presentation.ownerPalette,",
+  "replace": "      ownerPalette: DEFAULT_OWNER_PALETTE,",
+  "expect": "killed",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "why": "The palette is accepted, applied and published, and what reaches storage is always Classic, so the choice lasts exactly as long as the tab (issue #1058; modelled on settings-serializer-writes-the-default-quality-preset). Within a session everything looks right: the toggle moves, the next match honours it. The player who needs High contrast finds Classic again after every reload.",
+  "killedBy": [
+    "createPlayerSettingsStore: defaults and persistence round-trips EVERY field through a fresh construction",
+    "parseSettingsPayload: stored data round-trips its own serialiser exactly"
+  ]
+}

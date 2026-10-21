@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-toggle-sits-before-quality",
+  "file": "src/game/hud.ts",
+  "find": "          <button class=\"ui-btn ui-btn--sm hud-quality-toggle\" type=\"button\"></button>\n",
+  "replace": "          <button class=\"ui-btn ui-btn--sm hud-owner-palette-toggle\" type=\"button\"></button>\n          <button class=\"ui-btn ui-btn--sm hud-quality-toggle\" type=\"button\"></button>\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "A Player colours button lands BEFORE Quality, and it is the one `querySelector` finds, so the row reads Motion, Player colours, Quality (issue #1058 puts it after Quality, the last of the three). The row and section stay right, which is why the test reads the order node-wise rather than only asking which section the button is in.",
+  "killedBy": [
+    "hud: the owner-palette toggle (issue #1058) lives in the Settings pane, under Accessibility, after the quality toggle"
+  ]
+}

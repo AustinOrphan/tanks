@@ -2765,6 +2765,55 @@
   {
     "schemaVersion": 1,
     "recipeVersion": 1,
+    "id": "screen.settings.owner-palette",
+    "producer": {
+      "kind": "screen",
+      "scenarioId": "screen.settings.owner-palette"
+    },
+    "fixture": {
+      "id": "screen.settings.owner-palette",
+      "seed": 0
+    },
+    "variant": {},
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 2
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "reduced",
+      "capability": "headless-desktop",
+      "reducedMotion": true
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 0,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": true
+    },
+    "title": "Settings, Player colours set to High contrast",
+    "description": "The Settings pane for a player who chose High contrast player colours: the Accessibility row reads Player colours: High contrast, from the stored setting.",
+    "altText": "Screenshot of the Tanks! settings screen, with the Accessibility row reading Motion, Quality and Player colours: High contrast.",
+    "timeoutMs": 60000,
+    "outputBudgetBytes": 8000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
     "id": "flow.campaign-round.pp1roles-off",
     "producer": {
       "kind": "flow",

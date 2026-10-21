@@ -126,7 +126,11 @@ describe('hit-sweep.mjs: which surfaces the visual gate sweeps', () => {
     // 38 since issue #983's `screen.versus-setup.fresh`: the Versus Setup pane on a fresh save,
     // which carries a menu and so is swept like its four siblings. Its controls are theirs,
     // with fewer map cards, each wider than theirs at desktop width.
-    expect(hitSweepStates()).toHaveLength(38);
+    //
+    // 39 since issue #1058's `screen.settings.owner-palette`: the Settings pane with the
+    // stored Player colours setting at High contrast. It carries the Settings menu, so it is
+    // swept like `screen.settings`; its longer label is the one control whose width moved.
+    expect(hitSweepStates()).toHaveLength(39);
     expect(hitSweepStates().map((s) => s.id)).toEqual(expect.arrayContaining(['screen.controllers', 'screen.controllers.pads']));
   });
 

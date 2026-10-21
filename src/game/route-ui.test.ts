@@ -328,15 +328,17 @@ function fixture(
 // Issue #754's three: the controller layout pane's open/close pair scopes its settings
 // subscription, hotplug listeners and capture to the pane, and its request handler is the one
 // place a layout is written.
-// Issue #785's pair are the newest: the versus setup pane reads the connected pads on open
-// and holds hotplug listeners while it is up, the Controllers panel's shape.
+// Issue #785's pair: the versus setup pane reads the connected pads on open and holds
+// hotplug listeners while it is up, the Controllers panel's shape.
+// Issue #1058's `onOwnerPaletteChange` is the newest: the Player colours control, which
+// writes the settings store and nothing else, as `onQualityChange` does.
 const ROUTE_HANDLERS = [
   'onCampaignOpen', 'onControllerLayoutClose', 'onControllerLayoutOpen', 'onControllerLayoutRequest',
   'onControllerRumbleChange', 'onControllerSelfTestClose',
   'onControllerSelfTestOpen', 'onControllersClose', 'onControllersOpen', 'onCustomizeClose',
   'onGalleryClose', 'onGalleryOpen',
   'onCustomizeOpen', 'onFireModeChange', 'onHapticsChange', 'onMotionChange', 'onMuteToggle',
-  'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin', 'onQualityChange',
+  'onOwnerPaletteChange', 'onPauseTap', 'onPickAccentColor', 'onPickHullColor', 'onPickSkin', 'onQualityChange',
   'onRecordsOpen', 'onResetProgress', 'onResetStats', 'onSettingsClose', 'onSettingsOpen',
   'onTouchSchemeChange', 'onVersusOpen', 'onVersusSetupClose', 'onVersusSetupOpen',
   'onVersusStart', 'onVolumeChange',
@@ -394,6 +396,7 @@ describe('the application routes work with no gameplay session behind them', () 
     f.fire('onHapticsChange', !before.deviceHaptics);
     f.fire('onMotionChange', 'reduced');
     f.fire('onQualityChange', 'low');
+    f.fire('onOwnerPaletteChange', 'high-contrast');
     const after = f.deps.settings.snapshot().input;
     expect(after.touchScheme).toBe('point');
     expect(after.fireMode).toBe('button');
@@ -414,6 +417,12 @@ describe('the application routes work with no gameplay session behind them', () 
       f.deps.settings.snapshot().presentation.quality,
       'the quality toggle did not reach the store',
     ).toBe('low');
+    // Issue #1058's control, the same rule again. 'high-contrast' is not the default
+    // ('classic'), and the store refuses an id outside OWNER_PALETTE_IDS.
+    expect(
+      f.deps.settings.snapshot().presentation.ownerPalette,
+      'the Player colours toggle did not reach the store',
+    ).toBe('high-contrast');
   });
 
   it('Versus Start and Campaign reach their reboot seams from an empty page', () => {
@@ -627,6 +636,7 @@ describe('the application routes work with no gameplay session behind them', () 
     f.fire('onHapticsChange', false);
     f.fire('onMotionChange', 'reduced');
     f.fire('onQualityChange', 'low');
+    f.fire('onOwnerPaletteChange', 'high-contrast');
     f.fire('onCustomizeOpen');
     f.fire('onPickSkin', 'camo');
     f.fire('onCustomizeClose');
@@ -647,6 +657,7 @@ describe('the application routes work with no gameplay session behind them', () 
     expect(f.volume()).toBeCloseTo(0.4, 10);
     expect(f.deps.settings.snapshot().presentation.motion).toBe('reduced');
     expect(f.deps.settings.snapshot().presentation.quality).toBe('low');
+    expect(f.deps.settings.snapshot().presentation.ownerPalette).toBe('high-contrast');
   });
 
   it('unlockedLevels answers from progress alone, and counts CLEARED levels only', () => {

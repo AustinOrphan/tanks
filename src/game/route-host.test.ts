@@ -1551,6 +1551,38 @@ describe('createRouteHost: the Main Menu is painted from the stores by the page'
     ).toEqual(['medium']);
   });
 
+  it('paints the STORED owner palette on a page with no session', () => {
+    // Issue #1058, from the side the page owns, read from `effective` for quality's reason:
+    // nothing gates it, so effective IS the stored palette.
+    const f = fixture({ seed: (stores) => stores.settings.setOwnerPalette('high-contrast') });
+    expect(f.host.hasSession(), 'the point is a page with no session').toBe(false);
+    // NEGATIVE CONTROL: High contrast is not the default, so a paint that skipped the
+    // stores, or a constant, would have to disagree rather than coincide.
+    expect(f.stores.settings.snapshot().presentation.ownerPalette).toBe('high-contrast');
+    expect(f.hud.argsOf('setOwnerPalette').at(-1)).toEqual(['high-contrast']);
+  });
+
+  it('repaints the owner-palette control from the value the STORE accepted, with no session', () => {
+    // The chain the page owns, end to end on an empty page: the toggle's callback writes the
+    // store (route-ui.ts), the store notifies `effectiveSettings`, and its subscription
+    // repaints the button.
+    const f = fixture();
+    expect(f.host.hasSession()).toBe(false);
+    // NEGATIVE CONTROL on the pre-click state: Classic is the default.
+    expect(f.stores.settings.snapshot().presentation.ownerPalette).toBe('classic');
+    expect(f.hud.argsOf('setOwnerPalette').at(-1)).toEqual(['classic']);
+
+    f.hud.fire('onOwnerPaletteChange', 'high-contrast');
+    expect(
+      f.stores.settings.snapshot().presentation.ownerPalette,
+      'the toggle did not reach the store',
+    ).toBe('high-contrast');
+    expect(
+      f.hud.argsOf('setOwnerPalette').at(-1),
+      'the control was not repainted from the value the store accepted',
+    ).toEqual(['high-contrast']);
+  });
+
   it('keeps painting settings while a session holds the slot', () => {
     // The early return this replaced (`if (live !== null) return;`) existed because
     // `loop.ts` pushed the same values from its own subscription, so two owners would

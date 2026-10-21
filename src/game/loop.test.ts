@@ -165,6 +165,7 @@ import {
   OWNER_PALETTES,
   TEAM_COLORS,
   type OwnerPalette,
+  type OwnerPaletteId,
 } from '../presentation/identity';
 
 interface Recorder {
@@ -448,7 +449,7 @@ function progressClearedThrough(levels: number): ProgressStore {
   return progress;
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; savedQuality?: QualityPreset; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; savedQuality?: QualityPreset; savedOwnerPalette?: OwnerPaletteId; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
   deps: BrowserPageDeps;
   /**
    * The page's route UI (issue #468), built ONCE per harness from `deps` -- the REAL
@@ -499,6 +500,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     toggleScheme(s: TouchScheme): void;
     toggleFireMode(m: FireMode): void;
     toggleHaptics(v: boolean): void;
+    toggleOwnerPalette(id: OwnerPaletteId): void;
     pickLevel(i: number): void;
     newGame(): void;
     openRecords(): void;
@@ -731,6 +733,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onTouchSchemeChange = (_s: TouchScheme): void => {};
   let onFireModeChange = (_m: FireMode): void => {};
   let onHapticsChange = (_on: boolean): void => {};
+  let onOwnerPaletteChange = (_id: OwnerPaletteId): void => {};
   let onRecordsOpen = (): void => {};
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
@@ -851,6 +854,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   settingsStore.setDeviceHaptics(opts.savedHaptics ?? true);
   settingsStore.setControllerRumble(opts.savedControllerRumble ?? true);
   settingsStore.setQuality(opts.savedQuality ?? DEFAULT_QUALITY_PRESET);
+  // ONLY when given, unlike the setters above: a test that rebuilds the store on the SAME
+  // `settingsStorage` to read a palette back (issue #1058) would otherwise overwrite the very
+  // value it is reading with the default.
+  if (opts.savedOwnerPalette !== undefined) settingsStore.setOwnerPalette(opts.savedOwnerPalette);
 
   /**
    * Capabilities default to ALL PRESENT so an existing test that says nothing about a
@@ -1326,6 +1333,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onMotionChange: () => {},
         setQuality: () => {},
         onQualityChange: () => {},
+        setOwnerPalette: () => {},
+        onOwnerPaletteChange: (cb: (id: OwnerPaletteId) => void) => {
+          onOwnerPaletteChange = cb;
+        },
         setStats: () => {
           rec.statPushes += 1;
         },
@@ -1988,6 +1999,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       toggleScheme: (s: TouchScheme) => onTouchSchemeChange(s),
       toggleFireMode: (m: FireMode) => onFireModeChange(m),
       toggleHaptics: (v: boolean) => onHapticsChange(v),
+      toggleOwnerPalette: (id: OwnerPaletteId) => onOwnerPaletteChange(id),
       pickLevel: (i) => onPickLevel(i),
       newGame: () => onNewGame(),
       openRecords: () => onRecordsOpen(),
@@ -5454,6 +5466,45 @@ describe('startGameWith: dev flags stay off by default', () => {
     unflagged.handle.dispose();
   });
 
+  it('builds the session in the STORED owner palette when no flag is set (issue #1058)', () => {
+    // The half a player can reach: the Player colours setting, read once at build from the
+    // effective layer and handed to the renderer and the stock chips together. Identity
+    // (toBe), so a copy of the palette passes nothing.
+    const paletteOf = (h: ReturnType<typeof boot>): unknown =>
+      (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
+    const h = boot(makeDeps({ savedOwnerPalette: 'high-contrast' }));
+    expect(paletteOf(h)).toBe(OWNER_PALETTES['high-contrast']);
+    expect(h.rec.stockPalettes).toEqual([OWNER_PALETTES['high-contrast']]);
+    expect(h.rec.stockPalettes[0]).toBe(OWNER_PALETTES['high-contrast']);
+    h.handle.dispose();
+    // NEGATIVE CONTROL: a player who never opened Settings still gets Classic.
+    const untouched = boot(makeDeps());
+    expect(paletteOf(untouched)).toBe(OWNER_PALETTES.classic);
+    expect(untouched.rec.stockPalettes).toEqual([OWNER_PALETTES.classic]);
+    untouched.handle.dispose();
+  });
+
+  it('lets ?dev=1&ownerPalette= OVERRIDE the stored palette, without writing it', () => {
+    // `flag ?? setting`, as `?quality=` is: the flag forces a palette for one session and
+    // leaves the player's saved choice alone.
+    const paletteOf = (h: ReturnType<typeof boot>): unknown =>
+      (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
+    const h = boot(makeDeps({ savedOwnerPalette: 'high-contrast', devFlags: { ownerPalette: 'classic' } }));
+    expect(paletteOf(h)).toBe(OWNER_PALETTES.classic);
+    expect(h.rec.stockPalettes).toEqual([OWNER_PALETTES.classic]);
+    expect(
+      h.deps.settings.snapshot().presentation.ownerPalette,
+      "the flag wrote itself into the player's settings",
+    ).toBe('high-contrast');
+    h.handle.dispose();
+    // NEGATIVE CONTROL: the same stored palette with no flag reaches both readers, so the
+    // assertions above measure the override rather than a fixture that ignores storage.
+    const unflagged = boot(makeDeps({ savedOwnerPalette: 'high-contrast' }));
+    expect(paletteOf(unflagged)).toBe(OWNER_PALETTES['high-contrast']);
+    expect(unflagged.rec.stockPalettes).toEqual([OWNER_PALETTES['high-contrast']]);
+    unflagged.handle.dispose();
+  });
+
   it('applies each single-setting render override on top of the preset, and nothing else (issue #735)', () => {
     // Population: all 4 overrides, each on the stored `low` preset with a value `low` does not
     // already have, so an override that never arrived would leave `low` and fail.
@@ -5471,6 +5522,40 @@ describe('startGameWith: dev flags stay off by default', () => {
       });
       h.handle.dispose();
     }
+  });
+});
+
+describe('startGameWith: the Player colours setting survives a reload (issue #1058)', () => {
+  it("a High contrast choice made through the toggle reaches the next session's renderer and stock chips", () => {
+    const paletteOf = (h: ReturnType<typeof boot>): unknown =>
+      (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
+    // ONE Storage for the whole test, which is what a reload keeps.
+    const storage = createMemoryStorage();
+
+    // Session 1: the player opens Settings and taps Player colours. The tap goes through the
+    // real route-ui handler the page registers; the button half is hud.controls.test.ts's.
+    const first = boot(makeDeps({ settingsStorage: storage }));
+    expect(paletteOf(first)).toBe(OWNER_PALETTES.classic);
+    first.hud.toggleOwnerPalette('high-contrast');
+    expect(first.deps.settings.snapshot().presentation.ownerPalette).toBe('high-contrast');
+    // Read once at build: the match already running keeps the palette it was built with.
+    expect(first.rec.stockPalettes).toEqual([OWNER_PALETTES.classic]);
+    first.handle.dispose();
+
+    // The reload: a NEW store over the same Storage, and a new session built from it.
+    const second = boot(makeDeps({ settingsStorage: storage }));
+    expect(second.deps.settings.snapshot().presentation.ownerPalette).toBe('high-contrast');
+    expect(paletteOf(second)).toBe(OWNER_PALETTES['high-contrast']);
+    expect(second.rec.stockPalettes).toEqual([OWNER_PALETTES['high-contrast']]);
+    expect(second.rec.stockPalettes[0]).toBe(OWNER_PALETTES['high-contrast']);
+    second.handle.dispose();
+
+    // NEGATIVE CONTROL: a fresh Storage, a player who never chose, builds in Classic -- so the
+    // second session's High contrast came from what the first one stored.
+    const fresh = boot(makeDeps({ settingsStorage: createMemoryStorage() }));
+    expect(paletteOf(fresh)).toBe(OWNER_PALETTES.classic);
+    expect(fresh.rec.stockPalettes).toEqual([OWNER_PALETTES.classic]);
+    fresh.handle.dispose();
   });
 });
 

@@ -1,0 +1,16 @@
+{
+  "id": "persisted-settings-description-omits-owner-palette",
+  "file": "src/game/persistence-inventory.ts",
+  "find": "render quality preset, player color palette",
+  "replace": "render quality preset",
+  "expect": "killed",
+  "tests": [
+    "src/game/persistence-inventory.test.ts"
+  ],
+  "why": "The privacy policy's sentence for the settings key must name everything the key stores, and issue #1058 adds the player's colour palette to it. Modelled on persisted-settings-description-omits-controller-layouts, the case that slipped through before.",
+  "killedBy": [
+    "persistence inventory: the settings description names every field the settings store writes",
+    "persistence inventory: the privacy policies PRIVACY.md lists every current key with the inventory's description, in inventory order",
+    "persistence inventory: the privacy policies public/privacy.html lists every current key with the inventory's description, in inventory order"
+  ]
+}

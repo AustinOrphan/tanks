@@ -1,0 +1,15 @@
+{
+  "id": "settings-default-owner-palette-moves-off-classic",
+  "file": "src/game/settings.ts",
+  "find": "    ownerPalette: DEFAULT_OWNER_PALETTE,\n  }),\n});",
+  "replace": "    ownerPalette: 'high-contrast',\n  }),\n});",
+  "expect": "killed",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "why": "The store's default stops being Classic while `DEFAULT_OWNER_PALETTE` still says it is (issue #1058). A fresh install, and every `reset()`, would then draw High contrast. Only an assertion of the default settings against a literal sees it, because every comparison against the constant still agrees with itself.",
+  "killedBy": [
+    "the schema constants pins every documented default, so a silent retune fails here",
+    "createPlayerSettingsStore: reset restores every default, persists them, and clears the legacy key"
+  ]
+}

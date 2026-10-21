@@ -107,6 +107,7 @@ describe('persistence inventory: the settings description', () => {
     motion: /motion\/flash/,
     uiScale: /interface scale/,
     quality: /render quality/,
+    ownerPalette: /player color palette/,
   };
 
   it('names every field the settings store writes', () => {

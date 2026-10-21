@@ -565,7 +565,11 @@ export const SCREEN_STATES = Object.freeze([
     // UI-scale state below has a piece of the pane's smallest, `em`-sized text to compare.
     // Scoped to the pane: `measure` takes the FIRST DOM match, visible or not, and most of the
     // page's `.ui-hint`s are in closed panes.
-    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint'],
+    //
+    // `.hud-owner-palette-toggle` is the Player colours control (issue #1058): measured here so
+    // `screen.settings.owner-palette` below has a default-state label to differ from, and so
+    // the UI-scale state holds the newest control in the row to the same 1.5x rule.
+    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint', '.hud-owner-palette-toggle'],
   }),
   state({
     id: 'screen.settings.ui-scale',
@@ -592,7 +596,26 @@ export const SCREEN_STATES = Object.freeze([
     // UA's 2em of that base), the two Data buttons (`--hud-type-*` tokens) and the first
     // disabled-reason hint (0.85em). Until issue #1031 only the two buttons scaled, and a
     // "differs from screen.settings" check still passed on the title's y alone.
-    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint'],
+    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint', '.hud-owner-palette-toggle'],
+  }),
+  state({
+    id: 'screen.settings.owner-palette',
+    title: 'Settings, Player colours set to High contrast',
+    description:
+      'The same pane for a player who chose High contrast player colours: the Accessibility '
+      + 'row reads Player colours: High contrast, from the stored setting.',
+    // Issue #1058. The seed names only the field under test, the shape
+    // `screen.settings.ui-scale` uses, and the reader defaults the rest. What makes this state
+    // evidence rather than a copy of `screen.settings` is that something CONSUMES the seed: the
+    // page paints the toggle from the stored palette, so its measured text differs.
+    // `tools/screens/baseline.test.ts` holds the two baselines to that difference and to no
+    // other.
+    storage: {
+      ...MID_CAMPAIGN,
+      'tanks.settings.v1': JSON.stringify({ version: 1, presentation: { ownerPalette: 'high-contrast' } }),
+    },
+    steps: [...PAST_SPLASH, { click: '.hud-settings-open' }, { waitVisible: '.hud-settings' }],
+    measure: ['.hud-settings', '#hud-settings-title', '.hud-reset-stats', '.hud-reset-progress', '.hud-settings .ui-hint', '.hud-owner-palette-toggle'],
   }),
   state({
     id: 'screen.settings.touch',

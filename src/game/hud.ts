@@ -287,6 +287,7 @@ import { VERSUS_CATALOG, versusCatalogEntryById } from '../sim/config/versus-cat
 import type { VersusCatalogEntry } from '../sim/config/versus-catalog-types';
 import {
   TEAM_LABELS, identityAppliesAt, identityColor, teamColor, type OwnerPalette,
+  DEFAULT_OWNER_PALETTE, OWNER_PALETTE_LABELS, type OwnerPaletteId,
 } from '../presentation/identity';
 import { createTransitionRunner } from './transitions';
 import { equalizeMenuRows } from './menu-row-width';
@@ -633,8 +634,8 @@ export interface Hud {
    * calls it once, when it is built and before its first `setStatus`; it repaints nothing by
    * itself, and the chips read it the next time the strip is drawn. A strip of one entry, or
    * a HUD that is never told, draws the shipped default, as a single-player spawn ring does.
-   * Named for what it paints, leaving `setOwnerPalette` and `onOwnerPaletteChange` free for
-   * the Settings control.
+   * Named for what it paints, because `setOwnerPalette` and `onOwnerPaletteChange` are the
+   * Settings control's (issue #1058).
    */
   setStockPalette(palette: OwnerPalette): void;
   /**
@@ -1041,6 +1042,15 @@ export interface Hud {
   /** Fired with the NEXT preset in the cycle when the player taps the quality toggle. */
   onQualityChange(cb: (preset: QualityPreset) => void): void;
   /**
+   * Which owner palette the player has CHOSEN (issue #1058), echoed back by the page after
+   * an accepted toggle, as `setQuality` is. No resolved counterpart, for quality's reason:
+   * nothing gates it, so the stored value is the effective one. The display API of the
+   * Settings control only; the stock chips are painted through `setStockPalette`.
+   */
+  setOwnerPalette(id: OwnerPaletteId): void;
+  /** Fired with the OTHER palette when the player taps the Player colours toggle. */
+  onOwnerPaletteChange(cb: (id: OwnerPaletteId) => void): void;
+  /**
    * The player just fired. Pulses the aim mark, so a tap that produced a shot is
    * distinguishable from a tap that did not -- on a phone the muzzle is under the
    * player's own hand, and the shell is gone before the eye gets there.
@@ -1406,7 +1416,7 @@ export type RouteHudKey =
   | 'setTouchScheme' | 'onTouchSchemeChange' | 'setFireMode' | 'onFireModeChange'
   | 'setHaptics' | 'onHapticsChange' | 'setMotion' | 'onMotionChange'
   | 'setControllerRumble' | 'onControllerRumbleChange' | 'setControlRelevance'
-  | 'setQuality' | 'onQualityChange'
+  | 'setQuality' | 'onQualityChange' | 'setOwnerPalette' | 'onOwnerPaletteChange'
   | 'onReassignSlot' | 'setControllers' | 'setDetectedPads' | 'setBotAssignmentAllowed'
   | 'onControllersOpen' | 'onControllersClose'
   | 'onSettingsOpen' | 'onSettingsClose'
@@ -2467,6 +2477,12 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
                declaring a sixth section is issue #226's call, not this control's. Label
                and hint by renderQualityToggle. -->
           <button class="ui-btn ui-btn--sm hud-quality-toggle" type="button"></button>
+          <!-- Which colours mark whose tank is whose: the ring and team colours together
+               (issue #1058). Named for what it does, as #586 requires, and read once when a
+               match is built, as Quality is. It changes nothing a single player sees, since
+               the colours it picks appear only once two or more player tanks exist. Label
+               and hint by renderOwnerPaletteToggle. -->
+          <button class="ui-btn ui-btn--sm hud-owner-palette-toggle" type="button"></button>
         </div>
       </section>
       <section class="hud-settings-section" data-section="data" aria-labelledby="hud-settings-data">
@@ -2908,6 +2924,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const hapticsToggleBtn = el.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
   const motionToggleBtn = el.querySelector('.hud-motion-toggle') as HTMLButtonElement;
   const qualityToggleBtn = el.querySelector('.hud-quality-toggle') as HTMLButtonElement;
+  const ownerPaletteToggleBtn = el.querySelector('.hud-owner-palette-toggle') as HTMLButtonElement;
 
   const muteCbs: Array<() => void> = [];
   const volumeCbs: Array<(v: number) => void> = [];
@@ -6469,6 +6486,43 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   qualityToggleBtn.addEventListener('click', handleQualityToggle);
   qualityToggleBtn.addEventListener('click', blurIfPointer);
 
+  // The Player colours toggle (issue #1058): two states, the owner palettes of
+  // `presentation/identity.ts`, cycling like the quality toggle above it. The label uses the
+  // palette's own name; the hint says what it looks like, and never names a colour-vision
+  // condition (#586: the control is named for what it does).
+  const PALETTE_LABEL: Record<OwnerPaletteId, string> = {
+    classic: `Player colours: ${OWNER_PALETTE_LABELS.classic}`,
+    'high-contrast': `Player colours: ${OWNER_PALETTE_LABELS['high-contrast']}`,
+  };
+  const PALETTE_HINT: Record<OwnerPaletteId, string> = {
+    classic: 'The original ring and team colours that show which tank is whose.',
+    'high-contrast': 'Lighter ring and team colours that stand out from the arena floor.',
+  };
+  const NEXT_PALETTE: Record<OwnerPaletteId, OwnerPaletteId> = {
+    classic: 'high-contrast',
+    'high-contrast': 'classic',
+  };
+  // Classic until `paintSettingsControls` pushes the stored palette, as `currentQuality` is.
+  let currentOwnerPalette: OwnerPaletteId = DEFAULT_OWNER_PALETTE;
+  function renderOwnerPaletteToggle(): void {
+    ownerPaletteToggleBtn.textContent = PALETTE_LABEL[currentOwnerPalette];
+    // QUALITY_TIMING is true here for the same reason: a session reads the palette once,
+    // when it is built, so a change reaches the next match.
+    ownerPaletteToggleBtn.title = `${PALETTE_HINT[currentOwnerPalette]} ${QUALITY_TIMING}`;
+    ownerPaletteToggleBtn.setAttribute(
+      'aria-label',
+      `${PALETTE_LABEL[currentOwnerPalette]}. ${PALETTE_HINT[currentOwnerPalette]} ${QUALITY_TIMING} ` +
+        `Tap to switch to ${PALETTE_LABEL[NEXT_PALETTE[currentOwnerPalette]]}.`,
+    );
+  }
+  renderOwnerPaletteToggle();
+  const ownerPaletteChangeCbs: Array<(id: OwnerPaletteId) => void> = [];
+  const handleOwnerPaletteToggle = (): void => {
+    for (const cb of ownerPaletteChangeCbs) cb(NEXT_PALETTE[currentOwnerPalette]);
+  };
+  ownerPaletteToggleBtn.addEventListener('click', handleOwnerPaletteToggle);
+  ownerPaletteToggleBtn.addEventListener('click', blurIfPointer);
+
   /**
    * Whether this session has a level AFTER the one just cleared -- the win panel's copy
    * ("Next Level" and "Level N cleared!") turns on it.
@@ -8974,6 +9028,13 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     onQualityChange(cb: (preset: QualityPreset) => void): void {
       qualityChangeCbs.push(cb);
     },
+    setOwnerPalette(id: OwnerPaletteId): void {
+      currentOwnerPalette = id;
+      renderOwnerPaletteToggle();
+    },
+    onOwnerPaletteChange(cb: (id: OwnerPaletteId) => void): void {
+      ownerPaletteChangeCbs.push(cb);
+    },
     setAchievements(earned: ReadonlySet<AchievementId>): void {
       earnedIds = earned;
       // Only if the page is open: rebuilding a hidden list every frame-batch is
@@ -9042,6 +9103,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       motionToggleBtn.removeEventListener('click', blurIfPointer);
       qualityToggleBtn.removeEventListener('click', handleQualityToggle);
       qualityToggleBtn.removeEventListener('click', blurIfPointer);
+      ownerPaletteToggleBtn.removeEventListener('click', handleOwnerPaletteToggle);
+      ownerPaletteToggleBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);
       achBackBtn.removeEventListener('click', blurIfPointer);
       levelSelectOpenBtn.removeEventListener('click', handleLevelSelectOpen);

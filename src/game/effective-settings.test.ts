@@ -69,6 +69,25 @@ describe('resolveEffectiveSettings: audio, UI scale and quality pass through ung
     expect(QUALITY_PRESET_IDS).toContain('low');
   });
 
+  it('passes the owner palette straight through, on any capability set (issue #1058)', () => {
+    // Ungated for quality's reason: nothing probes the device for a colour preference, so
+    // the player's choice is the only answer. Population: both palettes, spelled out, x
+    // both capability sets = 4 combinations.
+    for (const ownerPalette of ['classic', 'high-contrast'] as const) {
+      for (const caps of [ALL_CAPABILITIES, NO_CAPABILITIES]) {
+        const eff = resolveEffectiveSettings(
+          settings({ presentation: { ...DEFAULT_SETTINGS.presentation, ownerPalette } }),
+          caps,
+          false,
+        );
+        expect(eff.ownerPalette, ownerPalette).toBe(ownerPalette);
+      }
+    }
+    // NEGATIVE CONTROL: the default is Classic, so a resolver that answered with it would
+    // disagree on the High contrast rows above rather than coincide.
+    expect(DEFAULT_SETTINGS.presentation.ownerPalette).toBe('classic');
+  });
+
   it('reports UI scale as both the preset and a multiplier', () => {
     // Population: all UI_SCALES. The factor is what #290/#321 will multiply tokens by,
     // and 100 -> 1 exactly is the property that keeps the default a no-op.
