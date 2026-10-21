@@ -375,7 +375,13 @@ function runs(seed, opts = {}) {
       }
       return true;
     };
-    /** Bounds first: they keep the ring's indices on the board. */
+    /**
+     * Bounds first: they keep the ring's indices on the board. On the fixed 33x27 board the
+     * bounds check is defensive and changes no board (seeds 1-1000, confinement on or off): no
+     * slot's rows reach the frame, and a column past it reads as not floor through the ring, so
+     * no mutation can kill it there. It stays, unlike the two checks the header leaves out,
+     * because on a smaller `board` the ring could index a row past the last one and throw.
+     */
     const massFits = (c0, r0, c1, r1) => {
       if (c1 >= board.cols - 1 || r1 >= board.rows - 1) return false;
       // The far corner is the rectangle's last cell in row-major order: inside the half, all of it is.
