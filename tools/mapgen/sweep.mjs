@@ -292,14 +292,16 @@ for (const r of rows) {
 }
 
 console.log();
-console.log('RUN LENGTHS: wall components (8-connected) read back as straight runs and L-bends, over the accepted boards.');
-console.log('run = a straight piece, or an L\'s straight leg with its corner; arm = an L\'s other leg without it. Every');
-console.log('piece appears twice under the 180-degree rotation. other = a component that is neither.');
+console.log('RUN LENGTHS: wall components (8-connected) read back as straight runs, L-bends and masses, over the accepted boards.');
+console.log('run = a straight piece, or an L\'s straight leg with its corner; arm = an L\'s other leg without it; mass = a');
+console.log('filled rectangle at least 3 cells each way, in cells (issue #1066). Every piece appears twice under the 180-degree');
+console.log('rotation. other = a component that is none of the three.');
 for (const r of rows) {
   const L = r.runLengths;
   const mmm = (s) => `${f(s.min, 0)} / ${f(s.median, 1)} / ${f(s.max, 0)}`;
-  console.log(`  ${tag(r).padEnd(LABEL + 4)}  ${L.boards} boards: ${L.straight + L.bent + L.other} components = `
-    + `${L.straight} straight + ${L.bent} L + ${L.other} other; run ${mmm(L.runs)}, arm ${mmm(L.arms)} (min / median / max)`);
+  console.log(`  ${tag(r).padEnd(LABEL + 4)}  ${L.boards} boards: ${L.straight + L.bent + L.masses.n + L.other} components = `
+    + `${L.straight} straight + ${L.bent} L + ${L.masses.n} mass + ${L.other} other; `
+    + `run ${mmm(L.runs)}, arm ${mmm(L.arms)}, mass ${mmm(L.masses)} (min / median / max)`);
 }
 
 // ---- expressive range (issue #822) ----
