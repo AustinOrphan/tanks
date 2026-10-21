@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-baseline-reads-classic",
+  "file": "tools/screens/baseline/screen.settings.owner-palette.json",
+  "find": "\"text\": \"Player colours: High contrast\"",
+  "replace": "\"text\": \"Player colours: Classic\"",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/baseline.test.ts"
+  ],
+  "why": "The committed capture of a High contrast player's Settings pane reads Classic, which is what an accept from a page that never consumed the seed would write (issue #1058). The UI-scale state was once byte-identical to the default for exactly that reason. The state is evidence only while its label differs from `screen.settings`'s.",
+  "killedBy": [
+    "the owner-palette capture photographs the stored palette (issue #1058) reads High contrast where the default capture reads Classic"
+  ]
+}

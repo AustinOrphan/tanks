@@ -109,6 +109,30 @@
         "margin-top": "13.6px",
         "margin-bottom": "13.6px"
       }
+    },
+    {
+      "selector": ".hud-owner-palette-toggle",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 729,
+        "y": 355,
+        "w": 162,
+        "h": 44
+      },
+      "text": "Player colours: Classic",
+      "aria": {
+        "aria-label": "Player colours: Classic. The original ring and team colours that show which tank is whose. Takes effect when the next match starts. Tap to switch to Player colours: High contrast."
+      },
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
     }
   ]
 }

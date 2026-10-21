@@ -107,6 +107,7 @@ on:
           - screen.settings.rumble-refused
           - screen.settings.touch
           - screen.settings.ui-scale
+          - screen.settings.owner-palette
           - screen.startup.entry-refused
           - screen.startup.entry-unparseable
           - screen.startup.match-failed

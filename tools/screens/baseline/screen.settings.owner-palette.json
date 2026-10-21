@@ -1,0 +1,138 @@
+{
+  "state": "screen.settings.owner-palette",
+  "measurements": [
+    {
+      "selector": ".hud-settings",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1280,
+        "h": 800
+      },
+      "text": "Settings\n      \n        Audio\n        \n          Mute (M)\n          \n          \n            −\n            \n            \n            +\n          \n        \n      \n      \n        Controls\n        \n      ",
+      "aria": {
+        "role": "region",
+        "aria-labelledby": "hud-settings-title"
+      },
+      "style": {
+        "display": "flex",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(10, 12, 16, 0.72)",
+        "font-size": "16px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": "#hud-settings-title",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 578,
+        "y": 35,
+        "w": 124,
+        "h": 42
+      },
+      "text": "Settings",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "32px",
+        "margin-top": "21.44px",
+        "margin-bottom": "21.44px"
+      }
+    },
+    {
+      "selector": ".hud-reset-stats",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 529,
+        "y": 489,
+        "w": 94,
+        "h": 44
+      },
+      "text": "Reset stats",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(255, 180, 180)",
+        "background-color": "rgba(255, 90, 90, 0.18)",
+        "font-size": "13px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-reset-progress",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 634,
+        "y": 489,
+        "w": 117,
+        "h": 44
+      },
+      "text": "Reset progress",
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(255, 180, 180)",
+        "background-color": "rgba(255, 90, 90, 0.18)",
+        "font-size": "13px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    },
+    {
+      "selector": ".hud-settings .ui-hint",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 368,
+        "y": 286,
+        "w": 544,
+        "h": 18
+      },
+      "text": "No connected controller reports a rumble motor. Connect one that does and this turns on.",
+      "style": {
+        "display": "block",
+        "opacity": "0.7",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "font-size": "13.6px",
+        "margin-top": "13.6px",
+        "margin-bottom": "13.6px"
+      }
+    },
+    {
+      "selector": ".hud-owner-palette-toggle",
+      "present": true,
+      "visible": true,
+      "box": {
+        "x": 710,
+        "y": 355,
+        "w": 199,
+        "h": 44
+      },
+      "text": "Player colours: High contrast",
+      "aria": {
+        "aria-label": "Player colours: High contrast. Lighter ring and team colours that stand out from the arena floor. Takes effect when the next match starts. Tap to switch to Player colours: Classic."
+      },
+      "style": {
+        "display": "block",
+        "opacity": "1",
+        "color": "rgb(216, 221, 230)",
+        "background-color": "rgba(216, 221, 230, 0.16)",
+        "font-size": "13px",
+        "margin-top": "0px",
+        "margin-bottom": "0px"
+      }
+    }
+  ]
+}
