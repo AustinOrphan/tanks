@@ -126,16 +126,19 @@ export async function runPagesJourney(dist) {
     await page.click('.hud-devcfg-open');
     if (!(await settles(page, '.hud-devcfg', 'visible'))) {
       failures.push('the Configuration entry did not open the configuration pane');
-    } else if (!(await settles(page, '.hud-devcfg-presets', 'visible'))) {
-      const reported = await page
-        .evaluate(() => document.querySelector('.hud-devcfg-failed')?.textContent ?? null)
-        .catch(() => null);
-      failures.push(
-        `the configuration pane opened but its body never loaded under ${PAGES_PREFIX}` +
-          (reported === null ? '' : ` -- the pane says: "${reported}"`) +
-          `. 404s so far: ${missing.length ? missing.join(', ') : 'none'}`,
-      );
     } else {
+      // Reported, and the round trip still made: a pane whose body failed keeps its Back, and
+      // stopping here would add every later step's failure to this one.
+      if (!(await settles(page, '.hud-devcfg-presets', 'visible'))) {
+        const reported = await page
+          .evaluate(() => document.querySelector('.hud-devcfg-failed')?.textContent ?? null)
+          .catch(() => null);
+        failures.push(
+          `the configuration pane opened but its body never loaded under ${PAGES_PREFIX}` +
+            (reported === null ? '' : ` -- the pane says: "${reported}"`) +
+            `. 404s so far: ${missing.length ? missing.join(', ') : 'none'}`,
+        );
+      }
       await page.click('.hud-devcfg-back');
       if (!(await settles(page, '.hud-devcfg', 'hidden'))) {
         failures.push('the configuration pane did not close on its own Back control');
