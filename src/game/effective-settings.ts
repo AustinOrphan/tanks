@@ -23,7 +23,7 @@ import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from
  * | `reducedMotion` | `'system'` follows the OS; `'full'` is always false; `'reduced'` is always true. |
  * | `uiScale` | the stored preference. |
  * | `quality` | the stored preference, UNGATED. Nothing here probes the GPU -- see below. |
- * | `ownerPalette` | the stored preference, UNGATED. Nothing probes the device for a colour preference; `?dev=1&ownerPalette=` overrides it in `loop.ts`, as `?quality=` does. |
+ * | `ownerPalette` | the stored preference, UNGATED. Nothing probes the device for a color preference; `?dev=1&ownerPalette=` overrides it in `loop.ts`, as `?quality=` does. |
  * | `controllerLayouts` | the stored layouts, UNGATED. Each gamepad reader resolves one against its pad's profile. |
  *
  * Touch scheme and fire mode are deliberately NOT gated on `capabilities.touch`. Gating

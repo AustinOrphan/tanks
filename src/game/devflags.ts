@@ -420,7 +420,7 @@ export interface DevFlags {
    * Which OWNER PALETTE every owner colour is drawn in (issue #1057, the threading half of
    * #586): identity and spawn rings, shell tints, tread trails, death pulses, the multiplayer
    * death vignette and the stock-strip chips. `null` -- absent or unrecognised -- leaves the
-   * player's Player colours setting in charge (issue #1058); a value overrides it for the
+   * player's Player colors setting in charge (issue #1058); a value overrides it for the
    * session without writing it, as `quality` does. Read once, when a session builds its
    * renderer, so a value applies from the next match.
    * A single-player game keeps the shipped colours under either value: the palette applies
@@ -1506,13 +1506,13 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Selects the owner palette every player and team colour is drawn in (issues #586, ' +
       '#1057): identity and spawn rings, shell tints, tread trails, death pulses, the ' +
       "multiplayer death vignette and the stock-strip chips. 'high-contrast' selects #586's " +
-      "palette and 'classic' the shipped colours; absent leaves the player's Player colours " +
+      "palette and 'classic' the shipped colors; absent leaves the player's Player colors " +
       'setting in charge.',
     notes: [
       'Read once, when a session builds its renderer: a value set here applies from the next ' +
         'match, as `quality` does. A single-player game keeps the shipped colours under ' +
         'either value: the palette applies only once two or more player tanks exist.',
-      'Overrides the Player colours setting for one session without writing it, as ' +
+      'Overrides the Player colors setting for one session without writing it, as ' +
         '`quality` does. The Settings control is what survives; the flag goes once the ' +
         'capture tooling can seed `tanks.settings.v1`.',
     ],

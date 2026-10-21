@@ -1,8 +1,8 @@
 {
   "id": "owner-palette-baseline-reads-classic",
   "file": "tools/screens/baseline/screen.settings.owner-palette.json",
-  "find": "\"text\": \"Player colours: High contrast\"",
-  "replace": "\"text\": \"Player colours: Classic\"",
+  "find": "\"text\": \"Player colors: High contrast\"",
+  "replace": "\"text\": \"Player colors: Classic\"",
   "expect": "killed",
   "tests": [
     "tools/screens/baseline.test.ts"

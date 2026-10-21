@@ -849,20 +849,20 @@ describe('hud: the owner-palette toggle (issue #1058)', () => {
    */
   const DEFICIENCY_WORDS = /colou?r[\s-]*blind|deficien|protan|deut(?:er)?an|tritan/i;
 
-  it('shows the stored palette, labelled Player colours: Classic and Player colours: High contrast', () => {
+  it('shows the stored palette, labelled Player colors: Classic and Player colors: High contrast', () => {
     const { hud: h, root } = mount();
 
     h.setOwnerPalette('classic');
-    expect(toggle(root).textContent).toBe('Player colours: Classic');
+    expect(toggle(root).textContent).toBe('Player colors: Classic');
     const classicAria = toggle(root).getAttribute('aria-label');
 
     h.setOwnerPalette('high-contrast');
-    expect(toggle(root).textContent).toBe('Player colours: High contrast');
+    expect(toggle(root).textContent).toBe('Player colors: High contrast');
     expect(toggle(root).getAttribute('aria-label')).not.toBe(classicAria);
 
     // Back again: a label that only ever moved one way would pass the two reads above.
     h.setOwnerPalette('classic');
-    expect(toggle(root).textContent).toBe('Player colours: Classic');
+    expect(toggle(root).textContent).toBe('Player colors: Classic');
   });
 
   it('says WHEN the choice takes effect, which the label cannot show', () => {
@@ -884,7 +884,7 @@ describe('hud: the owner-palette toggle (issue #1058)', () => {
     expect(toggle(root).title, 'both palettes share one hint').not.toBe(classic);
   });
 
-  it('names what it does, never a colour-vision deficiency, in every state', () => {
+  it('names what it does, never a color-vision deficiency, in every state', () => {
     // KNOWN-BAD CONTROLS, synthetic: the pattern has to be able to match the strings it
     // exists to refuse, or every assertion below passes over nothing.
     for (const bad of ['Colour-blind mode', 'color blind', 'Deuteranopia', 'Protanopia', 'Tritan', 'colour deficiency']) {
@@ -903,7 +903,7 @@ describe('hud: the owner-palette toggle (issue #1058)', () => {
       // The spoken form opens with the visible label, as the Motion and Quality toggles' do,
       // and ends by saying where a tap goes.
       expect(aria.startsWith(`${text}. `), `${id}: ${aria}`).toBe(true);
-      expect(aria.endsWith(`Tap to switch to Player colours: ${other[id]}.`), `${id}: ${aria}`).toBe(
+      expect(aria.endsWith(`Tap to switch to Player colors: ${other[id]}.`), `${id}: ${aria}`).toBe(
         true,
       );
     }
@@ -919,7 +919,7 @@ describe('hud: the owner-palette toggle (issue #1058)', () => {
     expect(seen, 'the toggle is not wired to anything').toEqual(['high-contrast']);
     // The button does NOT flip its own label: it reports the choice and waits for the page's
     // echo of what the store accepted, the convention every Settings control here follows.
-    expect(toggle(root).textContent).toBe('Player colours: Classic');
+    expect(toggle(root).textContent).toBe('Player colors: Classic');
 
     h.setOwnerPalette('high-contrast'); // the page's echo
     toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -939,15 +939,15 @@ describe('hud: the owner-palette toggle (issue #1058)', () => {
     expect(toggle(root).parentElement, 'not in the same row as Motion and Quality').toBe(
       quality.parentElement,
     );
-    // Node-wise order, not an element query: Quality comes first, then Player colours.
+    // Node-wise order, not an element query: Quality comes first, then Player colors.
     expect(
       quality.compareDocumentPosition(toggle(root)) & Node.DOCUMENT_POSITION_FOLLOWING,
-      'Player colours sits before Quality',
+      'Player colors sits before Quality',
     ).toBeTruthy();
   });
 
   it('stays offered on a device with no touch, no vibration and no pad', () => {
-    // Nothing gates a colour choice on a capability, so the verdict that hides the touch
+    // Nothing gates a color choice on a capability, so the verdict that hides the touch
     // pair and the haptics toggle on a desktop must leave this one in the walk.
     const { hud: h, root } = mount();
     h.setState('main-menu');

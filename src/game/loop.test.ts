@@ -5467,7 +5467,7 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 
   it('builds the session in the STORED owner palette when no flag is set (issue #1058)', () => {
-    // The half a player can reach: the Player colours setting, read once at build from the
+    // The half a player can reach: the Player colors setting, read once at build from the
     // effective layer and handed to the renderer and the stock chips together. Identity
     // (toBe), so a copy of the palette passes nothing.
     const paletteOf = (h: ReturnType<typeof boot>): unknown =>
@@ -5525,14 +5525,14 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 });
 
-describe('startGameWith: the Player colours setting survives a reload (issue #1058)', () => {
+describe('startGameWith: the Player colors setting survives a reload (issue #1058)', () => {
   it("a High contrast choice made through the toggle reaches the next session's renderer and stock chips", () => {
     const paletteOf = (h: ReturnType<typeof boot>): unknown =>
       (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
     // ONE Storage for the whole test, which is what a reload keeps.
     const storage = createMemoryStorage();
 
-    // Session 1: the player opens Settings and taps Player colours. The tap goes through the
+    // Session 1: the player opens Settings and taps Player colors. The tap goes through the
     // real route-ui handler the page registers; the button half is hud.controls.test.ts's.
     const first = boot(makeDeps({ settingsStorage: storage }));
     expect(paletteOf(first)).toBe(OWNER_PALETTES.classic);

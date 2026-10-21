@@ -2010,7 +2010,7 @@ export function startGameWith(
    * THE OWNER PALETTE THIS SESSION DRAWS IN (issue #1057), resolved once, as quality is, and
    * handed to the three readers that each draw part of it: the renderer (rings, shell tints,
    * trails, death pulses), the HUD's stock chips and the death vignette. One value for all
-   * three is what keeps a ring and its chip the same colour. The player's Player colours
+   * three is what keeps a ring and its chip the same color. The player's Player colors
    * setting decides it (issue #1058); `?dev=1&ownerPalette=` overrides that for the session
    * without writing it, as `?quality=` does for the quality setting.
    */
