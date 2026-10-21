@@ -1,6 +1,7 @@
 import type { TouchScheme, FireMode } from '../input/touch';
 import type { ControlLayout } from '../input/gamepad-profile';
 import type { PlayerSettings, UiScale, PlayerSettingsStore, QualityPreset } from './settings';
+import type { OwnerPaletteId } from '../presentation/identity';
 import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from './capabilities';
 
 /**
@@ -22,6 +23,7 @@ import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from
  * | `reducedMotion` | `'system'` follows the OS; `'full'` is always false; `'reduced'` is always true. |
  * | `uiScale` | the stored preference. |
  * | `quality` | the stored preference, UNGATED. Nothing here probes the GPU -- see below. |
+ * | `ownerPalette` | the stored preference, UNGATED. Nothing probes the device for a colour preference; `?dev=1&ownerPalette=` overrides it in `loop.ts`, as `?quality=` does. |
  * | `controllerLayouts` | the stored layouts, UNGATED. Each gamepad reader resolves one against its pad's profile. |
  *
  * Touch scheme and fire mode are deliberately NOT gated on `capabilities.touch`. Gating
@@ -70,6 +72,12 @@ export interface EffectiveSettings {
    */
   readonly quality: QualityPreset;
   /**
+   * Which owner palette a new session should build with (issue #1058). An id, not an
+   * `OwnerPalette`: `loop.ts` resolves it, once per session, after the dev flag has had
+   * its say.
+   */
+  readonly ownerPalette: OwnerPaletteId;
+  /**
    * The player's controller layouts by profile id (issue #754), as stored. Ungated for the
    * reason the touch scheme is: whether a pad is connected decides whether Settings SHOWS the
    * control, not what a stored layout means. A gamepad reader resolves one against its pad's
@@ -100,6 +108,7 @@ export function resolveEffectiveSettings(
     uiScale: settings.presentation.uiScale,
     uiScaleFactor: settings.presentation.uiScale / 100,
     quality: settings.presentation.quality,
+    ownerPalette: settings.presentation.ownerPalette,
     controllerLayouts: settings.input.controllerLayouts,
   });
 }

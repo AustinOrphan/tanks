@@ -1,0 +1,15 @@
+{
+  "id": "settings-accepts-an-unknown-owner-palette",
+  "file": "src/game/settings.ts",
+  "find": "      if (!PALETTE_IDS.has(id)) return;",
+  "replace": "      if (typeof id !== 'string') return;",
+  "expect": "killed",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "why": "Validates the TYPE instead of the domain, the plausible way to write this guard (issue #1058; modelled on settings-accepts-an-unknown-quality-preset). Any string is then stored, persisted and published, and the next match indexes `OWNER_PALETTES` with it, handing every ring, chip and vignette reader `undefined`. It also breaks the refusal contract the store rests on: a refused value publishes nothing, which is what keeps a control showing what was actually accepted.",
+  "killedBy": [
+    "createPlayerSettingsStore: validation refuses an off-domain SETTER argument and keeps the accepted value",
+    "createPlayerSettingsStore: defaults and persistence does NOT publish a refused value"
+  ]
+}

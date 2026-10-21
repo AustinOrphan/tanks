@@ -1,0 +1,15 @@
+{
+  "id": "settings-reads-a-missing-owner-palette-as-high-contrast",
+  "file": "src/game/settings.ts",
+  "find": "        ownerPalette: acceptedFrom(presentation.ownerPalette, PALETTE_IDS, DEFAULT_OWNER_PALETTE),",
+  "replace": "        ownerPalette: acceptedFrom(presentation.ownerPalette, PALETTE_IDS, 'high-contrast'),",
+  "expect": "killed",
+  "tests": [
+    "src/game/settings.test.ts"
+  ],
+  "why": "An absent or junk stored palette falls back to something other than the default (issue #1058). Every payload a build before #1058 wrote has no `ownerPalette`, so every returning player who never opened the new control would start drawing in High contrast: a visible change to the shipped colours that nobody asked for, and the opposite of 'Classic is the default and a player who never opens Settings sees no change'.",
+  "killedBy": [
+    "parseSettingsPayload: stored data loads a payload saved before the owner palette existed as Classic, keeping every sibling (issue #1058)",
+    "parseSettingsPayload: stored data defaults each field INDEPENDENTLY when its neighbour is junk"
+  ]
+}
