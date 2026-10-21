@@ -223,7 +223,11 @@ all ask it, so Escape with a volume slider focused is Back or Pause, never lost.
 stays outside the roving walk, because it consumes the arrows itself, so Settings' Audio row
 gives a pad the level through − and + steppers beside it (issue #918): two buttons in the
 walk, each moving the level to the next multiple of 10 percent (`steppedVolume`) and
-reporting through the slider's own subscribers. `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
+reporting through the slider's own subscribers. The places a pad or the keyboard is decided
+NOT to get this reach -- the controller self-test, Launch and a live match, the DEV badge, and
+a crossfade's outgoing surface -- are the exception register in
+`src/game/accessibility-exceptions.ts` (issue #915); the reachability records only mark them.
+`Hud.act(action)` is the dispatcher for the active layer -- directions walk the
 panel, `confirm` activates the focused control through its own click handler (or lands on
 the first control when only a container is focused -- a pane with no primary action, or focus
 fallen to one -- so a blind Confirm cannot fire whatever is first), `back` is `Hud.back()`,

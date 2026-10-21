@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { accessibilityException } from './accessibility-exceptions';
 import type { GameplayOutcome, HudLayerId, HudSurface } from './hud';
 import {
   LAYER_REACH,
   layerReachCase,
   mount,
   q,
+  SURFACE_REACH,
   unmount,
   WALKED_IN_OWN_FILE,
   walkWithPad,
@@ -24,10 +26,11 @@ import { ZERO_STATS } from './stats';
  * (#325, fixed in #912). Both shipped with the same symptom: arrows moved nothing inside the
  * pane and Confirm landed nowhere, while every required check stayed green.
  *
- * The two records are `Record<HudLayerId, ...>` (`LAYER_REACH`, in `hud-reachability-fixtures.ts`)
- * and `Record<HudSurface, ...>` (below), so adding a member to either union without saying how to
- * reach it does not compile. That is the whole mechanism: the omission becomes a build error at
- * the moment it is introduced, rather than a silence nobody is looking for.
+ * The two records are `Record<HudLayerId, ...>` (`LAYER_REACH`) and `Record<HudSurface, ...>`
+ * (`SURFACE_REACH`), both in `hud-reachability-fixtures.ts`, so adding a member to either union
+ * without saying how to reach it does not compile. That is the whole mechanism: the omission
+ * becomes a build error at the moment it is introduced, rather than a silence nobody is looking
+ * for.
  * `activePanelContainer` in `hud.ts` reads the same `LAYERS` record for the same reason.
  *
  * ONE LAYER IS WALKED ELSEWHERE: `developer-config`, in `hud.reachability.devconfig.test.ts`,
@@ -44,23 +47,6 @@ import { ZERO_STATS } from './stats';
  */
 
 afterEach(unmount);
-
-/**
- * A surface with no active panel is a decided design, not an omission; it says which and why.
- * A surface with one names the control its arrival focuses (issue #919).
- */
-type SurfaceReach = { readonly selector: string; readonly primary: string } | { readonly noPanel: string };
-
-const SURFACE_REACH: Record<HudSurface, SurfaceReach> = {
-  launch: { noPanel: 'the splash: the panel, topbar and touch row are all hidden behind it' },
-  playing: { noPanel: 'a live match: the arrows and the stick drive the tank, not a menu' },
-  // No run in this fixture, so Start Campaign; with one it is Continue Campaign, pinned in
-  // the arrival cases below.
-  'main-menu': { selector: '.hud-panel', primary: '.hud-new-game' },
-  paused: { selector: '.hud-panel', primary: '.hud-action' }, // Resume
-  'outcome-win': { selector: '.hud-panel', primary: '.hud-action' }, // Next Level
-  'outcome-lose': { selector: '.hud-panel', primary: '.hud-action' }, // the campaign-over action
-};
 
 /** A campaign-shaped ending, in the shape `pushOutcome` really hands the HUD. */
 const outcome = (kind: 'mission-clear' | 'campaign-over'): GameplayOutcome => ({
@@ -106,7 +92,10 @@ describe('every HUD surface hands the pad a panel, or says why it does not (issu
   for (const surface of surfaces) {
     const reach = SURFACE_REACH[surface];
     if ('noPanel' in reach) {
-      it(`leaves ${surface} without an active panel on purpose -- ${reach.noPanel}`, () => {
+      // The reason is the exception register's (issue #915), which holds it beside the
+      // others; `accessibility-exceptions.test.ts` fails if this record marks a surface the
+      // register gives no reason for, so the title cannot read "null" with everything green.
+      it(`leaves ${surface} without an active panel on purpose -- ${accessibilityException({ kind: 'surface', id: surface })}`, () => {
         const { hud: h, root } = mount();
         h.setState(surface);
         // Nothing to walk, and the assertion is that the pad is refused rather than silently

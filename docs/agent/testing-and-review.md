@@ -144,6 +144,42 @@ general form: a test combining several calls with one assertion at the end is bl
 any defect a LATER call's own no-op path happens to undo: `run.test.ts`'s
 `describe('createRunStore: no run yet', ...)` block carries the repaired version.
 
+## Accessibility exceptions
+
+Issue #327's first criterion accepts "documented manual exceptions" to its keyboard checks.
+They are one register: `accessibilityException` in `src/game/accessibility-exceptions.ts`
+(#915), which returns a reason per excepted subject or null, in `hitSweepExclusion`'s shape.
+`src/game/accessibility-exceptions.test.ts` folds every subject into a literal reason map: the
+15 layers, the 6 surfaces, every control outside every pane, and the crossfade. It also holds
+each entry to the mounted HUD, so an exception that stops being true fails.
+
+- **An exception needs an owner ruling.** Issue #915's ruling (2026-10-13) is the precedent in
+  both directions: the volume slider's missing pad route was put forward as one and ruled a
+  defect, which #918's steppers fixed; the crossfade's briefly tabbable leaving surface was
+  ruled an exception because it is transient.
+- **What earns an entry (owner, 2026-10-20):** a control a pad can never land on is an exception
+  only when nothing beside it does its job.
+  - Inside a pane, a button in the walk that does the job leaves nothing to except. That covers
+    the volume slider beside its − and + steppers, and the developer outputs beside their Copy
+    buttons.
+  - Outside every pane there is no such neighbour. A control shown over every surface takes its
+    own entry (the DEV badge); one shown on a single surface falls under that surface's entry
+    (the touch row's driving controls, under `playing`).
+- **An entry is three things:** its clause; a truth assertion that fails when the HUD stops
+  needing it; and two mutation entries, one deleting the clause and one making the truth false
+  in production. The truth assertion lives in the register's test, or in a reachability case
+  that the register's test ties to the entry.
+- **An entry that stops being true is deleted, not reworded.** The register's own truth cases
+  (the DEV badge and the crossfade) say so in their failure messages; a failure in the
+  self-test walk or the launch and playing cases means the same for that entry's clause. A
+  reason rewritten to fit new behaviour turns the register back into the scattered comments it
+  replaced.
+- **The reachability records mark, the register explains.** `LAYER_REACH`'s `padSuppressed`
+  and `SURFACE_REACH`'s `noPanel` (`src/game/hud-reachability-fixtures.ts`) say which members
+  are excepted. Each reason is written once, in the register, and its test pins the text as a
+  literal, as `hit-sweep.test.ts` does; one case holds the marks and the register to each other
+  in both directions.
+
 ## CI-pending execution
 
 Local candidate verification and authoritative CI/merge verification are separate gates.
