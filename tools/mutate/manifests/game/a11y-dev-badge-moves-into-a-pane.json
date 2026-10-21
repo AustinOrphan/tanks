@@ -1,0 +1,15 @@
+{
+  "id": "a11y-dev-badge-moves-into-a-pane",
+  "file": "src/game/hud.ts",
+  "find": "      <button class=\"ui-btn ui-btn--slab hud-gallery-back\" type=\"button\">Back</button>\n    </div>\n    <!-- The persistent DEV indicator (issue #243). On the HUD ROOT rather than in the\n         topbar, because the topbar is gameplay-status-only since issue #226 and is hidden\n         at the Main Menu -- so a topbar indicator could not be the \"throughout menus and\n         gameplay\" the issue asks for. Being outside it also keeps this clear of issue\n         #552's topbar arms, which rearrange that bar's contents.\n\n         A BUTTON, not a decoration: the issue requires activating it to reopen the tools\n         shell, so it has to be reachable by keyboard and controller like any other\n         control. -->\n    <button class=\"ui-btn ui-btn--sm ui-btn--danger hud-devbadge hud-devbadge--hidden\" type=\"button\" aria-label=\"Developer mode is on. Open Developer Tools.\">DEV</button>\n",
+  "replace": "      <button class=\"ui-btn ui-btn--slab hud-gallery-back\" type=\"button\">Back</button>\n    <!-- The persistent DEV indicator (issue #243). On the HUD ROOT rather than in the\n         topbar, because the topbar is gameplay-status-only since issue #226 and is hidden\n         at the Main Menu -- so a topbar indicator could not be the \"throughout menus and\n         gameplay\" the issue asks for. Being outside it also keeps this clear of issue\n         #552's topbar arms, which rearrange that bar's contents.\n\n         A BUTTON, not a decoration: the issue requires activating it to reopen the tools\n         shell, so it has to be reachable by keyboard and controller like any other\n         control. -->\n    <button class=\"ui-btn ui-btn--sm ui-btn--danger hud-devbadge hud-devbadge--hidden\" type=\"button\" aria-label=\"Developer mode is on. Open Developer Tools.\">DEV</button>\n    </div>\n",
+  "expect": "killed",
+  "why": "Issue #915. The gallery workbench's closing tag moves below the DEV badge, so the badge is inside that pane: its register entry -- the badge belongs to no panel -- is no longer true. One hunk because the two are adjacent in the template. Killed by the badge case, whose out-of-pane population empties, and by the fold, which loses the badge as a subject. Not a gap this file closes alone: six of `hud.navigation.test.ts`'s developer-mode cases also fail (measured), because a badge inside a pane is hidden whenever that pane is, while its own 'not in either walk' check reads only the panel, Developer Tools, Settings and About. The badge case is the one that states the entry.",
+  "tests": [
+    "src/game/accessibility-exceptions.test.ts"
+  ],
+  "killedBy": [
+    "the accessibility exception register (issue #915) registers exactly five exceptions, each for its reason",
+    "the accessibility exception register (issue #915) holds the DEV badge as the one control outside every pane"
+  ]
+}

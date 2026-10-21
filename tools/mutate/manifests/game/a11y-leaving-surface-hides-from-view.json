@@ -1,0 +1,14 @@
+{
+  "id": "a11y-leaving-surface-hides-from-view",
+  "file": "src/game/hud.css",
+  "find": ".ui-surface--leaving {\n  animation: ui-surface-out var(--ui-transition-duration) var(--ui-transition-ease) forwards;\n",
+  "replace": ".ui-surface--leaving {\n  animation: ui-surface-out var(--ui-transition-duration) var(--ui-transition-ease) forwards;\n  visibility: hidden;\n",
+  "expect": "killed",
+  "why": "Issue #915. `.ui-surface--leaving` hides the outgoing surface with `visibility: hidden`, which takes it out of the Tab order for the fade and the fade with it, so the register's crossfade entry is no longer true. Killed by the crossfade case's visibility check, and by nothing in the 18 HUD test files (measured): nothing else reads a leaving surface's visibility.",
+  "tests": [
+    "src/game/accessibility-exceptions.test.ts"
+  ],
+  "killedBy": [
+    "the accessibility exception register (issue #915) leaves a crossfade's outgoing surface tabbable until the fade settles, while the pad walks the arriving one"
+  ]
+}

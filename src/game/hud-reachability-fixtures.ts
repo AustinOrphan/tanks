@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 
-import { createHud, type Hud, type HudLayerId } from './hud';
+import { createHud, type Hud, type HudLayerId, type HudSurface } from './hud';
 import { focusableControls } from './focusable';
 
 /**
@@ -21,6 +21,11 @@ import { focusableControls } from './focusable';
  * and `hud.reachability.devconfig.test.ts` walks, so the two files cannot disagree about which
  * layers that is. What no check covers: deleting or skipping the devconfig file drops its walk,
  * as skipping the walk in one file always could.
+ *
+ * `SURFACE_REACH` lives here too, beside `LAYER_REACH`, since issue #915: both records mark the
+ * members a pad is decided NOT to walk (`padSuppressed`, `noPanel`), and
+ * `accessibility-exceptions.test.ts` holds those marks to the exception register, which is
+ * where each one's reason is written. The records say which; the register says why.
  *
  * A test-only module: nothing in production imports it.
  */
@@ -68,7 +73,8 @@ interface LayerReach {
   readonly open: (h: Hud, root: HTMLElement) => void;
   /**
    * Set only for the controller self-test, whose pad suppression is a decided behaviour rather
-   * than a gap. Its own assertions replace the walk.
+   * than a gap. Its own assertions replace the walk, and its reason is the exception register's
+   * (`accessibility-exceptions.ts`).
    */
   readonly padSuppressed?: true;
 }
@@ -179,6 +185,24 @@ export const LAYER_REACH: Record<HudLayerId, LayerReach> = {
 };
 
 /**
+ * A surface with no active panel is a decided design, not an omission: it is marked `noPanel`
+ * here, and the exception register says why. A surface with one names the control its arrival
+ * focuses (issue #919).
+ */
+type SurfaceReach = { readonly selector: string; readonly primary: string } | { readonly noPanel: true };
+
+export const SURFACE_REACH: Record<HudSurface, SurfaceReach> = {
+  launch: { noPanel: true },
+  playing: { noPanel: true },
+  // No run in this fixture, so Start Campaign; with one it is Continue Campaign, pinned in
+  // the arrival cases in `hud.reachability.test.ts`.
+  'main-menu': { selector: '.hud-panel', primary: '.hud-new-game' },
+  paused: { selector: '.hud-panel', primary: '.hud-action' }, // Resume
+  'outcome-win': { selector: '.hud-panel', primary: '.hud-action' }, // Next Level
+  'outcome-lose': { selector: '.hud-panel', primary: '.hud-action' }, // the campaign-over action
+};
+
+/**
  * Assert where `container`'s arrival put focus -- `primary`, a selector inside it, or the
  * container itself when `primary` is null (issue #919) -- then walk every control with the
  * PAD verb, which is the path a D-pad takes, from there round to there.
@@ -234,11 +258,11 @@ export function layerReachCase(id: HudLayerId, budgetMs: number): void {
       );
 
       if (reach.padSuppressed === true) {
-        // THE ONE DECIDED EXCEPTION (issue #599). The self-test's whole subject is which
-        // physical control is which index, so a Confirm pressed in it has to show up in the
-        // readout rather than activate whatever is focused, and a stick push has to move an
-        // axis bar rather than the focus ring. Every action is consumed and dropped -- which
-        // is why it is asserted here as a SUPPRESSION rather than skipped as a gap.
+        // THE ONE DECIDED LAYER EXCEPTION (issue #599), and the exception register
+        // (`accessibility-exceptions.ts`) is where its reason is written: a pad press in the
+        // self-test has to reach the readout, not the menu. Every action is consumed and
+        // dropped -- which is why it is asserted here as a SUPPRESSION rather than skipped as
+        // a gap.
         expect(document.activeElement, `${id} did not take focus as a container`).toBe(container);
         expect(h.act('down'), `${id} let the pad's Down through to the focus ring`).toBe(true);
         expect(document.activeElement, `${id} moved focus on a pad Down`).toBe(container);

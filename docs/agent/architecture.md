@@ -226,7 +226,10 @@ walk, each moving the level to the next multiple of 10 percent (`steppedVolume`)
 reporting through the slider's own subscribers. The slider says its level as a percentage
 (`aria-valuetext`), and a keyboard or pad press on a stepper, which leaves focus on the
 button, is announced ("Volume 60%") through the page's one live region once the presses stop;
-a slider drag is not, since the focused slider already speaks.
+a slider drag is not, since the focused slider already speaks. The places a pad or the
+keyboard is decided NOT to get this reach -- the controller self-test, Launch and a live
+match, the DEV badge, and a crossfade's outgoing surface -- are the exception register in
+`src/game/accessibility-exceptions.ts` (issue #915); the reachability records only mark them.
 `Hud.act(action)` is the dispatcher for the active layer -- directions walk the
 panel, `confirm` activates the focused control through its own click handler (or lands on
 the first control when only a container is focused -- a pane with no primary action, or focus
