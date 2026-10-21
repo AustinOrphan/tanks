@@ -199,11 +199,11 @@ describe('runs: masses for cover and thin runs for circulation (issue #1066)', (
     expect(faulty).toEqual([]);
   });
 
-  it('THE CONTROL: masses placed by their centre lines touch, and the read-back refuses the board', () => {
-    // The issue's named control for the edge clearance. Clearance from a mass's centre line at
+  it('THE CONTROL: masses placed by their center lines touch, and the read-back refuses the board', () => {
+    // The issue's named control for the edge clearance. Clearance from a mass's center line at
     // its own half-width reaches only its edge, so it admits a second mass that touches it. On
     // the 3-cell lattice that is these three shapes; the real generator is reached by the
-    // mutation mapgen-runs-mass-clearance-from-the-centre-line.
+    // mutation mapgen-runs-mass-clearance-from-the-center-line.
     const inAnL = picture([
       '..........',
       '.######...',

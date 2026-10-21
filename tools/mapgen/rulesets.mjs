@@ -278,7 +278,7 @@ const MASS_SHAPES = [[1, 2], [2, 1], [1, 3], [3, 1]];
  * (2026-10-09) chose a mix that mirrors the shipped set: masses for cover, thin runs and L-bends
  * for circulation, the interior share inside the band the shipped boards span and the thin share
  * a minority. One-cell-thick pieces alone cannot do either: no cell of a bar has four walled
- * neighbours, so every board measured interior share 0.000 and thin share 1.000.
+ * neighbors, so every board measured interior share 0.000 and thin share 1.000.
  *   - A mass is a filled bar ONE 3x3 module thick and two or three modules long: 3x6, 6x3, 3x9
  *     or 9x3 cells, always solid. It is vs-quad-02's vocabulary (whole 3x3 modules on a 3-cell
  *     lattice) narrowed to the shapes whose interior share lies inside the band by themselves. A
@@ -290,7 +290,7 @@ const MASS_SHAPES = [[1, 2], [2, 1], [1, 3], [3, 1]];
  *   - CLEARANCE IS MEASURED FROM THE MASS'S EDGE, as the `thickness` note in `spines` prescribes:
  *     the ring one cell outside the rectangle must be floor. On a 3-cell lattice two masses
  *     either touch or are a whole module apart, so the ring is what makes every lane between
- *     masses at least 3 cells; clearance from the centre line at the mass's half-width reaches
+ *     masses at least 3 cells; clearance from the center line at the mass's half-width reaches
  *     only its own edge and admits two masses that touch.
  *   - The thin pieces then go down by the rules above, unchanged, and keep their one-cell gap
  *     from the masses because the masses are already wall.
@@ -301,13 +301,13 @@ const MASS_SHAPES = [[1, 2], [2, 1], [1, 3], [3, 1]];
  * interior, and 2 thin pieces a half of at most 13 cells are at most 52 thin cells, so the share
  * is at least 16 / 124 (0.129). The thin ceiling of 0.37 is NOT by construction: the same worst
  * case reads 0.419, and it holds by measurement (no board over it on seeds 1-200; 2 of seeds
- * 1-1000, 351 and 753). Two checks the thin pieces make are left out
- * because they cannot fire for a mass, and a check that cannot fire cannot be proved by a failing
- * mutation either. Its own rotated image: a ring within reach of its own image would have to
- * cover both the board's centre row and its centre column, and the spur always protects one of
- * them. The connectivity revert: a rectangle with a ring of floor around it, and its image with
- * the same, cannot cut the floor in two. (Measured too: neither fired over seeds 1-1000, with
- * the confinement on or off and at `laneHalfWidth` 2.)
+ * 1-1000, 351 and 753). Two checks the thin pieces make are left out because they cannot fire
+ * for a mass, and a check that cannot fire cannot be proved by a failing mutation either. Its
+ * own rotated image: a ring within reach of its own image would have to cover both the board's
+ * center row and its center column, and the spur always protects one of them. The connectivity
+ * revert: a rectangle with a ring of floor around it, and its image with the same, cannot cut
+ * the floor in two. (Measured too: neither fired over seeds 1-1000, with the confinement on or
+ * off and at `laneHalfWidth` 2.)
  * `{ masses: 0, pieces: 16 }` takes no draw for the masses and is #1029's generator byte for
  * byte; the default piece count is 2, not 16, because the thin share is a minority only beside
  * the masses' 72-162 cells (3 pieces put 8 of seeds 1-100 over the ceiling).

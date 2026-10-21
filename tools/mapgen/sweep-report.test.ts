@@ -191,7 +191,7 @@ describe('the mass read-back (issue #1066)', () => {
     expect(legs).toMatchObject({ runs: [], arms: [], straight: 0, bent: 0, other: 2 });
   });
 
-  it('summarises the mass sizes over a sample of boards', () => {
+  it('summarizes the mass sizes over a sample of boards', () => {
     // One board with a 3x6 bar, a 3x3 module and a straight run; one with a 9x3 bar.
     const one = board(['..........', '.###..###.', '.###..###.', '.###..###.', '......###.', '......###.', '......###.', '..........', '.#####....', '..........']);
     const two = board(['...........', '.#########.', '.#########.', '.#########.', '...........']);
