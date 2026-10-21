@@ -30,19 +30,18 @@ export type StockRow = 'marks' | 'pips';
  * no team whose resolved marker is `shape`, and `pips` for every other combination.
  *
  * `marker` is the HUD's resolved `identityMarker` option. The page's HUD is handed `shape` when
- * the flag is absent, `null` for the reversal value `solid` and the named style otherwise
+ * the flag is absent or names it, and `null` for the reversal value `solid`
  * (`identity-marker-flag.ts`); an injected HUD built without the option has `null`.
  *
  *  - A TEAMS ENTRY DRAWS PIPS. `marks` spends the SLOT's outline, and a teams player shares a
  *    side, not a slot: two teammates in one colour drawn with two outlines would claim to be
  *    different sides, and the A/B/C letter beside the number already answers the question the
  *    outline would ask (PR #836's fallback, a week before the ruling).
- *  - ANY MARKER BUT `shape` DRAWS PIPS. The ruling reserved `marks` for a `shape` marker that is
- *    on by default, so that the strip's outlines never appear without the ground ring's. With
- *    the marker reversed (`?dev=1&identityMarker=solid`) there is no outline on the ground to
- *    pair with, and `arcs` and `roof` state identity in another vocabulary (the ring's arcs, the
- *    crown's blades); those two keep the leading mark beside their pips until issue #1023
- *    removes them.
+ *  - NO MARKER DRAWS PIPS. The ruling reserved `marks` for a `shape` marker that is on by
+ *    default, so that the strip's outlines never appear without the ground ring's. With the
+ *    marker reversed (`?dev=1&identityMarker=solid`) there is no outline on the ground to pair
+ *    with. `shape` is the one style since issue #1023 deleted `arcs` and `roof`, so a non-null
+ *    marker is `shape`.
  *
  * Both readings are derived from the code and the ruling's own condition rather than ruled on
  * directly, and a later ruling can reverse either.
@@ -123,7 +122,8 @@ export const STOCK_CUE_MS = 700;
  * The one-pip fallback stays at four players at four and five stocks. It fits, with 54.4px to
  * spare; #1055 leaves a rung that fits unchanged; and this rule is shared with the FFA entries
  * that draw pips, where every row at the 8px floor overflows four players at four stocks (8/2 by
- * 18.1px, 8/1 by 6.1px, measured with the leading mark beside each entry). For
+ * 18.1px, 8/1 by 6.1px, measured with the leading mark beside each entry; issue #1023 deleted
+ * that mark, so an FFA pip row is now narrower than measured and the fallback errs safe). For
  * teams alone, an 8px row with a 1px gap would fit 4x4 with 8.8px to spare, while an 8/2 row
  * overflows it by 3.2px; at 4x5 every 8px row overflows (8/2 by 43.2px, 8/1 by 27.2px). Those
  * rows were measured on the same page by drawing a full row in place of each fallback.

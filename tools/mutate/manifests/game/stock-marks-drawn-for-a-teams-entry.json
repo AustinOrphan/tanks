@@ -9,11 +9,10 @@
   ],
   "why": "The HUD stops handing the strip's rule the entry's team, so a teams entry under the shipped `shape` marker draws the `marks` row (issue #1022). `marks` spends the SLOT's outline, and in teams the identity a player shares is their TEAM: two teammates would be drawn with different outlines while wearing one colour, the readout claiming they are different sides. Rewritten by #1022 from the `stockCue === 'marks'` fallback it used to drop, which went with the flag; `stock-row-rule-ignores-the-team` guards the same clause inside `stockRowFor` itself.",
   "killedBy": [
-    "hud: identity mark in the stock strip (issue #778) leaves TEAMS untouched -- the letter is already that entry second channel",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for a teams entry, and for the reversed marker (issue #1022)",
     "hud: stock-loss cue arms (issue #230) THE CONTROL for the teams cases: the desktop strip draws every teams pip at full size",
     "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
     "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) four players at three stocks keep the letter and take the 9px row",
-    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn, the leading marks counted"
+    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn"
   ]
 }

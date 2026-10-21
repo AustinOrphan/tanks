@@ -2048,26 +2048,52 @@ describe('player identity: ring and shell tint', () => {
     views.dispose();
   });
 
-  it('keeps the identity marker ONE mesh under every candidate style (issue #630)', () => {
+  it('keeps the identity marker ONE mesh under `shape` (issue #630)', () => {
     // THE INVARIANT THE WHOLE FEATURE HAD TO BE BUILT AROUND. `TankView.ring` is a single
     // `THREE.Mesh | null`, and four assertions in this file count objects named
-    // `identity-ring` expecting exactly one per player. An arc count implemented as three
-    // sibling meshes per tank is the obvious way to write it and breaks all of them -- so
-    // the arcs are merged into one BufferGeometry instead, which is also cheaper to draw
-    // and needs no new teardown path.
-    for (const style of ['arcs', 'shape'] as const) {
-      const scene = new THREE.Scene();
-      const views = createEntityViews(scene, undefined, null, style);
+    // `identity-ring` expecting exactly one per player. A marker built as sibling meshes per
+    // tank breaks all of them, so it is one BufferGeometry instead, which is also cheaper to
+    // draw and needs no new teardown path.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene, undefined, null, 'shape');
+    const w = twoPlayerWorld();
+    views.sync(w, w, 0);
+    expect(identityRings(scene)).toHaveLength(2);
+    views.dispose();
+  });
+
+  it('holds the `shape` marker still as the hull turns, and leaves the solid ring unturned (issue #1023)', () => {
+    // The counter-rotation `sync` writes, read off the real view. Issue #1023 rewrote its guard
+    // from "the style draws on the ring" to "a marker is set", which agree only because `shape`
+    // is the one style left. A tank turned to 1.1 rad: the `shape` ring takes
+    // `identityMarkerSpin`'s angle, and the solid ring with no marker takes no write at all.
+    const turned = (): World => {
       const w = twoPlayerWorld();
+      w.tanks[0].bodyAngle = 1.1;
+      return w;
+    };
+    const spinOf = (marker: 'shape' | null): number => {
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene, undefined, null, marker);
+      const w = turned();
       views.sync(w, w, 0);
-      expect(identityRings(scene), style).toHaveLength(2);
+      let spin = NaN;
+      scene.traverse((o) => {
+        if (o.name !== 'identity-ring') return;
+        let g: THREE.Object3D | null = o;
+        while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+        if ((g as THREE.Group).position.x === w.tanks[0].pos.x) spin = o.rotation.z;
+      });
       views.dispose();
-    }
+      return spin;
+    };
+    expect(spinOf('shape'), 'the shape marker turned with the hull').toBeCloseTo(1.1, 9);
+    expect(spinOf(null), 'the solid ring took a spin it never took before').toBe(0);
   });
 
   it('leaves the shipped ring a RingGeometry when no marker is selected (issue #630)', () => {
-    // The control for the comparison above. Both candidates are developer experiments and
-    // neither ships as the default, so the absence of a flag has to leave the geometry the
+    // The control for the one-mesh case above. `null` is what teams, co-op and single-player
+    // draw, and what the reversal value `solid` resolves to, so it has to leave the geometry the
     // shipped one -- not a circle that merely resembles it. A `shape` slot-1 outline is a
     // 48-gon band and would look identical on screen while failing this.
     const scene = new THREE.Scene();

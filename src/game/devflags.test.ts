@@ -3,7 +3,6 @@ import { TANK_KINDS } from '../sim/config';
 import { BLOCKED_FIRE_CUES } from '../presentation/blocked-fire';
 import { HUD_FONTS } from '../presentation/hud-font';
 import { ENEMY_ROLE_CUES } from '../presentation/enemy-role';
-import { IDENTITY_MARKER_STYLES } from '../presentation/identity-marker';
 import { IDENTITY_MARKER_REVERSAL } from './identity-marker-flag';
 import {
   parseDevFlags,
@@ -677,10 +676,10 @@ describe('parseDevFlags: identityMarker (issues #630, #922 -- the kept identity-
     expect(parseDevFlags('?dev=1').identityMarker).toBeNull();
   });
 
-  it('accepts each drawable style -- population: every value in IDENTITY_MARKER_STYLES', () => {
-    for (const v of IDENTITY_MARKER_STYLES) {
-      expect(parseDevFlags(`?dev=1&identityMarker=${v}`).identityMarker).toBe(v);
-    }
+  it('accepts `shape`, the one drawable style', () => {
+    // Spelled literally, so a production list that lost `shape` fails here rather than looping
+    // over nothing.
+    expect(parseDevFlags('?dev=1&identityMarker=shape').identityMarker).toBe('shape');
   });
 
   it('accepts the reversal value, so the pre-ruling ring is reachable and not reported rejected', () => {
@@ -690,10 +689,11 @@ describe('parseDevFlags: identityMarker (issues #630, #922 -- the kept identity-
       .toBe(IDENTITY_MARKER_REVERSAL);
   });
 
-  it('rejects anything else to null rather than guessing -- population: the 7 forms below', () => {
-    // `none`, `off` and `ring` are the words someone reaching for the reversal would type;
-    // accepting any of them would put a value in the field that no resolver branch names.
-    for (const v of ['', 'none', 'off', 'ring', 'Solid', 'SHAPE', 'circle']) {
+  it('rejects anything else to null rather than guessing -- population: the 9 forms below', () => {
+    // `arcs` and `roof` were styles until issue #1023 deleted them. `none`, `off` and `ring` are
+    // the words someone reaching for the reversal would type; accepting any of them would put a
+    // value in the field that no resolver branch names.
+    for (const v of ['arcs', 'roof', '', 'none', 'off', 'ring', 'Solid', 'SHAPE', 'circle']) {
       expect(parseDevFlags(`?dev=1&identityMarker=${encodeURIComponent(v)}`).identityMarker, v)
         .toBeNull();
     }

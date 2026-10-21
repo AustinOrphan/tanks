@@ -7,7 +7,7 @@
   "tests": [
     "src/game/hud.match.test.ts"
   ],
-  "why": "Gives every mark an accessible name of its own. The row already carries one -- `3 of 3 stocks` -- which is the whole quantity said once; naming each mark as well makes a five-stock entry announce itself six times, and the five extra announcements carry no information the first does not. The same rule #778's leading marker follows, and for the same reason.",
+  "why": "Gives every mark an accessible name of its own. The row already carries one -- `3 of 3 stocks` -- which is the whole quantity said once; naming each mark as well makes a five-stock entry announce itself six times, and the five extra announcements carry no information the first does not. The same rule #778's leading marker followed until issue #1023 deleted it, and for the same reason.",
   "killedBy": [
     "hud: identity-shaped stocks, the `marks` arm (issue #230) names the count once for the row, not once per mark"
   ]

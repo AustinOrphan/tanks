@@ -411,9 +411,10 @@ export interface DevFlags {
    * #630, #922). A KEPT ROLLBACK LEVER, not an open question: `shape` won on #234 and ships.
    * The ruled arm is `null` -- absent or unrecognised -- in an FFA session, which draws
    * `shape`; in teams, co-op and single-player `null` keeps the solid hue-only ring. `solid`
-   * restores the pre-ruling ring, and the strip draws pips with no mark (issue #1022); `arcs`,
-   * `shape` and `roof` select themselves in any session. See `identity-marker-flag.ts` for the
-   * resolution and why `solid` is not a drawable style.
+   * restores the pre-ruling ring, and the strip draws pips with no mark (issue #1022); `shape`
+   * selects itself in any session. `arcs` and `roof` were deleted (issue #1023) and are
+   * rejected. See `identity-marker-flag.ts` for the resolution and why `solid` is not a
+   * drawable style.
    */
   identityMarker: IdentityMarkerFlag | null;
   /**
@@ -1484,19 +1485,17 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...IDENTITY_MARKER_FLAG_VALUES],
     description:
-      'Selects the second, non-colour channel of player identity (issues #630, #922). On the ' +
-      "ground ring: 'arcs' breaks it into one arc per slot, 'shape' gives each slot its own " +
-      "outline. On the turret crown instead: 'roof' leaves the ring solid and counts the " +
-      "slot in blades. In an FFA match the HUD stock strip follows it (issues #778, #1022): " +
-      "under 'shape' each player's stocks are drawn as their own outline, and under 'arcs' or " +
-      "'roof' as pips beside that style's mark. Teams entries draw pips beside their A/B/C " +
-      "letter under every value. 'shape' ships as the FFA default; 'solid' restores the " +
-      'pre-ruling solid ring, and the strip draws pips with no mark.',
+      'Selects the second, non-color channel of player identity (issues #630, #922). ' +
+      "'shape' gives each slot its own outline on the ground ring. In an FFA match the HUD " +
+      "stock strip follows it (issues #778, #1022): each player's stocks are drawn as their " +
+      'own outline. Teams entries draw pips beside their A/B/C letter under every value. ' +
+      "'shape' ships as the FFA default; 'solid' restores the pre-ruling solid ring, and the " +
+      'strip draws pips with no mark.',
     notes: [
       'A kept rollback lever: the comparison is settled (#234), and the flag stays so the ' +
         'default can be reversed and a regression report checked.',
       "Absent is the ruled arm: 'shape' in an FFA session, and the solid ring in teams, " +
-        'co-op and single-player. A named style applies in any session.',
+        "co-op and single-player. 'shape', named, applies in any session.",
     ],
   },
   ownerPalette: {

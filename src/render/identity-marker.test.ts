@@ -1,23 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { identityMarkerGeometry, identityRoofGeometry } from './identity-marker';
+import { identityMarkerGeometry } from './identity-marker';
 import {
   IDENTITY_MARKER_STYLES,
-  MARKER_ARC_GAP,
-  markerCount,
   shapeOutlineFor,
   identityMarkerSpin,
   isIdentityMarkerStyle,
-  marksTurretRoof,
-  ringMarkerFor,
 } from '../presentation/identity-marker';
 import { IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R } from './entities';
 import { TANK_RADIUS } from '../sim/constants';
 
 // ---------------------------------------------------------------------------
-// Issue #630. Second channels for player identity, all selectable by name. `shape` won on
-// #234 and ships in FFA (issue #922), resolved by the game layer before this module sees a
-// style; here `null` is still "no marker", the solid ring every other mode draws.
+// Issue #630. Second channels for player identity. `shape` won on #234 and ships in FFA
+// (issue #922), resolved by the game layer before this module sees a style, and it is the
+// one style left since issue #1023 deleted `arcs` and `roof`; here `null` is still "no
+// marker", the solid ring every other mode draws.
 //
 // NOTHING IN THIS SUITE ASSERTED RING GEOMETRY BEFORE. The identity ring was well guarded
 // on COLOUR -- a pairwise distinctness sweep over all four hues plus the roster -- and not
@@ -27,7 +24,7 @@ import { TANK_RADIUS } from '../sim/constants';
 // ---------------------------------------------------------------------------
 
 const SEGMENTS = 48;
-const build = (style: 'arcs' | 'shape', slot: number) =>
+const build = (style: 'shape', slot: number) =>
   identityMarkerGeometry(style, slot, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, SEGMENTS)!;
 
 /** The outer-rim vertices, as angles -- what the eye follows around the marker. */
@@ -36,18 +33,6 @@ function outerAngles(geo: THREE.BufferGeometry): number[] {
   const out: number[] = [];
   for (let i = 0; i < pos.count; i += 2) out.push(Math.atan2(pos.getY(i), pos.getX(i)));
   return out;
-}
-
-/**
- * The biggest angular gap anywhere around the marker, in radians. For a closed ring every
- * gap is one sampling step; a real break is many times that. Written to be immune to the
- * `atan2` wrap that made an earlier version of the one-arc assertion vacuous.
- */
-function largestGap(geo: THREE.BufferGeometry): number {
-  const sorted = outerAngles(geo).map((a) => (a + Math.PI * 2) % (Math.PI * 2)).sort((x, y) => x - y);
-  let max = sorted[0] + Math.PI * 2 - sorted[sorted.length - 1]; // the wrap-around gap
-  for (let i = 1; i < sorted.length; i++) max = Math.max(max, sorted[i] - sorted[i - 1]);
-  return max;
 }
 
 /**
@@ -68,10 +53,12 @@ function arcRuns(geo: THREE.BufferGeometry): number {
 }
 
 describe('identity marker vocabulary (issue #630)', () => {
-  it('offers exactly the three candidates, and rejects anything else', () => {
-    expect([...IDENTITY_MARKER_STYLES]).toEqual(['arcs', 'shape', 'roof']);
+  it('offers exactly the shipped style, and rejects anything else', () => {
+    // `arcs` and `roof` are rejects since issue #1023 deleted them, spelled literally so a
+    // half-revert that put either back in the list fails here.
+    expect([...IDENTITY_MARKER_STYLES]).toEqual(['shape']);
     for (const s of IDENTITY_MARKER_STYLES) expect(isIdentityMarkerStyle(s)).toBe(true);
-    for (const bad of ['solid', 'Arcs', '', 'shapes', 'Roof', null, 7, undefined]) {
+    for (const bad of ['solid', 'arcs', 'roof', 'Arcs', '', 'shapes', 'Roof', null, 7, undefined]) {
       expect(isIdentityMarkerStyle(bad), String(bad)).toBe(false);
     }
   });
@@ -91,99 +78,6 @@ describe('identity marker vocabulary (issue #630)', () => {
     // unchanged down to the vertex rather than merely equivalent to it. A comparison whose
     // control has also moved is not a comparison.
     expect(identityMarkerGeometry(null, 0, 0.65, 0.8, SEGMENTS)).toBeNull();
-  });
-});
-
-describe('identity marker: roof (issue #630)', () => {
-  /*
-   * The third candidate, and the first that does NOT use the ground ring.
-   *
-   * The ring arms buy AREA -- its mid-radius perimeter is 364-546px at the game camera,
-   * against 21-31px for a blade. What the roof buys is that nothing can cover it: not a
-   * tread trail, not a wreck, not a spawn ring, not a mine's warning glow, not a second
-   * tank parked alongside. Which matters more is a question for play, which is why all
-   * three are in the tree at once rather than one of them being chosen from a desk.
-   */
-  it('leaves the ring geometry alone, so the control stays the shipped rendering', () => {
-    // `ringMarkerFor('roof')` is null, so `makeIdentityRing` falls through to the exact
-    // `RingGeometry` expression that shipped. A comparison whose control has also moved
-    // is not a comparison -- the same reasoning the null-marker case already pins.
-    expect(ringMarkerFor('roof')).toBeNull();
-    expect(identityMarkerGeometry('roof', 0, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, SEGMENTS))
-      .toBeNull();
-  });
-
-  it('claims the turret crown, and nothing else does', () => {
-    expect(marksTurretRoof('roof')).toBe(true);
-    for (const s of ['arcs', 'shape'] as const) expect(marksTurretRoof(s), s).toBe(false);
-    // NOT the negation of ringMarkerFor: `marksTurretRoof(null)` must be false, or a HUD
-    // with no marker selected would still build blades.
-    expect(marksTurretRoof(null)).toBe(false);
-  });
-
-  it('draws one blade per slot, counting from one', () => {
-    for (let slot = 0; slot < 4; slot++) {
-      const geo = identityRoofGeometry(slot, 0.07, 0.32);
-      expect(arcRuns(geo), `slot ${slot + 1}`).toBe(slot + 1);
-    }
-  });
-
-  it('keeps every blade inside the turret crown', () => {
-    // TURRET_R is 0.36; blades run to 0.32, so they never reach the dome's edge where the
-    // silhouette would clip them. A blade that overhung would read as a bent aerial.
-    for (let slot = 0; slot < 4; slot++) {
-      const pos = identityRoofGeometry(slot, 0.07, 0.32).getAttribute('position');
-      for (let i = 0; i < pos.count; i++) {
-        expect(Math.hypot(pos.getX(i), pos.getY(i))).toBeLessThanOrEqual(0.32 + 1e-6);
-      }
-    }
-  });
-
-  it('needs no counter-rotation, because a count cannot be turned wrong', () => {
-    // The simplification over both ring arms, asserted rather than assumed. `shape`'s
-    // slots 3 and 4 are the same polygon 45 degrees apart and collapse without the spin;
-    // a blade COUNT is invariant, so the same test that catches that cannot fire here.
-    const a = identityRoofGeometry(2, 0.07, 0.32);
-    const b = identityRoofGeometry(2, 0.07, 0.32);
-    expect(arcRuns(a)).toBe(arcRuns(b));
-    expect(arcRuns(identityRoofGeometry(2, 0.07, 0.32))).toBe(3);
-  });
-});
-
-describe('identity marker: arcs (issue #630)', () => {
-  it('draws one arc for slot 1, two for slot 2, three for slot 3, four for slot 4', () => {
-    // The whole proposition of this candidate, measured off the geometry rather than
-    // restated from the input.
-    for (let slot = 0; slot < 4; slot++) {
-      expect(arcRuns(build('arcs', slot)), `slot ${slot + 1}`).toBe(slot + 1);
-    }
-  });
-
-  it('leaves a gap even at one arc', () => {
-    // A closed ring and a nearly-closed one read differently. Were slot 1 drawn solid,
-    // "the unbroken one is player 1" would be a rule a player has to be told rather than
-    // one they can see -- and it would be indistinguishable from the shipped default.
-    //
-    // MEASURED AS THE LARGEST GAP, not as the span between the first and last vertex. The
-    // first draft did the latter and was VACUOUS: `atan2` wraps to (-PI, PI], so with the
-    // gap closed the first and last sample both land on -PI/2 and the span reads as zero,
-    // which passed the assertion it was supposed to fail. The mutation
-    // `identity-arcs-lose-their-gap-at-one` SURVIVED and is the only reason that was
-    // caught -- reading the test did not catch it, and neither did watching it pass.
-    expect(largestGap(build('arcs', 0))).toBeGreaterThan((Math.PI * 2) / SEGMENTS * 3);
-  });
-
-  it('keeps every slot inside the ring band the shipped ring occupies', () => {
-    // A second channel must not become a bigger footprint: the marker occupies exactly the
-    // annulus the solid ring already did, so nothing about spacing or overlap changes.
-    for (let slot = 0; slot < 4; slot++) {
-      const pos = build('arcs', slot).getAttribute('position');
-      for (let i = 0; i < pos.count; i++) {
-        const r = Math.hypot(pos.getX(i), pos.getY(i));
-        expect(r).toBeGreaterThanOrEqual(IDENTITY_RING_INNER_R - 1e-6);
-        expect(r).toBeLessThanOrEqual(IDENTITY_RING_OUTER_R + 1e-6);
-      }
-    }
   });
 });
 
@@ -323,8 +217,8 @@ describe('identity marker: it does not spin with the hull (issue #630)', () => {
    *
    * The ring is parented to the tank's group, and `view.group.rotation.y = -bodyA` is
    * written every frame. A circular annulus is rotation-invariant, so this never mattered
-   * and nothing asserted it. It matters to both candidates: an arc count is readable while
-   * spinning, but a square turned 45 degrees IS the diamond.
+   * and nothing asserted it. It matters to `shape`: a square turned 45 degrees IS the
+   * diamond.
    *
    * A wrong sign here does not look broken at a glance -- it spins the marker twice as
    * fast instead of stopping it, which at small turn rates reads as wobble. So the
@@ -396,30 +290,6 @@ describe('identity markers: the ring follows the shared table (issue #778)', () 
       const geo = identityMarkerGeometry('shape', slot, 0.7, 0.8, 48);
       expect(geo, `slot ${slot} built no marker`).not.toBeNull();
       expect(samples(geo as THREE.BufferGeometry), `slot ${slot} (${outline.kind})`).toBe(want);
-    }
-  });
-
-  it('breaks the ring into the number of arcs the table counts, at the shared gap', () => {
-    for (let slot = 0; slot < 8; slot++) {
-      const count = markerCount(slot);
-      // `bandGeometry` samples each arc `perArc + 1` times, and `identityMarkerGeometry`
-      // picks `perArc` from the ring's own segment budget -- so the sample total is a
-      // function of the COUNT, and a slot drawing the wrong number of arcs moves it.
-      const perArc = Math.max(2, Math.round(48 / count));
-      const geo = identityMarkerGeometry('arcs', slot, 0.7, 0.8, 48) as THREE.BufferGeometry;
-      expect(samples(geo), `slot ${slot} drew ${count} arcs`).toBe(count * (perArc + 1));
-    }
-    // The gap is a fraction of each step, so it shrinks with the count rather than eating
-    // the ring -- the property that makes one arc and four arcs both legible.
-    expect(MARKER_ARC_GAP).toBeGreaterThan(0);
-    expect(MARKER_ARC_GAP).toBeLessThan(1);
-  });
-
-  it('puts the number of blades on the crown the table counts', () => {
-    for (let slot = 0; slot < 8; slot++) {
-      // Seven samples per blade, from `identityRoofGeometry`'s own sector construction.
-      const geo = identityRoofGeometry(slot, 0.07, 0.32);
-      expect(samples(geo), `slot ${slot}`).toBe(markerCount(slot) * 7);
     }
   });
 });

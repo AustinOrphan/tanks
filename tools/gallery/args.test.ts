@@ -262,6 +262,13 @@ describe('gallery args', () => {
     }
     expect(() => parseArgs(['--elements', 'identity', '--identityMarker', 'solid']))
       .toThrow(/--identityMarker must be one of/);
+    // The other direction, for the two styles issue #1023 deleted: a copy here that kept them
+    // would let a capture ask for a marker the renderer no longer draws. Spelled literally,
+    // because a loop over the production list cannot see a name the list has dropped.
+    for (const deleted of ['arcs', 'roof']) {
+      expect(() => parseArgs(['--elements', 'identity', '--identityMarker', deleted]), deleted)
+        .toThrow(/--identityMarker must be one of/);
+    }
   });
 
   it('refuses --identityMarker on an element set with no identity ring in it', () => {
@@ -271,7 +278,7 @@ describe('gallery args', () => {
     // change exists to end.
     expect(() => parseArgs(['--elements', 'tank', '--identityMarker', 'shape']))
       .toThrow(/needs an element set that poses two or more player tanks/);
-    expect(parseArgs(['--elements', 'coop', '--identityMarker', 'arcs']).identityMarker).toBe('arcs');
+    expect(parseArgs(['--elements', 'coop', '--identityMarker', 'shape']).identityMarker).toBe('shape');
   });
 
   it('pins the ring-bearing element list to the subjects that really pose two players', () => {

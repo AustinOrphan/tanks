@@ -301,8 +301,6 @@ import {
 } from '../presentation/stock-cue';
 import {
   type IdentityMarkerStyle,
-  MARKER_ARC_GAP,
-  markerCount,
   polygonAngles,
   shapeOutlineFor,
 } from '../presentation/identity-marker';
@@ -1520,11 +1518,11 @@ const ACHIEVEMENT_LOCK_ICON =
  * colour and keeps its shape. That is also why `hud.css.test.ts` refuses any `background`
  * in a `hud-stock-` rule, and why this draws geometry rather than styling a box.
  *
- * WHY IT READS THE SHARED TABLE. `shapeOutlineFor`, `markerCount` and `MARKER_ARC_GAP` are
- * the same values `render/identity-marker.ts` extrudes into the arena ring. Two copies is
- * the failure this pairing exists to rule out: a strip still claiming a square for slot 3
- * after the ring moved on would look right and be wrong, and the pairing #234 ruled on
- * would no longer exist.
+ * WHY IT READS THE SHARED TABLE. `shapeOutlineFor` and `polygonAngles` are the same values
+ * `render/identity-marker.ts` extrudes into the arena ring. Two copies is the failure this
+ * pairing exists to rule out: a strip still claiming a square for slot 3 after the ring
+ * moved on would look right and be wrong, and the pairing #234 ruled on would no longer
+ * exist.
  *
  * SIZES ARE THIS FILE'S OWN, and deliberately not shared. The arena's radii are tuned
  * against a constraint that does not exist here -- every outline's edge has to clear
@@ -1532,23 +1530,17 @@ const ACHIEVEMENT_LOCK_ICON =
  * the ORDER those radii encode, triangle out past starburst past square past circle, which
  * is what makes the four read as one size rather than four.
  */
-const MARKER_GLYPH_STROKE =
-  'fill="none" stroke="currentColor" stroke-width="0.18" stroke-linejoin="round" stroke-linecap="round"';
-
-/** Corner reach per outline in the glyph's unit box; see `identityMarkerIcon`. */
-const MARKER_GLYPH_R = { circle: 0.78, 3: 0.98, 4: 0.86, star: 0.92, arc: 0.82, blade: 0.9 } as const;
-
 interface MarkerRadii {
   readonly circle: number; readonly 3: number; readonly 4: number; readonly star: number;
 }
 
 /**
- * The same four outlines sized for FILL rather than for stroke (issue #230's `marks` row).
+ * The four outlines sized for FILL rather than for stroke (issue #230's `marks` row).
  *
- * A separate table, and not a tidy-up waiting to happen. The set above is tuned so the
- * outlines' CORNERS sit level, which is the right axis when the shape is a thin line: what
- * the eye measures on a hollow mark is how far it reaches. Filled, the eye measures ink as
- * well, and corner-level shapes are not area-level -- a square whose corners match a
+ * Not the stroked set the leading mark used before issue #1023 deleted it. That set was tuned
+ * so the outlines' CORNERS sat level, which is the right axis when the shape is a thin line:
+ * what the eye measures on a hollow mark is how far it reaches. Filled, the eye measures ink
+ * as well, and corner-level shapes are not area-level -- a square whose corners match a
  * circle's radius encloses a third less ink, which is how the first build of this row
  * rendered: P3's squares read visibly smaller than P1's circles at the same nominal size.
  *
@@ -1573,9 +1565,6 @@ const MARKER_FILL_R: MarkerRadii = { circle: 0.67, 3: 0.899, 4: 0.893, star: 0.8
 /** How deep the starburst's valleys cut, as a fraction of its points. */
 const MARKER_GLYPH_VALLEY = 0.44;
 
-/** Where a roof blade starts, so the glyph reads as spokes rather than as a filled fan. */
-const MARKER_GLYPH_HUB = 0.3;
-
 const markerNum = (n: number): string => n.toFixed(4);
 const markerXY = (angle: number, r: number): string =>
   `${markerNum(Math.cos(angle) * r)} ${markerNum(Math.sin(angle) * r)}`;
@@ -1583,15 +1572,11 @@ const markerXY = (angle: number, r: number): string =>
 /**
  * The `shape` outline for one slot as SVG body, with the caller's presentation attributes.
  *
- * Extracted so the leading identity marker (issue #778) and the `marks` stock row (issue #230)
- * draw the SAME outline from the same code rather than from the same table twice. They
- * differ only in their attributes: the marker is always stroked hollow, a held stock mark is filled.
- * Since issue #1022 the row replaces the leading marker wherever the marker is `shape`, so in
- * play only the row reaches this.
+ * Extracted when the leading identity marker (issue #778) and the `marks` stock row (issue
+ * #230) both drew it, so the two came from the same code rather than from the same table
+ * twice. Issue #1023 deleted the leading marker, so the `marks` row is the one caller.
  */
-function shapeOutlineBody(
-  slot: number, attrs: string, radii: MarkerRadii = MARKER_GLYPH_R,
-): string {
+function shapeOutlineBody(slot: number, attrs: string, radii: MarkerRadii): string {
   const outline = shapeOutlineFor(slot);
   if (outline.kind === 'circle') {
     return `<circle cx="0" cy="0" r="${markerNum(radii.circle)}" ${attrs}/>`;
@@ -1615,7 +1600,7 @@ function shapeOutlineBody(
  * One stock, drawn as the slot's identity outline (issue #230's `marks` row).
  *
  * HELD IS FILLED, LOST IS HOLLOW -- the same read `pips` gets from its border width, and the
- * reason the row replaces the separate leading marker: an outlined mark beside an outlined
+ * reason the row replaced the separate leading marker: an outlined mark beside an outlined
  * lost stock is two hollow copies of one shape, and slot 1's circle made them identical.
  *
  * Fill AND stroke, not fill alone, so a held mark keeps the same silhouette as a lost one at
@@ -1628,51 +1613,6 @@ function identityStockMark(slot: number, held: boolean): string {
   return '<svg class="hud-stock-mark' + (held ? '' : ' hud-stock-mark--lost')
     + '" viewBox="-1.1 -1.1 2.2 2.2" aria-hidden="true" focusable="false">'
     + shapeOutlineBody(slot, attrs, MARKER_FILL_R) + '</svg>';
-}
-
-function identityMarkerIcon(style: IdentityMarkerStyle, slot: number): string {
-  let body: string;
-  if (style === 'arcs') {
-    // The ring broken into `markerCount` runs, with the gap taken as the same FRACTION of
-    // each step the arena uses -- so three arcs here sit where three arcs sit there.
-    const count = markerCount(slot);
-    const step = (Math.PI * 2) / count;
-    const gap = step * MARKER_ARC_GAP;
-    const r = MARKER_GLYPH_R.arc;
-    body = Array.from({ length: count }, (_, k) => {
-      const from = k * step + gap / 2 - Math.PI / 2;
-      const to = (k + 1) * step - gap / 2 - Math.PI / 2;
-      // A single arc spans more than a semicircle once the gap is taken out of a full
-      // turn, and SVG needs telling: without the large-arc flag it draws the short way
-      // round and slot 1 renders as the minor arc of its own ring.
-      const large = to - from > Math.PI ? 1 : 0;
-      return `<path d="M ${markerXY(from, r)} A ${markerNum(r)} ${markerNum(r)} 0 ${large} 1 `
-        + `${markerXY(to, r)}" ${MARKER_GLYPH_STROKE}/>`;
-    }).join('');
-  } else if (style === 'roof') {
-    // The crown's blades as their AXES. The arena draws each one as a 44-degree sector,
-    // which at strip size is the same two or three pixels a stroke already covers; the
-    // count is what this style carries and the count is what survives the shrink.
-    const count = markerCount(slot);
-    const r = MARKER_GLYPH_R.blade;
-    body = Array.from({ length: count }, (_, k) => {
-      const a = -Math.PI / 2 + (k * 2 * Math.PI) / count;
-      return `<path d="M ${markerXY(a, MARKER_GLYPH_HUB)} L ${markerXY(a, r)}" `
-        + `${MARKER_GLYPH_STROKE}/>`;
-    }).join('');
-  } else {
-    // Unreached in play since issue #1022: an FFA entry under `shape` draws the `marks` row,
-    // which replaces this glyph (`stockRowFor`). Issue #1023 removes the leading mark entirely.
-    body = shapeOutlineBody(slot, MARKER_GLYPH_STROKE);
-  }
-  // No accessible name and not focusable: the entry's own text already says which player
-  // this is, and a second name for the same fact is the duplicate announcement
-  // `hud.a11y.test.ts` exists to catch.
-  // -1.1 rather than -1: the triangle's corners reach 0.98 and half a stroke adds 0.09, so
-  // a unit box clips exactly the three points that make it a triangle. Widening the box is
-  // robust where `overflow: visible` is a per-renderer courtesy.
-  return '<svg class="hud-stock-marker" viewBox="-1.1 -1.1 2.2 2.2" aria-hidden="true" '
-    + `focusable="false">${body}</svg>`;
 }
 
 /**
@@ -1752,10 +1692,10 @@ export interface HudOptions {
    * The identity marker the stock strip pairs with the arena's (issues #778, #922, #1022): the
    * RESOLVED style, which picks each entry's row through `stockRowFor`. `shape` draws an FFA
    * entry as the `marks` row, one copy of the slot's own outline per stock; `null` (and absent,
-   * which is every injected HUD) draws pips, with identity in hue alone; `arcs` and `roof` draw
-   * pips with that style's glyph ahead of the label. The page's HUD is handed the shipped
-   * `shape` here unless the flag says otherwise: `loop.ts` resolves the flag before this option
-   * sees it, so the default lives in `identity-marker-flag.ts`, not in this file.
+   * which is every injected HUD) draws pips, with identity in hue alone. The page's HUD is
+   * handed the shipped `shape` here unless the flag says otherwise: `loop.ts` resolves the flag
+   * before this option sees it, so the default lives in `identity-marker-flag.ts`, not in this
+   * file.
    *
    * FFA ONLY, which is the owner's direction on #234: a teams entry draws pips and no mark
    * whatever this says. It already carries a second non-colour channel -- the A/B/C letter
@@ -3533,22 +3473,6 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // degrades to a colour rather than an NaN hex string. It was REACHABLE between #281's
       // descriptor landing and TEAM_COLORS gaining its third entry: a 2v1v1 rendered team
       // 2's stock white, which is also the unstyled-slot placeholder.
-      // Issue #778: the mark this slot wears in the arena, ahead of its label, so the
-      // strip and the ground ring read as one channel (#234's pair).
-      //
-      // BESIDE PIPS ONLY (issue #1022). The `marks` row already draws this slot's outline once
-      // per stock and replaces it: a leading copy would state the identity twice and, worse,
-      // sit beside a hollow LOST mark of the same shape -- which for slot 1 is the same
-      // circle drawn the same way, and reads as a second identity mark rather than as a
-      // spent stock (measured on a real frame, issue #230). So it is left beside the pips an
-      // explicit `arcs` or `roof` marker draws, until issue #1023 removes those styles.
-      //
-      // FFA ONLY, by `entry.team === undefined` -- the same test the label and the colour
-      // below already branch on. A teams entry carries the A/B/C letter as its non-colour
-      // channel, so a mark there would be a third name for a side already stated twice.
-      if (row === 'pips' && entry.team === undefined && identityMarker !== null) {
-        span.insertAdjacentHTML('afterbegin', identityMarkerIcon(identityMarker, entry.slot));
-      }
       const hex = entry.team !== undefined
         ? teamColor(entry.team, chipPalette)
         : identityColor(entry.slot, chipPalette);

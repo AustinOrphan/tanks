@@ -64,7 +64,7 @@ export const FLOW_FLAGS = Object.freeze({
    * identity-marker-flag.ts) rather than the drawable styles: `solid` is the reversal value
    * that records an FFA round without the shipped `shape` marker (issue #922).
    */
-  identityMarker: Object.freeze(['arcs', 'shape', 'roof', 'solid']),
+  identityMarker: Object.freeze(['shape', 'solid']),
   /**
    * Issue #359's contact overlay. A switch: present or absent.
    *
