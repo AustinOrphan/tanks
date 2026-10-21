@@ -8,11 +8,10 @@
     "src/game/identity-marker-flag.test.ts",
     "src/game/loop.test.ts"
   ],
-  "why": "Lets the reversal value `solid` through as if it were a style (issue #922). Since issue #1023 left `shape` the one style, the renderer's `identityMarkerGeometry` draws the `shape` outline for any non-null style, so a leaked `solid` puts the shipped mark on the ring, and the strip, which keys its `marks` row on `shape` alone, draws pips beside it: the one way back to the pre-ruling ring draws the shipped mark. Killed by the resolver's reversal cases, the loop case that boots an FFA session with `solid`, and the page-HUD case.",
+  "why": "Lets the reversal value `solid` through as if it were a style (issue #922). Since issue #1023 left `shape` the one style, the renderer's `identityMarkerGeometry` draws the `shape` outline for any non-null style, so a leaked `solid` puts the shipped mark on the ring, and the strip, which keys its `marks` row on `shape` alone, draws pips beside it: the one way back to the pre-ruling ring draws the shipped mark. Killed by the resolver's reversal cases and the loop case that boots an FFA session with `solid`. The page-HUD case no longer fails: with the leading mark deleted, a leaked `solid` draws the same pips `null` does, so only the ring shows the leak.",
   "killedBy": [
     "sessionIdentityMarker: what a session renderer draws (issue #922) draws no marker for the reversal value, in every mode -- population: 4 modes",
     "stripIdentityMarker: what the page HUD draws on FFA entries (issue #922) draws the shipped mark unflagged, none for the reversal value, and a named style as named",
-    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws the solid ring in an FFA session for the reversal value, and a named style in any mode",
-    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)"
+    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws the solid ring in an FFA session for the reversal value, and a named style in any mode"
   ]
 }
