@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-load-failure-unhandled",
+  "file": "src/game/hud.ts",
+  "find": "      },\n      () => {\n        if (generation !== devCfgGeneration) return;\n        const failed = document.createElement('p');\n        failed.className = 'hud-devcfg-line hud-devcfg-failed';\n        failed.setAttribute('role', 'status');\n        failed.textContent = 'The Configuration menu could not be loaded. Reload the page to try again.';\n        devCfgBodyEl.append(failed);\n      },\n    );\n",
+  "replace": "      },\n    );\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a load that fails is reported in the pane, and the next open builds the body in its place"
+  ],
+  "why": "Issue #1015. The Configuration load loses its rejection handler, so a failed load (offline, or a chunk name a deploy made stale) leaves the pane blank and becomes an unhandled rejection, which `boot.ts` treats as the match failing whenever a session exists. The criterion is that the failure is reported in the pane."
+}

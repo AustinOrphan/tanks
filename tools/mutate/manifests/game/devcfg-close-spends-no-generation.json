@@ -1,0 +1,15 @@
+{
+  "id": "devcfg-close-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "      devCfgGeneration += 1; // a load still in flight now builds nothing into a closed pane\n",
+  "replace": "      // the close spends no generation\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a close during the load builds no body into the closed pane",
+    "the Configuration body loads when its pane first opens (issue #1015) a load that fails after the pane closed reports nothing into it"
+  ],
+  "why": "Issue #1015. The pane's close (every close is `back()`'s) stops spending the load's generation. `back()` goes on into `setState`, but by then the pane is leaving and the surface-change spend finds it closed, so nothing spends: a load still in flight builds the body into the closed pane, and a failed one writes its failure line there."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "devcfg-body-rebuilt-on-every-open",
+  "file": "src/game/hud.ts",
+  "find": "      if (!devCfgBuilt) loadDevConfigMenu();\n",
+  "replace": "      loadDevConfigMenu();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "reaching the configuration menu keeps the selection across a close, because building one is the slow part",
+    "the Configuration body loads when its pane first opens (issue #1015) builds the body once: a second visit keeps the same controls"
+  ],
+  "why": "Issue #1015. Every open loads and rebuilds the body, whether or not one exists. The controls are thrown away on each visit, and the rebuilt first view is `devMenuView({}, base)`, so the URL a developer built before pressing Back is no longer shown although the selection is still held -- the 'keeps the selection across a close' case reads exactly that. Built once and kept is how it behaved when it was built at construction."
+}

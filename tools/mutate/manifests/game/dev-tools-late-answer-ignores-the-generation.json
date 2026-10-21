@@ -9,7 +9,8 @@
   ],
   "killedBy": [
     "the developer modules load when the pane opens (issue #1014) a press answered after the pane closed writes nothing into the field the close cleared",
-    "the developer modules load when the pane opens (issue #1014) a teardown during the load writes nothing into the discarded field"
+    "the developer modules load when the pane opens (issue #1014) a teardown during the load writes nothing into the discarded field",
+    "the persistence controls (issue #249) a confirmed reload still waiting on the modules goes nowhere once the pane has closed (issue #1015)"
   ],
-  "why": "Issue #1014. An answer that lands after the load ignores the generation, so neither a close nor a teardown can drop it."
+  "why": "Issue #1014. An answer that lands after the load ignores the generation, so neither a close nor a teardown can drop it. Since issue #1015 Use Production Save waits on the same load for `canonicalDevSearch`, so a confirmed reload still waiting when the pane closes would navigate from a pane the developer had left; the third case pins that."
 }

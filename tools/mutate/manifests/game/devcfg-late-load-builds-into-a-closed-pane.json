@@ -1,0 +1,18 @@
+{
+  "id": "devcfg-late-load-builds-into-a-closed-pane",
+  "file": "src/game/hud.ts",
+  "find": "        if (generation !== devCfgGeneration) return;\n        buildDevConfigMenu(modules);\n",
+  "replace": "        buildDevConfigMenu(modules);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a close during the load builds no body into the closed pane",
+    "the Configuration body loads when its pane first opens (issue #1015) a close and reopen during the load builds the body once, for the reopen",
+    "the Configuration body loads when its pane first opens (issue #1015) a surface change during the load builds nothing into the pane it closed",
+    "the Configuration body loads when its pane first opens (issue #1015) a replace during the load builds nothing into the pane that is leaving",
+    "the Configuration body loads when its pane first opens (issue #1015) a teardown during the load builds nothing into the discarded tree"
+  ],
+  "why": "Issue #1015. The resolved load stops checking whether its generation is still current. A close, a surface change, a replace or a teardown during the load then builds the body into a pane that is gone, and a close and reopen builds two bodies side by side -- the generation guard the issue asks for, modelled on the gallery mount in `route-ui.ts`, gone."
+}

@@ -2,8 +2,10 @@
 //
 // The configuration menu inside the HUD (issue #246): reaching it, what a press does to the
 // previewed URL, and what Apply hands to the page. The view model and the renderer have
-// their own files; this is the wiring between them.
-import { describe, it, expect, afterEach } from 'vitest';
+// their own files; this is the wiring between them. Since issue #1015 the menu's body is
+// loaded when the pane first opens, so every case that presses a control in it waits for
+// that load first.
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud } from './hud';
 import { devSearchFrom, explainDevConfig, DEV_PRESETS } from './dev-config';
 
@@ -31,6 +33,28 @@ function open(root: HTMLElement): void {
   q<HTMLButtonElement>(root, '.hud-devtools-open').click();
   q<HTMLButtonElement>(root, '.hud-devcfg-open').click();
 }
+/**
+ * Opens the pane and waits for its body, which `hud.ts` loads when the pane first opens
+ * (issue #1015). Awaits the REAL imports, the seam the page uses, and is bounded, so a body
+ * that never lands fails here instead of leaving every later assertion reading an empty pane.
+ * The budget is explicit because the first dynamic import in a worker transforms the
+ * `dev-config` graph, which `vi.waitFor`'s 1 s default does not always cover on a CI shard.
+ */
+async function openLoaded(root: HTMLElement): Promise<void> {
+  open(root);
+  await vi.waitFor(() => {
+    expect(root.querySelector('.hud-devcfg-presets'), 'the Configuration body was never built')
+      .not.toBeNull();
+  }, { timeout: 5000 });
+}
+/**
+ * Every dynamic import in flight has landed, plus a macrotask, so the HUD's `.then` has run:
+ * an assertion of ABSENCE after this is not merely early. `hud.selftest.test.ts`'s helper.
+ */
+async function settled(): Promise<void> {
+  await vi.dynamicImportSettled();
+  await new Promise((r) => setTimeout(r, 0));
+}
 const optionIn = (root: HTMLElement, field: string, label: string): HTMLButtonElement =>
   Array.from(
     q(root, `.hud-devcfg-control[data-field="${field}"]`).querySelectorAll('button'),
@@ -47,41 +71,42 @@ describe('reaching the configuration menu', () => {
     expect(isOpen(q(root, '.hud-devcfg'), 'hud-devcfg--hidden')).toBe(false);
   });
 
-  it('keeps the selection across a close, because building one is the slow part', () => {
+  it('keeps the selection across a close, because building one is the slow part', async () => {
     // Losing a configuration because Back was pressed to check something would make the menu
     // hostile to the one task it exists for.
     const { hud: h, root } = mount();
-    open(root);
+    await openLoaded(root);
     optionIn(root, 'quality', 'low').click();
     const built = url(root);
     h.back();
     open(root);
+    await settled();
     expect(url(root)).toBe(built);
   });
 });
 
 describe('what a press does to the previewed URL', () => {
-  it('a value button puts that value in the URL, and Unset takes it out again', () => {
+  it('a value button puts that value in the URL, and Unset takes it out again', async () => {
     const { root } = mount();
-    open(root);
+    await openLoaded(root);
     optionIn(root, 'quality', 'low').click();
     expect(url(root)).toBe(devSearchFrom({ quality: 'low' }));
     optionIn(root, 'quality', 'Unset').click();
     expect(url(root)).toBe(devSearchFrom({}));
   });
 
-  it('a toggle adds its own parameter and nothing else', () => {
+  it('a toggle adds its own parameter and nothing else', async () => {
     const { root } = mount();
-    open(root);
+    await openLoaded(root);
     optionIn(root, 'aimRay', 'Off').click();
     expect(url(root)).toBe(devSearchFrom({ aimRay: true }));
   });
 
-  it('a stepper walks a valued flag, and stops where the parser stops', () => {
+  it('a stepper walks a valued flag, and stops where the parser stops', async () => {
     // The bound is the parser's, not a number written into the menu -- pressing past the
     // ceiling leaves the URL unchanged rather than building one the game would refuse.
     const { root } = mount();
-    open(root);
+    await openLoaded(root);
     const up = q<HTMLButtonElement>(
       q(root, '.hud-devcfg-control[data-field="players"]'),
       '.hud-devcfg-step:nth-of-type(2)',
@@ -93,11 +118,11 @@ describe('what a press does to the previewed URL', () => {
     expect(state.effective.players, 'the stepper never moved at all').not.toBeNull();
   });
 
-  it('a preset REPLACES the selection rather than merging into it', () => {
+  it('a preset REPLACES the selection rather than merging into it', async () => {
     // Half of one preset over half of another is a configuration neither describes, and the
     // preview would be accurate about something nobody chose.
     const { root } = mount();
-    open(root);
+    await openLoaded(root);
     optionIn(root, 'quality', 'low').click();
     q<HTMLButtonElement>(root, '[data-preset="all-bots"]').click();
     const allBots = DEV_PRESETS.find((p) => p.id === 'all-bots');
@@ -105,26 +130,26 @@ describe('what a press does to the previewed URL', () => {
     expect(url(root), 'the earlier choice survived the preset').not.toContain('quality');
   });
 
-  it('Reset clears the options and KEEPS developer mode', () => {
+  it('Reset clears the options and KEEPS developer mode', async () => {
     // The trap `dev-config.ts` names: Reset is the gate alone, not `developerExitSearch`.
     // Dropping the gate would move the page to the production namespace on the next load.
     const { root } = mount();
-    open(root);
+    await openLoaded(root);
     q<HTMLButtonElement>(root, '[data-preset="visual-debug"]').click();
     q<HTMLButtonElement>(root, '.hud-devcfg-reset').click();
     expect(url(root)).toBe(devSearchFrom({}));
     expect(explainDevConfig(url(root)).developerMode).toBe(true);
   });
 
-  it('carries the page’s non-developer query through, so Apply does not drop a deep link', () => {
+  it('carries the page’s non-developer query through, so Apply does not drop a deep link', async () => {
     const { root } = mount({ developerSearch: '?dev=1&utm=x' });
-    open(root);
+    await openLoaded(root);
     expect(url(root)).toContain('utm=x');
   });
 });
 
 describe('Apply and Reload', () => {
-  it('hands the page exactly the URL it was previewing', () => {
+  it('hands the page exactly the URL it was previewing', async () => {
     // Acceptance criterion 4. The preview and the navigation are the same string by
     // construction -- there is no second computation to disagree.
     // Mounted WITH a page query: without one, a rebuilt URL and the previewed one are the
@@ -135,7 +160,7 @@ describe('Apply and Reload', () => {
       applyDeveloperConfig: (s) => applied.push(s),
       developerSearch: '?dev=1&utm=x',
     });
-    open(root);
+    await openLoaded(root);
     optionIn(root, 'quality', 'high').click();
     const previewed = url(root);
     expect(previewed, 'the fixture must carry a page query for this to measure anything')
@@ -144,29 +169,203 @@ describe('Apply and Reload', () => {
     expect(applied).toEqual([previewed]);
   });
 
-  it('is HIDDEN on a HUD that cannot navigate, rather than offered and inert', () => {
+  it('is HIDDEN on a HUD that cannot navigate, rather than offered and inert', async () => {
     // Same rule as Exit Developer Mode beside it, and the same reason every injected HUD in
-    // a test stays off the History/Location APIs.
+    // a test stays off the History/Location APIs. Read once each body is built (issue #1015):
+    // the button does not exist before.
     const { root } = mount();
+    await openLoaded(root);
     expect(q<HTMLButtonElement>(root, '.hud-devcfg-apply').hidden).toBe(true);
     hud?.dispose();
     document.body.innerHTML = '';
     const second = mount({ applyDeveloperConfig: () => {} });
+    await openLoaded(second.root);
     expect(q<HTMLButtonElement>(second.root, '.hud-devcfg-apply').hidden).toBe(false);
   });
 });
 
 describe('Copy Link', () => {
-  it('fills the field with the previewed URL and selects it', () => {
+  it('fills the field with the previewed URL and selects it', async () => {
     // Selection is the path that always works: the async Clipboard API is origin- and
     // permission-gated and absent here.
     const { root } = mount();
-    open(root);
+    await openLoaded(root);
     optionIn(root, 'mode', 'teams').click();
     const field = q<HTMLTextAreaElement>(root, '.hud-devcfg-copyfield');
     q<HTMLButtonElement>(root, '.hud-devcfg-copy').click();
     expect(field.value).toBe(url(root));
     expect(field.selectionEnd).toBe(field.value.length);
     expect(field.classList.contains('hud-devcfg-copyfield--hidden')).toBe(false);
+  });
+});
+
+describe('the Configuration body loads when its pane first opens (issue #1015)', () => {
+  // `devtools-menu`, `dev-config-menu` and `dev-config` are loaded by dynamic imports on the
+  // pane's first open, so an ordinary page never downloads them. These cases pin what that must
+  // not change: nothing is built before an open, the open builds the body once and keeps it,
+  // and a close, replace, surface change or teardown during the load builds nothing. The
+  // modules register listeners only on the nodes they build, so "no listener behind" is "no
+  // body built".
+  const body = (root: HTMLElement): HTMLElement => q(root, '.hud-devcfg-body');
+  const BUILT = [
+    'hud-devcfg-presets',
+    'hud-devcfg-groups',
+    'ui-hint hud-devcfg-namespace',
+    'ui-hint hud-devcfg-unknown hud-devcfg-unknown--hidden',
+    'hud-devcfg-url',
+    'hud-devcfg-actions',
+  ];
+  const children = (root: HTMLElement): string[] => Array.from(body(root).children, (c) => c.className);
+
+  it('an ordinary page builds no body, even after every import has settled', async () => {
+    // Negative control: a load started at construction, as the build ran there before #1015.
+    // Settled FIRST, so a build deferred past construction by a tick is caught too.
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    hud = createHud(root, {});
+    hud.setState('main-menu');
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('a developer page builds no body until Configuration opens', async () => {
+    // Negative controls: a load started at construction, and the Developer Tools open loading
+    // the Configuration menu too. The developer entry is not what loads it.
+    const { root } = mount();
+    q<HTMLButtonElement>(root, '.hud-devtools-open').click();
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('THE CONTROL: the open loads the body, presets to actions, once it lands', async () => {
+    // Without this, the absences above could pass because the body is never built at all.
+    // Negative control: an open that does not start the load.
+    const { root } = mount();
+    open(root);
+    expect(body(root).childElementCount, 'the body is loaded, not built in the open itself').toBe(0);
+    await settled();
+    expect(children(root)).toEqual(BUILT);
+  });
+
+  it('a close during the load builds no body into the closed pane', async () => {
+    // Negative controls: the resolved load ignoring the generation, and a close that does not
+    // spend one.
+    const { hud: h, root } = mount();
+    open(root);
+    h.back();
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('a close and reopen during the load builds the body once, for the reopen', async () => {
+    // The superseded load and the reopen's both land; only the second may build. Negative
+    // control: the resolved load ignoring the generation, which builds two bodies side by side.
+    const { hud: h, root } = mount();
+    open(root);
+    h.back();
+    open(root);
+    await settled();
+    expect(body(root).querySelectorAll('.hud-devcfg-presets')).toHaveLength(1);
+    expect(children(root)).toEqual(BUILT);
+  });
+
+  it('a surface change during the load builds nothing into the pane it closed', async () => {
+    // A match starting under the pane closes it through `setState`'s close-all, not `back()`.
+    // Negative controls: a surface change that spends no generation, and the resolved load
+    // ignoring it.
+    const { hud: h, root } = mount();
+    open(root);
+    h.setState('playing');
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('a replace during the load builds nothing into the pane that is leaving', async () => {
+    // The DEV badge opens Developer Tools over the pane, which REPLACES it (the layer's
+    // `release`) rather than closing it. Negative controls: a replace that spends no
+    // generation, and the resolved load ignoring it.
+    const { root } = mount();
+    open(root);
+    q<HTMLButtonElement>(root, '.hud-devbadge').click();
+    await settled();
+    expect(body(root).childElementCount).toBe(0);
+  });
+
+  it('builds the body once: a second visit keeps the same controls', async () => {
+    // As before #1015, when it was built once at construction. Negative control: an open that
+    // loads and builds whether or not a body exists, which throws the controls away (and,
+    // with them, the view of the selection the keep-across-a-close case reads).
+    const { hud: h, root } = mount();
+    await openLoaded(root);
+    const presets = q(root, '.hud-devcfg-presets');
+    h.back();
+    open(root);
+    await settled();
+    expect(q(root, '.hud-devcfg-presets')).toBe(presets);
+    expect(children(root)).toEqual(BUILT);
+  });
+
+  it('a teardown during the load builds nothing into the discarded tree', async () => {
+    // `dispose` never runs the pane's close or a surface change. Negative control: a teardown
+    // that does not spend the generation itself.
+    const { hud: h, root } = mount();
+    open(root);
+    const discarded = body(root);
+    h.dispose();
+    hud = null;
+    await settled();
+    expect(discarded.childElementCount).toBe(0);
+  });
+
+  describe('a load that fails', () => {
+    // `devtools-menu` made to fail as a stale chunk name or a dropped connection would, mocked
+    // per case and restored after, so no other case loads a failing module. Not `dev-config`:
+    // the Developer Tools open, which comes first, loads that one too. Both the mock and its
+    // removal are flushed by an import of their own before the pane opens: Vitest resolves a
+    // queued `doMock` on the next import, and the Developer Tools open starts four imports of
+    // its own just before Configuration's three.
+    afterEach(async () => {
+      vi.doUnmock('./devtools-menu');
+      vi.resetModules();
+      await import('./devtools-menu');
+    });
+    async function failLoads(): Promise<void> {
+      vi.doMock('./devtools-menu', () => {
+        throw new Error('offline');
+      });
+      vi.resetModules();
+      await import('./devtools-menu').catch(() => {});
+    }
+
+    it('is reported in the pane, and the next open builds the body in its place', async () => {
+      // Negative controls: no rejection handler (an unhandled rejection, and a pane that stays
+      // blank), and a retry that leaves the old failure line beside the new body.
+      const { hud: h, root } = mount();
+      await failLoads();
+      open(root);
+      await settled();
+      expect(children(root)).toEqual(['hud-devcfg-line hud-devcfg-failed']);
+      const failed = q(root, '.hud-devcfg-failed');
+      expect(failed.getAttribute('role')).toBe('status');
+      expect(failed.textContent).toContain('could not be loaded');
+      vi.doUnmock('./devtools-menu');
+      vi.resetModules();
+      await import('./devtools-menu');
+      h.back();
+      open(root);
+      await settled();
+      expect(children(root)).toEqual(BUILT);
+    });
+
+    it('after the pane closed reports nothing into it', async () => {
+      // Negative controls: the failure path ignoring the generation, and a close that does not
+      // spend one.
+      const { hud: h, root } = mount();
+      await failLoads();
+      open(root);
+      h.back();
+      await settled();
+      expect(body(root).childElementCount).toBe(0);
+    });
   });
 });

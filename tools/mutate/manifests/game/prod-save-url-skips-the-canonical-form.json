@@ -1,0 +1,15 @@
+{
+  "id": "prod-save-url-skips-the-canonical-form",
+  "file": "src/game/hud.ts",
+  "find": "    whenDevTools(({ config }) => apply(config.canonicalDevSearch(`?${params.toString()}`).search));\n",
+  "replace": "    whenDevTools(() => apply(`?${params.toString()}`));\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.diagnostics.test.ts"
+  ],
+  "killedBy": [
+    "the persistence controls (issue #249) builds its URL through the canonical form the Configuration menu previews, when the press starts the load (issue #1015)",
+    "the persistence controls (issue #249) builds the same canonical URL when the pane loaded its modules before the press (issue #1015)"
+  ],
+  "why": "Issue #1015. Use Production Save hands over its URL without `canonicalDevSearch`, which since #1015 arrives with the Developer Tools pane's modules rather than from a static import. The URL then differs from the one the Configuration menu would preview for the same flags (here `?utm=x&aimRay=1&dev=1&prodSave=1` instead of the canonical `?dev=1&aimRay=1&prodSave=1&utm=x`). Measured before the change: written against the static call on `cbf8285d`, this mutation SURVIVED all 61 tests in `hud.diagnostics.test.ts`; the two canonical-URL cases, one pressed before the load and one after, are what kill it."
+}

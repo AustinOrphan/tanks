@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-retry-keeps-the-failure-line",
+  "file": "src/game/hud.ts",
+  "find": "    devCfgBodyEl.replaceChildren(); // a previous attempt's failure line\n",
+  "replace": "    // a retry keeps the previous attempt's failure line\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a load that fails is reported in the pane, and the next open builds the body in its place"
+  ],
+  "why": "Issue #1015. A load no longer clears the container before it starts, so after a failed load the next open builds the body beside the old failure line, and the pane says the menu could not be loaded while showing it."
+}

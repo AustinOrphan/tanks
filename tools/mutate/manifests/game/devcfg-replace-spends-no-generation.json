@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-replace-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "      release: () => {\n        devCfgGeneration += 1;\n      },\n",
+  "replace": "      release: () => {\n        // the replace spends no generation\n      },\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a replace during the load builds nothing into the pane that is leaving"
+  ],
+  "why": "Issue #1015. The layer's `release` stops spending the load's generation. The DEV badge opens Developer Tools over the pane, which REPLACES it rather than closing it, so neither the close nor a surface change runs: a load still in flight builds the body into the pane that is leaving."
+}

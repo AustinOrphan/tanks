@@ -1,0 +1,29 @@
+{
+  "id": "devcfg-open-never-loads",
+  "file": "src/game/hud.ts",
+  "find": "      if (!devCfgBuilt) loadDevConfigMenu();\n",
+  "replace": "      // the open never loads the body\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts",
+    "src/game/hud.reachability.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "reaching the configuration menu keeps the selection across a close, because building one is the slow part",
+    "what a press does to the previewed URL a value button puts that value in the URL, and Unset takes it out again",
+    "what a press does to the previewed URL a toggle adds its own parameter and nothing else",
+    "what a press does to the previewed URL a stepper walks a valued flag, and stops where the parser stops",
+    "what a press does to the previewed URL a preset REPLACES the selection rather than merging into it",
+    "what a press does to the previewed URL Reset clears the options and KEEPS developer mode",
+    "what a press does to the previewed URL carries the page’s non-developer query through, so Apply does not drop a deep link",
+    "Apply and Reload hands the page exactly the URL it was previewing",
+    "Apply and Reload is HIDDEN on a HUD that cannot navigate, rather than offered and inert",
+    "Copy Link fills the field with the previewed URL and selects it",
+    "the Configuration body loads when its pane first opens (issue #1015) THE CONTROL: the open loads the body, presets to actions, once it lands",
+    "the Configuration body loads when its pane first opens (issue #1015) a close and reopen during the load builds the body once, for the reopen",
+    "the Configuration body loads when its pane first opens (issue #1015) builds the body once: a second visit keeps the same controls",
+    "the Configuration body loads when its pane first opens (issue #1015) a load that fails is reported in the pane, and the next open builds the body in its place",
+    "every HUD layer is reachable by arrows and by a D-pad (issue #914) gives the pad the keyboard inside developer-config"
+  ],
+  "why": "Issue #1015. The open stops starting the load, so the Configuration body is never built and the pane shows its heading and Back alone. This is the negative control for THE CONTROL case and for every adapted case that awaits the body. It is also the only entry scoped to `hud.reachability.devconfig.test.ts`, deliberately: it is that walk's proof that it waits for the body (`LAYER_REACH['developer-config'].body`) rather than walking the shell's Back and passing -- which it did before the wait, measured against this mutant. The cost is that file's 163-step walk (about 29s locally, about 87s on a CI shard) in the baseline, under the harness's 180s kill."
+}

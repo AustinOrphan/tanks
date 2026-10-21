@@ -2121,10 +2121,29 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
 });
 
 describe('the UI kit contracts, swept across every control that uses them (issue #321)', () => {
-  function mountEveryChoice(): { hud: Hud; root: HTMLElement } {
+  async function mountEveryChoice(): Promise<{ hud: Hud; root: HTMLElement }> {
     const root = document.createElement('div');
     document.body.appendChild(root);
     const h = createHud(root);
+    // Handed to the file's `afterEach`, which this fixture skipped before issue #1015, so its
+    // key listeners outlived the case. That was harmless while the HUD never left its first
+    // surface; after the open and Back below, seven later #919 cases in this file had their key
+    // presses cancelled while the leaked HUDs lived (observed), as an arrival-guarded HUD would.
+    hud = h;
+    // The Configuration menu's body is loaded when its pane first opens (issue #1015): opened
+    // once through the real UI, the build awaited, and the HUD walked back to the surface it
+    // was built on, so the menu's choices are inside the sweep rather than silently outside it.
+    (root.querySelector('.hud-devtools-open') as HTMLButtonElement).click();
+    (root.querySelector('.hud-devcfg-open') as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(root.querySelector('.hud-devcfg-presets'), 'the Configuration body was never built')
+        .not.toBeNull();
+    }, { timeout: 5000 });
+    h.back();
+    await vi.waitFor(() => {
+      expect(root.querySelector('.ui-surface--leaving, .ui-surface--entering'), 'a crossfade never settled')
+        .toBeNull();
+    });
     h.setLevelSelect(2, 4);
     h.setBotAssignmentAllowed(true);
     h.setDetectedPads([{ padIndex: 1, id: 'Test Pad' }]);
@@ -2144,11 +2163,11 @@ describe('the UI kit contracts, swept across every control that uses them (issue
   const selectables = (root: HTMLElement): HTMLButtonElement[] =>
     Array.from(root.querySelectorAll('button.ui-selectable'));
 
-  it('announces the current choice on EVERY choice control, not only draws it', () => {
+  it('announces the current choice on EVERY choice control, not only draws it', async () => {
     // Before `setSelected`, the hull swatches, accent swatches, skins, controller
     // sources and versus options each toggled a class of their own and told assistive
     // technology nothing: the current choice was a white border and nothing else.
-    const { root } = mountEveryChoice();
+    const { root } = await mountEveryChoice();
     const btns = selectables(root);
     // Exactly, not a lower bound -- this is the sweep's denominator, and it is measured
     // against THIS fixture rather than derived: 11 swatches in the paint shop (PALETTE 6
@@ -2205,8 +2224,8 @@ describe('the UI kit contracts, swept across every control that uses them (issue
       .toBeGreaterThan(0);
   });
 
-  it('moves the announced state with the choice, not only on the first render', () => {
-    const { hud: h, root } = mountEveryChoice();
+  it('moves the announced state with the choice, not only on the first render', async () => {
+    const { hud: h, root } = await mountEveryChoice();
     const skins = () => Array.from(root.querySelectorAll('.hud-skin')) as HTMLButtonElement[];
     const pressed = () => skins().map((b) => b.getAttribute('aria-pressed'));
     const before = pressed();
@@ -2217,7 +2236,7 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     expect(pressed().filter((v) => v === 'true')).toHaveLength(1);
   });
 
-  it('leaves the level grid with nothing to describe, because nothing in it is refused', () => {
+  it('leaves the level grid with nothing to describe, because nothing in it is refused', async () => {
     // SUPERSEDES 'associates a locked level with the line that says why it is locked'.
     // That contract was real and this sweep still enforces it everywhere it applies --
     // the versus Start and the Controllers rows below. It stopped applying to the level
@@ -2226,7 +2245,7 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     //
     // Kept as an assertion rather than deleted with the branch, because the failure this
     // guards is a re-added locked button that points at an element whose id went with it.
-    const { hud: h, root } = mountEveryChoice();
+    const { hud: h, root } = await mountEveryChoice();
     expect(root.querySelector('#hud-levels-note'), 'the reason line outlived its reason').toBeNull();
 
     const btns = Array.from(root.querySelectorAll('.hud-level-btn')) as HTMLButtonElement[];
@@ -2245,12 +2264,12 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     expect(after.map((b) => b.getAttribute('aria-describedby'))).toEqual([null, null, null, null]);
   });
 
-  it("associates a refused Start with the reason, and describes the Controllers panel's real rows with nothing", () => {
+  it("associates a refused Start with the reason, and describes the Controllers panel's real rows with nothing", async () => {
     // SUPERSEDES the versus half of this test. It used to assert that the pane's
     // who's-playing PREVIEW buttons pointed at #hud-versus-assignment-note while
     // disabled -- those buttons are gone (issue #260), and the pane's disabled control
     // is now Start itself, whose reason moves with the problem.
-    const { root } = mountEveryChoice();
+    const { root } = await mountEveryChoice();
     const described = (sel: string): (string | null)[] =>
       Array.from(root.querySelectorAll(`${sel} .hud-controller-source-btn`))
         .map((b) => b.getAttribute('aria-describedby'));
