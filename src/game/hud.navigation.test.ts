@@ -1347,7 +1347,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // 91 since issue #918: Settings' Audio section gains the − and + volume steppers, the
     // controller's path to the level. The slider between them still does not count; it is an
     // `<input type="range">`, outside the walk on purpose.
-    expect(totalControls, 'recount the panels above if this moves').toBe(91);
+    //
+    // 92 since issue #1058: Settings' Accessibility section gains the Player colours toggle,
+    // after Quality, so the Settings pane goes from 15 to 16. Not capability-gated, so a
+    // relevance verdict would not take it out either.
+    expect(totalControls, 'recount the panels above if this moves').toBe(92);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );

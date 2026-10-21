@@ -1,0 +1,18 @@
+{
+  "id": "effective-settings-owner-palette-ignores-the-store",
+  "file": "src/game/effective-settings.ts",
+  "find": "    ownerPalette: settings.presentation.ownerPalette,",
+  "replace": "    ownerPalette: 'classic',",
+  "expect": "killed",
+  "tests": [
+    "src/game/effective-settings.test.ts",
+    "src/game/route-host.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Resolves the one palette setting that has nothing to resolve to a constant, and picks the constant that hides it: Classic, what every player saw before the control existed (issue #1058; modelled on effective-settings-quality-ignores-the-store). Both consumers read the effective value -- the Settings control paints from it and `loop.ts` builds the session from it -- so the store keeps the choice, the toggle keeps writing it, and nothing anywhere ever draws in High contrast. The three suites are the three places the value should arrive.",
+  "killedBy": [
+    "resolveEffectiveSettings: audio, UI scale and quality pass through ungated passes the owner palette straight through, on any capability set (issue #1058)",
+    "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED owner palette on a page with no session",
+    "startGameWith: dev flags stay off by default builds the session in the STORED owner palette when no flag is set (issue #1058)"
+  ]
+}

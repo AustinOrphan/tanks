@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-toggle-hides-when-the-choice-applies",
+  "file": "src/game/hud.ts",
+  "find": "    ownerPaletteToggleBtn.title = `${PALETTE_HINT[currentOwnerPalette]} ${QUALITY_TIMING}`;",
+  "replace": "    ownerPaletteToggleBtn.title = PALETTE_HINT[currentOwnerPalette];",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The tooltip stops saying that the palette reaches the NEXT match (issue #1058). A session reads it once, when it is built, so a player who switches from Pause sees no change in the match they are playing and has no way to tell that from a control that does nothing. Modelled on quality-toggle-hides-when-the-choice-applies.",
+  "killedBy": [
+    "hud: the owner-palette toggle (issue #1058) says WHEN the choice takes effect, which the label cannot show"
+  ]
+}

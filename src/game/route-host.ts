@@ -710,6 +710,8 @@ export function createRouteHost(
     // (effective-settings.ts), so reading it here keeps the ONE rule "consumers read the
     // effective layer" intact for a control that gains nothing from an exception.
     hud.setQuality(effective.quality);
+    // The owner palette (issue #1058), from `effective` for quality's reason: nothing gates it.
+    hud.setOwnerPalette(effective.ownerPalette);
     // THE STORED PREFERENCE, not the effective one -- the first of the two reads here that
     // break the function's `effective` pattern, the motion control below being the other.
     // `haptics.setEnabled` (loop.ts) takes the effective value so a device with no

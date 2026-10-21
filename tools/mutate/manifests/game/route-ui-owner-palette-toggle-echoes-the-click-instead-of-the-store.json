@@ -1,0 +1,17 @@
+{
+  "id": "route-ui-owner-palette-toggle-echoes-the-click-instead-of-the-store",
+  "file": "src/game/route-ui.ts",
+  "find": "  hud.onOwnerPaletteChange((next) => {\n    deps.settings.setOwnerPalette(next);\n  });",
+  "replace": "  hud.onOwnerPaletteChange((next) => {\n    hud.setOwnerPalette(next);\n  });",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-ui.test.ts",
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The handler that paints instead of persisting (issue #1058; modelled on route-ui-quality-toggle-echoes-the-click-instead-of-the-store). The label moves under the finger, so it looks like it worked, and nothing else happens: the palette is not saved, so it dies with the tab, and no session ever reads it, so every match still draws Classic.",
+  "killedBy": [
+    "the application routes work with no gameplay session behind them the settings routes write their stores",
+    "the application routes work with no gameplay session behind them drives every route while a real GameSessionHost stays EMPTY (issue #427)",
+    "createRouteHost: the Main Menu is painted from the stores by the page repaints the owner-palette control from the value the STORE accepted, with no session"
+  ]
+}
