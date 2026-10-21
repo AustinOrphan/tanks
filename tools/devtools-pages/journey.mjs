@@ -118,9 +118,23 @@ export async function runPagesJourney(dist) {
     //    pinning my expectation of it here would make a navigation ruling by accident.
     //    Recorded on #947 instead. What IS asserted is the round trip: you can leave the
     //    pane and get back to the tools.
+    //
+    //    The pane's BODY is loaded when it first opens (issue #1015), from a chunk resolved
+    //    against the deploy prefix, so the pane is waited for and then its body. A chunk that
+    //    fails to load under the prefix leaves the pane open with a failure line instead, and
+    //    an in-prefix 404 is not one the escape check below reports, so this is where it fails.
     await page.click('.hud-devcfg-open');
     if (!(await settles(page, '.hud-devcfg', 'visible'))) {
       failures.push('the Configuration entry did not open the configuration pane');
+    } else if (!(await settles(page, '.hud-devcfg-presets', 'visible'))) {
+      const reported = await page
+        .evaluate(() => document.querySelector('.hud-devcfg-failed')?.textContent ?? null)
+        .catch(() => null);
+      failures.push(
+        `the configuration pane opened but its body never loaded under ${PAGES_PREFIX}` +
+          (reported === null ? '' : ` -- the pane says: "${reported}"`) +
+          `. 404s so far: ${missing.length ? missing.join(', ') : 'none'}`,
+      );
     } else {
       await page.click('.hud-devcfg-back');
       if (!(await settles(page, '.hud-devcfg', 'hidden'))) {
@@ -171,7 +185,8 @@ export async function runPagesJourney(dist) {
     if (!failures.length) {
       console.log(
         `developer tools on a Pages shape: entered ${entered}, opened the menu and the ` +
-          `configuration pane, exited to ${landed}, and the app booted at both ends`,
+          `configuration pane, whose body loaded, exited to ${landed}, and the app booted at ` +
+          `both ends`,
       );
     }
   } finally {

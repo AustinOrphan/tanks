@@ -911,6 +911,10 @@ export const SCREEN_STATES = Object.freeze([
       { waitVisible: '.hud-devtools' },
       { click: '.hud-devcfg-open' },
       { waitVisible: '.hud-devcfg' },
+      // The body is loaded when the pane first opens (issue #1015), so the pane is visible
+      // before anything measured below exists. Its six nodes are appended together, so the
+      // first is enough.
+      { waitVisible: '.hud-devcfg-presets' },
     ],
     // `.hud-devcfg-url` is measured for its TEXT: it is what Apply navigates to and Copy
     // copies, so a capture that showed the menu without it would not show the thing the
