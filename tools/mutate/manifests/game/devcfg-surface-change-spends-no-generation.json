@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-surface-change-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "    if (isSurfaceOpen(DEVCFG_SURFACE)) devCfgGeneration += 1;\n",
+  "replace": "    // a surface change spends no Configuration generation\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a surface change during the load builds nothing into the pane it closed"
+  ],
+  "why": "Issue #1015. A surface change that finds the Configuration pane open stops spending the load's generation. `setState`'s close-all hides the pane with a bare class add and never runs `showDevConfig(false)`, so a match starting under the pane while its modules load would have the body built into a pane that is gone."
+}

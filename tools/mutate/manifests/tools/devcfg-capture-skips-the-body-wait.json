@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-capture-skips-the-body-wait",
+  "file": "tools/screens/states.mjs",
+  "find": "      { waitVisible: '.hud-devcfg-presets' },\n",
+  "replace": "\n",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/states.test.ts"
+  ],
+  "killedBy": [
+    "the screen-state catalogue waits for the Configuration body it measures, after the pane, since it loads on the first open (issue #1015)"
+  ],
+  "why": "Issue #1015. The Configuration screen state stops waiting for its built body. The body now loads when the pane opens, and the pane is visible before it, so a capture that waits only for `.hud-devcfg` can measure `.hud-devcfg-presets`, `.hud-devcfg-group` and the rest before they exist -- an absent measured selector fails only in a real capture."
+}

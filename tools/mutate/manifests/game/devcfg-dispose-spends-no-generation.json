@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-dispose-spends-no-generation",
+  "file": "src/game/hud.ts",
+  "find": "      devCfgGeneration += 1; // and a Configuration load still in flight builds nothing (issue #1015)\n",
+  "replace": "      // teardown spends no Configuration generation\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a teardown during the load builds nothing into the discarded tree"
+  ],
+  "why": "Issue #1015. Teardown stops spending the Configuration load's generation. `dispose` runs neither the pane's close nor a surface change, so a load still in flight builds the body, and the 14 listeners the menu puts on it, into the tree the teardown discarded."
+}

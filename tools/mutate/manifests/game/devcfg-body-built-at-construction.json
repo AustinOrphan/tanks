@@ -1,0 +1,15 @@
+{
+  "id": "devcfg-body-built-at-construction",
+  "file": "src/game/hud.ts",
+  "find": "  const layoutBody: ControllerLayoutView = renderControllerLayout(layoutBodyEl);\n",
+  "replace": "  loadDevConfigMenu();\n  const layoutBody: ControllerLayoutView = renderControllerLayout(layoutBodyEl);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) an ordinary page builds no body, even after every import has settled",
+    "the Configuration body loads when its pane first opens (issue #1015) a developer page builds no body until Configuration opens"
+  ],
+  "why": "Issue #1015. The Configuration menu's modules are loaded at construction again, on every page, as the menu was built before the issue. An ordinary page then downloads `devtools-menu`, `dev-config-menu` and `dev-config`, and the load builds the body into `.hud-devcfg-body` once it lands: construction's own `setState('launch')` finds the pane closed, so it spends no generation. The load is asynchronous, so only a case that lets every import settle before asserting the absence catches it: the two absence cases. The download itself is the browser probe's to see."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-late-failure-reports-into-a-closed-pane",
+  "file": "src/game/hud.ts",
+  "find": "        if (generation !== devCfgGeneration) return;\n        const failed = document.createElement('p');\n",
+  "replace": "        const failed = document.createElement('p');\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a load that fails after the pane closed reports nothing into it"
+  ],
+  "why": "Issue #1015. The failure path stops checking the generation, so a load that fails after the pane closed writes its failure line into the closed pane, where the next open finds a stale report before its own load starts."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "devcfg-loaded-by-the-developer-tools-open",
+  "file": "src/game/hud.ts",
+  "find": "      if (devTools === null) whenDevTools(revealDevActions);\n",
+  "replace": "      if (devTools === null) whenDevTools(revealDevActions);\n      loadDevConfigMenu();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.devconfig.test.ts"
+  ],
+  "killedBy": [
+    "the Configuration body loads when its pane first opens (issue #1015) a developer page builds no body until Configuration opens"
+  ],
+  "why": "Issue #1015. The Developer Tools open starts the Configuration menu's load as well as its own, so every developer who opens the shell downloads the menu's modules and builds its body without ever opening Configuration. The developer entry is not what loads it; the case that opens Developer Tools alone and settles catches it. Other cases fail as well (a second Developer Tools open starts a second load, which rebuilds the body) and are deliberately not pinned."
+}
