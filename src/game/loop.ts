@@ -116,7 +116,6 @@ import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-diffic
 import type { BlockedFireCue } from '../presentation/blocked-fire';
 import type { GameplayRouteHost, RouteHostDeps, StartIntent } from './route-host';
 import {
-  DEFAULT_OWNER_PALETTE,
   OWNER_PALETTES,
   resolveOwnerColor,
   type OwnerPalette,
@@ -2011,10 +2010,12 @@ export function startGameWith(
    * THE OWNER PALETTE THIS SESSION DRAWS IN (issue #1057), resolved once, as quality is, and
    * handed to the three readers that each draw part of it: the renderer (rings, shell tints,
    * trails, death pulses), the HUD's stock chips and the death vignette. One value for all
-   * three is what keeps a ring and its chip the same colour. `?dev=1&ownerPalette=` is the
-   * only selector until the Settings control lands; without it this is the shipped default.
+   * three is what keeps a ring and its chip the same colour. The player's Player colours
+   * setting decides it (issue #1058); `?dev=1&ownerPalette=` overrides that for the session
+   * without writing it, as `?quality=` does for the quality setting.
    */
-  const sessionOwnerPalette = OWNER_PALETTES[deps.devFlags.ownerPalette ?? DEFAULT_OWNER_PALETTE];
+  const sessionOwnerPalette =
+    OWNER_PALETTES[deps.devFlags.ownerPalette ?? deps.effectiveSettings.current().ownerPalette];
 
   // One renderer setting at a time on top of that preset (issue #735), for a device sweep. Held
   // beside the resolved configuration because the benchmark report records both: the

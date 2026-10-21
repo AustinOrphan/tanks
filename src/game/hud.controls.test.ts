@@ -5,6 +5,8 @@ import { focusableControls } from './focusable';
 import { SKINS, ACCENTS } from '../presentation/customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
+import { settingRelevance } from './control-relevance';
+import { NO_CAPABILITIES } from './capabilities';
 
 
 let hud: Hud | null = null;
@@ -835,6 +837,129 @@ describe('hud: the quality toggle (issue #540)', () => {
       root.querySelector('.hud-motion-toggle')!.closest('.hud-settings-section'),
       'the two presentation policies were split across sections',
     ).toBe(section);
+  });
+});
+
+describe('hud: the owner-palette toggle (issue #1058)', () => {
+  const toggle = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-owner-palette-toggle') as HTMLButtonElement;
+  /**
+   * What #586 rules out of every visible or spoken string: the control is named for what it
+   * does, not for a condition a player would have to name to find it.
+   */
+  const DEFICIENCY_WORDS = /colou?r[\s-]*blind|deficien|protan|deut(?:er)?an|tritan/i;
+
+  it('shows the stored palette, labelled Player colours: Classic and Player colours: High contrast', () => {
+    const { hud: h, root } = mount();
+
+    h.setOwnerPalette('classic');
+    expect(toggle(root).textContent).toBe('Player colours: Classic');
+    const classicAria = toggle(root).getAttribute('aria-label');
+
+    h.setOwnerPalette('high-contrast');
+    expect(toggle(root).textContent).toBe('Player colours: High contrast');
+    expect(toggle(root).getAttribute('aria-label')).not.toBe(classicAria);
+
+    // Back again: a label that only ever moved one way would pass the two reads above.
+    h.setOwnerPalette('classic');
+    expect(toggle(root).textContent).toBe('Player colours: Classic');
+  });
+
+  it('says WHEN the choice takes effect, which the label cannot show', () => {
+    // A session reads the palette once, when it is built (loop.ts), so a change made from
+    // Pause lands on the next match. The same sentence the quality toggle beside it carries.
+    const { hud: h, root } = mount();
+    for (const id of ['classic', 'high-contrast'] as const) {
+      h.setOwnerPalette(id);
+      expect(toggle(root).title, id).toMatch(/Takes effect when the next match starts\./);
+      expect(toggle(root).getAttribute('aria-label'), id).toMatch(
+        /Takes effect when the next match starts\./,
+      );
+    }
+    // NEGATIVE CONTROL: the hint is not ONLY the timing sentence -- each palette still says
+    // what it looks like.
+    h.setOwnerPalette('classic');
+    const classic = toggle(root).title;
+    h.setOwnerPalette('high-contrast');
+    expect(toggle(root).title, 'both palettes share one hint').not.toBe(classic);
+  });
+
+  it('names what it does, never a colour-vision deficiency, in every state', () => {
+    // KNOWN-BAD CONTROLS, synthetic: the pattern has to be able to match the strings it
+    // exists to refuse, or every assertion below passes over nothing.
+    for (const bad of ['Colour-blind mode', 'color blind', 'Deuteranopia', 'Protanopia', 'Tritan', 'colour deficiency']) {
+      expect(bad, bad).toMatch(DEFICIENCY_WORDS);
+    }
+    const { hud: h, root } = mount();
+    const other = { classic: 'High contrast', 'high-contrast': 'Classic' } as const;
+    for (const id of ['classic', 'high-contrast'] as const) {
+      h.setOwnerPalette(id);
+      const text = toggle(root).textContent ?? '';
+      const title = toggle(root).title;
+      const aria = toggle(root).getAttribute('aria-label') ?? '';
+      for (const [what, value] of [['label', text], ['title', title], ['aria-label', aria]]) {
+        expect(value, `${id} ${what}`).not.toMatch(DEFICIENCY_WORDS);
+      }
+      // The spoken form opens with the visible label, as the Motion and Quality toggles' do,
+      // and ends by saying where a tap goes.
+      expect(aria.startsWith(`${text}. `), `${id}: ${aria}`).toBe(true);
+      expect(aria.endsWith(`Tap to switch to Player colours: ${other[id]}.`), `${id}: ${aria}`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('taps the toggle and reports the OTHER palette, from a real click at the button', () => {
+    const { hud: h, root } = mount();
+    const seen: string[] = [];
+    h.onOwnerPaletteChange((id) => seen.push(id));
+    h.setOwnerPalette('classic');
+
+    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the toggle is not wired to anything').toEqual(['high-contrast']);
+    // The button does NOT flip its own label: it reports the choice and waits for the page's
+    // echo of what the store accepted, the convention every Settings control here follows.
+    expect(toggle(root).textContent).toBe('Player colours: Classic');
+
+    h.setOwnerPalette('high-contrast'); // the page's echo
+    toggle(root).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the second click did not wrap back to Classic').toEqual([
+      'high-contrast',
+      'classic',
+    ]);
+  });
+
+  it('lives in the Settings pane, under Accessibility, after the quality toggle', () => {
+    const { root } = mount();
+    expect(toggle(root)).not.toBeNull();
+    const section = toggle(root).closest('.hud-settings-section') as HTMLElement;
+    expect(section, 'the toggle is not inside a Settings section').not.toBeNull();
+    expect(section.dataset.section).toBe('accessibility');
+    const quality = root.querySelector('.hud-quality-toggle') as HTMLElement;
+    expect(toggle(root).parentElement, 'not in the same row as Motion and Quality').toBe(
+      quality.parentElement,
+    );
+    // Node-wise order, not an element query: Quality comes first, then Player colours.
+    expect(
+      quality.compareDocumentPosition(toggle(root)) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'Player colours sits before Quality',
+    ).toBeTruthy();
+  });
+
+  it('stays offered on a device with no touch, no vibration and no pad', () => {
+    // Nothing gates a colour choice on a capability, so the verdict that hides the touch
+    // pair and the haptics toggle on a desktop must leave this one in the walk.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    (root.querySelector('.hud-settings-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
+    const pane = root.querySelector('.hud-settings') as HTMLElement;
+    expect(focusableControls(pane)).toContain(root.querySelector('.hud-scheme-toggle'));
+    h.setControlRelevance(settingRelevance(NO_CAPABILITIES));
+    // NEGATIVE CONTROL: the verdict was applied -- it did take the scheme toggle out.
+    expect(focusableControls(pane)).not.toContain(root.querySelector('.hud-scheme-toggle'));
+    expect(focusableControls(pane)).toContain(toggle(root));
   });
 });
 

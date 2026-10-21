@@ -222,7 +222,11 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Issue #919 adds ONE, frame-owned: `onArrival`. 92 -> 93. FRAME for `act`'s reason: the
     // route host's gamepad dispatch reads it to drop a Confirm first seen on the poll after a
     // surface arrived, and arrivals belong to whatever surface is showing, not to one route.
-    expect(frame.size + route.size + gameplay.size).toBe(93);
+    //
+    // Issue #1058 adds TWO, both route-owned: the Player colours control's `setOwnerPalette`
+    // and `onOwnerPaletteChange`. 93 -> 95. ROUTE for quality's reason: the page paints
+    // Settings from the store, and a session reads the palette once, when it is built.
+    expect(frame.size + route.size + gameplay.size).toBe(95);
     expect(gameplay.size, 'what a live match may write').toBe(11);
   });
 

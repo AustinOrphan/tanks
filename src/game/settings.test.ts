@@ -37,6 +37,11 @@ import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { createMemoryStorage } from './storage';
 import { TOUCH_SCHEMES, FIRE_MODES } from '../input/touch';
 import { RECOMMENDED_LAYOUT, type ControlLayout } from '../input/gamepad-profile';
+import {
+  DEFAULT_OWNER_PALETTE,
+  OWNER_PALETTE_IDS,
+  type OwnerPaletteId,
+} from '../presentation/identity';
 
 beforeEach(() => localStorage.clear());
 
@@ -74,8 +79,9 @@ describe('the schema constants', () => {
   });
 
   it('pins every documented default, so a silent retune fails here', () => {
-    // Population: all TEN fields in PlayerSettings -- eight from issue #320, plus
-    // `presentation.quality` (#540) and `input.controllerLayouts` (#754). Each is asserted against the literal the
+    // Population: all ELEVEN fields in PlayerSettings -- eight from issue #320, plus
+    // `presentation.quality` (#540), `input.controllerLayouts` (#754) and
+    // `presentation.ownerPalette` (#1058). Each is asserted against the literal the
     // issue requires, not against its own constant -- comparing a constant to itself
     // would pass whatever the constant became.
     //
@@ -93,6 +99,9 @@ describe('the schema constants', () => {
     expect(DEFAULT_MOTION).toBe('system');
     expect(DEFAULT_UI_SCALE).toBe(100);
     expect(DEFAULT_QUALITY_PRESET).toBe('high');
+    // Classic is what every player saw before the control existed; one who never opens
+    // Settings must keep seeing it (issue #1058).
+    expect(DEFAULT_OWNER_PALETTE).toBe('classic');
     // No profile customised: every controller reads as it ships until a player changes it.
     expect(DEFAULT_CONTROLLER_LAYOUTS).toEqual({});
     expect(DEFAULT_SETTINGS).toEqual({
@@ -104,7 +113,7 @@ describe('the schema constants', () => {
         controllerRumble: true,
         controllerLayouts: {},
       },
-      presentation: { motion: 'system', uiScale: 100, quality: 'high' },
+      presentation: { motion: 'system', uiScale: 100, quality: 'high', ownerPalette: 'classic' },
     });
   });
 
@@ -133,7 +142,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
   });
 
   it('round-trips EVERY field through a fresh construction', () => {
-    // Population: all ten fields, each moved OFF its default so a store that silently
+    // Population: all eleven fields, each moved OFF its default so a store that silently
     // fell back would have to disagree rather than accidentally match.
     const a = createPlayerSettingsStore(localStorage);
     a.setMuted(true);
@@ -146,6 +155,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
     a.setMotion('reduced');
     a.setUiScale(150);
     a.setQuality('low');
+    a.setOwnerPalette('high-contrast');
     const expected: PlayerSettings = {
       audio: { muted: true, volume: 0.25 },
       input: {
@@ -155,7 +165,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
         controllerRumble: false,
         controllerLayouts: { standard: { preset: 'southpaw', bindings: { fire: 'bumper-right' } } },
       },
-      presentation: { motion: 'reduced', uiScale: 150, quality: 'low' },
+      presentation: { motion: 'reduced', uiScale: 150, quality: 'low', ownerPalette: 'high-contrast' },
     };
     expect(a.snapshot()).toEqual(expected);
     expect(createPlayerSettingsStore(localStorage).snapshot()).toEqual(expected);
@@ -185,6 +195,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
     store.setUiScale(101 as UiScale);
     store.setMotion('sideways' as MotionPreference);
     store.setQuality('ultra' as QualityPreset);
+    store.setOwnerPalette('neon' as OwnerPaletteId);
     store.setVolume(Number.NaN);
     expect(calls).toBe(0);
   });
@@ -192,7 +203,7 @@ describe('createPlayerSettingsStore: defaults and persistence', () => {
 
 describe('createPlayerSettingsStore: validation', () => {
   it('refuses an off-domain SETTER argument and keeps the accepted value', () => {
-    // Population: the five fields with a closed domain, each pushed past the types the
+    // Population: the six fields with a closed domain, each pushed past the types the
     // way untyped JS reaching this store would.
     const store = createPlayerSettingsStore(localStorage);
     store.setTouchScheme('point');
@@ -217,6 +228,12 @@ describe('createPlayerSettingsStore: validation', () => {
     store.setQuality('low');
     store.setQuality('ultra' as QualityPreset);
     expect(store.snapshot().presentation.quality).toBe('low');
+
+    // Issue #1058's field: a session indexes `OWNER_PALETTES` with it when a match is built,
+    // so an accepted junk id would hand every owner-colour reader `undefined`.
+    store.setOwnerPalette('high-contrast');
+    store.setOwnerPalette('neon' as OwnerPaletteId);
+    expect(store.snapshot().presentation.ownerPalette).toBe('high-contrast');
   });
 
   it('accepts every value the real domain lists', () => {
@@ -244,6 +261,13 @@ describe('createPlayerSettingsStore: validation', () => {
       store.setQuality(id);
       expect(store.snapshot().presentation.quality, id).toBe(id);
     }
+    // The palettes are spelled out rather than read from `OWNER_PALETTE_IDS`, so a member
+    // dropped from the domain also fails its own row here, not only the set pin below it.
+    for (const id of ['high-contrast', 'classic'] as const) {
+      store.setOwnerPalette(id);
+      expect(store.snapshot().presentation.ownerPalette, id).toBe(id);
+    }
+    expect(OWNER_PALETTE_IDS).toEqual(['classic', 'high-contrast']);
   });
 
   it('refuses a NON-FINITE volume outright and clamps a finite one', () => {
@@ -302,7 +326,7 @@ describe('parseSettingsPayload: stored data', () => {
         version: 1,
         audio: { muted: 'yes', volume: 0.25 },
         input: 7,
-        presentation: { motion: 'sideways', uiScale: 150, quality: 'ultra' },
+        presentation: { motion: 'sideways', uiScale: 150, quality: 'ultra', ownerPalette: 'neon' },
       }),
     );
     expect(parsed.kind).toBe('current');
@@ -316,6 +340,32 @@ describe('parseSettingsPayload: stored data', () => {
     // being carried through to `qualityFor`, which would index its table with a key it
     // has no entry for.
     expect(parsed.settings.presentation.quality).toBe(DEFAULT_QUALITY_PRESET); // junk
+    expect(parsed.settings.presentation.ownerPalette).toBe('classic'); // junk (issue #1058)
+
+    // And the other direction for the palette: a valid one survives a junk sibling.
+    const kept = parseSettingsPayload(
+      JSON.stringify({ version: 1, presentation: { motion: 'sideways', ownerPalette: 'high-contrast' } }),
+    );
+    if (kept.kind !== 'current') throw new Error('unreachable');
+    expect(kept.settings.presentation.motion).toBe(DEFAULT_MOTION); // junk
+    expect(kept.settings.presentation.ownerPalette).toBe('high-contrast'); // survived
+  });
+
+  it('loads a payload saved before the owner palette existed as Classic, keeping every sibling (issue #1058)', () => {
+    // The shape every deployed build before #1058 writes. The field is ADDITIVE, so the
+    // payload is still `current` -- not `recovered`, and not a schema bump -- and the
+    // palette reads as the one those players have always seen.
+    const parsed = parseSettingsPayload(
+      JSON.stringify({ version: 1, presentation: { motion: 'full', uiScale: 125, quality: 'low' } }),
+    );
+    expect(parsed.kind).toBe('current');
+    if (parsed.kind !== 'current') throw new Error('unreachable');
+    expect(parsed.settings.presentation).toEqual({
+      motion: 'full',
+      uiScale: 125,
+      quality: 'low',
+      ownerPalette: 'classic',
+    });
   });
 
   it('clamps a finite out-of-range stored volume and defaults a non-finite one', () => {
@@ -341,7 +391,7 @@ describe('parseSettingsPayload: stored data', () => {
         controllerRumble: false,
         controllerLayouts: { standard: { preset: 'southpaw', bindings: { confirm: 'face-left' } } },
       },
-      presentation: { motion: 'full', uiScale: 125, quality: 'medium' },
+      presentation: { motion: 'full', uiScale: 125, quality: 'medium', ownerPalette: 'high-contrast' },
     };
     const parsed = parseSettingsPayload(serializeSettings(settings));
     if (parsed.kind !== 'current') throw new Error('unreachable');
@@ -647,12 +697,14 @@ describe('createPlayerSettingsStore: reset', () => {
     const store = createPlayerSettingsStore(localStorage);
     store.setMuted(true);
     store.setUiScale(150);
+    store.setOwnerPalette('high-contrast');
     // Put the legacy key back, so reset has something to clear -- the case that matters
     // is an imported old save sitting beside settings the player then resets.
     localStorage.setItem(TOUCH_SETTINGS_KEY, JSON.stringify({ scheme: 'point' }));
 
     store.reset();
     expect(store.snapshot()).toEqual(DEFAULT_SETTINGS);
+    expect(store.snapshot().presentation.ownerPalette).toBe('classic');
     expect(createPlayerSettingsStore(localStorage).snapshot()).toEqual(DEFAULT_SETTINGS);
     expect(localStorage.getItem(TOUCH_SETTINGS_KEY)).toBeNull();
   });

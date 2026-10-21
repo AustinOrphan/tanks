@@ -1,0 +1,14 @@
+{
+  "id": "owner-palette-toggle-flips-its-own-label",
+  "file": "src/game/hud.ts",
+  "find": "  const handleOwnerPaletteToggle = (): void => {\n    for (const cb of ownerPaletteChangeCbs) cb(NEXT_PALETTE[currentOwnerPalette]);\n  };",
+  "replace": "  const handleOwnerPaletteToggle = (): void => {\n    for (const cb of ownerPaletteChangeCbs) cb(NEXT_PALETTE[currentOwnerPalette]);\n    currentOwnerPalette = NEXT_PALETTE[currentOwnerPalette];\n    renderOwnerPaletteToggle();\n  };",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "why": "The button flips its own label on a click instead of waiting for the page's echo of what the store accepted (issue #1058). It looks identical while every write succeeds; it diverges the first time the store refuses one, for example under a future-schema lock, when the button would show a palette that was never stored. Modelled on quality-toggle-flips-its-own-label.",
+  "killedBy": [
+    "hud: the owner-palette toggle (issue #1058) taps the toggle and reports the OTHER palette, from a real click at the button"
+  ]
+}

@@ -5,6 +5,11 @@ import {
   DEFAULT_QUALITY_PRESET,
   type QualityPreset,
 } from '../presentation/quality';
+import {
+  OWNER_PALETTE_IDS,
+  DEFAULT_OWNER_PALETTE,
+  type OwnerPaletteId,
+} from '../presentation/identity';
 import { TOUCH_SETTINGS_KEY, readLegacyTouchSettings } from './touch-settings';
 import {
   BINDABLE_ACTIONS,
@@ -51,6 +56,7 @@ import {
  * | `presentation.motion` | `'system'` | `MOTION_PREFERENCES` | default | refused |
  * | `presentation.uiScale` | `100` | `UI_SCALES` (100/125/150 percent) | default | refused |
  * | `presentation.quality` | `DEFAULT_QUALITY_PRESET` (`'high'`) | `QUALITY_PRESET_IDS` | default | refused |
+ * | `presentation.ownerPalette` | `DEFAULT_OWNER_PALETTE` (`'classic'`) | `OWNER_PALETTE_IDS` | default | refused |
  *
  * `presentation.quality` arrived after the schema did (issue #540) and did NOT bump
  * `SETTINGS_SCHEMA_VERSION`, deliberately. The bump exists for a payload this build cannot
@@ -58,7 +64,8 @@ import {
  * defaults like any absent field, and a build that predates it ignores the extra key
  * instead of refusing to write. Bumping would have made every already-deployed build read
  * the new payload as `'future'` and stop saving settings entirely, which is a real harm
- * traded for nothing.
+ * traded for nothing. `presentation.ownerPalette` (issue #1058) arrived the same additive
+ * way and also leaves `SETTINGS_SCHEMA_VERSION` at 1.
  *
  * Every field validates INDEPENDENTLY -- junk in one must never reset a sibling. That is
  * the property `tanks.touch.v1` already had (see touch-settings.ts's own comment) and it
@@ -171,6 +178,13 @@ export interface PresentationSettings {
    * without importing the Three.js table that gives them meaning.
    */
   readonly quality: QualityPreset;
+  /**
+   * Which owner palette -- the ring and team colours together -- a match is built with
+   * (issue #1058). Read once when a session is built, as `quality` is, so a change applies
+   * from the next match. The ids come from `presentation/identity.ts`, which imports only
+   * simulation types, so naming them here costs this module nothing.
+   */
+  readonly ownerPalette: OwnerPaletteId;
 }
 
 export interface PlayerSettings {
@@ -192,6 +206,7 @@ export const DEFAULT_SETTINGS: PlayerSettings = Object.freeze({
     motion: DEFAULT_MOTION,
     uiScale: DEFAULT_UI_SCALE,
     quality: DEFAULT_QUALITY_PRESET,
+    ownerPalette: DEFAULT_OWNER_PALETTE,
   }),
 });
 
@@ -298,6 +313,7 @@ export interface PlayerSettingsStore {
   setMotion(p: MotionPreference): void;
   setUiScale(s: UiScale): void;
   setQuality(q: QualityPreset): void;
+  setOwnerPalette(id: OwnerPaletteId): void;
   /**
    * Restore the documented defaults and persist them.
    *
@@ -321,6 +337,7 @@ const FIRE_MODE_IDS = new Set<string>(FIRE_MODES);
 const MOTION_IDS = new Set<string>(MOTION_PREFERENCES);
 const UI_SCALE_VALUES = new Set<number>(UI_SCALES);
 const QUALITY_IDS = new Set<string>(QUALITY_PRESET_IDS);
+const PALETTE_IDS = new Set<string>(OWNER_PALETTE_IDS);
 
 /** Finite, in range, or null. NaN and both infinities fail `Number.isFinite`. */
 function acceptedVolume(v: unknown): number | null {
@@ -473,6 +490,7 @@ export function parseSettingsPayload(raw: string | null): ParsedPayload {
             ? (presentation.uiScale as UiScale)
             : DEFAULT_UI_SCALE,
         quality: acceptedFrom(presentation.quality, QUALITY_IDS, DEFAULT_QUALITY_PRESET),
+        ownerPalette: acceptedFrom(presentation.ownerPalette, PALETTE_IDS, DEFAULT_OWNER_PALETTE),
       },
     }),
   };
@@ -494,6 +512,7 @@ export function serializeSettings(settings: PlayerSettings): string {
       motion: settings.presentation.motion,
       uiScale: settings.presentation.uiScale,
       quality: settings.presentation.quality,
+      ownerPalette: settings.presentation.ownerPalette,
     },
   });
 }
@@ -681,6 +700,10 @@ export function createPlayerSettingsStore(
     setQuality(q: QualityPreset): void {
       if (!QUALITY_IDS.has(q)) return;
       commit({ ...shadow, presentation: { ...shadow.presentation, quality: q } });
+    },
+    setOwnerPalette(id: OwnerPaletteId): void {
+      if (!PALETTE_IDS.has(id)) return;
+      commit({ ...shadow, presentation: { ...shadow.presentation, ownerPalette: id } });
     },
     reset(): void {
       shadow = DEFAULT_SETTINGS;

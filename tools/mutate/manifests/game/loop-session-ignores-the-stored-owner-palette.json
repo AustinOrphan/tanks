@@ -1,0 +1,16 @@
+{
+  "id": "loop-session-ignores-the-stored-owner-palette",
+  "file": "src/game/loop.ts",
+  "find": "OWNER_PALETTES[deps.devFlags.ownerPalette ?? deps.effectiveSettings.current().ownerPalette]",
+  "replace": "OWNER_PALETTES[deps.devFlags.ownerPalette ?? 'classic']",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Restores the pre-#1058 line (issue #1058; modelled on loop-renderer-ignores-the-stored-quality-preset): the Settings control writes the palette, the store persists it, the page paints it back, and every session still builds in Classic unless a developer flag says otherwise. A player can find the control, choose High contrast, watch the button agree, and never see it. The only witness is what the renderer and the stock chips were handed.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default builds the session in the STORED owner palette when no flag is set (issue #1058)",
+    "startGameWith: dev flags stay off by default lets ?dev=1&ownerPalette= OVERRIDE the stored palette, without writing it",
+    "startGameWith: the Player colours setting survives a reload (issue #1058) a High contrast choice made through the toggle reaches the next session's renderer and stock chips"
+  ]
+}
