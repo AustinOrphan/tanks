@@ -158,7 +158,7 @@ distinguish "a key this build does not know" from "this key, written by a newer 
 | `presentation.motion` | `system` | `system` / `full` / `reduced` | default | live `prefers-reduced-motion` | `system` follows the OS; `full` is false; `reduced` is true |
 | `presentation.uiScale` | `100` | `100` / `125` / `150` percent | default | none | the stored value, plus a `uiScaleFactor` multiplier for #290/#321 |
 | `presentation.quality` | `high` (`DEFAULT_QUALITY_PRESET`) | `low` / `medium` / `high` | default | none — nothing probes the GPU | the stored value |
-| `presentation.ownerPalette` | `classic` (`DEFAULT_OWNER_PALETTE`) | `classic` / `high-contrast` (`OWNER_PALETTE_IDS`, #1058) | default | none — nothing probes the device for a colour preference | the stored value; `?dev=1&ownerPalette=` overrides it for one session in `loop.ts`, without writing it |
+| `presentation.ownerPalette` | `classic` (`DEFAULT_OWNER_PALETTE`) | `classic` / `high-contrast` (`OWNER_PALETTE_IDS`, #1058) | default | none — nothing probes the device for a color preference | the stored value; `?dev=1&ownerPalette=` overrides it for one session in `loop.ts`, without writing it |
 | `input.controllerLayouts` | `{}` | logical profile id → `{ preset, bindings }` (#754) | per entry: off-list preset reads `recommended`, malformed ids and unknown actions dropped | none, like touch scheme | the stored value; each gamepad reader resolves it against its pad's profile, refusing unknown controls and clashes |
 
 Every field validates independently, so junk in one never resets a sibling. Touch scheme and

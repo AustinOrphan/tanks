@@ -1044,7 +1044,7 @@ export interface Hud {
    * Settings control only; the stock chips are painted through `setStockPalette`.
    */
   setOwnerPalette(id: OwnerPaletteId): void;
-  /** Fired with the OTHER palette when the player taps the Player colours toggle. */
+  /** Fired with the OTHER palette when the player taps the Player colors toggle. */
   onOwnerPaletteChange(cb: (id: OwnerPaletteId) => void): void;
   /**
    * The player just fired. Pulses the aim mark, so a tap that produced a shot is
@@ -2473,10 +2473,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
                declaring a sixth section is issue #226's call, not this control's. Label
                and hint by renderQualityToggle. -->
           <button class="ui-btn ui-btn--sm hud-quality-toggle" type="button"></button>
-          <!-- Which colours mark whose tank is whose: the ring and team colours together
+          <!-- Which colors mark whose tank is whose: the ring and team colors together
                (issue #1058). Named for what it does, as #586 requires, and read once when a
                match is built, as Quality is. It changes nothing a single player sees, since
-               the colours it picks appear only once two or more player tanks exist. Label
+               the colors it picks appear only once two or more player tanks exist. Label
                and hint by renderOwnerPaletteToggle. -->
           <button class="ui-btn ui-btn--sm hud-owner-palette-toggle" type="button"></button>
         </div>
@@ -6396,17 +6396,17 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   qualityToggleBtn.addEventListener('click', handleQualityToggle);
   qualityToggleBtn.addEventListener('click', blurIfPointer);
 
-  // The Player colours toggle (issue #1058): two states, the owner palettes of
+  // The Player colors toggle (issue #1058): two states, the owner palettes of
   // `presentation/identity.ts`, cycling like the quality toggle above it. The label uses the
-  // palette's own name; the hint says what it looks like, and never names a colour-vision
+  // palette's own name; the hint says what it looks like, and never names a color-vision
   // condition (#586: the control is named for what it does).
   const PALETTE_LABEL: Record<OwnerPaletteId, string> = {
-    classic: `Player colours: ${OWNER_PALETTE_LABELS.classic}`,
-    'high-contrast': `Player colours: ${OWNER_PALETTE_LABELS['high-contrast']}`,
+    classic: `Player colors: ${OWNER_PALETTE_LABELS.classic}`,
+    'high-contrast': `Player colors: ${OWNER_PALETTE_LABELS['high-contrast']}`,
   };
   const PALETTE_HINT: Record<OwnerPaletteId, string> = {
-    classic: 'The original ring and team colours that show which tank is whose.',
-    'high-contrast': 'Lighter ring and team colours that stand out from the arena floor.',
+    classic: 'The original ring and team colors that show which tank is whose.',
+    'high-contrast': 'Lighter ring and team colors that stand out from the arena floor.',
   };
   const NEXT_PALETTE: Record<OwnerPaletteId, OwnerPaletteId> = {
     classic: 'high-contrast',

@@ -70,7 +70,7 @@ describe('resolveEffectiveSettings: audio, UI scale and quality pass through ung
   });
 
   it('passes the owner palette straight through, on any capability set (issue #1058)', () => {
-    // Ungated for quality's reason: nothing probes the device for a colour preference, so
+    // Ungated for quality's reason: nothing probes the device for a color preference, so
     // the player's choice is the only answer. Population: both palettes, spelled out, x
     // both capability sets = 4 combinations.
     for (const ownerPalette of ['classic', 'high-contrast'] as const) {

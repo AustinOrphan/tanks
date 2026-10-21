@@ -115,14 +115,14 @@
       "present": true,
       "visible": true,
       "box": {
-        "x": 710,
+        "x": 714,
         "y": 355,
-        "w": 199,
+        "w": 192,
         "h": 44
       },
-      "text": "Player colours: High contrast",
+      "text": "Player colors: High contrast",
       "aria": {
-        "aria-label": "Player colours: High contrast. Lighter ring and team colours that stand out from the arena floor. Takes effect when the next match starts. Tap to switch to Player colours: Classic."
+        "aria-label": "Player colors: High contrast. Lighter ring and team colors that stand out from the arena floor. Takes effect when the next match starts. Tap to switch to Player colors: Classic."
       },
       "style": {
         "display": "block",

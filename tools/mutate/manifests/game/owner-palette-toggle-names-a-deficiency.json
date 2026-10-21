@@ -1,14 +1,14 @@
 {
   "id": "owner-palette-toggle-names-a-deficiency",
   "file": "src/game/hud.ts",
-  "find": "    'high-contrast': 'Lighter ring and team colours that stand out from the arena floor.',",
-  "replace": "    'high-contrast': 'Colour-blind friendly ring and team colours.',",
+  "find": "    'high-contrast': 'Lighter ring and team colors that stand out from the arena floor.',",
+  "replace": "    'high-contrast': 'Color-blind friendly ring and team colors.',",
   "expect": "killed",
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
-  "why": "The hint names a colour-vision condition, which #586 rules out: the control is named for what it does, so a player does not have to name a condition to find it and a player without one is not told the option is not for them (issue #1058). The wording is the natural one to reach for, which is why the test sweeps every visible and spoken string in both states.",
+  "why": "The hint names a color-vision condition, which #586 rules out: the control is named for what it does, so a player does not have to name a condition to find it and a player without one is not told the option is not for them (issue #1058). The wording is the natural one to reach for, which is why the test sweeps every visible and spoken string in both states.",
   "killedBy": [
-    "hud: the owner-palette toggle (issue #1058) names what it does, never a colour-vision deficiency, in every state"
+    "hud: the owner-palette toggle (issue #1058) names what it does, never a color-vision deficiency, in every state"
   ]
 }

@@ -636,8 +636,8 @@ describe('the owner-palette capture photographs the stored palette (issue #1058)
   }
 
   it('reads High contrast where the default capture reads Classic', () => {
-    expect(textOf(settingsBaseline)).toBe('Player colours: Classic');
-    expect(textOf(ownerPaletteBaseline)).toBe('Player colours: High contrast');
+    expect(textOf(settingsBaseline)).toBe('Player colors: Classic');
+    expect(textOf(ownerPaletteBaseline)).toBe('Player colors: High contrast');
   });
 
   it('differs from the default capture in that control alone', () => {

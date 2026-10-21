@@ -7,8 +7,8 @@
   "tests": [
     "src/game/hud.controls.test.ts"
   ],
-  "why": "The button reads `Player colours: Classic` whatever is stored (issue #1058; modelled on quality-toggle-label-frozen-at-the-default). A player who chose High contrast opens Settings on Classic while their matches correctly draw High contrast, and one tap takes them back to Classic, away from what they chose. The store, the session and the aria-label all keep working, so only the visible text is wrong.",
+  "why": "The button reads `Player colors: Classic` whatever is stored (issue #1058; modelled on quality-toggle-label-frozen-at-the-default). A player who chose High contrast opens Settings on Classic while their matches correctly draw High contrast, and one tap takes them back to Classic, away from what they chose. The store, the session and the aria-label all keep working, so only the visible text is wrong.",
   "killedBy": [
-    "hud: the owner-palette toggle (issue #1058) shows the stored palette, labelled Player colours: Classic and Player colours: High contrast"
+    "hud: the owner-palette toggle (issue #1058) shows the stored palette, labelled Player colors: Classic and Player colors: High contrast"
   ]
 }

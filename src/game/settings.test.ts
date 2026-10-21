@@ -230,7 +230,7 @@ describe('createPlayerSettingsStore: validation', () => {
     expect(store.snapshot().presentation.quality).toBe('low');
 
     // Issue #1058's field: a session indexes `OWNER_PALETTES` with it when a match is built,
-    // so an accepted junk id would hand every owner-colour reader `undefined`.
+    // so an accepted junk id would hand every owner-color reader `undefined`.
     store.setOwnerPalette('high-contrast');
     store.setOwnerPalette('neon' as OwnerPaletteId);
     expect(store.snapshot().presentation.ownerPalette).toBe('high-contrast');
