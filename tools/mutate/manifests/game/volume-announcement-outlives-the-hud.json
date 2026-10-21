@@ -1,0 +1,14 @@
+{
+  "id": "volume-announcement-outlives-the-hud",
+  "file": "src/game/hud.ts",
+  "find": "      if (volumeAnnounceTimer !== null) clearTimeout(volumeAnnounceTimer);\n",
+  "replace": "      // the pending volume announcement is left running\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "Dispose leaves a pending volume announcement running, so a HUD torn down inside the wait writes into the region it discarded: the leak every other HUD timer is cleared against. (Follow-up to issue #918.)",
+  "killedBy": [
+    "what a screen reader hears of the volume (follow-up to issue #918) a pending announcement does not outlive the HUD"
+  ]
+}

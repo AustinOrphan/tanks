@@ -1,0 +1,14 @@
+{
+  "id": "volume-text-skips-a-drag",
+  "file": "src/game/hud.ts",
+  "find": "    paintVolumeText();\n    for (const cb of volumeCbs) cb(v);\n",
+  "replace": "    for (const cb of volumeCbs) cb(v);\n",
+  "tests": [
+    "src/game/hud.controls.test.ts"
+  ],
+  "expect": "killed",
+  "why": "A slider drag moves the level without repainting its percentage, so the focused slider speaks the level from before the drag. (Follow-up to issue #918.)",
+  "killedBy": [
+    "what a screen reader hears of the volume (follow-up to issue #918) the slider speaks its level as a percentage, wherever the level moves"
+  ]
+}
