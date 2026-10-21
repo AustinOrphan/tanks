@@ -1,0 +1,15 @@
+{
+  "id": "stock-mark-paints-its-own-hue",
+  "file": "src/game/hud.ts",
+  "find": "    ? `fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"0.18\" stroke-linejoin=\"round\"`",
+  "replace": "    ? `fill=\"#ff8a1e\" stroke=\"#ff8a1e\" stroke-width=\"0.18\" stroke-linejoin=\"round\"`",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "A held stock mark paints slot 1's Classic hue as a literal instead of `currentColor`, so the mark stays Classic beside a High contrast chip and is dropped to the authored color under forced colors. It takes over the role `stock-marker-glyph-paints-its-own-hue` had for the leading mark, which issue #1023 deleted: the glyph-hue case now reads the `marks` row, the one glyph the strip still draws.",
+  "killedBy": [
+    "hud: stock chips in the session's owner palette (issue #1057) the identity-mark glyph takes its hue from the chip, so it follows the palette too (#778)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) paints in currentColor with no literal colour and no background"
+  ]
+}
