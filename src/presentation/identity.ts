@@ -168,12 +168,13 @@ export interface OwnerPalette {
 
 /**
  * The owner palettes (issue #1056, the data half of #586). The ids live here, free of any
- * renderer, so `game/settings.ts` can name them later the way it names
+ * renderer, so `game/settings.ts` can name them (since issue #1058) the way it names
  * `presentation/quality.ts`'s presets. Issue #1057 threaded them: every owner colour is read
  * through `identityColor`, `teamColor` or `resolveOwnerColor` with a palette passed in, and
- * a session picks the palette once, from the `ownerPalette` dev flag or this default. The
- * palette is an ARGUMENT at every site rather than state held here, so a test that draws in
- * High contrast cannot leave the next file's tests drawing in it too.
+ * a session picks the palette once, from the `ownerPalette` dev flag or else the player's
+ * stored Player colours setting. The palette is an ARGUMENT at every site rather than state
+ * held here, so a test that draws in High contrast cannot leave the next file's tests
+ * drawing in it too.
  */
 export const OWNER_PALETTE_IDS = ['classic', 'high-contrast'] as const;
 export type OwnerPaletteId = (typeof OWNER_PALETTE_IDS)[number];
