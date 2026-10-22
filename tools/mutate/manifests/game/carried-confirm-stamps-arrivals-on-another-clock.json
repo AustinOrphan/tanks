@@ -8,13 +8,11 @@
     "src/game/hud.arrival.test.ts",
     "src/game/route-host.test.ts"
   ],
-  "why": "The arrival must be stamped on the clock input events carry (issue #919). `performance.now()` is that clock in a browser but not in jsdom, where events carry `Date.now()`; stamped on it, every arrival reads as decades before every press, nothing is ever carried, and the guard is inert wherever the clocks differ.",
+  "why": "The arrival must be stamped on the clock input events carry (issue #919). `performance.now()` is that clock in a browser but not in jsdom, where events carry `Date.now()`; stamped on it, every arrival reads as decades before every press, nothing is ever carried, and the guard is inert wherever the clocks differ. Two arrival cases are not named, though they can fail: \"a Space held through the end of a match\" and \"a keydown queued behind an arrival\" fake `Date` alone, so under this mutation the arrival is stamped with the worker's real age, and each passes whenever that age lands between its faked press and its negative control. They failed 15s into the old 150-test `hud.navigation.test.ts`; as the first describe of `hud.arrival.test.ts` the first passed (issue #1093). The unit case, the route-host case and \"an Enter that opens a pane\" fail at any age.",
   "expect": "killed",
   "killedBy": [
     "createCarriedConfirmGuard (issue #919) stamps the arrival on the clock events carry by default, so the two always compare",
     "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) an Enter that opens a pane cannot press its primary with the repeats, keypress or release of that Enter",
-    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a Space held through the end of a match cannot press Retry with its repeats or its release",
-    "hud: arrival lands on the primary action, and a Confirm from the screen before cannot press it (issue #919) a keydown queued behind an arrival cannot press the new primary",
     "createRouteHost: the keystroke that leaves Launch cannot press the Main Menu (issue #919) cancels the keypress of the Enter that dismissed the splash, so Start Campaign is not pressed"
   ]
 }
