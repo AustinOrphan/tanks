@@ -18,10 +18,10 @@
  *  - THE REVERSAL VALUE IS `solid` (`IDENTITY_MARKER_REVERSAL`), named the way `topbar=full`
  *    names the pre-ruling bar. `?dev=1&identityMarker=solid` draws the solid hue-only ring,
  *    which is what every session drew before the ruling, and a stock strip of pips with no
- *    mark: the `marks` row is drawn only under `shape` (issue #1022, `stockRowFor`). No
- *    drawable style could do this: `roof` keeps the solid ring but adds crown blades and a
- *    strip glyph.
- *  - `arcs`, `shape` and `roof` still select themselves by name, in any session.
+ *    mark: the `marks` row is drawn only under `shape` (issue #1022, `stockRowFor`). `shape`,
+ *    the one drawable style, cannot do this.
+ *  - `shape` selects itself by name, in any session. `arcs` and `roof` were deleted (issue
+ *    #1023) and are rejected like any unknown value.
  *
  * FFA ONLY. The ruling's PP1 scope is the FFA ring and strip; team identity (#923) and shell
  * owner identity (#1024) are separate questions. Teams, co-op campaign and single-player
@@ -39,11 +39,12 @@
  *    status carries no stock strip at all.
  *
  * WHY `solid` IS NOT A STYLE. `IDENTITY_MARKER_STYLES` lists what the renderer and the HUD
- * can DRAW, and four tests pin that list. `solid` draws nothing: it resolves to `null` here,
+ * can DRAW, and tests pin that list. `solid` draws nothing: it resolves to `null` here,
  * before `createEntityViews` or `createHud` sees it, so those layers keep `null` as "no
- * marker" and never meet a value they would have to special-case. That matters at the HUD,
- * whose `identityMarkerIcon` draws the `shape` outline for any style that is neither `arcs`
- * nor `roof`.
+ * marker" and never meet a value they would have to special-case. That matters at the
+ * renderer, whose `identityMarkerGeometry` draws the `shape` outline for any non-null style
+ * since issue #1023 left `shape` the one style: a leaked `solid` would draw `shape` on the
+ * ring.
  *
  * In `src/game/` rather than `src/presentation/` because both readers are the flag layer and
  * its wiring (`devflags.ts`, `loop.ts`); `presentation/identity-marker.ts` keeps the drawable

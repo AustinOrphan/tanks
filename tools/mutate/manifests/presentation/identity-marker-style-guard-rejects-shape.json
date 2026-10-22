@@ -1,0 +1,20 @@
+{
+  "id": "identity-marker-style-guard-rejects-shape",
+  "file": "src/presentation/identity-marker.ts",
+  "find": "  return typeof value === 'string' && (IDENTITY_MARKER_STYLES as readonly string[]).includes(value);",
+  "replace": "  return false;",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity-marker.test.ts",
+    "src/render/identity-marker.test.ts",
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/devflags.test.ts"
+  ],
+  "why": "The parse-side guard stops accepting `shape`, so `?dev=1&identityMarker=shape` is dropped to null and the kept rollback lever can no longer name the shipped style. Issue #1023 replaced the loops over IDENTITY_MARKER_STYLES with literal accepts, because a loop over a production list cannot see a member it lost; this is the control those literal accepts answer to.",
+  "killedBy": [
+    "identity markers: the shared per-slot table (issue #778) keeps the style vocabulary to `shape`, and rejects the deleted styles",
+    "identity marker vocabulary (issue #630) offers exactly the shipped style, and rejects anything else",
+    "the identity-marker flag vocabulary (issue #922) accepts every flag value and rejects anything else -- population: 2 values, 9 rejects",
+    "parseDevFlags: identityMarker (issues #630, #922 -- the kept identity-marker lever) accepts `shape`, the one drawable style"
+  ]
+}

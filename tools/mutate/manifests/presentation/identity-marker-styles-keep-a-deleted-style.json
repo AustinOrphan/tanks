@@ -1,0 +1,24 @@
+{
+  "id": "identity-marker-styles-keep-a-deleted-style",
+  "file": "src/presentation/identity-marker.ts",
+  "find": "export const IDENTITY_MARKER_STYLES = ['shape'] as const;",
+  "replace": "export const IDENTITY_MARKER_STYLES = ['arcs', 'shape', 'roof'] as const;",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/identity-marker.test.ts",
+    "src/render/identity-marker.test.ts",
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/devflags.test.ts",
+    "tools/gallery/args.test.ts",
+    "tools/screens/flow.test.ts"
+  ],
+  "why": "The half-revert issue #1023 rules out: the vocabulary lists `arcs` and `roof` again, so `?dev=1&identityMarker=arcs` parses as a style instead of being rejected like any unknown value, and the renderer, which draws the `shape` outline for every non-null style since #1023, draws `shape` under a name that says otherwise. The literal reject lists in the vocabulary, flag and parse cases catch it, and so do the two tool copies of the vocabulary, the gallery CLI and the screens flow allowlist, which no longer carry the two names.",
+  "killedBy": [
+    "identity markers: the shared per-slot table (issue #778) keeps the style vocabulary to `shape`, and rejects the deleted styles",
+    "identity marker vocabulary (issue #630) offers exactly the shipped style, and rejects anything else",
+    "the identity-marker flag vocabulary (issue #922) accepts every flag value and rejects anything else -- population: 2 values, 9 rejects",
+    "parseDevFlags: identityMarker (issues #630, #922 -- the kept identity-marker lever) rejects anything else to null rather than guessing -- population: the 9 forms below",
+    "gallery args pins --identityMarker to the vocabulary the renderer actually owns",
+    "the flow catalogue (issue #815) allowlists only flags the dev-flag registry knows, with the vocabulary it knows"
+  ]
+}

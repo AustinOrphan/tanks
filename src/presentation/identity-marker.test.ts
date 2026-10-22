@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  IDENTITY_MARKER_STYLES, isIdentityMarkerStyle, MARKER_VARIANTS, MARKER_ARC_GAP,
-  markerVariant, markerCount, shapeOutlineFor, polygonAngles,
-  ringMarkerFor, marksTurretRoof, identityMarkerSpin,
+  IDENTITY_MARKER_STYLES, isIdentityMarkerStyle, MARKER_VARIANTS,
+  markerVariant, shapeOutlineFor, polygonAngles, identityMarkerSpin,
 } from './identity-marker';
 
 /**
@@ -26,14 +25,6 @@ describe('identity markers: the shared per-slot table (issue #778)', () => {
       expect(v, `slot ${slot} out of range`).toBeGreaterThanOrEqual(0);
       expect(v, `slot ${slot} out of range`).toBeLessThan(MARKER_VARIANTS);
     }
-  });
-
-  it('counts from one, and the two counting styles count the same', () => {
-    // `arcs` and `roof` both answer "how many", and they were separate `+ 1` expressions
-    // in two functions until this existed: changing one alone broke nothing that failed.
-    expect([0, 1, 2, 3].map(markerCount)).toEqual([1, 2, 3, 4]);
-    expect(markerCount(4), 'the fifth slot wraps to one').toBe(1);
-    for (const slot of [-3, 0, 5]) expect(markerCount(slot)).toBe(markerVariant(slot) + 1);
   });
 
   it('gives the four slots four DIFFERENT outlines -- the property the style exists for', () => {
@@ -75,25 +66,15 @@ describe('identity markers: the shared per-slot table (issue #778)', () => {
     expect(polygonAngles(48, 0), 'the ring tessellates through the same helper').toHaveLength(48);
   });
 
-  it('keeps the arc gap a FRACTION, which is why it works at one arc and at four', () => {
-    // A fixed angle was the alternative and it fails at both ends: at four arcs it eats
-    // most of the ring, at one it is invisible. A fraction of the step is scale-free, so
-    // this asserts the range rather than the value -- 0 is no gap and 1 is no arc.
-    expect(MARKER_ARC_GAP).toBeGreaterThan(0);
-    expect(MARKER_ARC_GAP).toBeLessThan(1);
-  });
-
-  it('keeps the style vocabulary and its surface routing intact', () => {
-    for (const s of IDENTITY_MARKER_STYLES) expect(isIdentityMarkerStyle(s)).toBe(true);
-    for (const s of ['', 'shapes', 'ring', 'none']) expect(isIdentityMarkerStyle(s), s).toBe(false);
-    // The ring styles and the roof style are disjoint, and `null` claims neither -- the
-    // property `marksTurretRoof` exists as its own predicate rather than a negation for.
-    expect([ringMarkerFor('arcs'), ringMarkerFor('shape')]).toEqual(['arcs', 'shape']);
-    expect(ringMarkerFor('roof')).toBeNull();
-    expect(ringMarkerFor(null)).toBeNull();
-    expect(marksTurretRoof('roof')).toBe(true);
-    expect([marksTurretRoof('arcs'), marksTurretRoof('shape'), marksTurretRoof(null)])
-      .toEqual([false, false, false]);
+  it('keeps the style vocabulary to `shape`, and rejects the deleted styles', () => {
+    // Issue #1023 deleted `arcs` and `roof`, so `?dev=1&identityMarker=arcs` is rejected like
+    // any unknown value. Spelled literally on both sides, because a loop over the production
+    // list cannot see a member it has gained or lost.
+    expect([...IDENTITY_MARKER_STYLES]).toEqual(['shape']);
+    expect(isIdentityMarkerStyle('shape')).toBe(true);
+    for (const s of ['arcs', 'roof', '', 'shapes', 'ring', 'none']) {
+      expect(isIdentityMarkerStyle(s), s).toBe(false);
+    }
     expect(identityMarkerSpin(1.23), 'the counter-rotation is the body angle').toBe(1.23);
   });
 });

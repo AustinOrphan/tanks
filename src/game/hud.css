@@ -3742,29 +3742,6 @@
   display: none;
 }
 
-/* ---- Identity mark in the stock strip (issues #778, #922; `?dev=1&identityMarker=`) */
-
-/* Ahead of an FFA entry's pips under an explicit `arcs` or `roof` marker only (issue #1022).
- * Under the shipped `shape` the `marks` row below replaces it, the reversal
- * `?dev=1&identityMarker=solid` draws pips with no mark, and teams entries never get one (they
- * carry the A/B/C letter). Issue #1023 removes it with the two styles that still draw it.
- *
- * STROKE, NEVER `background`, for the same reason stated below and enforced by
- * hud.css.test.ts for every `hud-stock-` rule: forced colours drops a background outright,
- * which is the exact condition a non-colour channel exists to survive. The outline takes
- * `currentColor`, so it inherits the entry's own inline tint in the ordinary case and the
- * UA's replacement text colour under forced colours -- with no rule of its own in either,
- * which is what keeps the single forced-colors block the only one in this file. */
-.hud-stock-marker {
-  display: inline-block;
-  width: 0.85em;
-  height: 0.85em;
-  /* Sits on the label's optical centre rather than its baseline: the label is `P1`,
-   * all cap-height and figures, so a mark aligned to the baseline reads low. */
-  vertical-align: -0.09em;
-  margin-right: 0.28em;
-}
-
 /* ---- Identity-shaped stocks (issue #230's `marks` row, the FFA strip) ----------- */
 
 /* Marks: `pips`, with the dot replaced by this slot's own identity outline (#234's
@@ -3776,8 +3753,8 @@
  * the count matters most. The fill is an SVG attribute on `currentColor`, not a CSS
  * background, so forced colours repaints it instead.
  *
- * The row replaces the leading identity marker (hud.ts draws that only beside pips), so `em`
- * sizing here is measured against an entry with no glyph ahead of its label.
+ * No entry draws a glyph ahead of its label since issue #1023 deleted the leading identity
+ * marker, so `em` sizing here is measured against the label alone.
  *
  * `--hud-mark` and `--hud-mark-gap` default to the full size and are overridden per row on a
  * narrow viewport (issue #1021), where four players at four stocks overflowed a 390px phone.

@@ -10,9 +10,7 @@
   ],
   "why": "Every entry writes its count as text beside the label again, the digit strip #1022 retired, now ahead of the row that already names the count. Assistive technology reads the count twice, and a `textContent` watcher sees digits change while the row it should be reading stays invisible to it -- the false comparison that nearly happened on #230. The count belongs in the row's one name, except beside the single unit of a narrow fallback.",
   "killedBy": [
-    "hud: identity mark in the stock strip (issue #778) adds no second name for the player, and nothing focusable",
     "hud: identity mark in the stock strip (issue #778) draws nothing at all without the flag, and leaves the strip byte-identical",
-    "hud: identity mark in the stock strip (issue #778) leaves TEAMS untouched -- the letter is already that entry second channel",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for a teams entry, and for the reversed marker (issue #1022)",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) names the count once for the row, not once per mark",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) four players at five stocks: ONE full-size mark and the count, and the cue still has a target",

@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 import {
   type IdentityMarkerStyle,
-  MARKER_ARC_GAP,
-  markerCount,
   polygonAngles,
   shapeOutlineFor,
 } from '../presentation/identity-marker';
@@ -10,52 +8,17 @@ import {
 /**
  * The identity marker's GEOMETRY -- the half that needs Three.js. The vocabulary
  * (`IDENTITY_MARKER_STYLES`, `identityMarkerSpin`) lives in
- * `presentation/identity-marker.ts`; see that file for what these markers are for and why
- * one of them is held world-fixed.
+ * `presentation/identity-marker.ts`; see that file for what the marker is for and why it
+ * is held world-fixed.
  */
-
-/**
- * The turret-crown blades: `slot + 1` radial spokes in a flat disc, as ONE geometry.
- *
- * A COUNT, so it needs no counter-rotation -- and that is a genuine simplification over
- * both ring arms, which exist only because a square turned 45 degrees is the diamond.
- * Blades may spin with the turret freely; three blades are three blades at every yaw.
- *
- * Sized against `TURRET_R` (0.36) rather than the ring's radii: inner 0.07, outer 0.32,
- * so the mark sits inside the crown with a margin and never overhangs the dome's edge
- * where the silhouette would clip it. Each blade spans 30 degrees.
- */
-export function identityRoofGeometry(
-  slot: number,
-  inner: number,
-  outer: number,
-): THREE.BufferGeometry {
-  const count = markerCount(slot);
-  // 44 degrees, not 30. The first build used a thin 30-degree wedge and it read as
-  // spindly at the shipped camera -- a hairline scratch on the crown rather than a mark.
-  // A blade is also foreshortened to 0.78 of its width across one axis (sin 51), so the
-  // drawn span has to start wider than it needs to look.
-  //
-  // Why a FIXED span rather than a fraction of the spacing: at four blades the gaps are
-  // already 46 degrees, so a proportional span would close them up as the count rises,
-  // and "how many gaps" is the read. Fixed keeps every gap at least as wide as a blade.
-  const half = (44 * Math.PI) / 180 / 2;
-  const runs = Array.from({ length: count }, (_, k) => {
-    const c = -Math.PI / 2 + (k * 2 * Math.PI) / count;
-    // Seven samples per blade: the wider span needs more of them to stay a sector rather
-    // than flattening into a quad at the edges. Four blades still sit under 120 vertices.
-    return Array.from({ length: 7 }, (_, i) => c - half + (2 * half * i) / 6);
-  });
-  return bandGeometry(runs, inner, outer);
-}
 
 /**
  * An annulus band through the given angles, as one indexed BufferGeometry.
  *
  * `runs` is a list of contiguous angle sequences. One run of 48 samples is a full ring;
- * three runs of a few samples each are three arcs with gaps between them. Each run
+ * three runs of a few samples each would be three arcs with gaps between them. Each run
  * contributes its own quad strip, and all of them share one buffer -- which is what keeps
- * the whole marker a single mesh whatever the style asks for.
+ * the whole marker a single mesh. Every outline the `shape` style draws is one closed run.
  */
 function bandGeometry(runs: readonly (readonly number[])[], inner: number, outer: number): THREE.BufferGeometry {
   const position: number[] = [];
@@ -198,40 +161,17 @@ export function identityMarkerGeometry(
   slot: number,
   // `let`, because the `shape` arm replaces both: each outline needs its own band to render
   // at one perpendicular weight (issue #660), and they share an outer radius of their own
-  // rather than the solid ring's. `arcs` uses the radii as given -- it IS the ring.
+  // rather than the solid ring's.
   inner: number,
   outer: number,
   segments: number,
 ): THREE.BufferGeometry | null {
   if (style === null) return null;
 
-  if (style === 'arcs') {
-    // `variant + 1` arcs, evenly spaced, with a gap that is a fixed FRACTION of each arc
-    // rather than a fixed angle: at four arcs a fixed gap eats most of the ring, and at
-    // one it is invisible. A single arc still carries a gap -- a closed ring and a
-    // nearly-closed one read differently, and "slot 1 is the unbroken one" would be a
-    // rule the player has to be told rather than one they can see.
-    const count = markerCount(slot);
-    const step = (Math.PI * 2) / count;
-    const gap = step * MARKER_ARC_GAP;
-    const perArc = Math.max(2, Math.round(segments / count));
-    const runs = Array.from({ length: count }, (_, k) => {
-      const from = k * step + gap / 2 - Math.PI / 2;
-      const to = (k + 1) * step - gap / 2 - Math.PI / 2;
-      return Array.from({ length: perArc + 1 }, (_, i) => from + ((to - from) * i) / perArc);
-    });
-    return bandGeometry(runs, inner, outer);
-  }
-
-  if (style === 'roof') {
-    // Unreachable: the roof style paints the turret crown, not the ring, and
-    // `makeIdentityRing` is handed `ringMarkerFor(style)` which is null here. Returning
-    // null rather than throwing keeps this function total, and the caller's `?? new
-    // RingGeometry(...)` then produces the shipped ring -- which is exactly what the roof
-    // arm wants underneath its blades.
-    return null;
-  }
-
+  // `shape` is the one style left since issue #1023 deleted `arcs` and `roof`, so any non-null
+  // style draws this outline. That is why the flag layer resolves the reversal value `solid`
+  // to `null` before this module is handed a style (`game/identity-marker-flag.ts`).
+  //
   // `shape`: circle, triangle, square, diamond. The square and the diamond are the SAME
   // polygon 45 degrees apart, which is only a legitimate pair because the marker is held
   // world-fixed (`identityMarkerSpin`). Were it to spin with the hull they would be one

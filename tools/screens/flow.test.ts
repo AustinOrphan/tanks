@@ -198,8 +198,8 @@ describe('flow inputs and the URL they build (issue #815)', () => {
       .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1&enemyRole=both');
     // Two cues at once, which is what issue #773's evidence list asks to see: a role cue and
     // an owner cue on the same board, to judge whether they stay distinct.
-    expect(buildFlowUrl(inputs({ flags: { enemyRole: 'both', identityMarker: 'roof' } })))
-      .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1&enemyRole=both&identityMarker=roof');
+    expect(buildFlowUrl(inputs({ flags: { enemyRole: 'both', identityMarker: 'shape' } })))
+      .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1&enemyRole=both&identityMarker=shape');
     expect(buildFlowUrl(inputs({ flags: { pp1Roles: true, enemyRole: 'flare' } })))
       .toBe('?dev=1&replay=1&level=1&seed=7&autoplay=1&pp1Roles=1&enemyRole=flare');
   });

@@ -49,7 +49,7 @@ import {
   resolveSession,
 } from './app-state';
 import { ENEMY_ROLE_CUES } from '../presentation/enemy-role';
-import { IDENTITY_MARKER_STYLES, shapeOutlineFor } from '../presentation/identity-marker';
+import { shapeOutlineFor } from '../presentation/identity-marker';
 import type {
   CampaignRunSummary,
   GameplayOutcome,
@@ -5255,16 +5255,14 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 
   it('threads the identityMarker dev flag through to the renderer (issue #630)', () => {
-    // The flag is a kept rollback lever (#922), so every style stays selectable by name, here
-    // in a single-player session where nothing is drawn by default. Every style is asserted
-    // rather than one: the wiring that would hand the renderer a hardcoded 'arcs' for any
-    // value passes a single-arm test.
-    for (const style of IDENTITY_MARKER_STYLES) {
-      const h = boot(makeDeps({ devFlags: { identityMarker: style } }));
-      const options = h.rec.rendererArgs[0][4] as { identityMarker?: string | null };
-      expect(options.identityMarker, style).toBe(style);
-      h.handle.dispose();
-    }
+    // The flag is a kept rollback lever (#922), so `shape` stays selectable by name, here in a
+    // single-player session where nothing is drawn by default. A wiring that dropped the value
+    // fails this case; one that handed the renderer a hardcoded 'shape' fails the unflagged
+    // case below.
+    const h = boot(makeDeps({ devFlags: { identityMarker: 'shape' } }));
+    const options = h.rec.rendererArgs[0][4] as { identityMarker?: string | null };
+    expect(options.identityMarker).toBe('shape');
+    h.handle.dispose();
     // ...and an unflagged single-player session still draws the solid ring: the shipped
     // `shape` default is FFA-only.
     const off = boot();
@@ -5350,11 +5348,9 @@ describe('startGameWith: dev flags stay off by default', () => {
       const solid = bootFromPane(FFA, { identityMarker: 'solid' });
       expect(markerOf(solid), 'solid in FFA').toBeNull();
       solid.handle.dispose();
-      for (const style of IDENTITY_MARKER_STYLES) {
-        const h = bootFromPane(TEAMS, { identityMarker: style });
-        expect(markerOf(h), `${style} in teams`).toBe(style);
-        h.handle.dispose();
-      }
+      const named = bootFromPane(TEAMS, { identityMarker: 'shape' });
+      expect(markerOf(named), 'shape in teams').toBe('shape');
+      named.handle.dispose();
     });
   });
 
@@ -7926,8 +7922,8 @@ describe('createBrowserDeps', () => {
       // other test is built with no `identityMarker` and draws pips with no mark, so only this
       // path shows what a production page puts in the stock strip. Since issue #1022 the
       // shipped mark IS the strip: an FFA entry under `shape` draws the `marks` row, one copy
-      // of its slot's outline per stock, and no separate leading mark. Each outline is read as
-      // what it draws -- 'circle', or the polygon's corner count -- per entry.
+      // of its slot's outline per stock. Each outline is read as what it draws -- 'circle', or
+      // the polygon's corner count -- per entry.
       const strip = (search: string, stocks: VersusStock[]) => {
         const deps = withSearch(search, () => createBrowserDeps());
         const root = document.createElement('div');
@@ -7943,7 +7939,6 @@ describe('createBrowserDeps', () => {
                 ? 'circle'
                 : mark.querySelector('polygon')!.getAttribute('points')!.trim().split(/\s+/).length / 2)),
             pips: root.querySelectorAll('.hud-versus-stocks .hud-stock-pip').length,
-            leading: root.querySelectorAll('.hud-versus-stocks .hud-stock-marker').length,
           };
         } finally {
           hud.dispose();
@@ -7957,15 +7952,15 @@ describe('createBrowserDeps', () => {
         const one = outline.kind === 'circle' ? 'circle' : outline.kind === 'polygon' ? outline.sides : outline.points * 2;
         return [one, one, one];
       });
-      expect(strip('', ffa), 'a production page, no ?dev').toEqual({ outlines: want, pips: 0, leading: 0 });
+      expect(strip('', ffa), 'a production page, no ?dev').toEqual({ outlines: want, pips: 0 });
       // NEGATIVE CONTROL: the reversal value draws the same four entries as pips, with no
       // outline anywhere -- so the case above is the flag's doing, not the strip's default.
       expect(strip('?dev=1&identityMarker=solid', ffa), 'the reversal value')
-        .toEqual({ outlines: [[], [], [], []], pips: 12, leading: 0 });
+        .toEqual({ outlines: [[], [], [], []], pips: 12 });
       // Teams entries draw pips and no mark under the shipped default: the HUD's own per-entry
       // rule, which is why the page HUD can resolve without a session mode.
       expect(strip('', [{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]), 'teams')
-        .toEqual({ outlines: [[], []], pips: 6, leading: 0 });
+        .toEqual({ outlines: [[], []], pips: 6 });
     });
 
     it('leaves the URL exactly as it found it', () => {

@@ -1,0 +1,14 @@
+{
+  "id": "gallery-marker-flag-keeps-a-deleted-style",
+  "file": "tools/gallery/args.mjs",
+  "find": "    const styles = ['shape'];",
+  "replace": "    const styles = ['arcs', 'shape', 'roof'];",
+  "expect": "killed",
+  "tests": [
+    "tools/gallery/args.test.ts"
+  ],
+  "why": "The gallery CLI's hardcoded copy of the vocabulary keeps the two styles issue #1023 deleted, so `--identityMarker arcs` builds a capture URL the renderer resolves to the `shape` outline while the frame is labelled as something else. The two-way pin's loop over IDENTITY_MARKER_STYLES cannot see an extra name in the copy, so the literal rejects added beside it are what catch this.",
+  "killedBy": [
+    "gallery args pins --identityMarker to the vocabulary the renderer actually owns"
+  ]
+}

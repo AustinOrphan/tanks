@@ -1,0 +1,17 @@
+{
+  "id": "session-identity-marker-gates-a-named-style-on-ffa",
+  "file": "src/game/identity-marker-flag.ts",
+  "find": "  if (flag !== null) return flag;",
+  "replace": "  if (flag !== null && mode === 'ffa') return flag;",
+  "expect": "killed",
+  "tests": [
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "A named `shape` reaches only FFA sessions, so `?dev=1&identityMarker=shape` in teams, co-op or single-player draws the solid ring the flag was meant to override (issue #922: a named style applies in any session). Before issue #1023 a loop over three styles in four modes pinned this; the cases that replaced it name `shape` literally, and this is their control.",
+  "killedBy": [
+    "sessionIdentityMarker: what a session renderer draws (issue #922) draws `shape`, named, in every mode -- population: 4 modes",
+    "startGameWith: dev flags stay off by default threads the identityMarker dev flag through to the renderer (issue #630)",
+    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws the solid ring in an FFA session for the reversal value, and a named style in any mode"
+  ]
+}

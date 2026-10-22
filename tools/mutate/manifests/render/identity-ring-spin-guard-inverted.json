@@ -1,0 +1,14 @@
+{
+  "id": "identity-ring-spin-guard-inverted",
+  "file": "src/render/entities.ts",
+  "find": "      if (identityMarker !== null && view.ring) {",
+  "replace": "      if (identityMarker === null && view.ring) {",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The counter-rotation `sync` writes goes to the wrong rings: the `shape` marker spins with the hull, so a square turned 45 degrees reads as a diamond, and the shipped solid ring takes a spin it never took before. Issue #1023 rewrote this guard from `ringMarkerFor(identityMarker) !== null` to `identityMarker !== null`, equal only because `shape` is the one style left, and nothing read the written angle off a real view before; the case that does checks both arms.",
+  "killedBy": [
+    "player identity: ring and shell tint holds the `shape` marker still as the hull turns, and leaves the solid ring unturned (issue #1023)"
+  ]
+}

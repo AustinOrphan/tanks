@@ -1,0 +1,14 @@
+{
+  "id": "identity-ring-spin-guard-dropped",
+  "file": "src/render/entities.ts",
+  "find": "      if (identityMarker !== null && view.ring) {",
+  "replace": "      if (view.ring) {",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Every identity ring takes the counter-rotation, including the shipped solid ring with no marker: invisible on screen, since a circle cannot show rotation, which is exactly why only a read of the written angle can see it. It is the control for the spin case's second assertion, which `identity-ring-spin-guard-inverted` never reaches because the case stops at its first failure.",
+  "killedBy": [
+    "player identity: ring and shell tint holds the `shape` marker still as the hull turns, and leaves the solid ring unturned (issue #1023)"
+  ]
+}

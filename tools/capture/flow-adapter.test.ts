@@ -309,10 +309,10 @@ describe('runFlow: the recorder run and the result handed to the runner (issue #
 
 describe('a valued flag reaches the recorder as its value (issues #773, #815)', () => {
   it('passes a switch as its id and a choice as id=value, and an unset flag not at all', () => {
-    const armed = recipe({ variant: { level: 1, driver: 'autoplay', flags: { enemyRole: 'both', identityMarker: 'roof' } } });
+    const armed = recipe({ variant: { level: 1, driver: 'autoplay', flags: { enemyRole: 'both', identityMarker: 'shape' } } });
     const args = buildFlowArguments(armed, 'tmp/x');
     expect(args.filter((a: string, i: number) => args[i - 1] === '--flag'))
-      .toEqual(['enemyRole=both', 'identityMarker=roof']);
+      .toEqual(['enemyRole=both', 'identityMarker=shape']);
     const mixed = recipe({ variant: { level: 1, driver: 'autoplay', flags: { pp1Roles: true, enemyRole: 'flare' } } });
     const mixedArgs = buildFlowArguments(mixed, 'tmp/x');
     expect(mixedArgs.filter((a: string, i: number) => mixedArgs[i - 1] === '--flag'))

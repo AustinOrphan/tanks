@@ -16,22 +16,22 @@
  * twelve has a red-green deficiency, and under forced colours every hue here is replaced
  * outright.
  *
- * `shape` SHIPS AS THE FFA DEFAULT; `arcs` AND `roof` STAY SELECTABLE. Three styles were
- * built and compared behind `?dev=1&identityMarker=`, and the ruling on #234 chose `shape`
- * on still evidence (issue #922). This module still says nothing about defaults: a `null`
- * style here is "no marker", which is what teams, co-op and single-player draw. WHICH
- * sessions get `shape` without asking, and the `solid` value that takes it back off, are
- * the flag layer's (`game/identity-marker-flag.ts`), which resolves both before the
- * renderer or the HUD is handed a style. The `identityMarker` flag is a kept rollback
- * lever, so the other two styles are still drawn when named.
+ * `shape` SHIPS AS THE FFA DEFAULT, AND IT IS THE ONE STYLE. Three styles were built and
+ * compared behind `?dev=1&identityMarker=`, and the ruling on #234 chose `shape` on still
+ * evidence (issue #922). The other two, `arcs` (the ring broken into one arc per slot) and
+ * `roof` (blades on the turret crown), were deleted by issue #1023, and the flag now
+ * rejects their names like any unknown value. This module still says nothing about
+ * defaults: a `null` style here is "no marker", which is what teams, co-op and
+ * single-player draw. WHICH sessions get `shape` without asking, and the `solid` value that
+ * takes it back off, are the flag layer's (`game/identity-marker-flag.ts`), which resolves
+ * both before the renderer or the HUD is handed a style.
  *
- *  - `arcs`  -- the ring broken into (slot + 1) arcs. Counting.
  *  - `shape` -- circle / triangle / square / starburst outline. Recognition. Ships in FFA.
  *
  * WHY THE MARKER IS WORLD-ALIGNED, and the thing a mockup cannot tell you: the ring is
  * parented to the tank's group, and `view.group.rotation.y = -bodyA` is written every
  * frame, so the ring SPINS WITH THE HULL. A circular annulus is rotation-invariant and
- * this has never mattered. It matters enormously to both candidates -- a square turned 45
+ * this has never mattered. It matters enormously to the `shape` style -- a square turned 45
  * degrees IS the diamond, so two of the four shapes would collide the moment a player
  * turned. `identityMarkerSpin` returns the counter-rotation that cancels it; see its own
  * note for the derivation. Applied ONLY when a marker is active, so the shipped default
@@ -39,11 +39,11 @@
  *
  * ONE MESH, NOT SEVERAL. `TankView.ring` is a single `THREE.Mesh`, and
  * `entities.test.ts` counts objects named `identity-ring` expecting exactly one per
- * player at four separate sites. The arc variant therefore merges its runs into ONE
- * BufferGeometry rather than adding sibling meshes -- which is also the cheaper thing to
- * draw, and keeps `disposeObject` correct with no new teardown path.
+ * player at four separate sites. A marker is therefore built as ONE BufferGeometry rather
+ * than as sibling meshes -- which is also the cheaper thing to draw, and keeps
+ * `disposeObject` correct with no new teardown path.
  */
-export const IDENTITY_MARKER_STYLES = ['arcs', 'shape', 'roof'] as const;
+export const IDENTITY_MARKER_STYLES = ['shape'] as const;
 export type IdentityMarkerStyle = (typeof IDENTITY_MARKER_STYLES)[number];
 
 /** Is this a marker style this module builds? The parse-side guard (`asIdentityMarker`). */
@@ -59,39 +59,6 @@ export function isIdentityMarkerStyle(value: unknown): value is IdentityMarkerSt
  * many slots exist would be a second opinion on a question presentation/identity.ts owns.
  */
 export const MARKER_VARIANTS = 4;
-
-/**
- * WHICH SURFACE a style paints, because the third candidate does not use the ring.
- *
- * `arcs` and `shape` reshape the ground ring. `roof` (issue #630, owner's pick to try)
- * leaves the ring exactly as shipped and puts the count on the TURRET CROWN instead --
- * the one flat surface in the arena that nothing occludes. The ground is the largest
- * identity surface there is (mid-radius perimeter ~364-546px against ~21-31px of blade),
- * and that AREA is what the ring arms buy; what the roof buys is that a tread trail, a
- * wreck, a spawn ring, a mine glow or a second tank parked alongside cannot cover it.
- * Which of those matters more is what playing all three answers.
- *
- * Two consequences fall out of the split and both are load-bearing:
- *
- *  - `makeIdentityRing` must keep its exact shipped `RingGeometry` expression under
- *    `roof`, not merely an equivalent one -- the control for the comparison has to be the
- *    shipped rendering.
- *  - The ring's COUNTER-ROTATION must be gated on this, not on "a marker is active".
- *    Spinning a plain annulus is invisible (a circle is rotation-invariant) and would pass
- *    every visual check while making the marker-spin test assert something untrue.
- */
-export function ringMarkerFor(style: IdentityMarkerStyle | null): IdentityMarkerStyle | null {
-  return style === 'arcs' || style === 'shape' ? style : null;
-}
-
-/**
- * Does this style paint the turret crown? Separate from `ringMarkerFor` rather than its
- * negation: a future style could paint both, and `!ringMarkerFor(s)` would quietly claim
- * the roof for every style that ever leaves the ring alone -- including `null`.
- */
-export function marksTurretRoof(style: IdentityMarkerStyle | null): boolean {
-  return style === 'roof';
-}
 
 /**
  * The counter-rotation, in radians, that holds a marker still while its tank turns.
@@ -146,28 +113,6 @@ export type MarkerOutline =
 export function markerVariant(slot: number): number {
   return ((slot % MARKER_VARIANTS) + MARKER_VARIANTS) % MARKER_VARIANTS;
 }
-
-/**
- * How many marks the COUNTING styles draw for a slot: `arcs` breaks the ring into this many
- * arcs, `roof` puts this many blades on the turret crown. One-based, so slot 1 reads as one.
- *
- * Shared because both styles answer the same question and drifted apart once already --
- * they were separate `+ 1` expressions in two functions, and nothing would have failed if
- * one had been changed alone.
- */
-export function markerCount(slot: number): number {
-  return markerVariant(slot) + 1;
-}
-
-/**
- * The gap between two `arcs` runs, as a FRACTION of each run's angular step.
- *
- * A fraction rather than a fixed angle, and the reason is the whole point of the style: at
- * four arcs a fixed gap eats most of the ring, and at one it is invisible. Shared so the
- * arena ring and the HUD glyph break the ring at the same place -- a glyph whose gaps sat
- * elsewhere would still count correctly and still look like a different mark.
- */
-export const MARKER_ARC_GAP = 0.28;
 
 /**
  * The outline the `shape` style gives a slot: circle, triangle, square, starburst.

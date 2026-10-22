@@ -9,7 +9,8 @@ import type { IdentityMarkerStyle } from './identity-marker';
  * Issue #1022: which row draws a stock entry is ONE rule -- `marks` for an entry with no team
  * whose resolved marker is `shape`, `pips` for every other combination -- and this is the table.
  *
- * Population: entry (FFA, teams) x resolved marker (`shape`, `null`, `arcs`, `roof`) = 8 cells.
+ * Population: entry (FFA, teams) x resolved marker (`shape`, `null`) = 4 cells; `arcs` and
+ * `roof` left the table when issue #1023 deleted them, so `shape` is the one non-null marker.
  * `null` is both the reversal value `solid` and a HUD built without the option; the absent flag
  * resolves to `shape` before this rule sees it, so "absent" is a cell only at the HUD seam
  * (`hud.match.test.ts`, which mounts it).
@@ -20,12 +21,8 @@ describe('stock cue: the strip\'s one row rule (issue #1022)', () => {
   const EXPECTED: Record<string, StockRow> = {
     'ffa x shape': 'marks',
     'ffa x null': 'pips',
-    'ffa x arcs': 'pips',
-    'ffa x roof': 'pips',
     'teams x shape': 'pips',
     'teams x null': 'pips',
-    'teams x arcs': 'pips',
-    'teams x roof': 'pips',
   };
   type Rule = (team: number | undefined, marker: IdentityMarkerStyle | null) => StockRow;
   const args = (cell: string): [number | undefined, IdentityMarkerStyle | null] => {
@@ -36,8 +33,8 @@ describe('stock cue: the strip\'s one row rule (issue #1022)', () => {
   const mismatches = (rule: Rule): string[] =>
     Object.entries(EXPECTED).filter(([cell, want]) => rule(...args(cell)) !== want).map(([cell]) => cell);
 
-  it('draws the row the table names in every one of the 8 cells', () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(8);
+  it('draws the row the table names in every one of the 4 cells', () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(4);
     expect(mismatches(stockRowFor)).toEqual([]);
   });
 
