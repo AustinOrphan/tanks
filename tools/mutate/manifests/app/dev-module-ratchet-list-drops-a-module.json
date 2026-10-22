@@ -1,11 +1,16 @@
 {
   "id": "dev-module-ratchet-list-drops-a-module",
   "file": "src/dependency-direction.test.ts",
-  "find": "  'devtools-menu', 'dev-config', 'dev-config-menu', 'dev-actions', 'dev-exports',",
-  "replace": "  'devtools-menu', 'dev-config-menu', 'dev-actions', 'dev-exports',",
+  "find": "  'game/devtools-menu', 'game/dev-config', 'game/dev-config-menu', 'game/dev-actions',",
+  "replace": "  'game/devtools-menu', 'game/dev-config-menu', 'game/dev-actions',",
   "tests": [
     "src/dependency-direction.test.ts"
   ],
-  "expect": "survives",
-  "why": "DISCLOSED SURVIVOR since issue #1015. One developer module falls off the list the #946 ratchet scans, which is how this guard would go quiet in practice: a module renamed, or a name dropped in a merge, leaving a scan that still reports a tidy number for a smaller set. While the pin held non-zero counts, the EXACT comparison caught it: `dev-config` was one hud.ts imported for value, so dropping it moved hud.ts's count off the pin. #1015 removed hud.ts's last developer value edge, so the pin is `{}`, and dropping ANY name leaves the inventory `{}` as well -- there is no edge left whose count could move. `every developer module named in the list still exists` passes, as it must: it asserts that every module STILL LISTED exists and structurally cannot see one that was removed. This is the non-vacuity check the ratchet's header said its non-zero counts supplied, now gone, kept here as executable evidence of it. #1016 replaces the pin with a flat ban and planted-import fixtures, which make a dropped module observable again; that slice flips this entry back to killed. History: RETARGETED for #1012 (it dropped `arena-schematic`, which #1012 removed from the list) and for #1013 (it dropped `controller-selftest`, whose last value edge #1013 removed); #1014 left the find untouched."
+  "expect": "killed",
+  "why": "One developer module falls off the list the #946 ban checks, which is how the ban would go quiet in practice: a module renamed, or a name dropped in a merge, leaving a sweep that still reports a clean tree for a smaller set. The sweep over the real tree passes under it, because nothing ordinary imports `dev-config` for value. The planted fixtures are what see it: the one planting `import { DEV_PRESETS, type DevControl } from './dev-config'` is now reported clean, the coverage test finds a fixture naming a module the list no longer holds, and the real-tree planting in hud.ts (`DEV_PRESETS` from `./dev-config`) no longer fails the sweep. `every developer module named in the list still exists` passes, as it must: it checks every module STILL LISTED and cannot see one that was removed. History: a disclosed survivor from #1015, which emptied the pinned inventory this entry was first written against, until #1016 replaced the pin with the ban and its planted fixtures; RETARGETED for #1012 (it dropped `arena-schematic`, which #1012 removed from the list) and #1013 (it dropped `controller-selftest`), and re-anchored for #1016, which lists modules by path under src/.",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) the ban reports a value import with an inline type modifier, import { value, type T }",
+    "developer modules stay off ordinary paths (issue #946) plants every developer module in a hand-written fixture, and no module off the list",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/hud.ts fails the sweep"
+  ]
 }

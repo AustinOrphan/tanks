@@ -870,129 +870,312 @@ describe('dependency direction: meta-test (the classifier actually fires)', () =
 });
 
 // ---------------------------------------------------------------------------
-// THE DEVELOPER-MODULE RATCHET (issue #946)
+// THE DEVELOPER-MODULE BAN (issues #946, #1016)
 //
-// #946 wants an ordinary production URL to request no developer chunk at all. A chunk is
-// only splittable if nothing on an ordinary path imports it for VALUE, so this counts those
-// imports and pins the count. The number must only ever go DOWN.
+// #946's first criterion: the developer modules are not among the bytes an ordinary URL
+// downloads. A module stays out of those bytes only while nothing an ordinary page loads
+// imports it for VALUE, so no file under src/ that is neither a developer module nor a test
+// may import one for value. Each developer pane's body module loads through a dynamic
+// `import()` when the pane first opens, while `hud.ts` keeps the pane's container, its layer
+// entry, its markup and its open/close order (#965, #1012 to #1015).
 //
-// WHY A PINNED INVENTORY rather than a flat ban: while edges remained, an inventory failed on a
-// NEW edge while recording what the remaining ones waited on, which `toBe(0)` could not do.
-// #946's route out was to load each pane's body-building module on demand, as the gallery
-// workbench's, the controller self-test's, the Developer Tools pane's own controls' and the
-// Configuration menu's now are, while `hud.ts` keeps the pane's container, its layer entry,
-// its markup and its open/close order. No edge remains (issue #1015), so the pin is empty;
-// #1016 replaces it with a flat ban.
+// WHAT THE SCAN SWEEPS. Every specifier comes from the layer scan's own `specifiersOf`, after
+// the same comment strip, and is resolved against the importing file. It names a developer
+// module when the resolved path is on DEV_ONLY_MODULES exactly: a path, not a file name, so a
+// `subjects.ts` in another directory is not banned. Reported, each shape with a planted
+// fixture below:
+//   - a value import (`import { x } from`, a namespace import) and the minified spelling,
+//     `import{x}from"..."`;
+//   - `import { value, type T }`: an inline `type` modifier still loads the module, the same
+//     conservatism the layer scan's header documents;
+//   - a re-export, `export { x } from` or `export * from`;
+//   - a bare side-effect import, `import './dev-x'`;
+//   - `require('./dev-x')`.
+// Free, each with a clean fixture: a LEADING `import type` or `export type`, erased at compile
+// time, and a dynamic `import('./dev-x')`, the lazy seam #946 asks for (`typeof import(...)`
+// in a type is read as the same form). Exempt importers, each with a clean fixture: a
+// developer module, since developer -> developer is not an ordinary path, and a test file.
+//
+// NOT SWEPT: an `import.meta.glob` is not matched against the list (no file outside the tests
+// under src/ used one when this was written). The layer scan's KNOWN LIMITS at the top of this
+// file apply here too, since the two share the comment strip and the extractor.
+//
+// NON-VACUITY. The sweep asserts an empty list over the real tree, which a scan gone blind
+// satisfies just as well. DEV_BAN_FORBIDDEN_FIXTURES are planted imports run through the same
+// function, and every developer module is planted by at least one of them, spelled by hand
+// rather than generated from the list: a module dropped from the list leaves its fixture
+// reported clean, and the coverage test fails on a fixture naming a module the list no longer
+// holds. DEV_BAN_REAL_PLANTINGS run the whole sweep over the real tree with one value import
+// prepended to a real ordinary file, so the sweep's own report is pinned as well.
 //
 // `arena-schematic` is NOT on the list, though it once was (issue #1012): `hud.ts` draws the
 // Versus Setup map cards with it at construction on every page (issue #274), so it is
 // player-facing code that can never leave the ordinary bundle without removing the previews.
 //
-// EXACT equality, not `<=`, and while the pinned counts were non-zero THAT WAS THIS GUARD'S
-// NON-VACUITY CHECK: a regex that went blind, or a developer module renamed out of the list,
-// drove a count to zero and failed here. WITH THE PIN EMPTY (issue #1015) IT IS GONE. The scan
-// below is a text match like the layer scan above, so it can stop matching, and an empty
-// inventory now passes whether nothing imports a developer module or the scan sees nothing;
-// a module dropped from `DEV_ONLY_MODULES` passes too (the mutation entry
-// `dev-module-ratchet-list-drops-a-module` is a disclosed survivor for that reason). The pin
-// test stays in place; #1016 replaces it with a flat ban and planted-import fixtures, which
-// give the scan its non-vacuity check back. The existence check below still catches a rename.
-//
-// TYPE-ONLY IMPORTS ARE FREE and are not counted: `import type { X } from './dev-x'` emits
-// no runtime edge and does not put the module in the bundle. A LEADING `import type` is the
-// only free form -- `import { value, type T }` still pulls the module in and is counted,
-// matching the conservatism the header above documents for the layer scan. A dynamic
-// `import('./dev-x')` is also uncounted, because that lazy seam is what #946 is asking for.
-//
-// SHAPES NOT SWEPT, measured over `src/` excluding tests when this guard was written: a
-// re-export (`export ... from './dev-x'`) would be a value edge and is not matched -- there
-// are 0 of them under src/; a bare `import './dev-x'` is not matched either -- the only bare
-// import under src/ is `./hud.css`. Extend the scan rather than trust the green if one
-// appears.
-//
-// Measured when this guard was written: 11 edges, down from 13. The two that went were
-// `loop.ts` and `route-host.ts` reaching into `dev-diagnostics.ts` for `readBuildIdentity`
-// alone, which moved to `build-identity.ts` because ordinary paths call it. That left
-// `route-host.ts` with no developer value edge at all.
-//
-// Issue #1012 took it from 11 to 7. `loop.ts`'s three went: the gallery workbench's scene
-// modules load when its pane opens, `surfaceName` moved to `app-state.ts`, and
-// `developerExitSearch` to the leaf `dev-params.ts`. `hud.ts`'s edge into `arena-schematic` went
-// off the count with the module's removal from the list (see above), not by a change to
-// `hud.ts`.
-//
-// Issue #1013 took it from 7 to 6: the controller self-test's body loads when its pane first
-// opens, so `hud.ts` names `controller-selftest` only through a leading `import type`.
-//
-// Issue #1014 took it from 6 to 3: the actions, diagnostics and exports behind the Developer
-// Tools pane's own controls load when the pane opens, so `hud.ts` names `dev-actions`,
-// `dev-diagnostics` and `dev-exports` only through leading `import type`s.
-//
-// Issue #1015 took it from 3 to 0: the Configuration menu's three modules load when its pane
-// first opens, so `hud.ts` names them only through leading `import type`s and
-// `typeof import(...)` in a type.
+// HISTORY. Until #1016 this was a pinned per-file inventory of value edges, and its exact
+// non-zero counts were its non-vacuity check. It recorded 13 edges, then 11 (`loop.ts` and
+// `route-host.ts` took `readBuildIdentity` from the new `build-identity.ts`, since ordinary
+// paths call it), 7 (#1012: the gallery scene modules, `surfaceName` to `app-state.ts`,
+// `developerExitSearch` to `dev-params.ts`, and `arena-schematic` off the list), 6 (#1013,
+// the controller self-test), 3 (#1014, the Developer Tools pane's actions, diagnostics and
+// exports) and 0 (#1015, the Configuration menu). An empty pin passes whether nothing imports
+// a developer module or the scan sees nothing, which is why #1016 replaced it with this ban.
 // ---------------------------------------------------------------------------
 
-/** The developer-only modules #946 names, by basename: the developer surface, then gallery. */
+/** The developer-only modules #946 names, by path under src/: the developer surface, then gallery. */
 const DEV_ONLY_MODULES: readonly string[] = [
-  'devtools-menu', 'dev-config', 'dev-config-menu', 'dev-actions', 'dev-exports',
-  'dev-diagnostics', 'controller-selftest',
-  'gallery-workbench', 'gallery-selection', 'gallery-command', 'moments', 'moment-scene',
-  'subjects', 'workbench-scene',
+  'game/devtools-menu', 'game/dev-config', 'game/dev-config-menu', 'game/dev-actions',
+  'game/dev-exports', 'game/dev-diagnostics', 'game/controller-selftest',
+  'game/gallery-workbench', 'game/gallery-selection', 'game/gallery-command',
+  'render/gallery/moments', 'render/gallery/moment-scene', 'render/gallery/subjects',
+  'render/gallery/workbench-scene',
 ];
 
 /**
- * Value edges into that set, per importing file, as they stand. Only ever remove an entry or
- * lower a count here: adding one means an ordinary module started pulling a developer module
- * into the bundle, which is the thing #946 exists to stop.
+ * The developer modules `src` imports for value, by path under src/, one per import. Always
+ * empty for a test file or a developer module: neither is an ordinary path.
  */
-const DEV_VALUE_EDGES: Readonly<Record<string, number>> = {};
+function developerImports(path: string, src: string): string[] {
+  if (isTestFile(path)) return []; // no test is an ordinary path
+  if (DEV_ONLY_MODULES.includes(path.replace(/^\.\/|\.ts$/g, ''))) return []; // developer -> developer
+  const found: string[] = [];
+  for (const spec of specifiersOf(stripComments(src))) {
+    if (spec.typeOnly) continue; // a LEADING `type` is erased at compile time
+    if (spec.form === 'dynamic') continue; // the lazy seam #946 asks for
+    const target = resolveInsideSrc(path, spec.specifier);
+    if (target !== null && DEV_ONLY_MODULES.includes(target)) found.push(target);
+  }
+  return found;
+}
+
+/** One message per value import of a developer module, over a tree of sources keyed by path. */
+function devBanViolations(sources: Readonly<Record<string, string>>): string[] {
+  const out: string[] = [];
+  for (const [path, src] of Object.entries(sources)) {
+    for (const target of developerImports(path, src)) {
+      out.push(`${path}: value import of developer module "${target}"`);
+    }
+  }
+  return out;
+}
+
+/** The real tree the layer sweep reads, keyed by path. */
+function realTree(): Record<string, string> {
+  return Object.fromEntries(files.map((path) => [path, rawModules[path]]));
+}
+
+interface DevBanFixture {
+  rule: string;
+  path: string;
+  src: string;
+}
+
+interface DevBanForbiddenFixture extends DevBanFixture {
+  /** The developer modules the ban must name for this source, one per import. */
+  reports: readonly string[];
+}
+
+// Spelled by hand, like the layer scan's fixtures: a list generated from DEV_ONLY_MODULES
+// would shrink in step with it.
+const DEV_BAN_FORBIDDEN_FIXTURES: DevBanForbiddenFixture[] = [
+  // --- the shapes #1016 names ---
+  {
+    rule: 'a plain value import (the shape #1015 removed from hud.ts)',
+    path: './game/hud.ts',
+    src: `import { devMenuView } from './dev-config-menu';\nexport const x = devMenuView;\n`,
+    reports: ['game/dev-config-menu'],
+  },
+  {
+    rule: 'a value import with an inline type modifier, import { value, type T }',
+    path: './game/hud.ts',
+    src: `import { DEV_PRESETS, type DevControl } from './dev-config';\nexport const x: [unknown, DevControl | null] = [DEV_PRESETS, null];\n`,
+    reports: ['game/dev-config'],
+  },
+  {
+    rule: 'a named re-export',
+    path: './game/route-host.ts',
+    src: `export { diagnosticsReport } from './dev-diagnostics';\n`,
+    reports: ['game/dev-diagnostics'],
+  },
+  {
+    rule: 'a star re-export',
+    path: './game/route-ui.ts',
+    src: `export * from './gallery-selection';\n`,
+    reports: ['game/gallery-selection'],
+  },
+  {
+    rule: 'a bare side-effect import, from the composition root',
+    path: './main.ts',
+    src: `import './game/devtools-menu';\nexport const x = 1;\n`,
+    reports: ['game/devtools-menu'],
+  },
+
+  // --- the other forms the extractor reads ---
+  {
+    rule: 'a CommonJS require',
+    path: './game/route-ui.ts',
+    src: `const m = require('./gallery-workbench');\nexport const x = m;\n`,
+    reports: ['game/gallery-workbench'],
+  },
+  {
+    rule: 'the minified spelling: no spaces, double quotes and an extension',
+    path: './game/loop.ts',
+    src: `import{WORKBENCH_CATALOG}from"../render/gallery/workbench-scene.ts";\nexport const x = WORKBENCH_CATALOG;\n`,
+    reports: ['render/gallery/workbench-scene'],
+  },
+  {
+    rule: 'a namespace import of a gallery module from inside render/',
+    path: './render/renderer.ts',
+    src: `import * as subjects from './gallery/subjects';\nexport const x = subjects;\n`,
+    reports: ['render/gallery/subjects'],
+  },
+  {
+    rule: 'a value import beside a leading import type of the same module (only the value one counts)',
+    path: './game/route-host.ts',
+    src: `import type { SessionDiagnostics } from './dev-diagnostics';\nimport { diagnosticsReport } from './dev-diagnostics';\nexport const x: [unknown, SessionDiagnostics | null] = [diagnosticsReport, null];\n`,
+    reports: ['game/dev-diagnostics'],
+  },
+
+  // --- every other developer module, so each one on the list is planted somewhere ---
+  {
+    rule: 'the other Developer Tools modules, from hud.ts',
+    path: './game/hud.ts',
+    src:
+      `import { DEV_ACTIONS } from './dev-actions';\n` +
+      `import { DIAGNOSTICS_FORMAT } from './dev-exports';\n` +
+      `import { renderControllerSelfTest } from './controller-selftest';\n` +
+      `export const x = [DEV_ACTIONS, DIAGNOSTICS_FORMAT, renderControllerSelfTest];\n`,
+    reports: ['game/dev-actions', 'game/dev-exports', 'game/controller-selftest'],
+  },
+  {
+    rule: 'the other gallery modules, from loop.ts',
+    path: './game/loop.ts',
+    src:
+      `import { galleryCommand } from './gallery-command';\n` +
+      `import { MOMENTS } from '../render/gallery/moments';\n` +
+      `import { buildMomentScene } from '../render/gallery/moment-scene';\n` +
+      `export const x = [galleryCommand, MOMENTS, buildMomentScene];\n`,
+    reports: ['game/gallery-command', 'render/gallery/moments', 'render/gallery/moment-scene'],
+  },
+];
+
+const DEV_BAN_CLEAN_FIXTURES: DevBanFixture[] = [
+  {
+    rule: 'a leading import type (erased at compile time)',
+    path: './game/hud.ts',
+    src: `import type { DevSelection } from './dev-config';\nimport type { DevActionId, DevActionPort } from './dev-actions';\nexport type S = [DevSelection, DevActionId, DevActionPort];\n`,
+  },
+  {
+    rule: 'a leading export type re-export',
+    path: './game/route-host.ts',
+    src: `export type { SessionDiagnostics } from './dev-diagnostics';\n`,
+  },
+  {
+    rule: 'a dynamic import, the lazy seam itself (the shape route-ui.ts opens the gallery with)',
+    path: './game/route-ui.ts',
+    src: `export async function open() {\n  return Promise.all([import('./gallery-workbench'), import('./gallery-selection')]);\n}\n`,
+  },
+  {
+    rule: 'typeof import(...) in a type',
+    path: './game/hud.ts',
+    src: `export type ConfigMenu = typeof import('./dev-config-menu');\n`,
+  },
+  {
+    rule: 'a developer module importing another (not an ordinary path)',
+    path: './game/dev-diagnostics.ts',
+    src: `import { DEV_PRESETS } from './dev-config';\nexport const x = DEV_PRESETS;\n`,
+  },
+  {
+    rule: 'a test file importing a developer module',
+    path: './game/hud.test.ts',
+    src: `import { renderDevConfigMenu } from './devtools-menu';\nexport const x = renderDevConfigMenu;\n`,
+  },
+  {
+    rule: 'comments quoting developer imports',
+    path: './game/hud.ts',
+    src:
+      `// Never \`import { DEV_PRESETS } from './dev-config'\` here: every page would download it.\n` +
+      `/* nor import './devtools-menu' */\n` +
+      `export const x = 1;\n`,
+  },
+  {
+    rule: 'ordinary modules whose names resemble developer ones',
+    path: './game/loop.ts',
+    src:
+      `import { developerExitSearch } from './dev-params';\n` +
+      `import { parseDevFlags } from './devflags';\n` +
+      `import { gallerySearch } from './gallery-link';\n` +
+      `import { arenaSchematic } from './arena-schematic';\n` +
+      `export const x = [developerExitSearch, parseDevFlags, gallerySearch, arenaSchematic];\n`,
+  },
+  {
+    rule: 'a module sharing a developer module\'s file name in another directory',
+    path: './game/loop.ts',
+    src: `import { compose } from '../render/subjects';\nimport { MOMENTS } from './moments';\nexport const x = [compose, MOMENTS];\n`,
+  },
+];
+
+/** One value import prepended to a real ordinary file: the four files #946's map named. */
+const DEV_BAN_REAL_PLANTINGS: ReadonlyArray<{ path: string; line: string; reports: string }> = [
+  { path: './game/hud.ts', line: `import { DEV_PRESETS } from './dev-config';`, reports: 'game/dev-config' },
+  { path: './game/loop.ts', line: `import { WORKBENCH_CATALOG } from '../render/gallery/workbench-scene';`, reports: 'render/gallery/workbench-scene' },
+  { path: './game/route-ui.ts', line: `import { mountGalleryWorkbench } from './gallery-workbench';`, reports: 'game/gallery-workbench' },
+  { path: './game/route-host.ts', line: `import { diagnosticsReport } from './dev-diagnostics';`, reports: 'game/dev-diagnostics' },
+];
 
 describe('developer modules stay off ordinary paths (issue #946)', () => {
-  /** Value imports of a developer module, by importing file. Type-only and dynamic are free. */
-  function devValueEdges(): Record<string, string[]> {
-    const out: Record<string, string[]> = {};
-    for (const path of files) {
-      if (path.endsWith('.test.ts')) continue; // a developer module's own tests are not a path
-      const base = path.split('/').pop()!.replace(/\.ts$/, '');
-      if (DEV_ONLY_MODULES.includes(base)) continue; // developer -> developer is not an edge
-      const code = stripComments(rawModules[path]);
-      for (const target of DEV_ONLY_MODULES) {
-        const re = new RegExp(`import(\\s+type)?\\s[^;]*?from\\s+'[^']*?/?${target}'`, 'g');
-        for (const m of code.matchAll(re)) {
-          if (m[1] !== undefined) continue; // a LEADING `type` carries nothing at runtime
-          (out[path] ??= []).push(target);
-        }
-      }
-    }
-    return out;
-  }
-
-  it('the inventory of developer value edges matches the pin exactly', () => {
-    const found = devValueEdges();
-    const counts: Record<string, number> = {};
-    for (const [file, targets] of Object.entries(found)) counts[file] = targets.length;
-    expect(counts, `edges found:\n${JSON.stringify(found, null, 2)}`).toEqual(DEV_VALUE_EDGES);
-    for (const file of Object.keys(DEV_VALUE_EDGES)) {
-      expect(file in rawModules, `${file} is pinned but no longer exists`).toBe(true);
-    }
+  it('no ordinary file under src/ imports a developer module for value', () => {
+    const violations = devBanViolations(realTree());
+    expect(violations, violations.join('\n')).toEqual([]);
   });
 
   it('every developer module named in the list still exists, so the scan cannot go quiet', () => {
-    // Without this, renaming a developer module would drop its edges from the count silently;
-    // the pin above would then fail for the wrong reason, or -- if the rename took the last
-    // edge -- a future pin of {} would pass for the wrong reason.
-    for (const name of DEV_ONLY_MODULES) {
+    // Without this, renaming a developer module would take it off the ban silently: the list
+    // would name a path nothing resolves to.
+    for (const module of DEV_ONLY_MODULES) {
       expect(
-        files.some((path) => path.endsWith(`/${name}.ts`)),
-        `no file named ${name}.ts -- rename it in DEV_ONLY_MODULES or drop it`,
+        `./${module}.ts` in rawModules,
+        `no file ${module}.ts -- rename it in DEV_ONLY_MODULES or drop it`,
       ).toBe(true);
     }
   });
 
-  it('route-host.ts holds NO developer value edge, which the build-identity split bought', () => {
-    // Stated on its own because it is the property that move was for: `route-host.ts` still
-    // names developer modules, and every one of them is type-only now.
-    expect(devValueEdges()['./game/route-host.ts'] ?? []).toEqual([]);
+  it.each(DEV_BAN_FORBIDDEN_FIXTURES.map((f) => [f.rule, f] as const))('the ban reports %s', (_rule, fixture) => {
+    const found = developerImports(fixture.path, fixture.src);
+    expect([...found].sort(), `the ban reported the planted source as ${JSON.stringify(found)}`).toEqual(
+      [...fixture.reports].sort(),
+    );
   });
+
+  it.each(DEV_BAN_CLEAN_FIXTURES.map((f) => [f.rule, f] as const))('the ban stays quiet for %s', (_rule, fixture) => {
+    expect(developerImports(fixture.path, fixture.src)).toEqual([]);
+  });
+
+  it('plants every developer module in a hand-written fixture, and no module off the list', () => {
+    // Population: the 14 modules on DEV_ONLY_MODULES. Dropping one from the list fails here,
+    // because a fixture still names it, and in that fixture's own case above, which the ban
+    // now reports clean; adding one without a fixture fails the first loop.
+    const planted = new Set(DEV_BAN_FORBIDDEN_FIXTURES.flatMap((f) => f.reports));
+    for (const module of DEV_ONLY_MODULES) {
+      expect(planted.has(module), `no forbidden fixture plants ${module}`).toBe(true);
+    }
+    for (const module of planted) {
+      expect(
+        DEV_ONLY_MODULES.includes(module),
+        `a fixture plants ${module}, which is not on DEV_ONLY_MODULES`,
+      ).toBe(true);
+    }
+  });
+
+  it.each(DEV_BAN_REAL_PLANTINGS.map((p) => [p.path, p] as const))(
+    'a value import planted in the real %s fails the sweep',
+    (_path, planting) => {
+      const tree = realTree();
+      expect(planting.path in tree, `${planting.path} is no longer scanned`).toBe(true);
+      tree[planting.path] = `${planting.line}\n${tree[planting.path]}`;
+      expect(devBanViolations(tree)).toEqual([
+        `${planting.path}: value import of developer module "${planting.reports}"`,
+      ]);
+    },
+  );
 });

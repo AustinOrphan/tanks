@@ -1,0 +1,19 @@
+{
+  "id": "dev-module-ban-route-host-drops-a-type",
+  "file": "src/game/route-host.ts",
+  "find": "import type { SessionDiagnostics } from './dev-diagnostics';",
+  "replace": "import { SessionDiagnostics } from './dev-diagnostics';",
+  "tests": [
+    "src/game/route-host.test.ts",
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) no ordinary file under src/ imports a developer module for value",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/hud.ts fails the sweep",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/loop.ts fails the sweep",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/route-ui.ts fails the sweep",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/route-host.ts fails the sweep"
+  ],
+  "why": "A planted negative control for the #946 ban on a real ordinary file: route-host.ts's type-only import of dev-diagnostics.ts loses its `type`, the edit an auto-import or a hurried merge makes. route-host.ts is the file a dedicated test held to no developer value edge before #1016 replaced it with the flat ban. The ban counts any import without a LEADING `type` as a value edge, so the sweep over the real tree fails naming route-host.ts, and so do the four real-tree planting tests, whose exact report now carries route-host.ts's edge beside the planted one. route-host.test.ts is in scope only so the mutation harness can reach the file, since dependency-direction.test.ts reads it through a raw glob the module graph does not relate; it passes under the mutation."
+}

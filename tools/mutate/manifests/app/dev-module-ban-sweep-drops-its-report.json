@@ -1,0 +1,17 @@
+{
+  "id": "dev-module-ban-sweep-drops-its-report",
+  "file": "src/dependency-direction.test.ts",
+  "find": "      out.push(`${path}: value import of developer module \"${target}\"`);",
+  "replace": "      // the import is found and never reported",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/hud.ts fails the sweep",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/loop.ts fails the sweep",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/route-ui.ts fails the sweep",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/route-host.ts fails the sweep"
+  ],
+  "why": "The sweep over the real tree finds every developer value import and reports none, so it would pass on any tree. The planted fixtures cannot see this, because they call the per-file classifier and not the sweep; the four real-tree plantings run the sweep itself, each with one value import prepended to a real ordinary file, and all four fail. The sweep's own assertion passes under it, which is the point of the entry."
+}
