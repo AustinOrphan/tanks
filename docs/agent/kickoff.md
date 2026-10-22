@@ -135,7 +135,13 @@ Module C's steps, read for this repository:
    that carry neither `human-required` nor `needs-split` against the
    [readiness checklist](task-sizing.md#readiness-labels), and list the ones that pass in
    the status document as proposals, with the evidence. Repeat that only when the set of
-   issues has changed. Add `priority:now` or `agent-ready` only on the owner's instruction.
+   issues has changed. Add `priority:now` only on the owner's instruction, and `agent-ready`
+   only on the owner's instruction or in one case (ruled 2026-10-22): the issue is
+   `priority:next`, its own text names the condition for adding the label (such as
+   "`agent-ready` is added when #N closes"), that condition is met, and the issue passes the
+   readiness checklist. Record the evidence in a comment on the issue when adding the label.
+   The exception never moves a horizon: a `priority:later` issue stays as it is, whatever its
+   text says.
 
 ```sh
 npm run issues:audit                       # metadata errors, then the queue plan (dry run)
