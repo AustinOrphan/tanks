@@ -40,7 +40,8 @@ import { createRequire } from 'node:module';
  *
  * NOT COVERED. A sheet is checked again only when its own rule count changes. A CSSOM edit
  * inside an existing rule (a declaration, a selector, a rule inside `@media`) that gives a
- * focus-state rule a `display` is not seen. No production module edits the CSSOM.
+ * focus-state rule a `display` is not seen, and neither is an `insertRule` and a `deleteRule`
+ * made between two reads, which leave the count unchanged. No production module edits the CSSOM.
  *
  * A test-only module: nothing in production imports it.
  */
