@@ -3,10 +3,10 @@
  * Two of these tests are the named killers of the manifest entries
  * `bot-fires-at-an-opponent-it-cannot-see` and `bot-movement-and-fire-split-again`, and the
  * mutation harness runs whole files. In player-profile.test.ts, 'a competent scripted player
- * against the shipped arenas' simulates 225 whole games (9 shipped arenas x 25 seeds) in its
- * describe body: 54 s of that file's 55 s on one local worker (2026-10-22), for verdicts
- * these tests reach in milliseconds. Neither mutant lengthens those games, so the cost was
- * the suite's own and not a tick cap the mutants run into.
+ * against the shipped arenas' simulates 25 seeded games on every shipped arena in its
+ * describe body, 225 games at 9 arenas: 54 s of that file's 55 s on one local worker
+ * (2026-10-22), for verdicts these tests reach in milliseconds. Neither mutant lengthens
+ * those games, so the cost was the suite's own and not a tick cap the mutants run into.
  *
  * The retreat test and the "wins a meaningful share of games" test named in the comments
  * below are still in player-profile.test.ts.
