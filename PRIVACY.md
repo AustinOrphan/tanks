@@ -4,19 +4,20 @@ title: Privacy Policy
 
 # Privacy Policy
 
-Last updated: 2026-09-17
+Last updated: 2026-10-22
 
 This policy covers the **Tanks!** browser game (the "game" or "app"), published at
 `austinorphan.com/tanks/`.
 
 ## Summary
 
-The game collects **no data**. Nothing leaves your device.
+The game collects **no data**. The website that serves it reports page loads to
+Cloudflare Web Analytics; see "The website that hosts the game" below.
 
 ## Data the game collects
 
-**Nothing.** The game does not send any data over the network &mdash; no analytics,
-no telemetry, no API calls. All game data stays on your device.
+**Nothing.** The game's own code does not send any data over the network &mdash; no
+analytics, no telemetry, no API calls. All game data stays on your device.
 
 ## Data the game stores
 
@@ -70,15 +71,34 @@ No audio files are downloaded from the network.
 **Graphics are PROGRAMMED.** All visuals are generated in real time via the Canvas API.
 No external assets (images, models, textures) are downloaded or included.
 
+## The website that hosts the game
+
+The game is served from `austinorphan.com` through Cloudflare. Like any web host,
+Cloudflare receives the standard details of every request it serves, such as the IP
+address and the browser's user agent.
+
+The site also uses **Cloudflare Web Analytics**. When a browser loads a page, Cloudflare
+adds a script (`static.cloudflareinsights.com/beacon.min.js`) that reports the page view
+and page-load timing to Cloudflare. The game's own code does not include or call this
+script, and blocking it does not affect the game.
+
+According to Cloudflare, Web Analytics does not use cookies or localStorage, does not
+fingerprint visitors, and does not track individuals across websites. Those are
+Cloudflare's statements about its service, not findings of this project. Cloudflare's
+privacy policy governs the data it receives.
+
 ## Third-party services
 
-The game has no third-party integrations. It does not use:
+The game's own code has no third-party integrations. It does not use:
 
 - Analytics or tracking services
 - Advertising networks
 - Social media plugins or buttons
 - External APIs, servers, or CDNs
 - Cookies
+
+The website that serves the game uses Cloudflare for hosting and Web Analytics, as
+described above.
 
 The game does use a few browser APIs that may be worth noting:
 
@@ -89,10 +109,11 @@ The game does use a few browser APIs that may be worth noting:
 
 ## Children's privacy
 
-The game is designed for all ages. No personal information is collected from any
-user, including children. This policy is provided to comply with best practices
+The game is designed for all ages. The game itself collects no personal information
+from any user, including children; what the hosting website's Cloudflare services
+receive is described above. This policy is provided to comply with best practices
 and platform requirements (including the Google Play Developer Policy on app
-privacy), even though no personal data is collected.
+privacy), even though the game collects no personal data.
 
 ## Changes to this policy
 
