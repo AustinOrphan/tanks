@@ -12,7 +12,8 @@ import {
  * carries the case that would read the same under the plausible wrong version: a band edge at
  * the shipped maximum, a median the mean would put outside, exactly half the boards outside,
  * destructibles over 30% of the wall but under 30% of the board, bars that touch only at a
- * corner, an L that has lost its corner cell.
+ * corner, an L that has lost its corner cell, and (issue #1066) a ring whose bounding box is a
+ * mass's.
  */
 
 /** A board from a picture: rows of characters, `#` solid, `x` destructible, letters spawns. */
@@ -154,7 +155,7 @@ describe('the run-length read-back (issue #1029)', () => {
     ]);
     // The corner-less L is one component 8-connected, and its cells all lie on one row and
     // one column of its bounding box -- only its cell count says it is not an L.
-    expect(runLegs(b)).toEqual({ runs: [], arms: [], straight: 0, bent: 0, other: 3 });
+    expect(runLegs(b)).toEqual({ runs: [], arms: [], masses: [], straight: 0, bent: 0, other: 3 });
   });
 
   it('sums the components and summarises the lengths over a sample of boards', () => {
@@ -164,6 +165,39 @@ describe('the run-length read-back (issue #1029)', () => {
     expect(report).toMatchObject({ boards: 2, straight: 2, bent: 1, other: 0 });
     expect(report.runs).toEqual({ n: 3, min: 3, median: 5, max: 7 });
     expect(report.arms).toEqual({ n: 1, min: 2, median: 2, max: 2 });
+  });
+});
+
+describe('the mass read-back (issue #1066)', () => {
+  it('reads a filled rectangle at least three cells each way as a mass, and a hollow ring or a slab two cells thick as other', () => {
+    // A 3x3 module (9 cells), a 3x6 bar (18), a 4x4 ring with no middle (12 of its 16 cells) and a
+    // 6x2 slab (12). The ring's and the slab's bounding boxes are as wide as a mass's; only the
+    // cell count says the ring is hollow, and only the 2-cell side says the slab is not a mass.
+    const b = board([
+      '..................',
+      '.###..###..####...',
+      '.###..###..#..#...',
+      '.###..###..#..#...',
+      '......###..####...',
+      '......###.........',
+      '......###.........',
+      '..................',
+      '.######...........',
+      '.######...........',
+      '..................',
+    ]);
+    const legs = runLegs(b);
+    expect([...legs.masses].sort((a, c) => a - c)).toEqual([9, 18]);
+    expect(legs).toMatchObject({ runs: [], arms: [], straight: 0, bent: 0, other: 2 });
+  });
+
+  it('summarizes the mass sizes over a sample of boards', () => {
+    // One board with a 3x6 bar, a 3x3 module and a straight run; one with a 9x3 bar.
+    const one = board(['..........', '.###..###.', '.###..###.', '.###..###.', '......###.', '......###.', '......###.', '..........', '.#####....', '..........']);
+    const two = board(['...........', '.#########.', '.#########.', '.#########.', '...........']);
+    const report = runLengthReport([one, two]);
+    expect(report.masses).toEqual({ n: 3, min: 9, median: 18, max: 27 });
+    expect(report).toMatchObject({ boards: 2, straight: 1, bent: 0, other: 0 });
   });
 });
 

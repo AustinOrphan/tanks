@@ -1,0 +1,15 @@
+{
+  "id": "mapgen-runs-pieces-one-past-the-retune",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "    pieces = 2,\n",
+  "replace": "    pieces = 3,\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "The default piece count one past the retune: 3 thin pieces a half beside the masses put some boards' thin share over the 0.37 ceiling, so the thin share is no longer a minority on every board. 2 is the largest count with none over on seeds 1-100; the thin ceiling is held by measurement, not by construction, so only the seeded population sees it.",
+  "killedBy": [
+    "runs: masses for cover and thin runs for circulation (issue #1066) puts every default board for seeds 1-100 inside the interior band and at or under the thin ceiling, each with a mass and a thin component",
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+  ]
+}

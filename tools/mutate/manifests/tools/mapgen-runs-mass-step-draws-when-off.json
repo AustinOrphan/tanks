@@ -1,0 +1,16 @@
+{
+  "id": "mapgen-runs-mass-step-draws-when-off",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "  if (masses > 0) {\n",
+  "replace": "  if (masses >= 0) {\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "The mass step runs at `masses: 0`: it places nothing, but its slot shuffle still takes draws, so every thin piece after it moves and `{ masses: 0, pieces: 16 }` is no longer #1029's generator byte for byte -- the issue's control, and the generator both #1029 cause controls run on.",
+  "killedBy": [
+    "runs: masses for cover and thin runs for circulation (issue #1066) with masses off and #1029's 16 pieces, draws seeds 1-100 byte for byte as at #1029's merge",
+    "runs: no wall component below 5 cells (issue #1029) THE CONTROL for cause 1: the old minRun 4, confinement still on, draws a 4-cell straight run",
+    "runs: masses for cover and thin runs for circulation (issue #1066) THE CONTROL: one piece fewer than the half holds moves the digest"
+  ]
+}

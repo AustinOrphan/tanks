@@ -227,6 +227,13 @@ function topology(seed, opts = {}) {
 
 
 /**
+ * The masses `runs` places (issue #1066), as [modules across, modules down] of 3x3 modules: one
+ * module thick, two or three long. The order is part of the draw sequence, since each slot
+ * shuffles a copy of it.
+ */
+const MASS_SHAPES = [[1, 2], [2, 1], [1, 3], [3, 1]];
+
+/**
  * RUNS RULESET: carve the pathways first, then build the cover out of long straight bars and
  * L-bends rather than blocks.
  *
@@ -262,20 +269,59 @@ function topology(seed, opts = {}) {
  *   1. A straight run drawn at `minRun` IS a component of that size, so `minRun` is 5, not 4.
  *   2. `rotate180` copies the first half of the board over the second, so a piece that
  *      crossed the midpoint index kept only its first-half stretch -- a fragment of any size.
- *      `confineToHalf` rejects any piece cell at or past that index in `fits()`. It is a
- *      switch, on by default, only so each cause can be measured alone and the regression
- *      test can control for it; `rotate180` itself is untouched, since four other rulesets
- *      use it.
+ *      `confineToHalf` rejects any piece cell at or past that index in `fits()`, and any mass
+ *      whose far corner is (issue #1066). It is a switch, on by default, only so each cause can
+ *      be measured alone and the regression test can control for it; `rotate180` itself is
+ *      untouched, since four other rulesets use it.
+ *
+ * MASSES FOR COVER (issue #1066), placed before the thin pieces. The thickness ruling on #821
+ * (2026-10-09) chose a mix that mirrors the shipped set: masses for cover, thin runs and L-bends
+ * for circulation, the interior share inside the band the shipped boards span and the thin share
+ * a minority. One-cell-thick pieces alone cannot do either: no cell of a bar has four walled
+ * neighbors, so every board measured interior share 0.000 and thin share 1.000.
+ *   - A mass is a filled bar ONE 3x3 module thick and two or three modules long: 3x6, 6x3, 3x9
+ *     or 9x3 cells, always solid. It is vs-quad-02's vocabulary (whole 3x3 modules on a 3-cell
+ *     lattice) narrowed to the shapes whose interior share lies inside the band by themselves. A
+ *     single module is 1 interior cell of 9 (0.111), which the thin cells dilute under 0.09; a
+ *     2x2-module block is 16 of 36 (0.444), over 0.35 on its own. Solid, because a destructible
+ *     3x9 pair is 54 cells of a board's roughly 123 and alone breaks the 30%-of-wall-mass cap.
+ *   - Slots lie on a 3-cell lattice anchored at the circuit's inner edge, in the half the
+ *     rotation copies, shuffled; each takes the first shape, in a shuffled order, that fits.
+ *   - CLEARANCE IS MEASURED FROM THE MASS'S EDGE, as the `thickness` note in `spines` prescribes:
+ *     the ring one cell outside the rectangle must be floor. On a 3-cell lattice two masses
+ *     either touch or are a whole module apart, so the ring is what makes every lane between
+ *     masses at least 3 cells; clearance from the center line at the mass's half-width reaches
+ *     only its own edge and admits two masses that touch.
+ *   - The thin pieces then go down by the rules above, unchanged, and keep their one-cell gap
+ *     from the masses because the masses are already wall.
+ * IN THE BAND BY CONSTRUCTION, without reading it: no ruleset imports the thickness gate, and
+ * nothing here redraws. A mass's own interior share is 4/18 (0.222) or 7/27 (0.259) and a thin
+ * piece has none, so a board's interior share is at most 0.259. At least 2 masses fit per half
+ * (measured over seeds 1-1000: never fewer), so a board carries at least 72 mass cells with 16
+ * interior, and 2 thin pieces a half of at most 13 cells are at most 52 thin cells, so the share
+ * is at least 16 / 124 (0.129). The thin ceiling of 0.37 is NOT by construction: the same worst
+ * case reads 0.419, and it holds by measurement (no board over it on seeds 1-200; 2 of seeds
+ * 1-1000, 351 and 753). Two checks the thin pieces make are left out because they cannot fire
+ * for a mass, and a check that cannot fire cannot be proved by a failing mutation either. Its
+ * own rotated image: a ring within reach of its own image would have to cover both the board's
+ * center row and its center column, and the spur always protects one of them. The connectivity
+ * revert: a rectangle with a ring of floor around it, and its image with the same, cannot cut
+ * the floor in two. (Measured too: neither fired over seeds 1-1000, with the confinement on or
+ * off and at `laneHalfWidth` 2.)
+ * `{ masses: 0, pieces: 16 }` takes no draw for the masses and is #1029's generator byte for
+ * byte; the default piece count is 2, not 16, because the thin share is a minority only beside
+ * the masses' 72-162 cells (3 pieces put 8 of seeds 1-100 over the ceiling).
  */
 function runs(seed, opts = {}) {
   const {
     board = BOARD,
-    pieces = 16,
+    pieces = 2,
     destructibleShare = 0.22,
     laneHalfWidth = 1,   // 1 -> a 3-cell lane, the comfortable corridor
     minRun = 5,
     maxRun = 8,
     confineToHalf = true,
+    masses = 3,
   } = opts;
   const r = rng(seed);
   const cells = blankCells(board);
@@ -308,7 +354,62 @@ function runs(seed, opts = {}) {
   if (r.next() < 0.5) protect(left, midRow, right, midRow);
   else protect(midCol, top, midCol, bottom);
 
-  // ---- step 2: cover as long runs and L-bends ----
+  // ---- step 2: masses for cover (issue #1066) ----
+  // Bars one 3x3 module thick, on a 3-cell lattice inside the circuit, each with a one-cell ring
+  // of floor around its edge. `masses: 0` skips the step and takes no draw.
+  if (masses > 0) {
+    const MODULE = 3;
+    const origin = inset + laneHalfWidth + 1;
+    const slots = [];
+    for (let rr = origin; rr + MODULE - 1 < board.rows - 1; rr += MODULE) {
+      for (let cc = origin; cc + MODULE - 1 < board.cols - 1; cc += MODULE) {
+        if (rr * board.cols + cc >= (board.rows * board.cols) / 2) continue;
+        slots.push([cc, rr]);
+      }
+    }
+    r.shuffle(slots);
+    /** The ring one cell outside the mass's EDGE holds no wall: every lane between masses is a module. */
+    const clearOfWalls = (c0, r0, c1, r1) => {
+      for (let rr = r0 - 1; rr <= r1 + 1; rr++) {
+        for (let cc = c0 - 1; cc <= c1 + 1; cc++) if (cells[rr][cc] !== '.') return false;
+      }
+      return true;
+    };
+    /**
+     * Bounds first: they keep the ring's indices on the board. On the fixed 33x27 board the
+     * bounds check is defensive and changes no board (seeds 1-1000, confinement on or off): no
+     * slot's rows reach the frame, and a column past it reads as not floor through the ring, so
+     * no mutation can kill it there. It stays, unlike the two checks the header leaves out,
+     * because on a smaller `board` the ring could index a row past the last one and throw.
+     */
+    const massFits = (c0, r0, c1, r1) => {
+      if (c1 >= board.cols - 1 || r1 >= board.rows - 1) return false;
+      // The far corner is the rectangle's last cell in row-major order: inside the half, all of it is.
+      if (confineToHalf && r1 * board.cols + c1 >= (board.rows * board.cols) / 2) return false;
+      for (let rr = r0; rr <= r1; rr++) {
+        for (let cc = c0; cc <= c1; cc++) {
+          if (protectedCells[rr][cc]) return false;
+          if (Math.abs(cc - anchor[0]) <= 3 && Math.abs(rr - anchor[1]) <= 3) return false;
+        }
+      }
+      return clearOfWalls(c0, r0, c1, r1);
+    };
+    let massesPlaced = 0;
+    for (const [cc, rr] of slots) {
+      if (massesPlaced >= masses) break;
+      for (const [w, h] of r.shuffle(MASS_SHAPES.slice())) {
+        const c1 = cc + w * MODULE - 1;
+        const r1 = rr + h * MODULE - 1;
+        if (!massFits(cc, rr, c1, r1)) continue;
+        for (let y = rr; y <= r1; y++) for (let x = cc; x <= c1; x++) cells[y][x] = '#';
+        rotate180(cells);
+        massesPlaced++;
+        break;
+      }
+    }
+  }
+
+  // ---- step 3: cover as long runs and L-bends ----
   // Every piece is ONE CELL THICK. That is deliberate and is what makes it a bar rather than a
   // block: a 1-cell wall is 0.667 wide, so it stops a tank, presents a long flat face to bank
   // off, and costs far less floor than a 2-cell-thick wall of the same length.
@@ -434,10 +535,11 @@ function spines(seed, opts = {}) {
      * two tank widths, a block to circle rather than a line to shoot past.
      *
      * Measured: every one of the 8 shipped boards has an interior share between 0.09 and 0.34,
-     * and `scatter`, `rooms`, `runs` and `spines` at thickness 1 all measure exactly 0.00. (The
-     * two decimals are a record, not a limit: 0.34 would refuse vs-quad-01's 0.3405. The limit
-     * is `INTERIOR_SHARE_MIN` and `INTERIOR_SHARE_MAX` in `thickness-gate.mjs`, 0.09 to 0.35,
-     * issue #1065, which no ruleset reads.)
+     * and `scatter`, `rooms`, `runs` and `spines` at thickness 1 all measured exactly 0.00 when
+     * this was written; `runs` places masses since issue #1066 and no longer does. (The two
+     * decimals are a record, not a limit: 0.34 would refuse vs-quad-01's 0.3405. The limit is
+     * `INTERIOR_SHARE_MIN` and `INTERIOR_SHARE_MAX` in `thickness-gate.mjs`, 0.09 to 0.35, issue
+     * #1065, which no ruleset reads.)
      * At 2 it is still 0.00 -- a two-cell bar has no enclosed cell either -- and at 3 it is
      * 0.25, inside the shipped band, with every gameplay measure also still in band.
      *
@@ -450,8 +552,9 @@ function spines(seed, opts = {}) {
      * failure mode the whole quality tier is supposed to catch and here does not.
      *
      * Doing it properly means changing the SEARCH, not the shape: measure clearance from a
-     * spine's edge rather than its centre line, and place thick spines before thin ones. That
-     * is issue #821's work, and the knob is left here as the evidence for it.
+     * spine's edge rather than its centre line, and place thick spines before thin ones. `runs`
+     * carries that out since issue #1066 (masses first, clearance from their edge); for `spines`
+     * it is still issue #821's work, and the knob is left here as the evidence for it.
      */
     thickness = 1,
   } = opts;
@@ -620,18 +723,26 @@ export const RULESETS = {
   },
   runs: {
     name: 'runs',
-    summary: 'carve a protected circulation circuit first, then cover as 1-cell-thick runs of 5-8 cells and L-bends, each kept inside the half the rotation copies',
-    prediction: 'longer flat faces and a drawn loop: wall fraction toward the shipped floor, a longer longest-sightline than rooms, bottleneck held at the carved lane width, route count at or above 2',
+    summary: 'carve a protected circulation circuit first, then masses one 3x3 module thick for cover, then 1-cell-thick runs of 5-8 cells and L-bends for circulation, each kept inside the half the rotation copies',
+    prediction: 'longer flat faces and a drawn loop: wall fraction toward the shipped floor, a longer longest-sightline than rooms, bottleneck held at the carved lane width, route count at or above 2; with the masses, interior share inside the shipped band and the thin share a minority',
     generate: runs,
     variants: [
+      { label: 'masses=3 pieces=2', opts: {} },
+      // Issue #1029's generator byte for byte: masses off, and the piece count it shipped with.
+      { label: 'masses=0 pieces=16', opts: { masses: 0, pieces: 16 } },
+      // Where the thin share crosses its ceiling beside the masses (issue #1066): 3 is the first
+      // count that puts a board for seeds 1-100 over it. On those seeds the masses leave room for
+      // at most 10 pieces a half, so 10, 16 and 24 draw the same boards.
+      { label: 'pieces=3', opts: { pieces: 3 } },
       { label: 'pieces=10', opts: { pieces: 10 } },
-      { label: 'pieces=16', opts: {} },
+      { label: 'pieces=16', opts: { pieces: 16 } },
       { label: 'pieces=24', opts: { pieces: 24 } },
       { label: 'run=6-12', opts: { minRun: 6, maxRun: 12 } },
       { label: 'lane=5cell', opts: { laneHalfWidth: 2 } },
       // Issue #1029's two causes of a wall component below 5 cells, one at a time: the
-      // pre-#1029 default (neither fixed), each fix alone, and the longer bars without the
-      // confinement. The default row above is both fixed.
+      // pre-#1029 settings (neither fixed), each fix alone, and the longer bars without the
+      // confinement. The default row above is both fixed. Since issue #1066 these rows carry
+      // the masses too, and `confine=off` unconfines the masses with the pieces.
       { label: 'minRun=4 confine=off', opts: { minRun: 4, confineToHalf: false } },
       { label: 'minRun=4', opts: { minRun: 4 } },
       { label: 'confine=off', opts: { confineToHalf: false } },

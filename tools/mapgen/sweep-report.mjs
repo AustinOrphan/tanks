@@ -145,7 +145,8 @@ export function smallBlockReport(boards) {
 }
 
 /**
- * One component's shape: a straight run (`{ run }`), an L (`{ run, arm }`), or null.
+ * One component's shape: a straight run (`{ run }`), an L (`{ run, arm }`), a mass
+ * (`{ mass }`), or null.
  *
  * An L is two one-cell-thick legs meeting at a corner of its bounding box. `runs` draws a
  * straight of `len` cells and turns an arm of `max(2, floor(len / 2)) + 0 or 1` cells off its
@@ -153,6 +154,10 @@ export function smallBlockReport(boards) {
  * more the arm's leg (at most `floor(len / 2) + 2` cells with the corner) is shorter than the
  * straight, or equal to it at `len` 4 alone, which is what lets the longer leg be read back as
  * the drawn straight.
+ *
+ * A mass (issue #1066) is a FILLED rectangle at least 3 cells each way, its size in cells: the
+ * thinnest block that can hold an interior cell. A hollow ring or a slab 2 cells thick is not
+ * one, and neither is two masses that touch, which read as one larger rectangle or as null.
  */
 function legsOf(cells) {
   const cs = cells.map(([c]) => c);
@@ -164,6 +169,7 @@ function legsOf(cells) {
   const w = maxC - minC + 1;
   const h = maxR - minR + 1;
   if (w === 1 || h === 1) return cells.length === w * h ? { run: cells.length } : null;
+  if (w >= 3 && h >= 3 && cells.length === w * h) return { mass: cells.length };
   if (cells.length !== w + h - 1) return null;
   for (const r0 of [minR, maxR]) {
     for (const c0 of [minC, maxC]) {
@@ -175,41 +181,46 @@ function legsOf(cells) {
 
 /**
  * A board's wall components (8-connected, the block target's own connectivity) read back as
- * the pieces `runs` draws: every straight run's length, and every L-arm's.
+ * the pieces `runs` draws: every straight run's length, every L-arm's, and every mass's size in
+ * cells (issue #1066).
  *
  * READ FROM THE BOARD, not from the generator's draw, so it reports what survived placement and
  * the rotation: a fragment the mirror step cut shows up here as the short run it became. Two
- * pieces that touched would read as one `other` component, which `runs`' one-cell gap prevents,
- * so a non-zero `other` on a `runs` board is itself a finding. Each piece appears twice, once
- * per half, which leaves the min, median and max unchanged.
+ * pieces that touched would read as one `other` component (or, two masses side by side, as one
+ * larger mass), which `runs`' one-cell gap and its masses' edge clearance prevent, so a non-zero
+ * `other` on a `runs` board -- a component that is none of the three -- is itself a finding.
+ * Each piece appears twice, once per half, which leaves the min, median and max unchanged.
  *
  * @param {import('./measure').GridBoard} board
  */
 export function runLegs(board) {
   const runs = [];
   const arms = [];
+  const masses = [];
   let straight = 0;
   let bent = 0;
   let other = 0;
   for (const cells of wallComponents(board, 8)) {
     const legs = legsOf(cells);
     if (legs === null) { other++; continue; }
+    if (legs.mass !== undefined) { masses.push(legs.mass); continue; }
     runs.push(legs.run);
     if (legs.arm === undefined) straight++;
     else { bent++; arms.push(legs.arm); }
   }
-  return { runs, arms, straight, bent, other };
+  return { runs, arms, masses, straight, bent, other };
 }
 
 /**
  * `runLegs` over a sample of boards: component counts, and min / median / max of the straight
- * runs (every straight piece, and every L's straight leg) and of the L-arms.
+ * runs (every straight piece, and every L's straight leg), of the L-arms and of the mass sizes.
  *
  * @param {readonly import('./measure').GridBoard[]} boards
  */
 export function runLengthReport(boards) {
   const runs = [];
   const arms = [];
+  const masses = [];
   let straight = 0;
   let bent = 0;
   let other = 0;
@@ -217,6 +228,7 @@ export function runLengthReport(boards) {
     const legs = runLegs(board);
     runs.push(...legs.runs);
     arms.push(...legs.arms);
+    masses.push(...legs.masses);
     straight += legs.straight;
     bent += legs.bent;
     other += legs.other;
@@ -225,7 +237,9 @@ export function runLengthReport(boards) {
     const s = spreadOf(xs);
     return { n: s.n, min: s.min, median: s.median, max: s.max };
   };
-  return { boards: boards.length, straight, bent, other, runs: summary(runs), arms: summary(arms) };
+  return {
+    boards: boards.length, straight, bent, other, runs: summary(runs), arms: summary(arms), masses: summary(masses),
+  };
 }
 
 /** Seeds as a sorted, compact list: `[1, 2, 3, 7]` reads `1-3, 7`, and none reads `none`. */

@@ -1,0 +1,17 @@
+{
+  "id": "mapgen-runs-mass-confinement-dropped",
+  "file": "tools/mapgen/rulesets.mjs",
+  "find": "      if (confineToHalf && r1 * board.cols + c1 >= (board.rows * board.cols) / 2) return false;\n",
+  "replace": "      // the far corner may lie past the midpoint, where rotate180 cuts the mass\n",
+  "expect": "killed",
+  "tests": [
+    "tools/mapgen/runs.test.ts"
+  ],
+  "why": "Issue #1029's confinement is dropped for masses only: a mass whose far corner crosses the midpoint index is cut by `rotate180` to its first-half rows, a slab one or two cells thick that reads as a thin component or as no shape `runs` draws. With no thin pieces at all the cut slabs are still thin, so the masses-only control sees it too.",
+  "killedBy": [
+    "runs: masses for cover and thin runs for circulation (issue #1066) puts every default board for seeds 1-100 inside the interior band and at or under the thin ceiling, each with a mass and a thin component",
+    "runs: masses for cover and thin runs for circulation (issue #1066) THE CONTROL: no thin pieces draws boards with no thin component",
+    "runs: masses for cover and thin runs for circulation (issue #1066) builds every mass one module thick and two or three modules long, and every other wall component a straight run or an L",
+    "runs: destructibles over 30% of the wall mass, listed by seed (issue #1029) lists the default boards over 30% of their wall cells for seeds 1-100, by seed and share"
+  ]
+}

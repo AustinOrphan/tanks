@@ -20,10 +20,11 @@ import { INTERIOR_SHARE_MAX, INTERIOR_SHARE_MIN, THIN_SHARE_CEILING } from './th
  * a two-decimal record of that measurement, not a limit: 0.34 would refuse vs-quad-01's 0.3405.
  * The limit is the thickness gate's band, `INTERIOR_SHARE_MIN` and `INTERIOR_SHARE_MAX` in
  * `thickness-gate.mjs` (0.09 to 0.35 over the 9 boards that ship now, issue #1065).
- * Four of the five generators measured exactly 0.00 -- they were building lines where every
- * authored board builds masses. Three cells is the thinnest run that can have an interior, and
- * three cells is 2.0 world units: two tank widths, a block to circle rather than a line to
- * shoot past.
+ * When this file was written (issue #832, 2026-09-18), four of the five generators measured
+ * exactly 0.00 -- they were building lines where every authored board builds masses. `runs`
+ * places masses before its lines since issue #1066 and no longer does. Three cells is the
+ * thinnest run that can have an interior, and three cells is 2.0 world units: two tank widths, a
+ * block to circle rather than a line to shoot past.
  *
  * WALL MEANS A LEGEND CELL, solid or destructible (issue #1028): `wallCellTest` in `measure.ts`.
  * This file used to count every cell that was not `.`, so each spawn and enemy letter was a
