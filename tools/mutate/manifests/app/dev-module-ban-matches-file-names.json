@@ -1,0 +1,14 @@
+{
+  "id": "dev-module-ban-matches-file-names",
+  "file": "src/dependency-direction.test.ts",
+  "find": "    if (target !== null && DEV_ONLY_MODULES.includes(target)) found.push(target);",
+  "replace": "    if (target !== null && DEV_ONLY_MODULES.some((m) => m.endsWith(`/${target.split('/').pop()}`))) found.push(target);",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) the ban stays quiet for a module sharing a developer module's file name in another directory"
+  ],
+  "why": "The #946 ban matches a developer module by file name rather than by its path under src/, the way the pinned inventory before #1016 listed them. Then a `render/subjects` or a `game/moments` is banned for sharing a name with `render/gallery/subjects` or `render/gallery/moments`. No ordinary file imports such a module today, so the sweep passes; the clean fixture planting both is what fails."
+}

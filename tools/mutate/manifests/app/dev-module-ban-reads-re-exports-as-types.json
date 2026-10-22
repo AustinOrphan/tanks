@@ -1,0 +1,15 @@
+{
+  "id": "dev-module-ban-reads-re-exports-as-types",
+  "file": "src/dependency-direction.test.ts",
+  "find": "    for (const k of head.matchAll(/\\b(?:import|export)(\\s+type)?\\b/g)) typeOnly = k[1] !== undefined;",
+  "replace": "    for (const k of head.matchAll(/\\b(?:import|export)(\\s+type)?\\b/g)) typeOnly = k[1] !== undefined || k[0] === 'export';",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) the ban reports a named re-export",
+    "developer modules stay off ordinary paths (issue #946) the ban reports a star re-export"
+  ],
+  "why": "The shared extractor reads every `export ... from` as type-only, so a re-export of a developer module goes free: the shape the pinned inventory before #1016 did not match, and one that puts the module in the bundle. The #946 ban takes its specifiers from the layer scan's `specifiersOf` rather than a regex of its own, so this is where it would go blind to re-exports. The real tree re-exports no developer module, and the layer scan's fixtures still pass (its re-export fixture is root-absolute, refused before the type check), so the two re-export fixtures of the ban are what fail."
+}

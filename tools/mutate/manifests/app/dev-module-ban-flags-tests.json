@@ -1,0 +1,15 @@
+{
+  "id": "dev-module-ban-flags-tests",
+  "file": "src/dependency-direction.test.ts",
+  "find": "  if (isTestFile(path)) return []; // no test is an ordinary path",
+  "replace": "  // a test is checked like an ordinary file",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) no ordinary file under src/ imports a developer module for value",
+    "developer modules stay off ordinary paths (issue #946) the ban stays quiet for a test file importing a developer module"
+  ],
+  "why": "The #946 ban stops exempting test files, which no page loads. The developer modules' own tests import them for value, and so do the HUD suites that drive the panes, so the sweep over the real tree fails, and so does the clean fixture for a test file."
+}

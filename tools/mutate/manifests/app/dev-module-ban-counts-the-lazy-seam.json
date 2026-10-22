@@ -1,0 +1,16 @@
+{
+  "id": "dev-module-ban-counts-the-lazy-seam",
+  "file": "src/dependency-direction.test.ts",
+  "find": "    if (spec.form === 'dynamic') continue; // the lazy seam #946 asks for",
+  "replace": "    // a dynamic import is reported like a static one",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) no ordinary file under src/ imports a developer module for value",
+    "developer modules stay off ordinary paths (issue #946) the ban stays quiet for a dynamic import, the lazy seam itself (the shape route-ui.ts opens the gallery with)",
+    "developer modules stay off ordinary paths (issue #946) the ban stays quiet for typeof import(...) in a type"
+  ],
+  "why": "The #946 ban reports a dynamic `import()` of a developer module, which is the lazy seam every slice of #946 built: hud.ts, loop.ts and route-ui.ts load the developer modules that way when a pane opens, so the sweep over the real tree fails, and so do the two clean fixtures for a dynamic import and for `typeof import(...)` in a type, which the extractor reads as the same form."
+}

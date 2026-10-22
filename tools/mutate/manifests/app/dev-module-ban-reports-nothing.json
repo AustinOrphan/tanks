@@ -1,0 +1,19 @@
+{
+  "id": "dev-module-ban-reports-nothing",
+  "file": "src/dependency-direction.test.ts",
+  "find": "    if (target !== null && DEV_ONLY_MODULES.includes(target)) found.push(target);",
+  "replace": "    // a developer module the import resolves to is never reported",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) the ban reports a plain value import (the shape #1015 removed from hud.ts)",
+    "developer modules stay off ordinary paths (issue #946) the ban reports a value import with an inline type modifier, import { value, type T }",
+    "developer modules stay off ordinary paths (issue #946) the ban reports a named re-export",
+    "developer modules stay off ordinary paths (issue #946) the ban reports a star re-export",
+    "developer modules stay off ordinary paths (issue #946) the ban reports a bare side-effect import, from the composition root",
+    "developer modules stay off ordinary paths (issue #946) a value import planted in the real ./game/hud.ts fails the sweep"
+  ],
+  "why": "The #946 ban goes blind: every import is extracted and resolved, and none is reported. This is the failure an empty pin could not see, and why #1016 replaced the pinned inventory: the sweep over the real tree passes under it, because the tree has no developer value import to miss. The planted fixtures are the non-vacuity check: the five shapes #1016 names (a plain value import, `import { value, type T }`, both re-export forms and a bare import) are each reported clean, and so is the value import planted at the top of the real hud.ts. The coverage test passes, as it must: it reads the fixtures and the list, not the classifier."
+}

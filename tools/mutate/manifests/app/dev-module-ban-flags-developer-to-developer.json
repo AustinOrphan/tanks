@@ -1,0 +1,15 @@
+{
+  "id": "dev-module-ban-flags-developer-to-developer",
+  "file": "src/dependency-direction.test.ts",
+  "find": "  if (DEV_ONLY_MODULES.includes(path.replace(/^\\.\\/|\\.ts$/g, ''))) return []; // developer -> developer",
+  "replace": "  // a developer module is checked like an ordinary one",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) no ordinary file under src/ imports a developer module for value",
+    "developer modules stay off ordinary paths (issue #946) the ban stays quiet for a developer module importing another (not an ordinary path)"
+  ],
+  "why": "The #946 ban stops exempting developer modules, so one developer module importing another is reported as an ordinary path. It is not one: both load together behind the pane that needs them. The sweep over the real tree fails (dev-diagnostics.ts imports dev-config.ts, and the gallery scene modules import each other), and so does the clean fixture for that edge."
+}

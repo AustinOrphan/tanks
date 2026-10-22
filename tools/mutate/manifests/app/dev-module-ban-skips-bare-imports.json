@@ -1,0 +1,14 @@
+{
+  "id": "dev-module-ban-skips-bare-imports",
+  "file": "src/dependency-direction.test.ts",
+  "find": "    if (spec.form === 'dynamic') continue; // the lazy seam #946 asks for",
+  "replace": "    if (spec.form === 'dynamic' || spec.form === 'side-effect') continue; // the lazy seam #946 asks for",
+  "tests": [
+    "src/dependency-direction.test.ts"
+  ],
+  "expect": "killed",
+  "killedBy": [
+    "developer modules stay off ordinary paths (issue #946) the ban reports a bare side-effect import, from the composition root"
+  ],
+  "why": "The #946 ban stops reporting a bare `import './dev-x'`, the shape the pinned inventory before #1016 did not match. A bare import runs the module and so puts it in the bundle as surely as a named one. The real tree has no bare import of a developer module, so the sweep passes; the bare-import fixture, planted in main.ts, is what fails."
+}
