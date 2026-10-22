@@ -5,7 +5,7 @@
   "replace": "      LAYERS[top.id].close();",
   "expect": "killed",
   "tests": [
-    "src/game/hud.surfaces.test.ts"
+    "src/game/hud.transitions.test.ts"
   ],
   "why": "Restores the shipped defect issue #558 was filed for. Every pane's close is defined as \"return to the Main Menu\" -- it is `closeSurface`, which swaps to `PANEL_SURFACE` -- so replacing one pane with another moved Stats -> Main Menu -> Achievements and the player watched the menu they had already left flash between two panes the layer stack's own doc comment calls siblings. The incoming `open()` drains the outstanding chain before starting its own, so the menu genuinely lands open and is then crossfaded back out. Invisible once settled and invisible under reduced motion, which is why the killer reads the panel MID-transition with no timer advance.",
   "killedBy": [

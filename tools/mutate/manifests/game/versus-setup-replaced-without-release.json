@@ -5,8 +5,7 @@
   "replace": "      /* no release */",
   "expect": "killed",
   "tests": [
-    "src/game/hud.surfaces.test.ts",
-    "src/game/route-host.test.ts"
+    "src/game/hud.transitions.test.ts"
   ],
   "killedBy": [
     "createHud application transition contract closes the versus setup pane when another pane replaces it (issue #785)"
