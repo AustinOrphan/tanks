@@ -4,7 +4,10 @@ import { createHud, type GameplayOutcome, type GameplayStatus, type Hud, SINGLE_
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { TYPED_OUTCOME_KINDS, type TypedOutcome } from './app-state';
 import { ZERO_STATS, type StatCounts } from './stats';
+import { installComputedStyleCache } from './computed-style-cache';
 
+// Keeps `display` across focus moves, which jsdom 30.1.2 recomputes (issue #1093).
+installComputedStyleCache();
 
 let hud: Hud | null = null;
 

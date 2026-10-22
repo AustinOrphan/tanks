@@ -14,6 +14,10 @@ import {
   walkWithPad,
 } from './hud-reachability-fixtures';
 import { ZERO_STATS } from './stats';
+import { installComputedStyleCache } from './computed-style-cache';
+
+// Keeps `display` across focus moves, which jsdom 30.1.2 recomputes (issue #1093).
+installComputedStyleCache();
 
 /**
  * Every pane and every surface, reachable by arrows and by a D-pad (issue #914).

@@ -26,6 +26,10 @@ import type { DetectedPad, GamepadLike } from '../input/gamepad';
 import type { SlotSource } from '../input/assignment';
 import { MODALITY_SWITCH_MS } from './modality';
 import { DEV_CONSOLE_KEY, type DevConsole } from './loop';
+import { installComputedStyleCache } from './computed-style-cache';
+
+// Keeps `display` across focus moves, which jsdom 30.1.2 recomputes (issue #1093).
+installComputedStyleCache();
 
 /**
  * Issue #468's coverage, and the shape of it is the point.

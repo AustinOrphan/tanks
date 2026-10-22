@@ -7,7 +7,10 @@ import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { settingRelevance } from './control-relevance';
 import { NO_CAPABILITIES } from './capabilities';
+import { installComputedStyleCache } from './computed-style-cache';
 
+// Keeps `display` across focus moves, which jsdom 30.1.2 recomputes (issue #1093).
+installComputedStyleCache();
 
 let hud: Hud | null = null;
 

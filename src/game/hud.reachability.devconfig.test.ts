@@ -2,6 +2,10 @@
 import { afterEach, describe } from 'vitest';
 
 import { layerReachCase, unmount, WALKED_IN_OWN_FILE } from './hud-reachability-fixtures';
+import { installComputedStyleCache } from './computed-style-cache';
+
+// Keeps `display` across focus moves, which jsdom 30.1.2 recomputes (issue #1093).
+installComputedStyleCache();
 
 /**
  * The developer-config layer's walk (issue #914), split from `hud.reachability.test.ts` so the
@@ -23,7 +27,9 @@ describe('every HUD layer is reachable by arrows and by a D-pad (issue #914)', (
   // focus change (so `:focus` rules recompute, as in a browser). Each pad Down moves focus, so
   // the next one re-runs the cascade for all ~290 nodes on the control paths -- 0.1 fresh
   // cascades per step became 312, and the walk went from ~1s to ~29s locally and from 2.5s to
-  // 87s in CI's `checks` job.
+  // 87s in CI's `checks` job. Since issue #1093 this file keeps `display` across focus moves
+  // (the install above), and the whole file runs in about 3s locally; the budget stays for a run
+  // without the cache.
   //
   // The real ceiling is the mutation harness, not this number. Vitest judges a synchronous
   // test's budget only when it returns (CI's failing run reported its 30s timeout at 87s), and a

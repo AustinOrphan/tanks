@@ -13,7 +13,10 @@ import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
 import type { TypedOutcome } from './app-state';
 import { ZERO_STATS } from './stats';
+import { installComputedStyleCache } from './computed-style-cache';
 
+// Keeps `display` across focus moves, which jsdom 30.1.2 recomputes (issue #1093).
+installComputedStyleCache();
 
 let hud: Hud | null = null;
 
