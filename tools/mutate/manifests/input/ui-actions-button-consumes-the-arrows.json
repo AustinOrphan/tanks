@@ -5,7 +5,9 @@
   "replace": "  return ADJUSTABLE_KEYS.has(key);",
   "why": "A focused button must NOT keep the arrows: the roving-focus handler asks this rule first, and a button that consumed arrows froze keyboard navigation on the first focused menu button (found as a spinning walk test on 2026-09-02).",
   "tests": [
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.relaunch.test.ts",
+    "src/game/hud.roving.test.ts",
+    "src/game/hud.versus-setup.test.ts",
     "src/input/ui-actions.test.ts"
   ],
   "expect": "killed",

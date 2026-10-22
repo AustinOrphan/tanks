@@ -6,7 +6,9 @@
   "expect": "killed",
   "why": "The issue's 'never accept Start with an inert required slot'. The reasons would still render on the offending card, so the pane would still LOOK like it was refusing -- while Start stayed clickable and launched a match with an unassigned or driverless tank. Computing a refusal and not enforcing it is the failure this pins.",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.roving.test.ts",
+    "src/game/hud.ui-kit.test.ts",
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
     "createHud roving-tabindex focus navigation (issue #115) does not intercept arrow keys while playing, so input.ts still drives the tank",

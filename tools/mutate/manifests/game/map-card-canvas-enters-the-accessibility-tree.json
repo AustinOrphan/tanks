@@ -5,7 +5,7 @@
   "replace": "      canvas.setAttribute('aria-hidden', 'false');",
   "expect": "killed",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
     "the versus map cards (issue #274) keeps the picture and the sentence out of the card's name, and the sentence in its description"

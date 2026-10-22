@@ -4,7 +4,7 @@
   "find": "    panelArrival = { state: panelArrival.state, target };\n    focusInView(target);",
   "replace": "    panelArrival = { state: panelArrival.state, target };\n    target.focus();",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.arrival.test.ts"
   ],
   "why": "The Main Menu arrival's follow places the arrival's focus again (issue #919), so it focuses the way the arrival does: through `focusInView`, never the browser's own focus scroll.",
   "expect": "killed",

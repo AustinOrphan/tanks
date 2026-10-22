@@ -5,7 +5,7 @@
   "replace": "      else if (bottom > scrollTop) parent.scrollTop = bottom - clientHeight;",
   "tests": [
     "src/game/focusable.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.arrival.test.ts"
   ],
   "why": "An arrival scrolls only for a target outside its scroller's view (issue #919). Judging the bottom edge against the top of the view scrolls a pane whose primary is already in view, the 4px move this replaced in another form.",
   "expect": "killed",

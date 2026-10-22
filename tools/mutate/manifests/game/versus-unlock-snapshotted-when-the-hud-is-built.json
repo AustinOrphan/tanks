@@ -5,7 +5,7 @@
   "replace": "  const versusUnlockAtBuild = opts.versusUnlock?.() ?? EVERY_BOARD_UNLOCKED;\n  const versusUnlock = (): BoardUnlock => versusUnlockAtBuild;",
   "expect": "killed",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) shows only the boards this save has unlocked, re-read on every open (issue #983)",

@@ -4,9 +4,11 @@
   "find": "    opts.versusSetup?.set({ ...next });",
   "replace": "    void next;",
   "expect": "killed",
-  "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage. Re-measured at hud.navigation.test.ts once #318's layer cases joined the file: the callback-and-store sweep's negative control expects a role click to write exactly once. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts, hud.roving.test.ts, hud.versus-setup.test.ts.",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts",
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
     "createHud roving-tabindex focus navigation (issue #115) does not intercept arrow keys while playing, so input.ts still drives the tank",

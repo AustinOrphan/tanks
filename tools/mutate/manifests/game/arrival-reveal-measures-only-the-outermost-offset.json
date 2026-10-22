@@ -4,8 +4,7 @@
   "find": "    top += node.offsetTop;",
   "replace": "    top = node.offsetTop;",
   "tests": [
-    "src/game/focusable.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/focusable.test.ts"
   ],
   "why": "A control's position in its scroller is the sum of the offsets up the offset-parent chain (issue #919). Keeping only the outermost puts Start where its sticky bar is, and a control in a positioned card where the card is.",
   "expect": "killed",

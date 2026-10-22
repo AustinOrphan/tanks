@@ -4,8 +4,7 @@
   "find": "    top += parent.clientTop;\n    node = parent;",
   "replace": "    node = parent;",
   "tests": [
-    "src/game/focusable.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/focusable.test.ts"
   ],
   "why": "An offset is measured from its offset parent's padding edge, so each parent's top border lies between it and the next offset (issue #919); dropping it leaves a bordered card's control that many pixels short of the view's edge.",
   "expect": "killed",

@@ -5,8 +5,8 @@
   "replace": "  if (false) {",
   "expect": "killed",
   "tests": [
-    "src/game/versus-config.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.versus-setup.test.ts",
+    "src/game/versus-config.test.ts"
   ],
   "killedBy": [
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) an axis change drops a held board the save no longer unlocks, and says only that it is gone (issue #983)",

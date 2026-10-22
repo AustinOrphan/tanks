@@ -5,7 +5,7 @@
   "replace": "    if (false) setVersusConfig({ ...versusConfigState, arenaId: retained.arenaId });",
   "expect": "killed",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) drops a selected board that a progress reset locked, on the next open, seeded or not (issue #983)"

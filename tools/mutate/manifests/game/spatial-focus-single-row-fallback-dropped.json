@@ -6,6 +6,9 @@
   "why": "With one row (every rect empty under jsdom, or a genuinely single-row pane) Up and Down would wrap onto the same row and land on the focused control: a dead end, and the pre-#495 keyboard walk that closes over every control would spin.",
   "tests": [
     "src/game/hud.navigation.test.ts",
+    "src/game/hud.relaunch.test.ts",
+    "src/game/hud.roving.test.ts",
+    "src/game/hud.versus-setup.test.ts",
     "src/game/spatial-focus.test.ts"
   ],
   "expect": "killed",

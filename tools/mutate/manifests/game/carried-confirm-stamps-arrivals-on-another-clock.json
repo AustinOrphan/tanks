@@ -5,7 +5,7 @@
   "replace": "const eventClock = (): number => performance.now();",
   "tests": [
     "src/game/carried-confirm.test.ts",
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.arrival.test.ts",
     "src/game/route-host.test.ts"
   ],
   "why": "The arrival must be stamped on the clock input events carry (issue #919). `performance.now()` is that clock in a browser but not in jsdom, where events carry `Date.now()`; stamped on it, every arrival reads as decades before every press, nothing is ever carried, and the guard is inert wherever the clocks differ.",

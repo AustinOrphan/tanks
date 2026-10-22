@@ -5,7 +5,7 @@
   "replace": "    if (row) {",
   "why": "Every candidate joins the first row, so geometry collapses to document order: Right walks off the end of a segmented row and Down never reaches the next card. This is the mutation issue #495's acceptance names -- a model that is really DOM order must be killed.",
   "tests": [
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts",
     "src/game/spatial-focus.test.ts"
   ],
   "expect": "killed",

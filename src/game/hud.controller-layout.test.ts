@@ -155,7 +155,7 @@ describe('the controller layout pane (issue #754)', () => {
   });
 
   it('the arrow keys reach the preset, every row, Reset and Back in order, from the container', () => {
-    // Keyboard reach is the pane's own to prove: `hud.navigation.test.ts`'s walk stops at the
+    // Keyboard reach is the pane's own to prove: `hud.roving.test.ts`'s walk stops at the
     // openers on the Main Menu, so a row that stopped being focusable would fail no test there.
     const { hud: h, root } = mount();
     openLayout(root);

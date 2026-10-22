@@ -5,7 +5,7 @@
   "replace": "      primary: NO_PRIMARY,",
   "tests": [
     "src/game/hud.reachability.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.roving.test.ts"
   ],
   "why": "Level Select's action is picking a level, so its arrival lands on the first one (issue #919; the spec's \"select an unlocked mission and Start Practice directly\").",
   "expect": "killed",

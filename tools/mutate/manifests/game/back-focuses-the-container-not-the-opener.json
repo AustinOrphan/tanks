@@ -4,10 +4,11 @@
   "find": "    if (isHiddenWithin(opener, el)) return;\n    opener.focus();",
   "replace": "    if (isHiddenWithin(opener, el)) return;\n    void opener;",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts"
   ],
   "expect": "killed",
-  "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. hud.navigation.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "why": "Back leaves focus on the destination container, the pre-#318 behaviour: a keyboard player loses their place on every Back and has to arrow down from the top of the menu again. hud.navigation.test.ts (244): the roving walk and the hotkey-liveness case (both re-stated for #318), the Controllers-from-Pause, `hud.back()` and pointer-Back cases, both Escape cases and both mirror cases -- every case that ends on a restored opener. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts, hud.roving.test.ts.",
   "killedBy": [
     "createHud roving-tabindex focus navigation (issue #115) Back returns focus to the control that opened the subpanel, and the menu hotkeys stay alive there (issue #318)",
     "createHud roving-tabindex focus navigation (issue #115) reaches every visible, enabled control from the title screen using arrow keys alone",

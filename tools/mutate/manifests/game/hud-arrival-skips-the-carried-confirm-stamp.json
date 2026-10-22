@@ -4,7 +4,7 @@
   "find": "    carriedConfirm.arrive(graceMs);\n    const target = arrivalTarget(container, primary);",
   "replace": "    const target = arrivalTarget(container, primary);",
   "tests": [
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.arrival.test.ts",
     "src/game/route-host.test.ts"
   ],
   "why": "Every arrival stamps the carried-Confirm guard before it moves focus (issue #919). Without the stamp the guard never learns a screen changed, so a held or same-keystroke Enter presses the primary the arrival just focused.",

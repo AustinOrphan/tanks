@@ -7,6 +7,9 @@
   "why": "A button, slider or select keeps only the keys it operates on; consuming every key makes M, P and Escape vanish with a slider or a button focused.",
   "tests": [
     "src/game/hud.navigation.test.ts",
+    "src/game/hud.relaunch.test.ts",
+    "src/game/hud.roving.test.ts",
+    "src/game/hud.versus-setup.test.ts",
     "src/input/input.test.ts",
     "src/input/ui-actions.test.ts"
   ],
