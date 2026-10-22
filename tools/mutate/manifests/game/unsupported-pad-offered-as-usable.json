@@ -5,7 +5,7 @@
   "replace": "        if (false) {\n",
   "expect": "killed",
   "tests": [
-    "src/game/hud.controls.test.ts"
+    "src/game/hud.controller-panel.test.ts"
   ],
   "why": "Issue #597. The Controllers pane offers a pad Tanks cannot read as an ordinary, enabled candidate again, as it did before: no 'not supported' label, no pointer at the reason, and a reassign listener that assigns a slot the reader samples as neutral every tick. Killed by the disabled-candidate case and the cannot-be-chosen case. ANCHOR REPOINTED (issue #556): the controller label helpers moved from `createHud`'s closure to `src/game/controller-labels.ts`, taking the live pad list as a parameter instead of reading `currentDetectedPads` from scope. The mutation is unchanged in meaning; only where the line lives, and its indentation, moved. Re-pointed when the Controllers pane moved to `controllers-pane.ts` (issue #556). The body is unchanged; `currentDetectedPads` became the local `pads`, because the list is now the host's and reaches this renderer as a value rather than a closure read.",
   "killedBy": [

@@ -26,7 +26,7 @@
  *     surface's content is unconditional now, so the exclusion that spares the title
  *     screen guards every build rather than a flag nobody sets.
  *
- * These run with FAKE TIMERS for the reason `hud.surfaces.test.ts`'s transition suite
+ * These run with FAKE TIMERS for the reason `hud.transitions.test.ts`'s transition suite
  * states: `hud.ts` imports `./hud.css` and vitest is configured with `css: true`, so the
  * stylesheet is live in this jsdom document and every transition here is genuinely
  * deferred. Measured before these were written, not assumed -- the `fade-long` timing

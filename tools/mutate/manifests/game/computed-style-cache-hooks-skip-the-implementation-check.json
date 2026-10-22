@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-hooks-skip-the-implementation-check",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "  if (typeof impl !== 'object' || impl === null) {\n    throw renamed('implForWrapper(document) returned no implementation object');\n  }\n",
+  "replace": "  // a missing implementation goes unnamed\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Drops the named check on what `implForWrapper(document)` returns. jsdom returns null for a wrapper another copy of jsdom made, which is how a second jsdom in node_modules would show; without the check that surfaces as a TypeError about `_clearStyleCache`.",
+  "killedBy": [
+    "computed-style-cache: the jsdom internals it hooks throws naming a document implementation when a jsdom upgrade drops it"
+  ]
+}

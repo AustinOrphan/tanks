@@ -8,10 +8,11 @@ import { arrivalTarget, focusableControls, focusInView } from './focusable';
  * (issue #556).
  *
  * The rest of this module is covered where it always was. Measured by mutation against
- * `hud.navigation.test.ts`, `hud.surfaces.test.ts` and `hud.controls.test.ts`: making
- * `isHiddenWithin` ignore ancestors fails 3 cases, keeping disabled buttons fails 2, keeping
- * hidden ones fails 8, removing `captureFocus`'s no-op fails 1, and dropping its same-row
- * fallback fails 1. Re-testing any of those here would duplicate a real test with a fixture.
+ * `hud.navigation.test.ts` (split since, issue #1093, into the files its header names),
+ * `hud.surfaces.test.ts` and `hud.controls.test.ts`: making `isHiddenWithin` ignore ancestors
+ * fails 3 cases, keeping disabled buttons fails 2, keeping hidden ones fails 8, removing
+ * `captureFocus`'s no-op fails 1, and dropping its same-row fallback fails 1. Re-testing any of
+ * those here would duplicate a real test with a fixture.
  *
  * The negative-`tabindex` filter is different: **nothing in the HUD carries one**, which the
  * line's own comment says ("none today, but future-proof"), so no panel can exercise it and the

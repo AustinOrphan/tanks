@@ -5,7 +5,7 @@
   "replace": "      primary: NO_PRIMARY,",
   "tests": [
     "src/game/hud.reachability.test.ts",
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.versus-setup.test.ts",
     "src/game/route-host.test.ts"
   ],
   "why": "Versus Setup arrives on Start (issue #919), which is what makes the spec's first VS match three confirmations -- Launch, Versus, Start -- rather than five.",

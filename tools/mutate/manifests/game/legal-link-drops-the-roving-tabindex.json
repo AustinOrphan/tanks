@@ -5,8 +5,8 @@
   "replace": "    a.tabIndex = -1;",
   "expect": "killed",
   "tests": [
-    "src/game/legal.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.roving.test.ts",
+    "src/game/legal.test.ts"
   ],
   "killedBy": [
     "the outbound legal links is a link, opens safely, and says so in its name",

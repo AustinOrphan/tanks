@@ -4,7 +4,8 @@
   "find": "    'main-menu': () => [continueBtn, newGameBtn],",
   "replace": "    'main-menu': () => [newGameBtn, continueBtn],",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.arrival.test.ts",
+    "src/game/hud.roving.test.ts"
   ],
   "why": "With a run, the Main Menu arrives on Continue Campaign (issue #919; the spec's Campaign action). Listing New Game first would land a returning player on Start New Campaign, the tertiary label for replacing their run.",
   "expect": "killed",

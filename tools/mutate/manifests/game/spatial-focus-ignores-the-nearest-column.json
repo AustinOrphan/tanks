@@ -5,7 +5,7 @@
   "replace": "    if (false) {\n      best = cand;\n      bestDist = d;\n    }",
   "why": "Up and Down must land on the control whose centre is nearest, not the row's first: a bot card's difficulty column reached by Down from the card above is the case.",
   "tests": [
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts",
     "src/game/spatial-focus.test.ts"
   ],
   "expect": "killed",

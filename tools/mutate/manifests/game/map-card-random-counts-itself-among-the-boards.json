@@ -5,7 +5,7 @@
   "replace": "        const eligible = choices.length;",
   "expect": "killed",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
     "the versus map cards (issue #274) tells Random how many boards it will draw from, counting the row and not the catalog"

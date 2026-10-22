@@ -5,7 +5,7 @@
   "replace": "    for (const cb of versusSetupCloseCbs) cb();",
   "expect": "killed",
   "tests": [
-    "src/game/hud.surfaces.test.ts",
+    "src/game/hud.transitions.test.ts",
     "src/game/route-host.test.ts"
   ],
   "killedBy": [

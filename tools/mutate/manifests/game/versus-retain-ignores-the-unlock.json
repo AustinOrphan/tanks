@@ -5,8 +5,8 @@
   "replace": "  if (versusMapChoices(players, mode, entries).includes(arenaId)) {",
   "expect": "killed",
   "tests": [
-    "src/game/versus-config.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.versus-setup.test.ts",
+    "src/game/versus-config.test.ts"
   ],
   "killedBy": [
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) drops a selected board that a progress reset locked, on the next open, seeded or not (issue #983)",

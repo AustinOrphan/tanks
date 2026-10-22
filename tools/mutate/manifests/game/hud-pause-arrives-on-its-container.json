@@ -5,7 +5,7 @@
   "replace": "    paused: () => [],",
   "tests": [
     "src/game/hud.reachability.test.ts",
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts",
     "src/game/route-host.test.ts"
   ],
   "why": "Pause arrives on Resume (issue #919; the spec's \"Resume is the default and one Confirm returns to play\"). `hud.reachability.test.ts` was dropped from this scope under jsdom 30.1.2, when its developer-config walk took 87s on a CI shard and the three files' mutated run passed the harness's 180s kill; it is back since that walk moved to `hud.reachability.devconfig.test.ts`.",

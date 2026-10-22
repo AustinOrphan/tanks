@@ -4,7 +4,7 @@
   "find": "    graceMs = 0,\n  ): HTMLElement {",
   "replace": "    graceMs = 250,\n  ): HTMLElement {",
   "tests": [
-    "src/game/hud.navigation.test.ts",
+    "src/game/hud.arrival.test.ts",
     "src/game/route-host.test.ts"
   ],
   "why": "A layer opens because the player asked for it, so its arrival carries no reaction window (issue #919): a fresh press on Level Select or Versus Setup is meant for it and must be taken at once.",

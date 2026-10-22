@@ -4,11 +4,14 @@
   "find": "    LAYERS[popped.id].close();\n    setState(popped.origin);",
   "replace": "    LAYERS[popped.id].close();\n    setState('main-menu');",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.versus-setup.test.ts"
   ],
   "expect": "killed",
-  "why": "Back re-renders the Main Menu whatever surface the layer was opened over -- the pre-#318 hard-code, restored. Controllers opened from Pause returns to the title and abandons the paused round on screen while the state machine still says paused; Versus Setup opened over Pause does the same. hud.navigation.test.ts (244): the Controllers-from-Pause case under \"navigation layers\", whose Back must re-render the paused panel. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts.",
+  "why": "Back re-renders the Main Menu whatever surface the layer was opened over -- the pre-#318 hard-code, restored. Controllers opened from Pause returns to the title and abandons the paused round on screen while the state machine still says paused; Versus Setup opened over Pause does the same. hud.navigation.test.ts (244): the Controllers-from-Pause case under \"navigation layers\", whose Back must re-render the paused panel. Pinned by name since the hud suite was split (issue #511); its killers live in hud.navigation.test.ts, hud.versus-setup.test.ts. The Controllers-from-Pause case named above, and its Escape twin, were not pinned until issue #1093, when scoping each entry to its pinned killers would otherwise have dropped the file they are in.",
   "killedBy": [
+    "hud: Escape is Back while a layer is open (issue #318) Escape with Controllers open over Pause returns to Pause and fires onControllersClose exactly once; a second Escape is not consumed",
+    "hud: navigation layers -- origin, Back and focus restoration (issue #318) Controllers opened from PAUSED returns to paused, focuses the Controllers button, and the narrowed pause hotkey accepts that target",
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) Back hides the pane and returns to the surface it was opened OVER: paused when opened there, title from the title (issue #318)"
   ]
 }

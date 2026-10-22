@@ -4,7 +4,7 @@
   "find": "    focusInView(target);\n    for (const cb of arrivalCbs) cb(graceMs);",
   "replace": "    target.focus({ preventScroll: true });\n    for (const cb of arrivalCbs) cb(graceMs);",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.arrival.test.ts"
   ],
   "why": "Turning the browser's focus scroll off is half of the arrival's focus (issue #919); without `focusInView`'s own scroll, a primary out of its pane's view takes focus where the player cannot see it.",
   "expect": "killed",

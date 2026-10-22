@@ -4,8 +4,7 @@
   "find": "      if (top < scrollTop) parent.scrollTop = top;",
   "replace": "      if (top < scrollTop) parent.scrollTop = scrollTop;",
   "tests": [
-    "src/game/focusable.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/focusable.test.ts"
   ],
   "why": "A scroller left scrolled down holds its primary above the view, and with the browser's focus scroll turned off (issue #919) only this brings it back into view.",
   "expect": "killed",

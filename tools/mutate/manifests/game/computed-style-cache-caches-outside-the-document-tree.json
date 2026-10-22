@@ -1,0 +1,16 @@
+{
+  "id": "computed-style-cache-caches-outside-the-document-tree",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "    if (pseudo || el.getRootNode() !== document) {\n",
+  "replace": "    if (pseudo) {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Caches elements outside this document's tree. jsdom clears nothing for a detached element's changes, so only its next focus clear makes a fresh read right; an element of another document is cleared by that document's `_clearStyleCache`, which this cache does not hook; and a shadow root's sheets are not in `document.styleSheets`, so the focus-state guard never reads its `:focus-within` rule. Each case reads a value the cache would hold stale.",
+  "killedBy": [
+    "computed-style-cache: reads it never caches passes a detached element through, so a focus move cannot strand its value",
+    "computed-style-cache: reads it never caches passes an element in a shadow root through, whose sheets the guard never reads",
+    "computed-style-cache: reads it never caches passes an element of another document through, whose clears this cache does not count"
+  ]
+}

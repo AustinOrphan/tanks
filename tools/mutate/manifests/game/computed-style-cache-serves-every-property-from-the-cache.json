@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-serves-every-property-from-the-cache",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "        if (key === 'display') return display;\n",
+  "replace": "        if (typeof key === 'string') return display;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Serves the cached value for every property of a hit rather than `display` alone. hud.css's `:focus`, `:focus-visible`, `:hover` and `:active` rules change other properties, and focus moves no longer empty the cache, so a hit must read everything but `display` fresh. The `:focus` color case reads `color` and `getPropertyValue('color')` through a hit after a focus move.",
+  "killedBy": [
+    "computed-style-cache: what a hit returns reads every property but display fresh, so a :focus color shows after a focus move"
+  ]
+}

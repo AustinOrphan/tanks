@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-hooks-skip-the-implforwrapper-check",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "  if (typeof implForWrapper !== 'function') {\n    throw renamed('jsdom/lib/generated/idl/utils.js exports no implForWrapper');\n  }\n",
+  "replace": "  // a missing implForWrapper goes unnamed\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Drops the named check on jsdom's `implForWrapper`, so a jsdom upgrade that moves it fails every opted-in file with a bare TypeError rather than a message saying which internal moved and where the cache is.",
+  "killedBy": [
+    "computed-style-cache: the jsdom internals it hooks throws naming implForWrapper when a jsdom upgrade drops it"
+  ]
+}

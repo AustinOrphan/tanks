@@ -5,8 +5,7 @@
   "replace": "      const began = pressedAt.get(key);",
   "tests": [
     "src/game/carried-confirm.test.ts",
-    "src/game/hud.navigation.test.ts",
-    "src/game/route-host.test.ts"
+    "src/game/hud.arrival.test.ts"
   ],
   "why": "The guard judges a press by when its first keydown was stamped (issue #919). Never recording it makes every press look unseen, so every Enter and Space is cancelled: the keyboard could no longer press any menu button at all.",
   "expect": "killed",

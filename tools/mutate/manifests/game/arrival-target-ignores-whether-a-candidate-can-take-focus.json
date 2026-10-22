@@ -5,7 +5,7 @@
   "replace": "  return primary[0] ?? container;",
   "tests": [
     "src/game/focusable.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.arrival.test.ts"
   ],
   "why": "An arrival lands on the first declared primary that can take focus right now (issue #919). Taking the first regardless puts focus on a hidden Retry, a disabled Start or a hidden Continue, where no keyboard or pad position is visible and Confirm does nothing the player can see.",
   "expect": "killed",

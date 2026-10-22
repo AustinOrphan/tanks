@@ -2,7 +2,7 @@
 //
 // Customize's three choice rows (issue #556), driven directly. What `hud.ts` hands the module is
 // three empty containers, so that is the whole fixture. The pane around them -- opening, closing,
-// focus, the live preview -- is `hud.controls.test.ts`'s, through `createHud`.
+// focus, the live preview -- is `hud.paint-shop.test.ts`'s, through `createHud`.
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   renderCustomizeChoices,

@@ -5,7 +5,7 @@
   "replace": "\n",
   "expect": "killed",
   "tests": [
-    "src/game/hud.controls.test.ts"
+    "src/game/hud.controller-panel.test.ts"
   ],
   "why": "Issue #597. A slot already bound to a pad Tanks cannot read shows that pad as its current source with no 'not supported' suffix, which is exactly how a working pad reads. The pad is present, so the disconnected suffix does not fire either. Killed by the assigned-unsupported-pad case. ANCHOR REPOINTED (issue #556): the controller label helpers moved from `createHud`'s closure to `src/game/controller-labels.ts`, taking the live pad list as a parameter instead of reading `currentDetectedPads` from scope. The mutation is unchanged in meaning; only where the line lives, and its indentation, moved. Re-pointed when the Controllers pane moved to `controllers-pane.ts` (issue #556). The body is unchanged; `currentDetectedPads` became the local `pads`, because the list is now the host's and reaches this renderer as a value rather than a closure read.",
   "killedBy": [

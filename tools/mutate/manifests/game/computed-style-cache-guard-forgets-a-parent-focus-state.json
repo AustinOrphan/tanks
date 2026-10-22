@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-guard-forgets-a-parent-focus-state",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "      if ('cssRules' in rule) walk((rule as CSSGroupingRule).cssRules, focusState);\n",
+  "replace": "      if ('cssRules' in rule) walk((rule as CSSGroupingRule).cssRules, underFocusState);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Descends with the state the parent inherited rather than its own, so `.a:focus { .b { display: none } }` reads as a plain `& .b` rule. A nested rule's selector never repeats its parent's state, which is why the state is carried down.",
+  "killedBy": [
+    "computed-style-cache: the focus-state guard reports display set under a rule nested under a focus-state rule"
+  ]
+}

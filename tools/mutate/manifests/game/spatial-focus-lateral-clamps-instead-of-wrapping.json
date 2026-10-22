@@ -6,6 +6,7 @@
   "why": "Right at the end of a row must wrap to its start (issue #495: 'row wrap at the ends and no dead ends'); clamping leaves the player stuck on the last option.",
   "tests": [
     "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts",
     "src/game/spatial-focus.test.ts"
   ],
   "expect": "killed",

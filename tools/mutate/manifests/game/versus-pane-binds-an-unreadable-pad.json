@@ -5,7 +5,7 @@
   "replace": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));\n",
   "expect": "killed",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.versus-setup.test.ts"
   ],
   "why": "Issue #713. The Versus Setup pane resolves devices without the unreadable-pad verdict, so its device column names a pad the Controllers pane marks not supported, and Start stays enabled for a slot that would be bound to it. Seeding (loop.ts) skips that pad, so what the pane displayed would not be what launched -- the divergence issue #260 exists to prevent.",
   "killedBy": [

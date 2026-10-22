@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-install-skips-the-guard",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "  guardSheets();\n\n  let generation = 0;\n",
+  "replace": "  // the sheets present at install go unchecked\n\n  let generation = 0;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "The install stops checking the sheets already in the document, which for an opted-in HUD file is hud.css, loaded by its imports before the install runs. Until jsdom next clears its cache, a focus-state `display` rule would then serve stale hits.",
+  "killedBy": [
+    "computed-style-cache: the focus-state guard the install refuses a sheet with a focus-state display rule, naming it"
+  ]
+}

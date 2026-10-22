@@ -6,6 +6,7 @@
   "why": "Each control becomes its own row, so Left and Right wrap onto the focused control itself and never move along the segment.",
   "tests": [
     "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts",
     "src/game/spatial-focus.test.ts"
   ],
   "expect": "killed",

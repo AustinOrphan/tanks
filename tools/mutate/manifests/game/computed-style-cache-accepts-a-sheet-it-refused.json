@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-accepts-a-sheet-it-refused",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "      guardSheets();\n      cache = new WeakMap();\n      cachedGeneration = generation;\n",
+  "replace": "      cachedGeneration = generation;\n      guardSheets();\n      cache = new WeakMap();\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Marks the generation as seen before the guard runs, so the read that refuses a sheet is the only one that does, and every read after it serves the cache with the refused sheet in place. A test that catches the first throw would then read on with a stale-prone cache.",
+  "killedBy": [
+    "computed-style-cache: the focus-state guard a sheet added after the install is refused at the next read, and at every read after"
+  ]
+}

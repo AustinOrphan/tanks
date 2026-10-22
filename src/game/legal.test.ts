@@ -235,7 +235,7 @@ describe('the outbound legal links', () => {
     // a player cannot tell the control leaves the app; a missing `rel` hands the new tab a
     // live `window.opener` back into the game; a missing `tabindex` drops the link out of
     // `focusableControls`' `'button, [tabindex]'` selector, so a gamepad can never reach it
-    // (see hud.navigation.test.ts's control count, measured at 83 without it); and a name that
+    // (see hud.roving.test.ts's control count, measured at 83 without it); and a name that
     // omits "Opens a new tab" leaves the one thing `target="_blank"` does not reliably
     // announce unsaid.
     const container = document.createElement('div');

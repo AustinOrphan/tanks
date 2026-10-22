@@ -6,7 +6,7 @@
   "expect": "killed",
   "tests": [
     "src/game/hud.navigation.test.ts",
-    "src/game/hud.surfaces.test.ts"
+    "src/game/hud.transitions.test.ts"
   ],
   "why": "The same leak as the entry above, reached one layer down: the replace path still calls `release()` and the row still exists, but the row does nothing. Worth its own entry because the two are fixed in different places -- a correct replace branch over an empty release row is exactly as leaky as no release at all, and reads more correct. Killed by the pre-existing navigation case as well as the transition one: both drive Customize then `showVersusSetup`, and both read the close count, so an empty row shows up as zero in either. SCOPED TO BOTH FILES deliberately: the leak is asserted in two places -- the navigation case counts the close callback over the gesture, and the transition case reads the same gesture's surfaces -- and naming a killer in a file the entry does not run is a mismatch rather than a claim. Re-pointed in issue #556: the release body moved into `customize-pane.ts` with the rest of the pane, and `hud.ts`'s `LAYERS.customize` row now calls it.",
   "killedBy": [

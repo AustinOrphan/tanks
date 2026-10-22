@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-guard-ignores-all",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "        if (focusState && (setsDisplay || setsAll)) selectors.push(rule.selectorText);\n",
+  "replace": "        if (focusState && setsDisplay) selectors.push(rule.selectorText);\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Stops counting `all` as setting `display`. `all: unset` (or `initial`, `revert`) under a focus state resets `display` as surely as naming it.",
+  "killedBy": [
+    "computed-style-cache: the focus-state guard reports display set under all, which resets display"
+  ]
+}

@@ -11,7 +11,7 @@ import { createCarriedConfirmGuard } from './carried-confirm';
  * that reads a variable, so every "before" and "after" below is a number on the page rather
  * than an accident of how fast the test ran. What the browser then does with a cancelled event
  * is not modelled here: `defaultPrevented` is the whole contract, because the activation it
- * cancels is the browser's own (`hud.ts` never claims Enter or Space). `hud.navigation.test.ts`
+ * cancels is the browser's own (`hud.ts` never claims Enter or Space). `hud.arrival.test.ts`
  * drives the same guard through a real HUD, and the visual gate presses real keys.
  *
  * Enter and Space are each spelled out, never read from `ui-actions.ts`: a key dropped from that

@@ -4,7 +4,8 @@
   "find": "    if (consumesKey(e.target, e.key)) return;\n    const action = keyToUiAction(e.key);",
   "replace": "    const action = keyToUiAction(e.key);",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.navigation.test.ts",
+    "src/game/hud.roving.test.ts"
   ],
   "why": "Without the consume rule the roving focus takes ArrowDown away from a focused volume slider, which is the key the slider exists to consume.",
   "expect": "killed",

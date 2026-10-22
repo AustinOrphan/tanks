@@ -6,7 +6,8 @@
   "expect": "killed",
   "why": "Issue #321's rule is that a disabled control's reason is ASSOCIATED, not merely nearby. The sentence would still be on screen for a sighted player while a screen-reader user hears only that Start is disabled. Nothing about the visible rendering changes, so only an aria-describedby assertion can catch it.",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.ui-kit.test.ts",
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one",

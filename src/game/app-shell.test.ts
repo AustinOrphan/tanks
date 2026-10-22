@@ -261,7 +261,7 @@ describe('createBrowserAppShell: the one real probe on the page (issue #470)', (
 describe('createBrowserDeps: leaving developer mode (issue #243)', () => {
   // THE COMPOSITION, which neither half proves on its own. `developerExitSearch` is unit
   // tested in dev-config.test.ts and the HUD is proven to call its injected seam exactly
-  // once in hud.navigation.test.ts -- but only this wiring decides WHICH function the seam
+  // once in hud.developer-mode.test.ts -- but only this wiring decides WHICH function the seam
   // is bound to, and the wrong one (`canonicalDevSearch`, which keeps every flag) would
   // satisfy both of those tests while leaving developer mode on after Exit.
   //

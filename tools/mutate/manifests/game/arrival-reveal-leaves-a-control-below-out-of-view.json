@@ -5,7 +5,7 @@
   "replace": "      return;",
   "tests": [
     "src/game/focusable.test.ts",
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.arrival.test.ts"
   ],
   "why": "With the browser's focus scroll turned off (issue #919), nothing else brings a primary below the view into it: focus would land on a control the player cannot see.",
   "expect": "killed",

@@ -5,7 +5,7 @@
   "replace": "      ? \"Tanks can't read its buttons in this browser.\"\n",
   "expect": "killed",
   "tests": [
-    "src/game/hud.controls.test.ts"
+    "src/game/hud.controller-panel.test.ts"
   ],
   "why": "Issue #597. Every unsupported pad gets the unknown-mapping sentence, including one whose profile matched but which lacks the controls it needs. That player is told the browser cannot read the pad, when the real fix is a pad with more buttons or sticks. Killed by the insufficient-controls case. ANCHOR REPOINTED (issue #556): the controller label helpers moved from `createHud`'s closure to `src/game/controller-labels.ts`, taking the live pad list as a parameter instead of reading `currentDetectedPads` from scope. The mutation is unchanged in meaning; only where the line lives, and its indentation, moved.",
   "killedBy": [

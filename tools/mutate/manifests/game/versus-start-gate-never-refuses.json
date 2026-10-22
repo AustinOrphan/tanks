@@ -4,13 +4,12 @@
   "find": "    versusStartBtn.disabled = problem !== null;",
   "replace": "    versusStartBtn.disabled = false;",
   "expect": "killed",
-  "why": "The issue's 'never accept Start with an inert required slot'. The reasons would still render on the offending card, so the pane would still LOOK like it was refusing -- while Start stayed clickable and launched a match with an unassigned or driverless tank. Computing a refusal and not enforcing it is the failure this pins.",
+  "why": "The issue's 'never accept Start with an inert required slot'. The reasons would still render on the offending card, so the pane would still LOOK like it was refusing -- while Start stayed clickable and launched a match with an unassigned or driverless tank. Computing a refusal and not enforcing it is the failure this pins. Two roving-tabindex cases it named until issue #1093 are not killers: in the 150-test `hud.navigation.test.ts` they failed only because \"works with no store at all\" fails under this mutation before its own `dispose`, and the HUD it leaves listening on `window` took later key presses in that file (measured the same with the display cache and without). Split into `hud.roving.test.ts`, they pass.",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.ui-kit.test.ts",
+    "src/game/hud.versus-setup.test.ts"
   ],
   "killedBy": [
-    "createHud roving-tabindex focus navigation (issue #115) does not intercept arrow keys while playing, so input.ts still drives the tank",
-    "createHud roving-tabindex focus navigation (issue #115) leaves ArrowLeft/ArrowRight on the preview canvas for its own rotation scheme",
     "hud: the versus pane reads and writes the RETAINED setup (issue #260) works with no store at all -- the pane still gates, it simply forgets",
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) a Human slot left without a device refuses Start with the device-missing reason, not the off one",
     "hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md) refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one",

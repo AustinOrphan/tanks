@@ -1,0 +1,29 @@
+{
+  "id": "computed-style-cache-ignores-jsdom-clears",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "      if (!inFocusSetter) generation += 1;\n",
+  "replace": "      // jsdom's own clears go uncounted\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Drops the generation bump from the `_clearStyleCache` wrapper, so the cache never empties and serves the first `display` it read for each element forever. This is the cache's whole staleness contract: every path case changes `display` through one route jsdom tracks (attributes, children, stylesheets, the CSSOM, form state, and a removal that also moves focus) after priming a hit, and expects the new value through the cache.",
+  "killedBy": [
+    "computed-style-cache: a hit follows every change jsdom tracks sees a class added to the element",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a class removed from the element",
+    "computed-style-cache: a hit follows every change jsdom tracks sees an attribute a selector reads",
+    "computed-style-cache: a hit follows every change jsdom tracks sees the hidden attribute (user-agent sheet)",
+    "computed-style-cache: a hit follows every change jsdom tracks sees an inline style",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a sibling a combinator reads",
+    "computed-style-cache: a hit follows every change jsdom tracks sees its last child removed (:empty)",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a class on an ancestor",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a <style> appended",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a <style> removed",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a rule inserted with insertRule",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a rule deleted with deleteRule",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a rule's declaration edited in place",
+    "computed-style-cache: a hit follows every change jsdom tracks sees a checkbox checked (:checked)",
+    "computed-style-cache: a hit follows every change jsdom tracks sees an input made valid (:invalid)",
+    "computed-style-cache: a hit follows every change jsdom tracks sees the focused element removed"
+  ]
+}

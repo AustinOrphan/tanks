@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-hooks-accept-a-focus-getter-alone",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "  if (focus?.get === undefined || focus.set === undefined) {\n",
+  "replace": "  if (focus?.get === undefined) {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Accepts a `_lastFocusedElement` with no setter. The focus exclusion wraps the setter, so with none the first focus move fails with a TypeError inside jsdom's focus code rather than a message naming the internal that moved.",
+  "killedBy": [
+    "computed-style-cache: the jsdom internals it hooks throws naming _lastFocusedElement's setter when a jsdom upgrade drops it"
+  ]
+}

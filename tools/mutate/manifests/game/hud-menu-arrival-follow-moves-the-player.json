@@ -4,7 +4,7 @@
   "find": "    if (active !== panelArrival.target && active !== document.body && active !== null) return;\n    const target = arrivalTarget(panel, PANEL_PRIMARY[panelArrival.state]());",
   "replace": "    const target = arrivalTarget(panel, PANEL_PRIMARY[panelArrival.state]());",
   "tests": [
-    "src/game/hud.navigation.test.ts"
+    "src/game/hud.arrival.test.ts"
   ],
   "why": "The Main Menu arrival follows its affordances only while focus is still where it put it (issue #919). Unguarded, a repaint of Continue pulls a player who has already moved back onto the primary.",
   "expect": "killed",
