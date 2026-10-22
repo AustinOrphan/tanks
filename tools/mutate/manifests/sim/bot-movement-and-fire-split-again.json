@@ -5,7 +5,7 @@
   "replace": "    return { engaged: nearest, engagedInSight: nearestVisible !== null, centroid };",
   "expect": "killed",
   "tests": [
-    "src/sim/ai/player-profile.test.ts"
+    "src/sim/ai/player-profile.engaged.test.ts"
   ],
   "killedBy": [
     "issue #893: one opponent drives movement AND fire, not two MOVES toward that same opponent, which is the half that used to disagree"

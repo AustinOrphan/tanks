@@ -5,7 +5,7 @@
   "replace": "  const target: Tank | null = threats.engaged;",
   "expect": "killed",
   "tests": [
-    "src/sim/ai/player-profile.test.ts"
+    "src/sim/ai/player-profile.engaged.test.ts"
   ],
   "killedBy": [
     "issue #893: one opponent drives movement AND fire, not two holds its turret when NOTHING is visible, rather than tracking the tank behind the wall"
