@@ -82,9 +82,12 @@ Command behavior and CI/deployment details are in
   infrastructure, CI/release behavior, and cross-cutting contracts: run the quick/build
   candidate floor, every applicable subsystem check, and a wider adversarial review of
   invariants, consumers, compatibility, and failure modes.
-- For behavior, code, or tests touched, run every applicable mutation entry locally with
-  `npm run mutate -- --only <id>`; add or update entries when the coverage contract changes.
-  Keep using a real failing production mutation to prove a claimed testing gap is closed.
+- For behavior, code, or tests touched, run the applicable mutation entries locally with
+  `npm run mutate -- --only <id>`: new and edited entries, entries whose `killedBy` names a
+  touched test, and the touched files' other entries up to 150. Leave a larger population to
+  `verify (current)` and name it in the PR (`docs/agent/testing-and-review.md#merge-bar`).
+  Add or update entries when the coverage contract changes. Keep using a real failing
+  production mutation to prove a claimed testing gap is closed.
 - Do not run the complete mutation manifest locally by default. `npm run verify:full` is
   reserved for changes to the mutation harness, broad manifest edits, CI mutation-failure
   diagnosis, cross-cutting changes that targeted selection cannot cover with reasonable

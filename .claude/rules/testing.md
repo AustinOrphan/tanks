@@ -10,8 +10,11 @@ paths:
 
 - Prove the gap first: apply the production mutation, observe the old test set stay green,
   add the test, and observe the mutation fail.
-- During local candidate verification, run every existing or new manifest entry relevant to
-  the behavior, code, and tests touched with `npm run mutate -- --only <id>`. `--only` is
+- During local candidate verification, run the manifest entries the merge bar selects
+  (`docs/agent/testing-and-review.md#merge-bar`) with `npm run mutate -- --only <id>`: new
+  and edited entries, entries whose `killedBy` names a touched test, and the touched files'
+  other entries up to 150, leaving a larger population to `verify (current)` and naming it
+  in the pull request. `--only` is
   repeatable and accepts a comma list, so one invocation carries the whole selection; an
   id matching no entry refuses the run and names every such id, and the closing tally
   prints how many entries were requested beside how many ran. Add or update entries when
