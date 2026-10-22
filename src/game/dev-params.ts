@@ -34,12 +34,16 @@ export function toParams(search: string): URLSearchParams {
  * `menuTransition`, taken out by the revert in #547 and accepted again by #548 the same day,
  * never was.
  *
+ * `ownerPalette` is the second: issue #1100 removed it and left the Player colors setting
+ * (#1058) as the one selector of the owner palette, so an old #1057 or #586 evidence URL still
+ * carries `?ownerPalette=`.
+ *
  * Without this list the configuration model CANNOT tell a deprecated developer parameter
  * from an unrelated application one -- both are simply "not known". `unknownParams` still
  * reports them together, since the menu has no deprecated category (`dev-config-menu.ts`);
  * that is a stated limit, not an oversight.
  */
-export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue'];
+export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue', 'ownerPalette'];
 
 /**
  * The query string to leave developer mode with (issue #243).

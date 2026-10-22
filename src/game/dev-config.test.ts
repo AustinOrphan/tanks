@@ -403,11 +403,12 @@ describe('canonicalDevSearch', () => {
     expect(plain.search).toContain('oldFlag=1');
   });
 
-  it('retires stockCue by default, the one developer parameter removed for good (issue #1022)', () => {
+  it('retires stockCue by default, the first developer parameter removed for good (issue #1022)', () => {
     // Population: every developer parameter removed for good since this list was built (#413),
-    // which is one -- `stockCue`, whose flag #1022 removed when the `marks` strip shipped.
-    // `menuTransition` went out with the revert in #547 and came back in #548 the same day.
-    expect(DEPRECATED_DEV_PARAMS).toEqual(['stockCue']);
+    // which is two -- `stockCue`, whose flag #1022 removed when the `marks` strip shipped, and
+    // `ownerPalette`, the next case's. `menuTransition` went out with the revert in #547 and
+    // came back in #548 the same day.
+    expect(DEPRECATED_DEV_PARAMS).toEqual(['stockCue', 'ownerPalette']);
     const r = canonicalDevSearch('?dev=1&stockCue=marks&aimRay=1');
     expect(r.search).toBe('?dev=1&aimRay=1');
     expect(r.deprecated).toEqual(['stockCue']);
@@ -417,6 +418,22 @@ describe('canonicalDevSearch', () => {
     const plain = canonicalDevSearch('?dev=1&stockCue=marks&aimRay=1', { deprecated: [] });
     expect(plain.unknown).toEqual(['stockCue']);
     expect(plain.search).toBe('?dev=1&aimRay=1&stockCue=marks');
+  });
+
+  it('retires ownerPalette by default, the flag the Player colors setting replaced (issue #1100)', () => {
+    // An old #1057 evidence URL. The Player colors setting (#1058) is what selects the palette
+    // now, so the parameter is developer state that nothing reads.
+    const r = canonicalDevSearch('?dev=1&ownerPalette=high-contrast&aimRay=1');
+    expect(r.search).toBe('?dev=1&aimRay=1');
+    expect(r.deprecated).toEqual(['ownerPalette']);
+    expect(r.unknown).toEqual([]);
+    // THE NEGATIVE CONTROL: with only #1022's entry, the list before #1100, the same URL
+    // carries `ownerPalette` into the canonical form as an unrelated parameter.
+    const before = canonicalDevSearch('?dev=1&ownerPalette=high-contrast&aimRay=1', {
+      deprecated: ['stockCue'],
+    });
+    expect(before.unknown).toEqual(['ownerPalette']);
+    expect(before.search).toBe('?dev=1&aimRay=1&ownerPalette=high-contrast');
   });
 
   it('retains or removes the master gate as asked', () => {

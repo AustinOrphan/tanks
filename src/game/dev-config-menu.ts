@@ -36,10 +36,10 @@ import { selectStorageNamespace, type StorageNamespace } from './storage';
  * `unknownParams`, and no more: the owner's 2026-09-08 ruling on this issue is that the
  * surface renders the semantics the configuration model actually provides, and that separate
  * `clamped`/`deprecated`/`incompatible` categories are not to be invented to satisfy older
- * wording. `DEPRECATED_DEV_PARAMS` (`stockCue` since issue #1022) is deliberately not a
- * category here: `explainDevConfig` lists a retired parameter among `unknownParams`, and every
- * URL the menu builds drops it, since `devSearchFrom` carries the page's other parameters
- * through `developerExitSearch`.
+ * wording. `DEPRECATED_DEV_PARAMS` (`stockCue` since issue #1022, `ownerPalette` since
+ * #1100) is deliberately not a category here: `explainDevConfig` lists a retired parameter
+ * among `unknownParams`, and every URL the menu builds drops it, since `devSearchFrom`
+ * carries the page's other parameters through `developerExitSearch`.
  */
 
 /** One control, with the value the menu currently holds for it and the model's notes about it. */
