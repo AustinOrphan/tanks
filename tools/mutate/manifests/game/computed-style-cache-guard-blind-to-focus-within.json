@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-guard-blind-to-focus-within",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "const FOCUS_STATE = /:(?:focus(?:-within|-visible)?|hover|active)(?![\\w-])/i;\n",
+  "replace": "const FOCUS_STATE = /:(?:focus(?:-visible)?|hover|active)(?![\\w-])/i;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Drops `:focus-within` from the guard's states. It is the state a focus move changes on every ancestor of the focused control, so a `:focus-within` rule that sets `display` is the likeliest way a HUD sheet could make a cached hit stale.",
+  "killedBy": [
+    "computed-style-cache: the focus-state guard reports display set under :focus-within"
+  ]
+}

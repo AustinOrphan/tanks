@@ -1,0 +1,15 @@
+{
+  "id": "computed-style-cache-clears-on-focus",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "      if (!inFocusSetter) generation += 1;\n",
+  "replace": "      generation += 1;\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Counts the clears jsdom's focus setter makes too, so every focus move empties the cache, which is exactly the jsdom 30.1.2 cost the cache exists to remove (issue #1093). Nothing reads stale, so only the cases that assert a read after a focus move is still a hit, with no invalidation, can see it.",
+  "killedBy": [
+    "computed-style-cache: a focus move keeps the cache serves display from the cache across a focus, a second focus and a blur, though jsdom empties its own on each",
+    "computed-style-cache: what a hit returns reads every property but display fresh, so a :focus color shows after a focus move"
+  ]
+}

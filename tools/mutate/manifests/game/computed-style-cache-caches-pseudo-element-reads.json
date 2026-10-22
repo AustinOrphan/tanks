@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-caches-pseudo-element-reads",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "    if (pseudo || el.getRootNode() !== document) {\n",
+  "replace": "    if (el.getRootNode() !== document) {\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Caches a pseudo-element read under its element. jsdom 30.1.2 computes no pseudo-element style (a `::before` read returns the element's own), so no value can tell; the pass-through case asserts the policy through the counters instead: two `::before` reads add no hit.",
+  "killedBy": [
+    "computed-style-cache: reads it never caches passes a pseudo-element read through"
+  ]
+}

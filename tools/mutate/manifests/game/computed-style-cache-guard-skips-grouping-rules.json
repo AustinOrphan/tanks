@@ -1,0 +1,16 @@
+{
+  "id": "computed-style-cache-guard-skips-grouping-rules",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "      if ('cssRules' in rule) walk((rule as CSSGroupingRule).cssRules, focusState);\n",
+  "replace": "      // rules inside @media, @supports and nesting go unread\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Stops the guard descending into rules that hold rules. hud.css wraps rules in `@media`; a focus-state `display` rule inside one, inside `@supports`, or nested under a focus-state rule would pass the install unseen.",
+  "killedBy": [
+    "computed-style-cache: the focus-state guard reports display set under a rule inside @media",
+    "computed-style-cache: the focus-state guard reports display set under a rule inside @supports",
+    "computed-style-cache: the focus-state guard reports display set under a rule nested under a focus-state rule"
+  ]
+}

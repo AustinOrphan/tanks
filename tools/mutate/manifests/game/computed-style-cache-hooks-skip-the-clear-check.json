@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-hooks-skip-the-clear-check",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "  if (typeof clearStyleCache !== 'function') {\n    throw renamed('the document implementation has no _clearStyleCache method');\n  }\n",
+  "replace": "  // a renamed _clearStyleCache goes unnamed\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Drops the named check on `_clearStyleCache`, the cache's only invalidation signal. If a jsdom upgrade renamed it, jsdom would call the new name and never this cache's wrapper, so the cache would never empty and every opted-in file would read stale `display` values with no error at all.",
+  "killedBy": [
+    "computed-style-cache: the jsdom internals it hooks throws naming _clearStyleCache when a jsdom upgrade drops it"
+  ]
+}

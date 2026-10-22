@@ -1,0 +1,14 @@
+{
+  "id": "computed-style-cache-hit-is-not-a-declaration",
+  "file": "src/game/computed-style-cache.ts",
+  "find": "      getPrototypeOf: () => Reflect.getPrototypeOf(style()),\n",
+  "replace": "      // a hit keeps the empty target's prototype\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/computed-style-cache.test.ts"
+  ],
+  "why": "Drops the proxy's `getPrototypeOf` trap, so a hit is a plain object rather than a `CSSStyleDeclaration` and `instanceof` tells a hit from a real read.",
+  "killedBy": [
+    "computed-style-cache: what a hit returns is a CSSStyleDeclaration, as a real one is"
+  ]
+}
