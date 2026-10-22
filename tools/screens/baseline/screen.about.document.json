@@ -34,9 +34,9 @@
         "x": 296,
         "y": 666,
         "w": 688,
-        "h": 1658
+        "h": 1940
       },
-      "text": "Privacy PolicyThe full text of PRIVACY.md in this repository.Last updated: 2026-09-17This policy covers the Tanks! browser game (the \"game\" or \"app\"), published at austinorphan.com/tanks/.SummaryThe g",
+      "text": "Privacy PolicyThe full text of PRIVACY.md in this repository.Last updated: 2026-10-22This policy covers the Tanks! browser game (the \"game\" or \"app\"), published at austinorphan.com/tanks/.SummaryThe g",
       "aria": {
         "role": "group",
         "aria-labelledby": "hud-legal-toggle-privacy"
@@ -57,7 +57,7 @@
       "visible": true,
       "box": {
         "x": 306,
-        "y": 1041,
+        "y": 1061,
         "w": 668,
         "h": 351
       },
