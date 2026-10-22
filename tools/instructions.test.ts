@@ -111,12 +111,17 @@ function verificationPolicyProblems(root: string, policy: string): string[] {
   const high = markdownSection(policy, 'High risk');
   const exceptions = markdownSection(policy, 'Full local mutation-manifest exceptions');
   const ci = markdownSection(policy, 'CI and merge verification');
+  // The merge bar's own paragraph sits under its `##` heading, before the first tier.
+  const mergeBar = /^## Merge bar\r?\n([\s\S]*?)(?=^### )/m.exec(policy)?.[1] ?? '';
   const checks: Array<[string, boolean]> = [
     ['targeted local mutation command', `${root}\n${policy}`.includes('npm run mutate -- --only <id>')],
     ['root rejects routine full local manifest', /Do not run the complete mutation manifest locally by default/.test(root)],
     ['high risk keeps quick verification', high.includes('npm run verify:quick')],
     ['high risk keeps conditional build verification', high.includes('npm run verify:build')],
-    ['high risk selects applicable mutations', /all mutation entries applicable/.test(high)],
+    ['high risk uses the merge bar selection', /mutation selection the merge bar defines/.test(high)],
+    ['merge bar caps the local population', /at most 150 entries/.test(mergeBar)],
+    ['merge bar leaves the rest to current CI and names it',
+      /leave it to `verify \(current\)`[\s\S]{0,200}?say in the pull request which population was left/.test(mergeBar)],
     ['high risk does not require the full composite', !high.includes('npm run verify:full')],
     ['exceptions retain the full composite', exceptions.includes('npm run verify:full')],
     ['harness exception', /mutation harness itself/.test(exceptions)],
@@ -305,7 +310,7 @@ describe('the instruction files', () => {
     expect(high).toMatch(/cross-cutting change/);
     expect(high).toContain('npm run verify:quick');
     expect(high).toContain('npm run verify:build');
-    expect(high).toMatch(/all mutation entries applicable/);
+    expect(high).toMatch(/mutation selection the merge bar defines/);
     expect(high).not.toContain('npm run verify:full');
     expect(high).toMatch(/adversarially review invariants/);
   });
@@ -354,6 +359,13 @@ describe('the instruction files', () => {
       'does not make routine local full-manifest execution necessary',
       'requires routine local full-manifest execution as compensation',
     );
+    // Since 2026-10-22 a local run may leave a large population to CI, but only capped and
+    // only when the pull request says so; losing either half is a silent weakening.
+    const uncapped = policy.replace('population is at most 150 entries', 'population is any size');
+    const unnamedLeave = policy.replace(
+      'say in the pull request which population was left and its size',
+      'move on',
+    );
     const prematureCompletion = policy.replace(
       'Do not report the change as fully\nverified or merge-ready',
       'Report the change as fully verified and merge-ready',
@@ -369,6 +381,8 @@ describe('the instruction files', () => {
       ['missing scheduled floor manifest', root, noScheduledFloor],
       ['local compensation required', root, localCompensation],
       ['premature completion claim', root, prematureCompletion],
+      ['uncapped local population', root, uncapped],
+      ['unnamed population left to CI', root, unnamedLeave],
     ] as const) {
       expect(verificationPolicyProblems(candidateRoot, candidatePolicy), name).not.toEqual([]);
     }

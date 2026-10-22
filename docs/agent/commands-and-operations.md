@@ -187,9 +187,9 @@ complete diff. The risk tier remains a floor rather than a substitute for target
 | --- | --- |
 | Low | Directly relevant documentation, formatting, link, or generator checks; no universal composite |
 | Standard | `npm run verify:quick`; add `npm run verify:build` when production output can change, selected applicable mutation entries when behavior/code/tests change, and `npm run verify:visual` for user-visible rendering |
-| High | `npm run verify:quick`; add `npm run verify:build` when production output can change, every affected subsystem check, and all applicable mutation entries selected for the touched behavior/code/tests; renderer/WebGL work adds `npm run verify:visual` |
+| High | `npm run verify:quick`; add `npm run verify:build` when production output can change, every affected subsystem check, and the merge bar's mutation selection for the touched behavior/code/tests; renderer/WebGL work adds `npm run verify:visual` |
 
-Use `npm run mutate -- --only <id>` for each applicable existing or new mutation entry.
+Use `npm run mutate -- --only <id>` for the entries the [merge bar](testing-and-review.md#merge-bar) selects: new and edited entries, entries whose `killedBy` names a touched test, and the touched files' other entries up to 150. Leave a larger population to `verify (current)` and name it in the pull request.
 Continue proving a claimed test gap with a real production mutation that passes before the
 test and fails after it. Add, update, and remeasure manifest entries when a change alters the
 coverage contract. Simulation may also need the golden/browser/Safari trace; persistence may

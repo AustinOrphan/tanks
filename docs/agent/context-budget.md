@@ -16,8 +16,8 @@ reading.
 | State | Source | Lines | UTF-8 bytes |
 | --- | --- | ---: | ---: |
 | Before | `CLAUDE.md` at `844986c` | 1002 | 72393 |
-| After | root `CLAUDE.md` on this branch | 141 | 8554 |
-| Reduction | globally loaded project prose | — | 63839 (88.2%) |
+| After | root `CLAUDE.md` on this branch | 144 | 8797 |
+| Reduction | globally loaded project prose | — | 63596 (87.8%) |
 
 `AGENTS.md` is the same file through a symlink and is retained for non-Claude harnesses.
 No rule under `.claude/rules/` is unscoped, and no on-demand reference is imported by
@@ -39,10 +39,10 @@ These files load only after Claude Code reads a file matching their `paths` fron
 | `.claude/rules/rendering.md` | 32 | 1437 |
 | `.claude/rules/audio.md` | 20 | 778 |
 | `.claude/rules/presentation.md` | 19 | 944 |
-| `.claude/rules/testing.md` | 47 | 2809 |
+| `.claude/rules/testing.md` | 50 | 3022 |
 | `.claude/rules/workflows.md` | 39 | 1901 |
 | `.claude/rules/documentation.md` | 39 | 2029 |
-| **Total conditional rules** | — | **14534** |
+| **Total conditional rules** | — | **14747** |
 
 The documents in this directory are normal links and remain unloaded until read.
 

@@ -233,8 +233,20 @@ not reduce that production change's tier. These tiers define local candidate evi
 required CI defines final merge verification.
 
 Run directly relevant tests throughout implementation. Whenever behavior, code, or tests
-change, select every applicable existing or new mutation entry and run it locally with
-`npm run mutate -- --only <id>`. Add, update, and remeasure entries when the coverage
+change, run the applicable mutation entries locally with `npm run mutate -- --only <id>`:
+
+1. every new or edited entry;
+2. every entry whose `killedBy` names a test the change adds, edits, renames, or deletes;
+3. every other entry whose `file` or `tests` names a file the change touches, while that
+   population is at most 150 entries.
+
+When the third population is larger, leave it to `verify (current)`, which runs every entry
+the diff can affect, and say in the pull request which population was left and its size.
+Ruled 2026-10-22: a change to `hud.ts` or `loop.ts` alone selects 300-700 entries, about an
+hour of local run that `verify (current)` repeats in full. The cost of leaving them is
+a CI round trip when one fails. A stale anchor is not at risk, because `verify:quick`
+already fails on any entry whose `find` no longer matches exactly once
+(`tools/mutate/orchestrate.test.ts`). Add, update, and remeasure entries when the coverage
 contract changes. A claimed testing gap still requires a real failing production mutation
 before the new test is accepted as closing it.
 
@@ -297,8 +309,9 @@ Minimum evidence:
   change
 - run every affected subsystem-specific check, such as the golden trace for simulation,
   persistence compatibility tests, WebGL/visual checks, or built-output portability
-- run all mutation entries applicable to the touched behavior, code, and tests; broaden the
-  selection when multiple consumers or contracts are involved
+- run the mutation selection the merge bar defines above, broadening it when multiple
+  consumers or contracts are involved; a population past its 150-entry cap is still left to
+  `verify (current)`, and the pull request says which one
 - adversarially review invariants, failure modes, compatibility, and expected absences
 - independently reproduce material measurements and claims from primary output
 
