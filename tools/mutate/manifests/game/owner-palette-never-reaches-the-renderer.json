@@ -1,0 +1,15 @@
+{
+  "id": "owner-palette-never-reaches-the-renderer",
+  "file": "src/game/loop.ts",
+  "find": "    ownerPalette: sessionOwnerPalette,\n",
+  "replace": "    ownerPalette: OWNER_PALETTES.classic,\n",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Hands the session's renderer the default palette whatever the Player colors setting says, so rings, spawn rings, shell tints, trails and death pulses draw Classic while a stored High contrast still recolors the stock chips (issues #1057, #1058): a ring and its chip disagree. Equal to what a session with nothing stored passes, so only a test that stores High contrast can see it. Modelled on identity-marker-flag-ignored-by-the-renderer.",
+  "killedBy": [
+    "startGameWith: dev flags stay off by default threads the stored owner palette to every reader, once per session (issues #1057, #1058) hands the renderer and the stock HUD the SAME palette the setting names, before any status",
+    "startGameWith: the Player colors setting survives a reload (issue #1058) a High contrast choice made through the toggle reaches the next session's renderer and stock chips"
+  ]
+}

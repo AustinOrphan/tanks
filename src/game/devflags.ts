@@ -11,7 +11,6 @@
 import type { TankKind, UnarmedTrigger, GameMode } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import { QUALITY_PRESET_IDS, type QualityPreset } from '../presentation/quality';
-import { OWNER_PALETTE_IDS, type OwnerPaletteId } from '../presentation/identity';
 import { BENCH_WORKLOAD_IDS, BENCH_WORKLOADS, type BenchWorkloadId } from './bench';
 import type { AiTargetPerception } from '../sim/types';
 import {
@@ -418,22 +417,6 @@ export interface DevFlags {
    */
   identityMarker: IdentityMarkerFlag | null;
   /**
-   * Which OWNER PALETTE every owner colour is drawn in (issue #1057, the threading half of
-   * #586): identity and spawn rings, shell tints, tread trails, death pulses, the multiplayer
-   * death vignette and the stock-strip chips. `null` -- absent or unrecognised -- leaves the
-   * player's Player colors setting in charge (issue #1058); a value overrides it for the
-   * session without writing it, as `quality` does. Read once, when a session builds its
-   * renderer, so a value applies from the next match.
-   * A single-player game keeps the shipped colours under either value: the palette applies
-   * only where identity does (`identityApplies`, two or more player tanks).
-   *
-   * End state, per the flag-lifecycle rule (`.claude/rules/game.md`): the flag is not the
-   * feature. The Settings control (issue #1058) is what survives; the flag remains only
-   * because the capture flows cannot yet seed the stored setting, and goes once the capture
-   * tooling can seed `tanks.settings.v1`.
-   */
-  ownerPalette: OwnerPaletteId | null;
-  /**
    * Which experimental non-colour ROLE cue to draw on every tank (issues #357, #773). `null`
    * -- absent or unrecognised -- keeps the shipped board, where what an enemy does is carried
    * by hue alone.
@@ -587,7 +570,6 @@ export const DEV_FLAGS_OFF: DevFlags = {
   backdrop: null,
   mineWarn: null,
   identityMarker: null,
-  ownerPalette: null,
   enemyRole: null,
   shellTrail: null,
   arrival: null,
@@ -812,19 +794,6 @@ function asIdentityMarker(params: URLSearchParams): IdentityMarkerFlag | null {
   return isIdentityMarkerFlag(raw) ? raw : null;
 }
 
-/**
- * The accepted `?ownerPalette=` values, from the ONE list the palettes are keyed by
- * (`presentation/identity.ts`), so the flag cannot offer a palette that does not exist.
- */
-const OWNER_PALETTE_NAMES: ReadonlySet<string> = new Set<string>(OWNER_PALETTE_IDS);
-
-/** One of the named owner palettes, or null when absent or unrecognised -- see `asQuality`. */
-function asOwnerPalette(params: URLSearchParams): OwnerPaletteId | null {
-  const raw = params.get('ownerPalette');
-  if (raw === null) return null;
-  return OWNER_PALETTE_NAMES.has(raw) ? (raw as OwnerPaletteId) : null;
-}
-
 /** One of the named role cues, or null when absent or unrecognised. */
 function asEnemyRole(params: URLSearchParams): EnemyRoleCue | null {
   const raw = params.get('enemyRole');
@@ -983,7 +952,6 @@ export function parseDevFlags(search: string): DevFlags {
     backdrop: asBackdrop(params),
     mineWarn: asMineWarn(params),
     identityMarker: asIdentityMarker(params),
-    ownerPalette: asOwnerPalette(params),
     enemyRole: asEnemyRole(params),
     shellTrail: asShellTrail(params),
     arrival: asArrival(params),
@@ -1496,24 +1464,6 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
         'default can be reversed and a regression report checked.',
       "Absent is the ruled arm: 'shape' in an FFA session, and the solid ring in teams, " +
         "co-op and single-player. 'shape', named, applies in any session.",
-    ],
-  },
-  ownerPalette: {
-    kind: 'valued',
-    values: [...OWNER_PALETTE_NAMES],
-    description:
-      'Selects the owner palette every player and team colour is drawn in (issues #586, ' +
-      '#1057): identity and spawn rings, shell tints, tread trails, death pulses, the ' +
-      "multiplayer death vignette and the stock-strip chips. 'high-contrast' selects #586's " +
-      "palette and 'classic' the shipped colors; absent leaves the player's Player colors " +
-      'setting in charge.',
-    notes: [
-      'Read once, when a session builds its renderer: a value set here applies from the next ' +
-        'match, as `quality` does. A single-player game keeps the shipped colours under ' +
-        'either value: the palette applies only once two or more player tanks exist.',
-      'Overrides the Player colors setting for one session without writing it, as ' +
-        '`quality` does. The Settings control is what survives; the flag goes once the ' +
-        'capture tooling can seed `tanks.settings.v1`.',
     ],
   },
   enemyRole: {
