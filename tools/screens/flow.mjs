@@ -86,14 +86,6 @@ export const FLOW_FLAGS = Object.freeze({
    * crumble, sink, or otherwise") is a judgement about movement.
    */
   wreck: Object.freeze(['sink', 'fade', 'tilt']),
-  /**
-   * Issue #1057's owner palette, so #586's evidence can record a four-player round in High
-   * contrast. A CHOICE, hardcoded and pinned like the three above: `OWNER_PALETTE_IDS`
-   * (src/presentation/identity.ts) owns the vocabulary and `flow.test.ts` pins the two
-   * together in both directions. `classic` is listed though it is the default, so a recipe
-   * can name the control arm explicitly.
-   */
-  ownerPalette: Object.freeze(['classic', 'high-contrast']),
 });
 export const FLOW_FLAG_IDS = Object.freeze(Object.keys(FLOW_FLAGS));
 

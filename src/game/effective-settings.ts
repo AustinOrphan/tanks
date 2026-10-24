@@ -23,7 +23,7 @@ import type { PlatformCapabilities, CapabilitySource, ReducedMotionSource } from
  * | `reducedMotion` | `'system'` follows the OS; `'full'` is always false; `'reduced'` is always true. |
  * | `uiScale` | the stored preference. |
  * | `quality` | the stored preference, UNGATED. Nothing here probes the GPU -- see below. |
- * | `ownerPalette` | the stored preference, UNGATED. Nothing probes the device for a color preference; `?dev=1&ownerPalette=` overrides it in `loop.ts`, as `?quality=` does. |
+ * | `ownerPalette` | the stored preference, UNGATED. Nothing probes the device for a color preference, and no developer flag overrides it (issue #1100). |
  * | `controllerLayouts` | the stored layouts, UNGATED. Each gamepad reader resolves one against its pad's profile. |
  *
  * Touch scheme and fire mode are deliberately NOT gated on `capabilities.touch`. Gating
@@ -73,8 +73,7 @@ export interface EffectiveSettings {
   readonly quality: QualityPreset;
   /**
    * Which owner palette a new session should build with (issue #1058). An id, not an
-   * `OwnerPalette`: `loop.ts` resolves it, once per session, after the dev flag has had
-   * its say.
+   * `OwnerPalette`: `loop.ts` resolves it, once per session.
    */
   readonly ownerPalette: OwnerPaletteId;
   /**

@@ -13,6 +13,6 @@
   "killedBy": [
     "resolveEffectiveSettings: audio, UI scale and quality pass through ungated passes the owner palette straight through, on any capability set (issue #1058)",
     "createRouteHost: the Main Menu is painted from the stores by the page paints the STORED owner palette on a page with no session",
-    "startGameWith: dev flags stay off by default builds the session in the STORED owner palette when no flag is set (issue #1058)"
+    "startGameWith: dev flags stay off by default threads the stored owner palette to every reader, once per session (issues #1057, #1058) hands the renderer and the stock HUD the SAME palette the setting names, before any status"
   ]
 }

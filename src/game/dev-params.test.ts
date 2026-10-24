@@ -41,6 +41,15 @@ describe('developerExitSearch', () => {
     expect(developerExitSearch('?dev=1&stockCue=marks&keep=me', [])).toBe('?stockCue=marks&keep=me');
   });
 
+  it('drops ownerPalette with the shipped list, the flag issue #1100 removed', () => {
+    // An old #1057 evidence URL, exited. THE NEGATIVE CONTROL is the same call with only
+    // #1022's entry, the list before #1100: `ownerPalette` survives Exit as an unrelated
+    // parameter.
+    expect(developerExitSearch('?dev=1&ownerPalette=high-contrast&keep=me')).toBe('?keep=me');
+    expect(developerExitSearch('?dev=1&ownerPalette=high-contrast&keep=me', ['stockCue']))
+      .toBe('?ownerPalette=high-contrast&keep=me');
+  });
+
   it('returns an empty string rather than a bare question mark', () => {
     expect(developerExitSearch('?dev=1')).toBe('');
     expect(developerExitSearch('')).toBe('');

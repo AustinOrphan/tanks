@@ -4213,9 +4213,9 @@ describe('startGameWith: a real player death reaches the HUD', () => {
   it('flashes a two-player FFA death in the session\'s owner palette (issue #1057)', () => {
     // deathVignetteColor's own tests pass the palette themselves; this is the frame handler
     // handing it on. P2's shell on the tracked player (slot 0), one real driven frame, under
-    // High contrast and, as the control, with no flag.
-    for (const [ownerPalette, want] of [['high-contrast', 0x63d1fd], [null, 0x3fd0ff]] as const) {
-      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa', ownerPalette } }));
+    // a stored High contrast and, as the control, with nothing stored.
+    for (const [savedOwnerPalette, want] of [['high-contrast', 0x63d1fd], [undefined, 0x3fd0ff]] as const) {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' }, savedOwnerPalette }));
       const world = h.rec.builtWorlds[0];
       const [p0, p1] = world.tanks.filter((t: Tank) => t.kind === 'player');
       world.bullets.push({
@@ -4224,7 +4224,7 @@ describe('startGameWith: a real player death reaches the HUD', () => {
       });
       h.setState('playing');
       h.fireFrame(20);
-      expect(h.rec.deathColors, `ownerPalette=${ownerPalette}`).toEqual([want]);
+      expect(h.rec.deathColors, `savedOwnerPalette=${savedOwnerPalette}`).toEqual([want]);
       h.handle.dispose();
     }
   });
@@ -5270,15 +5270,16 @@ describe('startGameWith: dev flags stay off by default', () => {
     off.handle.dispose();
   });
 
-  describe('threads the ownerPalette dev flag to every reader, once per session (issue #1057)', () => {
+  describe('threads the stored owner palette to every reader, once per session (issues #1057, #1058)', () => {
     const paletteOf = (h: ReturnType<typeof boot>): unknown =>
       (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
 
-    it('hands the renderer and the stock HUD the SAME palette the flag names, before any status', () => {
-      // Both readers, from one resolution: a renderer in High contrast beside chips in
-      // Classic is the disagreement the issue rules out. Identity (toBe), not equality, so a
-      // copy of the palette passes nothing.
-      const h = boot(makeDeps({ devFlags: { ownerPalette: 'high-contrast' } }));
+    it('hands the renderer and the stock HUD the SAME palette the setting names, before any status', () => {
+      // Both readers, from one resolution of the Player colors setting, read from the
+      // effective layer at build: a renderer in High contrast beside chips in Classic is the
+      // disagreement #1057 rules out. Identity (toBe), not equality, so a copy of the palette
+      // passes nothing.
+      const h = boot(makeDeps({ savedOwnerPalette: 'high-contrast' }));
       expect(paletteOf(h)).toBe(OWNER_PALETTES['high-contrast']);
       expect(h.rec.stockPalettes, 'handed to the HUD exactly once').toEqual([OWNER_PALETTES['high-contrast']]);
       expect(h.rec.stockPalettes[0]).toBe(OWNER_PALETTES['high-contrast']);
@@ -5291,10 +5292,11 @@ describe('startGameWith: dev flags stay off by default', () => {
       h.handle.dispose();
     });
 
-    it('NEGATIVE CONTROLS: absent and `classic` both hand every reader Classic', () => {
-      for (const devFlags of [{}, { ownerPalette: 'classic' as const }]) {
-        const h = boot(makeDeps({ devFlags }));
-        const label = JSON.stringify(devFlags);
+    it('NEGATIVE CONTROLS: nothing stored and a stored `classic` both hand every reader Classic', () => {
+      // Nothing stored is a player who never opened Settings.
+      for (const opts of [{}, { savedOwnerPalette: 'classic' as const }]) {
+        const h = boot(makeDeps(opts));
+        const label = JSON.stringify(opts);
         expect(paletteOf(h), label).toBe(OWNER_PALETTES.classic);
         expect(h.rec.stockPalettes, label).toEqual([OWNER_PALETTES.classic]);
         h.handle.dispose();
@@ -5459,45 +5461,6 @@ describe('startGameWith: dev flags stay off by default', () => {
     expect((unflagged.rec.rendererArgs[0][4] as { quality?: unknown }).quality).toEqual(
       QUALITY_PRESETS.low,
     );
-    unflagged.handle.dispose();
-  });
-
-  it('builds the session in the STORED owner palette when no flag is set (issue #1058)', () => {
-    // The half a player can reach: the Player colors setting, read once at build from the
-    // effective layer and handed to the renderer and the stock chips together. Identity
-    // (toBe), so a copy of the palette passes nothing.
-    const paletteOf = (h: ReturnType<typeof boot>): unknown =>
-      (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
-    const h = boot(makeDeps({ savedOwnerPalette: 'high-contrast' }));
-    expect(paletteOf(h)).toBe(OWNER_PALETTES['high-contrast']);
-    expect(h.rec.stockPalettes).toEqual([OWNER_PALETTES['high-contrast']]);
-    expect(h.rec.stockPalettes[0]).toBe(OWNER_PALETTES['high-contrast']);
-    h.handle.dispose();
-    // NEGATIVE CONTROL: a player who never opened Settings still gets Classic.
-    const untouched = boot(makeDeps());
-    expect(paletteOf(untouched)).toBe(OWNER_PALETTES.classic);
-    expect(untouched.rec.stockPalettes).toEqual([OWNER_PALETTES.classic]);
-    untouched.handle.dispose();
-  });
-
-  it('lets ?dev=1&ownerPalette= OVERRIDE the stored palette, without writing it', () => {
-    // `flag ?? setting`, as `?quality=` is: the flag forces a palette for one session and
-    // leaves the player's saved choice alone.
-    const paletteOf = (h: ReturnType<typeof boot>): unknown =>
-      (h.rec.rendererArgs[0][4] as { ownerPalette?: unknown }).ownerPalette;
-    const h = boot(makeDeps({ savedOwnerPalette: 'high-contrast', devFlags: { ownerPalette: 'classic' } }));
-    expect(paletteOf(h)).toBe(OWNER_PALETTES.classic);
-    expect(h.rec.stockPalettes).toEqual([OWNER_PALETTES.classic]);
-    expect(
-      h.deps.settings.snapshot().presentation.ownerPalette,
-      "the flag wrote itself into the player's settings",
-    ).toBe('high-contrast');
-    h.handle.dispose();
-    // NEGATIVE CONTROL: the same stored palette with no flag reaches both readers, so the
-    // assertions above measure the override rather than a fixture that ignores storage.
-    const unflagged = boot(makeDeps({ savedOwnerPalette: 'high-contrast' }));
-    expect(paletteOf(unflagged)).toBe(OWNER_PALETTES['high-contrast']);
-    expect(unflagged.rec.stockPalettes).toEqual([OWNER_PALETTES['high-contrast']]);
     unflagged.handle.dispose();
   });
 

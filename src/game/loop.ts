@@ -2011,11 +2011,10 @@ export function startGameWith(
    * handed to the three readers that each draw part of it: the renderer (rings, shell tints,
    * trails, death pulses), the HUD's stock chips and the death vignette. One value for all
    * three is what keeps a ring and its chip the same color. The player's Player colors
-   * setting decides it (issue #1058); `?dev=1&ownerPalette=` overrides that for the session
-   * without writing it, as `?quality=` does for the quality setting.
+   * setting alone decides it (issue #1058). Unlike `quality`, no developer flag overrides it:
+   * a capture that needs High contrast seeds the stored setting (issue #1100).
    */
-  const sessionOwnerPalette =
-    OWNER_PALETTES[deps.devFlags.ownerPalette ?? deps.effectiveSettings.current().ownerPalette];
+  const sessionOwnerPalette = OWNER_PALETTES[deps.effectiveSettings.current().ownerPalette];
 
   // One renderer setting at a time on top of that preset (issue #735), for a device sweep. Held
   // beside the resolved configuration because the benchmark report records both: the
