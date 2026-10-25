@@ -19,13 +19,19 @@ anyway risks wasted effort, which is the reason this file is explicit rather tha
 
 This is not a judgement about the contribution.
 
+After the Public Prototype 1.0 release the
+[maintenance policy](docs/superpowers/specs/2026-10-24-maintenance-policy.md) also applies: it
+says which changes the repository still accepts and how pull requests are handled.
+
 ## What is welcome
 
 - **Issue reports** — bugs, reproductions, crashes, platform problems.
 - **Playtest feedback** — how something feels at normal speed, where the difficulty sits.
 - **Questions and discussion** about behaviour, design or direction.
 
-None of these require the rights above.
+None of these require the rights above. After the Public Prototype 1.0 release, reports
+are triaged as the [maintenance policy](docs/superpowers/specs/2026-10-24-maintenance-policy.md)
+describes.
 
 ## If you want to use the code
 
@@ -43,3 +49,5 @@ overrides the default.
 - [`CONTENT-LICENSE.md`](CONTENT-LICENSE.md) — first-party content, All Rights Reserved.
 - [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) — generated; the authoritative record
   for dependencies and vendored source, which keep their own licenses.
+- [Maintenance policy](docs/superpowers/specs/2026-10-24-maintenance-policy.md) — what the
+  repository accepts after the Public Prototype 1.0 release.
