@@ -957,9 +957,14 @@ export interface Hud {
   /**
    * A single-line, self-expiring toast, reusing the same `.hud-toast` stack and timer as
    * `showAchievementToasts` but for a plain message with no achievement identity behind
-   * it. Today's one caller: `?dev=1&gamepad=1`'s "gamepad connected" notice -- Firefox
+   * it. Its first caller was `?dev=1&gamepad=1`'s "gamepad connected" notice -- Firefox
    * hides a pad from `navigator.getGamepads()` until the player presses a button on it,
-   * so the game has no other moment to confirm the pad was seen.
+   * so the game has no other moment to confirm the pad was seen. The page's mute shortcut,
+   * the persistence notice and issue #925's co-op death toast ("P2 out") ride it too.
+   *
+   * The stack sits inside the page's one `aria-live="polite"` region, so a toast's text is
+   * also what a screen reader hears; a caller writes its string here once, not here and to
+   * the announcement line as well.
    */
   showToast(message: string): void;
   /**
@@ -1459,7 +1464,9 @@ export type GameplayHudKey =
   | 'setStockPalette'
   // Lent from the frame, which owns the stack itself. A session needs it for the gamepad
   // connect/disconnect edges, which are neither route changes nor gameplay events but do
-  // happen mid-match and have nowhere else to report.
+  // happen mid-match and have nowhere else to report. Issue #925's co-op death toast is a
+  // gameplay event that borrows it too, because the stack is the page's one live region and
+  // the toast's text is meant to be both seen and spoken (death-toast.ts).
   | 'showToast';
 
 export type RouteHud = Pick<Hud, RouteHudKey>;

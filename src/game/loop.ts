@@ -76,6 +76,7 @@ import type { SuiteContext } from '../audio/suites';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
 import { createBlockedFireHudCue } from './blocked-fire-hud';
+import { createDeathToastCue } from './death-toast';
 import {
   createGameStateMachine,
   type GameStateMachine,
@@ -2305,6 +2306,12 @@ export function startGameWith(
   const blockedFireHud = createBlockedFireHudCue(hud, playerId, {
     blockedFire: deps.devFlags.blockedFire,
   });
+  /**
+   * Issue #925: a co-op player's death, named in the toast rail. The gate, the throttle and
+   * why versus is left to its stock strip are death-toast.ts's; this line is wiring, like the
+   * blocked-fire arm above, and `handle` is called from onFrameEvents beside the vignette.
+   */
+  const deathToast = createDeathToastCue(hud);
 
   /**
    * Issue #591's capture flag: the ending this session is to be photographed on, or `null`
@@ -2858,6 +2865,9 @@ export function startGameWith(
         // Practice/sandbox never reach here -- see campaignActive.
         if (campaignActive()) deps.run.setLivesRemaining(driver.world.lives);
       }
+      // The same frame's deaths, named where nothing else on screen names them (issue #925).
+      // The session's own kind, as `pushStatus` reads it: versus has a stock strip for this.
+      deathToast.handle(events, driver.world, currentDescriptor.kind, playerId ?? -1);
       // Discriminated by ownerId, not presence: the stream is shared, so a bare
       // `some(e => e.type === 'fire')` pulses on every enemy shot -- exactly the
       // presence-only mistake docs/agent/testing-and-review.md warns about.
@@ -3194,6 +3204,8 @@ export function startGameWith(
     // undefined as "no tracked player, say nothing", which is the honest reading of a
     // world with no player tank -- an id of -1 would be a tank id that can never match.
     blockedFireHud.setPlayerId(playerId);
+    // A new world restarts the tick clock the death toast's window is counted on.
+    deathToast.reset();
     enemiesAtRoundStart = countEnemies(world);
     const b = deps.levels.bounds(level);
     if (b.width !== shownBounds.width || b.height !== shownBounds.height || b.cellSize !== shownBounds.cellSize) {

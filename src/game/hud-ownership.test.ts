@@ -68,7 +68,8 @@ const ROUTE_REACHING_HUD_TYPES = ['Hud', 'RouteHud'];
 /**
  * The one frame member a session legitimately holds. The frame owns the toast STACK; a
  * session is lent the writer for the gamepad connect/disconnect edges, which are neither
- * route changes nor gameplay events but do happen mid-match.
+ * route changes nor gameplay events but do happen mid-match, and for issue #925's co-op
+ * death toast, which `death-toast.ts` raises through the same writer.
  *
  * `dispose` is deliberately absent: issue #468 already moved HUD teardown to the page, and
  * `loop.ts` only mentions it in a comment explaining that it used to do so.
