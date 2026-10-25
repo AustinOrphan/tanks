@@ -10,7 +10,10 @@ This repository is the **Public Prototype** of Tanks!: a playable prototype and 
 showcase, built to be technically representative rather than a finished game. What belongs
 in it is set out in the [project direction](docs/superpowers/specs/2026-08-22-project-direction.md).
 
-What the prototype does not do at the Public Prototype 1.0 release is listed in the
+At the Public Prototype 1.0 release the repository enters maintenance mode: it accepts
+deliberate fixes and representative improvements, under the
+[maintenance policy](docs/superpowers/specs/2026-10-24-maintenance-policy.md). What the
+prototype does not do at that release is listed in the
 [known limitations](docs/superpowers/specs/2026-10-24-known-limitations.md).
 
 Three.js renderer over a pure, deterministic 2D simulation — swept ray-vs-AABB shell
