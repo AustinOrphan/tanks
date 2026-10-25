@@ -48,7 +48,7 @@ These are the only plans and specifications that state current direction.
 | [Manual accessibility review protocol](superpowers/specs/2026-09-23-manual-accessibility-review-protocol.md) | `active` | The manual accessibility review sitting for PP1 - which surfaces to visit per area, how to reach each, what counts as a pass, and where verdicts are recorded | issues #915, #935 |
 | [Viewport composition: what each surface does at each size](superpowers/specs/2026-09-26-viewport-composition.md) | `active` | What the HUD's composition actually is at each viewport in issue #290's emulated matrix | issue #985 |
 | [Known limitations of Public Prototype 1.0](superpowers/specs/2026-10-24-known-limitations.md) | `proposed` | What Public Prototype 1.0 does not do at the freeze, grouped by platform and devices, accessibility, content and tooling; a draft to re-check at the release commit | issues #294, #1113 |
-| [Public repository maintenance after Public Prototype 1.0](superpowers/specs/2026-10-24-maintenance-policy.md) | `proposed` | What the public repository accepts after the Public Prototype 1.0 release, how fixes move to and from the private repository, and what happens to later issues and pull requests | issues #294, #1112 |
+| [Public repository maintenance after Public Prototype 1.0](superpowers/specs/2026-10-24-maintenance-policy.md) | `active` | What the public repository accepts after the Public Prototype 1.0 release, how fixes move to and from the private repository, and what happens to later issues and pull requests | issues #294, #1112; PR #1116 |
 
 ## Backlog topics
 
