@@ -1,0 +1,14 @@
+{
+  "id": "toasts-also-written-to-the-announcement-line",
+  "file": "src/game/hud.ts",
+  "find": "      t.className = 'hud-toast';\n      t.textContent = message;\n      appendToast(t);",
+  "replace": "      t.className = 'hud-toast';\n      t.textContent = message;\n      appendToast(t);\n      announce(message);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #925's one-string rule, the other way round. Writing a toast's string to the announcement line as well makes the one polite region speak it twice, which is the second utterance #327 asks gameplay narration to avoid.",
+  "killedBy": [
+    "the co-op death toast is its own announcement (issue #925) shows its one string inside the polite region, to sight and to a screen reader, once"
+  ]
+}

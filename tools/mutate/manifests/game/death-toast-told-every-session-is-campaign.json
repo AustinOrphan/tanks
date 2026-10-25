@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-told-every-session-is-campaign",
+  "file": "src/game/loop.ts",
+  "find": "deathToast.handle(events, driver.world, currentDescriptor.kind, playerId ?? -1);",
+  "replace": "deathToast.handle(events, driver.world, 'campaign', playerId ?? -1);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #925. The frame handler stops passing the session's own kind, so a versus death raises a toast on top of the stock strip and its announcement. The cue's own versus test passes the kind itself and cannot see this.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD names nobody in single-player or in versus (issue #925)"
+  ]
+}

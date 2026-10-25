@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-tracks-nobody",
+  "file": "src/game/loop.ts",
+  "find": "deathToast.handle(events, driver.world, currentDescriptor.kind, playerId ?? -1);",
+  "replace": "deathToast.handle(events, driver.world, currentDescriptor.kind, -1);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #925. The frame handler stops naming the tracked player, so a co-op multi-kill that takes the vignette's owner names whichever victim the sim reported first. The cue's own ordering test passes the id itself and cannot see this.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD names the tracked player when a co-op multi-kill takes them, beside their vignette (issue #925)"
+  ]
+}

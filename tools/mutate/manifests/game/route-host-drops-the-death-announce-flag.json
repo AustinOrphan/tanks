@@ -1,0 +1,14 @@
+{
+  "id": "route-host-drops-the-death-announce-flag",
+  "file": "src/game/route-host.ts",
+  "find": "          if (current()) hud.signalPlayerDeath(color, opts);",
+  "replace": "          if (current()) hud.signalPlayerDeath(color, { announce: true });",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "Issue #925 review. The session facade forwards a constant in place of the session's `announce`, which still typechecks, so every co-op death the toast names also speaks the Life lost line through the page HUD.",
+  "killedBy": [
+    "createRouteHost: the slot's gameplay HUD reaches the page HUD while the session holds the slot"
+  ]
+}

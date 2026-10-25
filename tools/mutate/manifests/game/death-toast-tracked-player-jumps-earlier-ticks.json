@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-tracked-player-jumps-earlier-ticks",
+  "file": "src/game/death-toast.ts",
+  "find": "      deaths.sort((a, b) => a.tick - b.tick || Number(b.id === trackedId) - Number(a.id === trackedId));",
+  "replace": "      deaths.sort((a, b) => Number(b.id === trackedId) - Number(a.id === trackedId));",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925 review. Puts the tracked player's death first across the whole batch rather than among one tick's deaths, so in a catch-up frame a partner who died three ticks earlier lands inside the window the later death opened and is never named, though two single-tick frames would name both.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death a catch-up frame, which runs several ticks and hands over their events as one batch keeps an earlier death ahead of the vignette owner's later one"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-names-another-victim-first",
+  "file": "src/game/death-toast.ts",
+  "find": "      deaths.sort((a, b) => a.tick - b.tick || Number(b.id === trackedId) - Number(a.id === trackedId));",
+  "replace": "      deaths.sort((a, b) => a.tick - b.tick);",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. Drops the sort's tie-break, so a same-tick multi-kill that includes the tracked player names the other victim while the vignette flashes the tracked player's color: the toast mis-attributes the very flash it exists to name.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death names the vignette's owner first in a frame it shares"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-names-an-enemy",
+  "file": "src/game/death-toast.ts",
+  "find": "        if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;",
+  "replace": "        if (e.type !== 'tank-destroyed') continue;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. The presence-only mistake on a shared stream: every enemy kill becomes a toast, and an enemy carries no slot, so it reads \"P1 out\" while the tracked player is alive.",
+  "killedBy": [
+    "the co-op death toast (issue #925) ignores an enemy's death"
+  ]
+}

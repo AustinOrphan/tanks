@@ -4,6 +4,7 @@ import { createHud, type Hud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
 import { ZERO_STATS } from './stats';
 import type { TypedOutcome } from './app-state';
+import { deathToastText } from './death-toast';
 
 // ---------------------------------------------------------------------------
 // Issue #629: landmarks, pane roles, and named controls.
@@ -389,7 +390,7 @@ describe('live status announcements (issue #629)', () => {
     const { hud: h, root } = mount();
     h.setStatus(campaign({ lives: 3 }));
     expect(spoken(root)).toBe('');
-    h.signalPlayerDeath(0xff0000);
+    h.signalPlayerDeath(0xff0000, { announce: true });
     h.setStatus(campaign({ lives: 2 }));
     expect(spoken(root)).toBe('Life lost. 2 lives remaining.');
   });
@@ -397,7 +398,7 @@ describe('live status announcements (issue #629)', () => {
   it('says "1 life", not "1 lives"', () => {
     const { hud: h, root } = mount();
     h.setStatus(campaign({ lives: 2 }));
-    h.signalPlayerDeath(0xff0000);
+    h.signalPlayerDeath(0xff0000, { announce: true });
     h.setStatus(campaign({ lives: 1 }));
     expect(spoken(root)).toBe('Life lost. 1 life remaining.');
   });
@@ -418,11 +419,11 @@ describe('live status announcements (issue #629)', () => {
     // mode this whole feature is most likely to produce.
     const { hud: h, root } = mount();
     h.setStatus(campaign({ lives: 3 }));
-    h.signalPlayerDeath(0xff0000);
+    h.signalPlayerDeath(0xff0000, { announce: true });
     for (let i = 0; i < 60; i++) h.setStatus(campaign({ lives: 2 }));
     expect(spoken(root)).toBe('Life lost. 2 lives remaining.');
     // ...and a SECOND death still speaks, because its sentence differs.
-    h.signalPlayerDeath(0xff0000);
+    h.signalPlayerDeath(0xff0000, { announce: true });
     h.setStatus(campaign({ lives: 1 }));
     expect(spoken(root)).toBe('Life lost. 1 life remaining.');
   });
@@ -515,7 +516,7 @@ describe('live status announcements (issue #629)', () => {
     // as an advance, and an owed death announcement belongs to the session that is over.
     const { hud: h, root } = mount();
     h.setStatus(campaign({ mission: 1, lives: 3 }));
-    h.signalPlayerDeath(0xff0000);
+    h.signalPlayerDeath(0xff0000, { announce: true });
     h.setStatus(null);
     h.setStatus(campaign({ mission: 4, lives: 1 }));
     expect(spoken(root)).toBe('');
@@ -531,6 +532,50 @@ describe('live status announcements (issue #629)', () => {
     expect(node.classList.contains('ui-sr-only')).toBe(true);
     expect(node.closest('[aria-live]')?.className).toBe('hud-toasts');
     expect(node.hasAttribute('aria-live')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #925: the co-op death toast is its own announcement.
+//
+// The ruling asks for one string on two channels: the toast a player sees and the line the
+// live region speaks. The toast stack IS the page's one polite region, so the toast's own
+// text is the spoken line, and the cue (death-toast.ts) hands the HUD nothing else. What can
+// break that is here: a toast hidden from assistive technology, a toast outside the region,
+// the same string written to the announcement line as well, which would speak it twice, or
+// the life-loss line spoken beside the toast, a second sentence for the same death.
+// ---------------------------------------------------------------------------
+describe('the co-op death toast is its own announcement (issue #925)', () => {
+  it('shows its one string inside the polite region, to sight and to a screen reader, once', () => {
+    const { hud: h, root } = mount();
+    const text = deathToastText(1);
+    h.showToast(text);
+    const regions = Array.from(root.querySelectorAll('[aria-live]'));
+    expect(regions).toHaveLength(1);
+    expect(regions[0].getAttribute('aria-live')).toBe('polite');
+    const toast = Array.from(regions[0].querySelectorAll<HTMLElement>('.hud-toast'))
+      .find((t) => t.textContent === text);
+    expect(toast, 'the toast is not inside the live region').toBeDefined();
+    expect(toast?.closest('[aria-hidden="true"]'), 'the toast is hidden from a screen reader')
+      .toBeNull();
+    expect(toast?.classList.contains('ui-sr-only'), 'the toast is hidden from sight').toBe(false);
+    expect(spoken(root), 'the announcement line carries it too, so it is spoken twice').toBe('');
+  });
+
+  it('speaks no Life lost line for a death its toast names', () => {
+    // The tracked player's co-op death with a partner standing: loop.ts passes `announce:
+    // false`, and the push that follows still shows three lives, because under shared
+    // attempts nothing was spent.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ lives: 3 }));
+    h.signalPlayerDeath(0x3fd0ff, { announce: false });
+    h.showToast(deathToastText(0));
+    h.setStatus(campaign({ lives: 3 }));
+    expect(spoken(root), 'the Life lost line is spoken beside the toast').toBe('');
+    // The control, on the same HUD: a death no toast names still owes its line.
+    h.signalPlayerDeath(0xff0000, { announce: true });
+    h.setStatus(campaign({ lives: 2 }));
+    expect(spoken(root)).toBe('Life lost. 2 lives remaining.');
   });
 });
 

@@ -1,0 +1,17 @@
+{
+  "id": "death-toast-narrates-every-death",
+  "file": "src/game/death-toast.ts",
+  "find": "        const inWindow = lastToastTick !== null && tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
+  "replace": "        const inWindow = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. Removes the throttle, so a multi-kill raises one toast per victim and the polite region queues every name: the narration the ruling forbids.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death names one player when several die in one frame",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death raises nothing for a death inside the window, and names one at its end",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death holds every death one real blast causes inside one window",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death starts the window over on a new world, whose tick clock starts over"
+  ]
+}

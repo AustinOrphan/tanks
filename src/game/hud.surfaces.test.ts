@@ -615,7 +615,7 @@ describe('hud: losing a life', () => {
 
   it('flashes the screen and pulses the counter', () => {
     const { root, hud } = mount();
-    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE, { announce: true });
     expect(root.querySelector('.hud-damage')?.className).toContain('hud-damage--hit');
     expect(root.querySelector('.hud-lives')?.className).toContain('hud-lives--hit');
     hud.dispose();
@@ -628,11 +628,11 @@ describe('hud: losing a life', () => {
     // needs telling. MutationObserver delivers on a microtask, so drain it
     // synchronously with takeRecords rather than waiting.
     const { root, hud } = mount();
-    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE, { announce: true });
     const damage = root.querySelector('.hud-damage') as HTMLElement;
     const obs = new MutationObserver(() => {});
     obs.observe(damage, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
-    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE, { announce: true });
     const records = obs.takeRecords();
     obs.disconnect();
     const sawRemoval = records.some(
@@ -648,7 +648,7 @@ describe('hud: losing a life', () => {
     // It covers the whole board, and the player is aiming through it the
     // instant they respawn.
     const { root, hud } = mount();
-    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE, { announce: true });
     const damage = root.querySelector('.hud-damage') as HTMLElement;
     expect(damage.getAttribute('aria-hidden')).toBe('true');
     hud.dispose();
@@ -663,7 +663,7 @@ describe('hud: losing a life', () => {
 
   it('tints the vignette to the colour it is given', () => {
     const { root, hud } = mount();
-    hud.signalPlayerDeath(0x3fd0ff);
+    hud.signalPlayerDeath(0x3fd0ff, { announce: true });
     const damage = root.querySelector('.hud-damage') as HTMLElement;
     expect(damage.style.getPropertyValue('--hud-damage-color')).toBe(expectedCssColor(0x3fd0ff));
     hud.dispose();
@@ -674,7 +674,7 @@ describe('hud: losing a life', () => {
     // the point: this assertion only fails if the constant's VALUE stops matching what
     // the property is set to, so retuning the constant cannot silently desync the two.
     const { root, hud } = mount();
-    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE, { announce: true });
     const damage = root.querySelector('.hud-damage') as HTMLElement;
     expect(damage.style.getPropertyValue('--hud-damage-color')).toBe(
       expectedCssColor(SINGLE_PLAYER_DEATH_VIGNETTE),

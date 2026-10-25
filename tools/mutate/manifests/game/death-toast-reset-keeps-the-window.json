@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-reset-keeps-the-window",
+  "file": "src/game/death-toast.ts",
+  "find": "    reset(): void {\n      lastToastTick = null;\n    },",
+  "replace": "    reset(): void {},",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. A reset that forgets nothing: a new world's tick clock starts over, so the previous world's last toast tick can sit just ahead of the new world's first deaths and silence them.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death starts the window over on a new world, whose tick clock starts over"
+  ]
+}

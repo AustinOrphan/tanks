@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-window-outlives-its-world",
+  "file": "src/game/loop.ts",
+  "find": "    // A new world restarts the tick clock the death toast's window is counted on.\n    deathToast.reset();",
+  "replace": "    // A new world restarts the tick clock the death toast's window is counted on.",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #925. switchTo stops resetting the cue, so the first death of a new world can fall inside the last world's window on the restarted tick clock and go unnamed. The cue's reset test calls reset itself.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD starts the death toast's window over when a new world is built (issue #925)"
+  ]
+}

@@ -797,8 +797,14 @@ export interface Hud {
    * The player just lost a life. Losing one was previously invisible: the only
    * cue was the Lives number quietly decrementing in a corner, plus a sound --
    * and with no audio assets committed, that sound is a procedural blip.
+   *
+   * `announce` says whether the live region owes this death its "Life lost. N lives
+   * remaining." sentence at the next status push (issue #629). The caller passes `false`
+   * where issue #925's co-op toast names the death (death-toast.ts's
+   * `deathToastNamesDeaths`): that toast sits in the same live region, so the sentence would
+   * be a second one for the same death.
    */
-  signalPlayerDeath(color: number): void;
+  signalPlayerDeath(color: number, opts: { announce: boolean }): void;
   onMuteToggle(cb: () => void): void;
   onVolumeChange(cb: (v: number) => void): void;
   /**
@@ -957,9 +963,15 @@ export interface Hud {
   /**
    * A single-line, self-expiring toast, reusing the same `.hud-toast` stack and timer as
    * `showAchievementToasts` but for a plain message with no achievement identity behind
-   * it. Today's one caller: `?dev=1&gamepad=1`'s "gamepad connected" notice -- Firefox
+   * it. Its first caller was `?dev=1&gamepad=1`'s "gamepad connected" notice -- Firefox
    * hides a pad from `navigator.getGamepads()` until the player presses a button on it,
-   * so the game has no other moment to confirm the pad was seen.
+   * so the game has no other moment to confirm the pad was seen. The page's mute shortcut,
+   * the persistence notice, the controller-layout capture status (route-ui.ts) and issue
+   * #925's co-op death toast ("P2 out") ride it too.
+   *
+   * The stack sits inside the page's one `aria-live="polite"` region, so a toast's text is
+   * also what a screen reader hears; a caller writes its string here once, not here and to
+   * the announcement line as well.
    */
   showToast(message: string): void;
   /**
@@ -1459,7 +1471,9 @@ export type GameplayHudKey =
   | 'setStockPalette'
   // Lent from the frame, which owns the stack itself. A session needs it for the gamepad
   // connect/disconnect edges, which are neither route changes nor gameplay events but do
-  // happen mid-match and have nowhere else to report.
+  // happen mid-match and have nowhere else to report. Issue #925's co-op death toast is a
+  // gameplay event that borrows it too, because the stack is the page's one live region and
+  // the toast's text is meant to be both seen and spoken (death-toast.ts).
   | 'showToast';
 
 export type RouteHud = Pick<Hud, RouteHudKey>;
@@ -4036,8 +4050,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    *
    * THE POLICY, in the order it is applied:
    *
-   *  1. A LIFE LOST, when `signalPlayerDeath` has fired since the last push. The number
-   *     comes from THIS push, so the sentence and the bar agree.
+   *  1. A LIFE LOST, when `signalPlayerDeath` has fired since the last push with
+   *     `announce` set. The number comes from THIS push, so the sentence and the bar agree.
+   *     A co-op death at two or more player tanks is named by its toast instead (#925).
    *  2. A VERSUS STOCK LOST, from a per-slot decrease. Only a decrease: a rematch resets
    *     every stock upward, and announcing that would narrate the setup rather than a loss.
    *     Guarded on the previous push also being versus with the same slots, so a different
@@ -8617,13 +8632,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       void capacityEl.offsetWidth;
       capacityEl.classList.add('hud-capacity--flash');
     },
-    signalPlayerDeath(color: number): void {
+    signalPlayerDeath(color: number, { announce }: { announce: boolean }): void {
       // The AUTHORITATIVE life-loss event (issue #629), and the reason the announcement is
       // not derived from a lives diff: `pushStatus` fires on every world build too, so
       // "lives went down" also describes a session replaced by a different board. Recorded
       // rather than spoken here, because the remaining count belongs to the NEXT status
-      // push -- this cue and the topbar would otherwise be a frame out of step.
-      deathPending = true;
+      // push -- this cue and the topbar would otherwise be a frame out of step. Not
+      // recorded where the caller says the co-op toast already names the death (#925).
+      if (announce) deathPending = true;
       // Set before the (re)trigger below, so the very first paint of the replayed
       // animation already carries the right colour rather than one frame of the old one.
       damageEl.style.setProperty('--hud-damage-color', cssColor(color));

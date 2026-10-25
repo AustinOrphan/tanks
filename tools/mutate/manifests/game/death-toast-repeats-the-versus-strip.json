@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-repeats-the-versus-strip",
+  "file": "src/game/death-toast.ts",
+  "find": "  return sessionKind !== 'versus' && identityApplies(world);",
+  "replace": "  return identityApplies(world);",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. Drops the versus exclusion, so a versus death is named three times: the stock strip's cue on the slot's entry, the live region's 'Player N lost a stock' sentence (#629), and now a toast the same region reads. Measured before the build: versus already names every death without color.",
+  "killedBy": [
+    "the co-op death toast (issue #925) stays silent in versus, whose stock strip and announcement already name every death"
+  ]
+}

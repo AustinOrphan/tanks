@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-leaves-the-life-loss-line-owed",
+  "file": "src/game/loop.ts",
+  "find": "{ announce: !deathToastNamesDeaths(driver.world, currentDescriptor.kind) }",
+  "replace": "{ announce: true }",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #925 review. The frame handler always owes the HUD its Life lost line, so the tracked player's co-op death is spoken twice, once by its toast and once by the line. The HUD's own test passes the flag by hand; only a driven frame can see the frame handler set it.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD tells the HUD a co-op death's toast is its only sentence, unlike a single-player death (issue #925)"
+  ]
+}

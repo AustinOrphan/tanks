@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-window-includes-its-last-tick",
+  "file": "src/game/death-toast.ts",
+  "find": "&& tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
+  "replace": "&& tick - lastToastTick <= DEATH_TOAST_WINDOW_TICKS;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. Off by one at the window's end: a death DEATH_TOAST_WINDOW_TICKS after a toast is a separate event, not part of the multi-kill, and is swallowed.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death raises nothing for a death inside the window, and names one at its end"
+  ]
+}
