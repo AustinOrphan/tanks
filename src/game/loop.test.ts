@@ -4228,6 +4228,98 @@ describe('startGameWith: a real player death reaches the HUD', () => {
       h.handle.dispose();
     }
   });
+
+  /**
+   * An enemy shell sitting on `victim`, one driven frame from killing it. Shells resolve in
+   * array order (bullets.ts's `resolveBulletHits`), so pushing two fixes which death the sim
+   * reports first.
+   */
+  function shellOn(world: World, victim: Tank, id: number): void {
+    const enemy = world.tanks.find((t: Tank) => t.kind !== 'player');
+    if (!enemy) throw new Error('fixture has no enemy');
+    world.bullets.push({
+      id, ownerId: enemy.id, type: 'normal', pos: { x: victim.pos.x, y: victim.pos.y },
+      vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+    });
+  }
+
+  it('names a co-op partner who dies in the toast rail, though no vignette flashes for them (issue #925)', () => {
+    // death-toast.ts's own tests call the cue directly; this is the frame handler handing it
+    // a real death. Slot 1 is not the tracked player, so the vignette stays dark and the
+    // toast is the only thing that says who went down.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    const world = h.rec.builtWorlds[0];
+    const [, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    shellOn(world, p2, 900);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.plainToasts).toEqual(['P2 out']);
+    expect(h.rec.deathSignals, "a partner's death flashes no vignette").toBe(0);
+    h.handle.dispose();
+  });
+
+  it('names the tracked player when a co-op multi-kill takes them, beside their vignette (issue #925)', () => {
+    // Both players die on one frame, slot 1's shell resolving first. The vignette flashes the
+    // tracked player's color on this frame, so the one toast the throttle allows must name
+    // them rather than whichever victim the sim reported first.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    const world = h.rec.builtWorlds[0];
+    const [p1, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    shellOn(world, p2, 900);
+    shellOn(world, p1, 901);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.deathSignals, 'the tracked player really died').toBe(1);
+    expect(h.rec.plainToasts).toEqual(['P1 out']);
+    h.handle.dispose();
+  });
+
+  it('names nobody in single-player or in versus (issue #925)', () => {
+    // Single-player: one player tank, the classic red vignette, nobody to tell apart.
+    const solo = boot(makeDeps({ world: worldWithPlayerAboutToDie() }));
+    solo.setState('playing');
+    solo.fireFrame(20);
+    expect(solo.rec.deathSignals, 'the single-player death really happened').toBe(1);
+    expect(solo.rec.plainToasts).toEqual([]);
+    solo.handle.dispose();
+    // Versus: P2's shell on the tracked player. The stock strip and its announcement name the
+    // death already, so the frame handler must hand the cue the session's own kind.
+    const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+    const world = h.rec.builtWorlds[0];
+    const [p1, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    world.bullets.push({
+      id: 900, ownerId: p2.id, type: 'normal', pos: { x: p1.pos.x, y: p1.pos.y },
+      vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+    });
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.deathSignals, 'the versus death really happened').toBe(1);
+    expect(h.rec.plainToasts).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it("starts the death toast's window over when a new world is built (issue #925)", () => {
+    // The window is counted on the world's tick clock, which a new world restarts. Both deaths
+    // below land on the first ticks of their worlds, so without the reset the second sits
+    // inside the first one's window and is never named. The switch is a cleared level's Next
+    // Level: `levelCount: 2` gives it a second board, played by the same two players.
+    const h = boot(makeDeps({ levelCount: 2, devFlags: { players: 2 } }));
+    const first = h.rec.builtWorlds[0];
+    shellOn(first, first.tanks.filter((t: Tank) => t.kind === 'player')[1], 900);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.plainToasts).toEqual(['P2 out']);
+    h.setState('outcome-win');
+    h.hud.startRestart();
+    const second = h.rec.builtWorlds.at(-1) as World;
+    expect(second, 'Next Level built no new world').not.toBe(first);
+    expect(second.tick, 'the new world restarts the tick clock').toBe(0);
+    shellOn(second, second.tanks.filter((t: Tank) => t.kind === 'player')[1], 901);
+    h.setState('playing');
+    h.fireFrame(40);
+    expect(h.rec.plainToasts).toEqual(['P2 out', 'P2 out']);
+    h.handle.dispose();
+  });
 });
 
 /**

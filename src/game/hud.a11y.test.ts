@@ -4,6 +4,7 @@ import { createHud, type Hud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
 import { ZERO_STATS } from './stats';
 import type { TypedOutcome } from './app-state';
+import { deathToastText } from './death-toast';
 
 // ---------------------------------------------------------------------------
 // Issue #629: landmarks, pane roles, and named controls.
@@ -531,6 +532,33 @@ describe('live status announcements (issue #629)', () => {
     expect(node.classList.contains('ui-sr-only')).toBe(true);
     expect(node.closest('[aria-live]')?.className).toBe('hud-toasts');
     expect(node.hasAttribute('aria-live')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #925: the co-op death toast is its own announcement.
+//
+// The ruling asks for one string on two channels: the toast a player sees and the line the
+// live region speaks. The toast stack IS the page's one polite region, so the toast's own
+// text is the spoken line, and the cue (death-toast.ts) hands the HUD nothing else. What can
+// break that is here: a toast hidden from assistive technology, a toast outside the region,
+// or the same string written to the announcement line as well, which would speak it twice.
+// ---------------------------------------------------------------------------
+describe('the co-op death toast is its own announcement (issue #925)', () => {
+  it('shows its one string inside the polite region, to sight and to a screen reader, once', () => {
+    const { hud: h, root } = mount();
+    const text = deathToastText(1);
+    h.showToast(text);
+    const regions = Array.from(root.querySelectorAll('[aria-live]'));
+    expect(regions).toHaveLength(1);
+    expect(regions[0].getAttribute('aria-live')).toBe('polite');
+    const toast = Array.from(regions[0].querySelectorAll<HTMLElement>('.hud-toast'))
+      .find((t) => t.textContent === text);
+    expect(toast, 'the toast is not inside the live region').toBeDefined();
+    expect(toast?.closest('[aria-hidden="true"]'), 'the toast is hidden from a screen reader')
+      .toBeNull();
+    expect(toast?.classList.contains('ui-sr-only'), 'the toast is hidden from sight').toBe(false);
+    expect(spoken(root), 'the announcement line carries it too, so it is spoken twice').toBe('');
   });
 });
 
