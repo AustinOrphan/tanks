@@ -19,7 +19,6 @@ counts through that test, never by hand.
 - [Spike: multiplayer — which mode, and does peer determinism hold?](backlog/spike-multiplayer-peer-determinism.md)
 - [Spike: richer animated skins — what the offset mechanism cannot express](backlog/spike-richer-animated-skins.md)
 - [Follow-ups from "game data plumbing" (storage resolver, save export/import, replay recorder)](backlog/follow-ups-game-data-plumbing.md)
-- [Spike: should `src/sim/` be Rust compiled to WASM?](backlog/spike-sim-in-rust-wasm.md)
 - [Spike: `src/sim/` behind a real package boundary](backlog/spike-sim-package-boundary.md)
 - [Spike: should New Game confirm before abandoning an active run?](backlog/spike-new-game-confirm.md)
 - [Spike: the rest of versus mode -- setup UI and maps](backlog/spike-versus-mode-rest.md)

@@ -1,14 +1,9 @@
----
-status: active
-date: 2026-08-23
-last-reviewed: 2026-08-23
-scope: Spike -- should `src/sim/` be Rust compiled to WASM?
-implementation-issues: []
-implementation-prs: []
-supersedes: []
-superseded-by: []
----
 # Spike: should `src/sim/` be Rust compiled to WASM?
+
+**Closed 2026-10-24 as out of scope**, by the ruling on the #1114 audit (comment 6392071810):
+a Rust/WASM rewrite of the simulation is not pursued in this repository. The audit's row for
+this topic gives the reasons. The spike moved here from the backlog as a research record; the
+text below is as last reviewed on 2026-08-23 and is not re-checked.
 
 **Raised 2026-08-10**, alongside the cross-engine determinism issue.
 

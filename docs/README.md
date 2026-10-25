@@ -50,7 +50,7 @@ These are the only plans and specifications that state current direction.
 
 ## Backlog topics
 
-15 documents under `docs/superpowers/backlog/` (15 `active`).
+14 documents under `docs/superpowers/backlog/` (14 `active`).
 A topic is present only while its question is open.
 They are enumerated in [the backlog index](superpowers/backlog.md), which
 `tools/backlog.test.ts` gates for completeness; this index counts them rather than listing
@@ -58,7 +58,7 @@ them a second time.
 
 ## Research
 
-5 documents under `docs/research/`.
+6 documents under `docs/research/`.
 Research is recorded in `docs/research/inventory.json` rather than in frontmatter, and
 `classification` places a note against the Public Prototype 1.0 boundary; it is not a
 status.
@@ -70,6 +70,7 @@ status.
 | [mobile-release.md](research/mobile-release.md) | `mixed` | Feasibility of wrapping the game as an Android/iOS app: offline bundle, touch controls, storage keys, safe-area and WebGL2 gaps, store policies, and the unmeasured phone frame time. |
 | [multiplayer.md](research/multiplayer.md) | `mixed` | Multiplayer feasibility: the immutable deterministic sim as a netcode foundation, the game layer's then single-player assumptions, cross-engine float determinism, and the couch-first ordering. |
 | [pp1-roles-evidence.md](research/pp1-roles-evidence.md) | `public-prototype` | Evidence package for the pp1Roles experiment: arm inputs against shipped defaults, matched deterministic measurements, four matched normal-speed captures, and how to play the pair. |
+| [sim-in-rust-wasm.md](research/sim-in-rust-wasm.md) | `commercial-direction` | Spike, closed 2026-10-24 as out of scope: whether src/sim/ should be rewritten in Rust compiled to WASM for cross-engine determinism. |
 
 ## Implementation record
 
