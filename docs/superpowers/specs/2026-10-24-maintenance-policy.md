@@ -1,21 +1,21 @@
 ---
-status: proposed
+status: active
 date: 2026-10-24
-last-reviewed: 2026-10-24
+last-reviewed: 2026-10-25
 scope: What the public repository accepts after the Public Prototype 1.0 release, how fixes move to and from the private repository, and what happens to later issues and pull requests
 implementation-issues: [294, 1112]
-implementation-prs: []
+implementation-prs: [1116]
 supersedes: []
 superseded-by: []
 ---
 # Public repository maintenance after Public Prototype 1.0
 
-Proposed 2026-10-24 (#1112). Step 14 of the cutover procedure in #294 puts the public repository
-into showcase and maintenance mode, and #294 requires the policy for that mode to be written down;
-this is that policy. A rule that cites #294 or the
+Proposed 2026-10-24 (#1112, PR #1116) and ruled 2026-10-25 (chat): every rule stands as written,
+except that automated dependency pull requests are narrowed to security updates after the release
+(see "Issues and pull requests after the release"). Step 14 of the cutover procedure in #294 puts
+the public repository into showcase and maintenance mode, and #294 requires the policy for that
+mode to be written down; this is that policy. A rule that cites #294 or the
 [project direction](./2026-08-22-project-direction.md) restates a decision already made there.
-Every other rule is a proposal awaiting a ruling, and this document becomes `active` once each has
-one.
 
 ## When it applies
 
@@ -92,9 +92,12 @@ From the release on, every open issue is handled as above.
 **Pull requests.** Outside code and asset contributions are not accepted, for the licensing reason
 [CONTRIBUTING.md](../../../CONTRIBUTING.md) gives, and the release does not change that. An outside
 pull request is closed with a link to CONTRIBUTING.md, and closing it is not a judgment about the
-change. Automated dependency pull requests from
-[`.github/dependabot.yml`](../../../.github/dependabot.yml) count as maintenance: one that passes
-the required checks and keeps the prototype working may merge, and any other is closed.
+change. From the release on, [`.github/dependabot.yml`](../../../.github/dependabot.yml) proposes
+security updates only, and narrowing it is a step of the cutover in #294 (ruled 2026-10-25,
+chat): a routine version bump costs a CI run and a merge in a repository that no longer develops,
+and the price is that a later security fix may be a larger jump. A security update counts as
+maintenance: one that passes the required checks and keeps the prototype working may merge, and
+any other is closed.
 
 ## Outside this policy
 
