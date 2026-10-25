@@ -1,13 +1,13 @@
 {
   "id": "death-toast-speaks-in-single-player",
   "file": "src/game/death-toast.ts",
-  "find": "      if (sessionKind === 'versus') return;\n      if (!identityApplies(world)) return;",
-  "replace": "      if (sessionKind === 'versus') return;",
+  "find": "  return sessionKind !== 'versus' && identityApplies(world);",
+  "replace": "  return sessionKind !== 'versus';",
   "expect": "killed",
   "tests": [
     "src/game/death-toast.test.ts"
   ],
-  "why": "Issue #925. Drops the player-count gate, so a one-player campaign death raises \"P1 out\" beside the classic red vignette and the \"Life lost\" sentence: a name where there is nobody to tell apart, and a second utterance at the moment #327 asks the live region to stay short.",
+  "why": "Issue #925. Drops the player-count gate, so a one-player campaign death raises \"P1 out\" beside the classic red vignette, and loop.ts, reading the same gate, withholds its \"Life lost\" sentence: a name where there is nobody to tell apart, in place of the line that says how many lives are left.",
   "killedBy": [
     "the co-op death toast (issue #925) stays silent with one player tank, where the vignette is the classic red"
   ]

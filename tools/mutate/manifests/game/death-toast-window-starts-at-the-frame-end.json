@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-window-starts-at-the-frame-end",
+  "file": "src/game/death-toast.ts",
+  "find": "        lastToastTick = tick;",
+  "replace": "        lastToastTick = world.tick;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925 review. Starts the next window at the frame's last tick instead of the named death's, so after a catch-up frame the window runs late: a later death in the same batch reads as inside it and is never named.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death a catch-up frame, which runs several ticks and hands over their events as one batch names both of two deaths a window apart, though the frame ends after both"
+  ]
+}

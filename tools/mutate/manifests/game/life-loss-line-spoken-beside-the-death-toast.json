@@ -1,0 +1,14 @@
+{
+  "id": "life-loss-line-spoken-beside-the-death-toast",
+  "file": "src/game/hud.ts",
+  "find": "      if (announce) deathPending = true;",
+  "replace": "      deathPending = true;",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #925 review. The HUD ignores `announce`, so a co-op death the toast already names also speaks 'Life lost. N lives remaining.' into the same live region: two sentences for one death, and under shared attempts a false one while a partner still stands.",
+  "killedBy": [
+    "the co-op death toast is its own announcement (issue #925) speaks no Life lost line for a death its toast names"
+  ]
+}

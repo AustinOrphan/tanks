@@ -1,8 +1,8 @@
 {
   "id": "death-toast-window-includes-its-last-tick",
   "file": "src/game/death-toast.ts",
-  "find": "world.tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
-  "replace": "world.tick - lastToastTick <= DEATH_TOAST_WINDOW_TICKS;",
+  "find": "&& tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
+  "replace": "&& tick - lastToastTick <= DEATH_TOAST_WINDOW_TICKS;",
   "expect": "killed",
   "tests": [
     "src/game/death-toast.test.ts"

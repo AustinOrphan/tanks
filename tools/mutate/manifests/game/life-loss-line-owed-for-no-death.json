@@ -1,0 +1,14 @@
+{
+  "id": "life-loss-line-owed-for-no-death",
+  "file": "src/game/loop.ts",
+  "find": "{ announce: !deathToastNamesDeaths(driver.world, currentDescriptor.kind) }",
+  "replace": "{ announce: false }",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #925 review. The frame handler never owes the HUD its Life lost line, so a single-player death, which no toast names, is silent in the live region: issue #629's announcement lost.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD tells the HUD a co-op death's toast is its only sentence, unlike a single-player death (issue #925)"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-dates-deaths-by-the-frame-end",
+  "file": "src/game/death-toast.ts",
+  "find": "&& tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
+  "replace": "&& world.tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925 review. Measures a death against the frame's last tick instead of its own, so a catch-up frame that runs several ticks names a second victim of one blast whenever the frame ends a window after the first death. Every single-tick frame has the two ticks equal, which is why only a batched case can see it.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death a catch-up frame, which runs several ticks and hands over their events as one batch holds two deaths five ticks apart in one window, though the frame ends past it"
+  ]
+}

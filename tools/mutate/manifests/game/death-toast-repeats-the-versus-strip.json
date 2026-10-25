@@ -1,8 +1,8 @@
 {
   "id": "death-toast-repeats-the-versus-strip",
   "file": "src/game/death-toast.ts",
-  "find": "      if (sessionKind === 'versus') return;\n      if (!identityApplies(world)) return;",
-  "replace": "      if (!identityApplies(world)) return;",
+  "find": "  return sessionKind !== 'versus' && identityApplies(world);",
+  "replace": "  return identityApplies(world);",
   "expect": "killed",
   "tests": [
     "src/game/death-toast.test.ts"

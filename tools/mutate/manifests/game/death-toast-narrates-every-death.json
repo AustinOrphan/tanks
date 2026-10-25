@@ -1,7 +1,7 @@
 {
   "id": "death-toast-narrates-every-death",
   "file": "src/game/death-toast.ts",
-  "find": "        const inWindow = lastToastTick !== null && world.tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
+  "find": "        const inWindow = lastToastTick !== null && tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;",
   "replace": "        const inWindow = false;",
   "expect": "killed",
   "tests": [
