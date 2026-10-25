@@ -970,7 +970,7 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
     ['setRoundPhase', (s) => s.hud.setRoundPhase(null)],
     ['setShellCount', (s) => s.hud.setShellCount(null)],
     ['signalShellCapacity', (s) => s.hud.signalShellCapacity({ inFlight: 3, cap: 3 })],
-    ['signalPlayerDeath', (s) => s.hud.signalPlayerDeath(0xb41e1e)],
+    ['signalPlayerDeath', (s) => s.hud.signalPlayerDeath(0xb41e1e, { announce: false })],
     ['signalPlayerFire', (s) => s.hud.signalPlayerFire()],
     [
       'setTouchIndicator',
@@ -994,6 +994,9 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
       expect.arrayContaining(GAMEPLAY_PUSHES.map(([name]) => name)),
     );
     expect(f.hud.argsOf('showToast').at(-1)).toEqual(['Gamepad connected']);
+    // `announce: false` above, not the default-looking `true`, so a facade that forwarded a
+    // constant in its place could not pass (issue #925's co-op death toast relies on it).
+    expect(f.hud.argsOf('signalPlayerDeath').at(-1)).toEqual([0xb41e1e, { announce: false }]);
   });
 
   it('drops EVERY push from a session that has already been replaced', () => {

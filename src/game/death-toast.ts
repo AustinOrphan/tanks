@@ -1,8 +1,8 @@
-import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { BLAST_LIFETIME_TICKS } from '../sim/mines';
 import { identityApplies } from '../presentation/identity';
 import type { SessionDescriptorKind } from './app-state';
+import type { FrameEvent } from './driver';
 
 /**
  * Issue #925 (parent #327): a co-op player's death, named without color.
@@ -38,6 +38,16 @@ import type { SessionDescriptorKind } from './app-state';
  * This module hands the HUD nothing else: writing the string to `announce` as well would
  * speak it twice.
  *
+ * AND THE DEATH'S ONLY SENTENCE. The HUD's life-loss line is owed on the tracked player's
+ * death, so beside "P1 out" it would be a second sentence for one death: the double narration
+ * versus is spared above. `deathToastNamesDeaths` is the one test of where this toast
+ * narrates, and loop.ts hands its negation to `signalPlayerDeath` as `announce`, so the HUD
+ * owes no line there. In shipped co-op that line was also false whenever a partner still
+ * stood: under shared attempts (world.ts's `resolveStatusCoop`) a death spends a life only
+ * when it completes a wipe, and a wipe a partner's death completed was never announced. What
+ * this gives up is the count on the one death the line was true for, a wipe the tracked
+ * player completes; the topbar's Lives readout still carries it.
+ *
  * THE THROTTLE, so a multi-kill does not narrate every death. After a toast, no other
  * player's death raises one for `DEATH_TOAST_WINDOW_TICKS`, which is `BLAST_LIFETIME_TICKS`.
  * A shell stops on the first tank it hits, so it kills one; a mine's blast is the one hazard
@@ -45,12 +55,15 @@ import type { SessionDescriptorKind } from './app-state';
  * `BLAST_LIFETIME_TICKS - 1`, so every death one blast causes falls inside one window. The
  * window is the sim's own number rather than a feel value, and moves with the blast if the
  * blast is retuned. Deaths further apart than one blast are separate events and each is named.
+ * Each death is placed at the tick that produced it (`FrameEvent.tick`), not at the frame's
+ * last tick: a catch-up frame runs several ticks and hands over their events as one batch.
  *
- * THE VIGNETTE'S OWNER IS ALWAYS NAMED. The tracked player's death is taken first within a
- * frame, so a multi-kill that includes them names them, and the window never suppresses it:
- * the vignette flashes for that death on the same frame, and a toast naming another player
- * beside it would attribute the flash to the wrong player. The cost is a second toast when
- * the tracked player dies a few ticks after another player in the same blast.
+ * THE VIGNETTE'S OWNER IS ALWAYS NAMED. The tracked player's death is taken first among the
+ * deaths of one tick, so a multi-kill that includes them names them, and the window never
+ * suppresses it: the vignette flashes for that death on the same frame, and a toast naming
+ * another player beside it would attribute the flash to the wrong player. The cost is a
+ * second toast when the tracked player dies a few ticks after another player in the same
+ * blast.
  *
  * In `src/game/` beside `blocked-fire-hud.ts`, for that module's reason: loop.ts stays
  * wiring, and the policy's tests live here rather than among loop.test.ts's thousand
@@ -65,6 +78,14 @@ export function deathToastText(slot: number): string {
 /** Sim ticks after a death toast in which another player's death raises none. See above. */
 export const DEATH_TOAST_WINDOW_TICKS = BLAST_LIFETIME_TICKS;
 
+/**
+ * Whether this session's player deaths are named by the toast: outside versus, at two or more
+ * player tanks. Where they are, the toast is a death's only sentence (see above).
+ */
+export function deathToastNamesDeaths(world: World, sessionKind: SessionDescriptorKind): boolean {
+  return sessionKind !== 'versus' && identityApplies(world);
+}
+
 /** The slice of the HUD this cue drives: the toast writer a session is lent. */
 export interface DeathToastSurface {
   showToast(message: string): void;
@@ -76,7 +97,7 @@ export interface DeathToastCue {
    * session's descriptor kind, the input that decides whether the HUD draws a stock strip;
    * `trackedId` is the vignette's owner, loop.ts's `playerId`.
    */
-  handle(events: SimEvent[], world: World, sessionKind: SessionDescriptorKind, trackedId: number): void;
+  handle(events: FrameEvent[], world: World, sessionKind: SessionDescriptorKind, trackedId: number): void;
   /** A new world: its tick clock starts over, so the window does too. */
   reset(): void;
 }
@@ -86,24 +107,25 @@ export function createDeathToastCue(hud: DeathToastSurface): DeathToastCue {
 
   return {
     handle(events, world, sessionKind, trackedId): void {
-      if (sessionKind === 'versus') return;
-      if (!identityApplies(world)) return;
-      const deaths: number[] = [];
+      if (!deathToastNamesDeaths(world, sessionKind)) return;
+      const deaths: Array<{ id: number; tick: number }> = [];
       for (const e of events) {
         // Player-kind only: an enemy's death is the players' success, not a player out.
         if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;
-        if (e.tankId === trackedId) deaths.unshift(e.tankId);
-        else deaths.push(e.tankId);
+        deaths.push({ id: e.tankId, tick: e.tick });
       }
-      for (const id of deaths) {
-        const inWindow = lastToastTick !== null && world.tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;
+      // In tick order, the tracked player first among one tick's deaths. The driver already
+      // stamps a batch in tick order, and the sort is stable, so only the tie moves.
+      deaths.sort((a, b) => a.tick - b.tick || Number(b.id === trackedId) - Number(a.id === trackedId));
+      for (const { id, tick } of deaths) {
+        const inWindow = lastToastTick !== null && tick - lastToastTick < DEATH_TOAST_WINDOW_TICKS;
         if (inWindow && id !== trackedId) continue;
         // `tank-destroyed` carries no slot. A destroyed tank stays in `world.tanks` (`alive:
         // false`), the same lookup `deathVignetteColor` makes.
         const tank = world.tanks.find((t) => t.id === id);
         if (!tank) continue;
         hud.showToast(deathToastText(tank.controlledBy ?? 0));
-        lastToastTick = world.tick;
+        lastToastTick = tick;
       }
     },
     reset(): void {

@@ -76,7 +76,7 @@ import type { SuiteContext } from '../audio/suites';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
 import { createBlockedFireHudCue } from './blocked-fire-hud';
-import { createDeathToastCue } from './death-toast';
+import { createDeathToastCue, deathToastNamesDeaths } from './death-toast';
 import {
   createGameStateMachine,
   type GameStateMachine,
@@ -2857,6 +2857,9 @@ export function startGameWith(
       if (isPlayerDeath(events, playerId ?? -1)) {
         hud.signalPlayerDeath(
           deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette),
+          // Where the co-op toast below names this death, it is the death's only sentence, so
+          // the HUD owes no "Life lost" line beside it (issue #925, death-toast.ts).
+          { announce: !deathToastNamesDeaths(driver.world, currentDescriptor.kind) },
         );
         // The #152 fix: persist the reduced life count on the RUN before the player
         // can escape it by refreshing or leaving gameplay -- not deferred to any

@@ -7,15 +7,17 @@ import { dropMine, detonateMine, stepBlasts, BLAST_LIFETIME_TICKS } from '../sim
 import { MINE_BLAST_RADIUS, TANK_RADIUS } from '../sim/constants';
 import type { Tank } from '../sim/types';
 import type { SimEvent } from '../sim/events';
+import type { FrameEvent } from './driver';
 
 function spy(): { hud: { showToast(message: string): void }; toasts: string[] } {
   const toasts: string[] = [];
   return { hud: { showToast: (m) => toasts.push(m) }, toasts };
 }
 
-const destroyed = (t: Tank): SimEvent => ({
+/** A tank's death as the driver hands it over: stamped with the tick that produced it. */
+const destroyed = (t: Tank, tick: number): FrameEvent => ({
   type: 'tank-destroyed', tankId: t.id, kind: t.kind, by: { source: 'shell', ownerId: 0 },
-  pos: { x: t.pos.x, y: t.pos.y },
+  pos: { x: t.pos.x, y: t.pos.y }, tick,
 });
 
 /** A real campaign-coop load, its player tanks in slot order (slot 0 is the tracked player). */
@@ -30,6 +32,7 @@ function coop(players: number): { world: World; slots: Tank[] } {
   return { world, slots };
 }
 
+/** The world a frame ends on, at its last tick. */
 const at = (world: World, tick: number): World => ({ ...world, tick });
 
 describe('the co-op death toast (issue #925)', () => {
@@ -42,7 +45,7 @@ describe('the co-op death toast (issue #925)', () => {
     // vignette is tied to the tracked player.
     const { world, slots: [p1, , p3] } = coop(3);
     const { hud, toasts } = spy();
-    createDeathToastCue(hud).handle([destroyed(p3)], world, 'campaign', p1.id);
+    createDeathToastCue(hud).handle([destroyed(p3, world.tick)], world, 'campaign', p1.id);
     expect(toasts).toEqual(['P3 out']);
   });
 
@@ -50,12 +53,12 @@ describe('the co-op death toast (issue #925)', () => {
     const solo = createArenaWorld(7);
     const player = solo.tanks.find((t) => t.kind === 'player') as Tank;
     const { hud, toasts } = spy();
-    createDeathToastCue(hud).handle([destroyed(player)], solo, 'campaign', player.id);
+    createDeathToastCue(hud).handle([destroyed(player, solo.tick)], solo, 'campaign', player.id);
     expect(toasts).toEqual([]);
     // The control: the same death with a partner on the board is named.
     const { world, slots: [p1] } = coop(2);
     const partnered = spy();
-    createDeathToastCue(partnered.hud).handle([destroyed(p1)], world, 'campaign', p1.id);
+    createDeathToastCue(partnered.hud).handle([destroyed(p1, world.tick)], world, 'campaign', p1.id);
     expect(partnered.toasts).toEqual(['P1 out']);
   });
 
@@ -64,13 +67,13 @@ describe('the co-op death toast (issue #925)', () => {
       const world = createWorldFor(STANDARD_ARENA, 7, { playerCount: 2, rules: { mode } });
       const [p1, p2] = world.tanks.filter((t) => t.kind === 'player');
       const { hud, toasts } = spy();
-      createDeathToastCue(hud).handle([destroyed(p2), destroyed(p1)], world, 'versus', p1.id);
+      createDeathToastCue(hud).handle([destroyed(p2, world.tick), destroyed(p1, world.tick)], world, 'versus', p1.id);
       expect(toasts, mode).toEqual([]);
     }
     // The control: a Level Select board played by two is co-op-shaped, and is named.
     const { world, slots: [p1, p2] } = coop(2);
     const { hud, toasts } = spy();
-    createDeathToastCue(hud).handle([destroyed(p2)], world, 'practice', p1.id);
+    createDeathToastCue(hud).handle([destroyed(p2, world.tick)], world, 'practice', p1.id);
     expect(toasts).toEqual(['P2 out']);
   });
 
@@ -78,7 +81,7 @@ describe('the co-op death toast (issue #925)', () => {
     const { world, slots: [p1] } = coop(2);
     const enemy = world.tanks.find((t) => t.kind !== 'player') as Tank;
     const { hud, toasts } = spy();
-    createDeathToastCue(hud).handle([destroyed(enemy)], world, 'campaign', p1.id);
+    createDeathToastCue(hud).handle([destroyed(enemy, world.tick)], world, 'campaign', p1.id);
     expect(toasts).toEqual([]);
   });
 
@@ -86,7 +89,7 @@ describe('the co-op death toast (issue #925)', () => {
     it('names one player when several die in one frame', () => {
       const { world, slots: [p1, p2, p3] } = coop(3);
       const { hud, toasts } = spy();
-      createDeathToastCue(hud).handle([destroyed(p2), destroyed(p3)], at(world, 100), 'campaign', p1.id);
+      createDeathToastCue(hud).handle([destroyed(p2, 100), destroyed(p3, 100)], at(world, 100), 'campaign', p1.id);
       expect(toasts).toEqual(['P2 out']);
     });
 
@@ -94,13 +97,15 @@ describe('the co-op death toast (issue #925)', () => {
       const { world, slots: [p1, p2, p3] } = coop(3);
       const inside = spy();
       const cue = createDeathToastCue(inside.hud);
-      cue.handle([destroyed(p2)], at(world, 100), 'campaign', p1.id);
-      cue.handle([destroyed(p3)], at(world, 100 + DEATH_TOAST_WINDOW_TICKS - 1), 'campaign', p1.id);
+      cue.handle([destroyed(p2, 100)], at(world, 100), 'campaign', p1.id);
+      const last = 100 + DEATH_TOAST_WINDOW_TICKS - 1;
+      cue.handle([destroyed(p3, last)], at(world, last), 'campaign', p1.id);
       expect(inside.toasts).toEqual(['P2 out']);
       const after = spy();
       const later = createDeathToastCue(after.hud);
-      later.handle([destroyed(p2)], at(world, 100), 'campaign', p1.id);
-      later.handle([destroyed(p3)], at(world, 100 + DEATH_TOAST_WINDOW_TICKS), 'campaign', p1.id);
+      later.handle([destroyed(p2, 100)], at(world, 100), 'campaign', p1.id);
+      const next = 100 + DEATH_TOAST_WINDOW_TICKS;
+      later.handle([destroyed(p3, next)], at(world, next), 'campaign', p1.id);
       expect(after.toasts).toEqual(['P2 out', 'P3 out']);
     });
 
@@ -129,7 +134,7 @@ describe('the co-op death toast (issue #925)', () => {
       const diedAt = new Map<number, number>();
       const frame = (events: SimEvent[]): void => {
         for (const e of events) if (e.type === 'tank-destroyed') diedAt.set(e.tankId, world.tick - 500);
-        cue.handle(events, world, 'campaign', p1.id);
+        cue.handle(events.map((e) => ({ ...e, tick: world.tick })), world, 'campaign', p1.id);
       };
       const first: SimEvent[] = [];
       detonateMine(world, mine, first);
@@ -154,7 +159,7 @@ describe('the co-op death toast (issue #925)', () => {
       // naming the other victim would mis-attribute it.
       const { world, slots: [p1, p2] } = coop(2);
       const { hud, toasts } = spy();
-      createDeathToastCue(hud).handle([destroyed(p2), destroyed(p1)], at(world, 100), 'campaign', p1.id);
+      createDeathToastCue(hud).handle([destroyed(p2, 100), destroyed(p1, 100)], at(world, 100), 'campaign', p1.id);
       expect(toasts).toEqual(['P1 out']);
     });
 
@@ -162,8 +167,8 @@ describe('the co-op death toast (issue #925)', () => {
       const { world, slots: [p1, p2] } = coop(2);
       const { hud, toasts } = spy();
       const cue = createDeathToastCue(hud);
-      cue.handle([destroyed(p2)], at(world, 100), 'campaign', p1.id);
-      cue.handle([destroyed(p1)], at(world, 103), 'campaign', p1.id);
+      cue.handle([destroyed(p2, 100)], at(world, 100), 'campaign', p1.id);
+      cue.handle([destroyed(p1, 103)], at(world, 103), 'campaign', p1.id);
       expect(toasts).toEqual(['P2 out', 'P1 out']);
     });
 
@@ -171,16 +176,49 @@ describe('the co-op death toast (issue #925)', () => {
       const { world, slots: [p1, p2, p3] } = coop(3);
       const { hud, toasts } = spy();
       const cue = createDeathToastCue(hud);
-      cue.handle([destroyed(p2)], at(world, 100), 'campaign', p1.id);
+      cue.handle([destroyed(p2, 100)], at(world, 100), 'campaign', p1.id);
       cue.reset();
-      cue.handle([destroyed(p3)], at(world, 103), 'campaign', p1.id);
+      cue.handle([destroyed(p3, 103)], at(world, 103), 'campaign', p1.id);
       expect(toasts).toEqual(['P2 out', 'P3 out']);
       // The control: without the reset the same two deaths are one window.
       const kept = spy();
       const stale = createDeathToastCue(kept.hud);
-      stale.handle([destroyed(p2)], at(world, 100), 'campaign', p1.id);
-      stale.handle([destroyed(p3)], at(world, 103), 'campaign', p1.id);
+      stale.handle([destroyed(p2, 100)], at(world, 100), 'campaign', p1.id);
+      stale.handle([destroyed(p3, 103)], at(world, 103), 'campaign', p1.id);
       expect(kept.toasts).toEqual(['P2 out']);
+    });
+
+    describe('a catch-up frame, which runs several ticks and hands over their events as one batch', () => {
+      // A throttled tab's next frame can run many ticks. Each death is placed at the tick that
+      // produced it, so the window means what it does across single-tick frames. The first two
+      // cases are each other's control: one shape, deaths five ticks apart and a window apart.
+      it('holds two deaths five ticks apart in one window, though the frame ends past it', () => {
+        const { world, slots: [p1, p2, p3] } = coop(3);
+        const { hud, toasts } = spy();
+        const cue = createDeathToastCue(hud);
+        cue.handle([destroyed(p2, 100), destroyed(p3, 105)], at(world, 112), 'campaign', p1.id);
+        expect(toasts).toEqual(['P2 out']);
+      });
+
+      it('names both of two deaths a window apart, though the frame ends after both', () => {
+        const { world, slots: [p1, p2, p3] } = coop(3);
+        const { hud, toasts } = spy();
+        const later = 100 + DEATH_TOAST_WINDOW_TICKS;
+        const cue = createDeathToastCue(hud);
+        cue.handle([destroyed(p2, 100), destroyed(p3, later)], at(world, later + 2), 'campaign', p1.id);
+        expect(toasts).toEqual(['P2 out', 'P3 out']);
+      });
+
+      it("keeps an earlier death ahead of the vignette owner's later one", () => {
+        // Split over two single-tick frames, these deaths read 'P2 out' then 'P1 out' (the
+        // never-suppressed case above); one batch must say the same. Only one tick's deaths
+        // put the tracked player first, the case "names the vignette's owner first" pins.
+        const { world, slots: [p1, p2] } = coop(2);
+        const { hud, toasts } = spy();
+        const cue = createDeathToastCue(hud);
+        cue.handle([destroyed(p2, 100), destroyed(p1, 103)], at(world, 105), 'campaign', p1.id);
+        expect(toasts).toEqual(['P2 out', 'P1 out']);
+      });
     });
   });
 });

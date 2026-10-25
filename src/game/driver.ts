@@ -87,8 +87,11 @@ export interface DriverDeps {
    *
    * Called only when the frame produced events, on the same terms as the other
    * two -- so the three consumers cannot drift apart in when they see a frame.
+   *
+   * Typed `FrameEvent[]` because a consumer there reads the stamp: the co-op death toast's
+   * throttle window (death-toast.ts, issue #925) counts from each death's own tick.
    */
-  onFrameEvents(events: SimEvent[]): void;
+  onFrameEvents(events: FrameEvent[]): void;
 }
 
 /**
@@ -101,11 +104,13 @@ export interface DriverDeps {
  * came from.
  *
  * Deliberately a structural superset of `SimEvent`, not a `{tick, events}[]` envelope:
- * every consumer today (`renderer.render`, `particles.spawn`, `director.handle`,
- * `haptics.handle`, `state.onEvents`, `loop.ts`'s `onFrameEvents`) takes a plain
- * `SimEvent[]`, and a `FrameEvent[]` is assignable there without touching any of them.
- * Nothing reads `.tick` yet -- it exists for a future rollback layer's dedup, which does
- * not exist today (no transport, no rollback buffer, no peer protocol).
+ * every other consumer (`renderer.render`, `particles.spawn`, `director.handle`,
+ * `haptics.handle`, `state.onEvents`) takes a plain `SimEvent[]`, and a `FrameEvent[]` is
+ * assignable there without touching any of them. One reader of `.tick` exists: loop.ts's
+ * `onFrameEvents` hands it to the co-op death toast (issue #925), whose throttle window
+ * would otherwise date every death in a catch-up frame to the frame's last tick. A future
+ * rollback layer's dedup would be the second; none exists today (no transport, no
+ * rollback buffer, no peer protocol).
  */
 export type FrameEvent = SimEvent & { tick: number };
 

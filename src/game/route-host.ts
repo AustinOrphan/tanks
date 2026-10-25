@@ -1183,8 +1183,8 @@ export function createRouteHost(
         signalShellCapacity: (info) => {
           if (current()) hud.signalShellCapacity(info);
         },
-        signalPlayerDeath: (color) => {
-          if (current()) hud.signalPlayerDeath(color);
+        signalPlayerDeath: (color, opts) => {
+          if (current()) hud.signalPlayerDeath(color, opts);
         },
         signalPlayerFire: () => {
           if (current()) hud.signalPlayerFire();

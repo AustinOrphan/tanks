@@ -212,6 +212,8 @@ interface Recorder {
   deathSignals: number;
   /** Every colour passed to signalPlayerDeath, in order -- death-pulse issue #200. */
   deathColors: number[];
+  /** Every `announce` passed to signalPlayerDeath, in order (issue #925). */
+  deathAnnounces: boolean[];
   /**
    * Every palette passed to hud.setStockPalette, in order (issue #1057). Also logged to
    * `hudCallLog` as `stockPalette`, so a case can read it against the first status push.
@@ -576,6 +578,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     roundPhases: [],
     deathSignals: 0,
     deathColors: [],
+    deathAnnounces: [],
     stockPalettes: [],
     inputClears: 0,
     minePresses: 0,
@@ -1276,7 +1279,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setShellCount: (i) => rec.shellCounts.push(i),
         signalShellCapacity: (i) => rec.capacityFlashes.push(i),
         setRoundPhase: (info) => rec.roundPhases.push(info),
-        signalPlayerDeath: (color: number) => { rec.deathSignals += 1; rec.deathColors.push(color); },
+        signalPlayerDeath: (color: number, { announce }: { announce: boolean }) => {
+          rec.deathSignals += 1;
+          rec.deathColors.push(color);
+          rec.deathAnnounces.push(announce);
+        },
         setStockPalette: (palette: OwnerPalette) => {
           rec.stockPalettes.push(palette);
           rec.hudCallLog.push('stockPalette');
@@ -4296,6 +4303,27 @@ describe('startGameWith: a real player death reaches the HUD', () => {
     expect(h.rec.deathSignals, 'the versus death really happened').toBe(1);
     expect(h.rec.plainToasts).toEqual([]);
     h.handle.dispose();
+  });
+
+  it("tells the HUD a co-op death's toast is its only sentence, unlike a single-player death (issue #925)", () => {
+    // The tracked player dies with a partner standing. "P1 out" is the death's sentence in the
+    // live region, so the HUD's "Life lost" line, owed on this same death, would be a second.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    const world = h.rec.builtWorlds[0];
+    const [p1] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    shellOn(world, p1, 900);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.plainToasts).toEqual(['P1 out']);
+    expect(h.rec.deathAnnounces, 'a Life lost line is owed beside the toast').toEqual([false]);
+    h.handle.dispose();
+    // The control: a single-player death raises no toast, so its line is still owed.
+    const solo = boot(makeDeps({ world: worldWithPlayerAboutToDie() }));
+    solo.setState('playing');
+    solo.fireFrame(20);
+    expect(solo.rec.plainToasts).toEqual([]);
+    expect(solo.rec.deathAnnounces, 'no line is owed for an unnamed death').toEqual([true]);
+    solo.handle.dispose();
   });
 
   it("starts the death toast's window over when a new world is built (issue #925)", () => {
