@@ -960,7 +960,8 @@ export interface Hud {
    * it. Its first caller was `?dev=1&gamepad=1`'s "gamepad connected" notice -- Firefox
    * hides a pad from `navigator.getGamepads()` until the player presses a button on it,
    * so the game has no other moment to confirm the pad was seen. The page's mute shortcut,
-   * the persistence notice and issue #925's co-op death toast ("P2 out") ride it too.
+   * the persistence notice, the controller-layout capture status (route-ui.ts) and issue
+   * #925's co-op death toast ("P2 out") ride it too.
    *
    * The stack sits inside the page's one `aria-live="polite"` region, so a toast's text is
    * also what a screen reader hears; a caller writes its string here once, not here and to
