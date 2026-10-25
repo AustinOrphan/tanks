@@ -5,30 +5,30 @@ import { identityApplies } from '../presentation/identity';
 import type { SessionDescriptorKind } from './app-state';
 
 /**
- * Issue #925 (parent #327): a co-op player's death, named without colour.
+ * Issue #925 (parent #327): a co-op player's death, named without color.
  *
  * THE GAP, MEASURED BEFORE THIS WAS BUILT. At two or more player tanks the death vignette
- * tints to the dying tank's owner colour (`deathVignetteColor` in loop.ts), and it fires for
+ * tints to the dying tank's owner color (`deathVignetteColor` in loop.ts), and it fires for
  * the TRACKED player alone -- slot 0, the first player-kind tank -- as the identity
  * spawn/death spec's section 6 decided ("the primary player's fires the vignette"). What
  * else names that player at the same moment differs by session:
  *
- *  - VERSUS (FFA and teams) already names every death without colour. The stock strip's
- *    entry is labelled `P<n>` (with the team letter under teams, and drawn in the slot's
+ *  - VERSUS (FFA and teams) already names every death without color. The stock strip's
+ *    entry is labeled `P<n>` (with the team letter under teams, and drawn in the slot's
  *    shape marks under FFA), and the unit that just emptied carries the stock-loss cue;
  *    the page's live region says "Player N lost a stock. N remaining." (issue #629), one
  *    sentence per status push. A toast there would say the same thing twice, so versus is
  *    left alone.
  *  - CO-OP names nobody. Its status carries no strip; the live region says "Life lost. N
  *    lives remaining." on the tracked player's death and nothing on anyone else's, so the
- *    vignette's colour was the only thing on screen that said whose death it was.
+ *    vignette's color was the only thing on screen that said whose death it was.
  *
  * So a co-op session at two or more player tanks raises a toast for each player tank that
  * dies, naming its slot: "P2 out". The ruling on #925 (2026-10-13, re-ruled 2026-10-24 to
  * name the player who died rather than the killer) asked for the slot's shape marker too;
  * co-op draws no shape marker anywhere -- `identity-marker-flag.ts` ships `shape` to FFA
  * only -- so a shape here would pair with nothing on the board, and the slot number is the
- * channel that survives greyscale. Single-player keeps its classic red vignette and its
+ * channel that survives grayscale. Single-player keeps its classic red vignette and its
  * "Life lost" sentence exactly as before: there is one player and nobody to tell apart.
  *
  * ONE STRING, TWO CHANNELS, BY CONSTRUCTION. The toast stack IS the page's one polite live
