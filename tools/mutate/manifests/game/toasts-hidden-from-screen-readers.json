@@ -1,0 +1,14 @@
+{
+  "id": "toasts-hidden-from-screen-readers",
+  "file": "src/game/hud.ts",
+  "find": "      t.className = 'hud-toast';\n      t.textContent = message;\n      appendToast(t);",
+  "replace": "      t.className = 'hud-toast';\n      t.textContent = message;\n      t.setAttribute('aria-hidden', 'true');\n      appendToast(t);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Issue #925's one-string rule, its HUD half. A plain toast hidden from assistive technology still shows, so the co-op death toast would be seen and never spoken, and nothing else writes its string to the live region. Before #925 no test asserted that a toast is read at all.",
+  "killedBy": [
+    "the co-op death toast is its own announcement (issue #925) shows its one string inside the polite region, to sight and to a screen reader, once"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-window-shorter-than-a-blast",
+  "file": "src/game/death-toast.ts",
+  "find": "export const DEATH_TOAST_WINDOW_TICKS = BLAST_LIFETIME_TICKS;",
+  "replace": "export const DEATH_TOAST_WINDOW_TICKS = BLAST_LIFETIME_TICKS - 1;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. One tick short of a blast's lethal life, so a tank that drives into a blast on its last lethal tick is named as a second toast for one multi-kill. The symbolic window tests move with the constant and cannot see this; the real-blast test measures the sim's spread.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death holds every death one real blast causes inside one window"
+  ]
+}

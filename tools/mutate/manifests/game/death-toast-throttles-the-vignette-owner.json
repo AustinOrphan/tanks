@@ -1,0 +1,14 @@
+{
+  "id": "death-toast-throttles-the-vignette-owner",
+  "file": "src/game/death-toast.ts",
+  "find": "        if (inWindow && id !== trackedId) continue;",
+  "replace": "        if (inWindow) continue;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. Lets the window swallow the tracked player's death when another player died a few ticks earlier, so the vignette flashes with no name and the toast still on screen names someone else.",
+  "killedBy": [
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death never suppresses the vignette's owner inside the window"
+  ]
+}

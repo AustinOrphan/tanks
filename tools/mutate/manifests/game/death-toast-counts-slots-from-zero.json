@@ -1,0 +1,23 @@
+{
+  "id": "death-toast-counts-slots-from-zero",
+  "file": "src/game/death-toast.ts",
+  "find": "  return `P${slot + 1} out`;",
+  "replace": "  return `P${slot} out`;",
+  "expect": "killed",
+  "tests": [
+    "src/game/death-toast.test.ts"
+  ],
+  "why": "Issue #925. Names the slot by its 0-based index, so slot 1 reads \"P1 out\" while the stock strip, the controllers pane and the gamepad toasts all call it Player 2. The string is the whole channel: a toast naming the wrong slot is worse than none.",
+  "killedBy": [
+    "the co-op death toast (issue #925) names the slot the way the stock strip labels it, P1 through P4",
+    "the co-op death toast (issue #925) names the player who died, not the tracked player",
+    "the co-op death toast (issue #925) stays silent with one player tank, where the vignette is the classic red",
+    "the co-op death toast (issue #925) stays silent in versus, whose stock strip and announcement already name every death",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death names one player when several die in one frame",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death raises nothing for a death inside the window, and names one at its end",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death holds every death one real blast causes inside one window",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death names the vignette's owner first in a frame it shares",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death never suppresses the vignette's owner inside the window",
+    "the co-op death toast (issue #925) the throttle: a multi-kill does not narrate every death starts the window over on a new world, whose tick clock starts over"
+  ]
+}
