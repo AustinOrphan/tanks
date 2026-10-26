@@ -1,0 +1,15 @@
+{
+  "id": "unstyled-fallback-takes-slot-0",
+  "file": "src/render/entities.ts",
+  "find": "style === DEFAULT_OTHER_SLOT_STYLE ?",
+  "replace": "!playerStyles.has(slot) ?",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Rewrites the unstyled test as \"this slot has no paint-shop entry\", which reads the same and also catches slot 0: an unpainted P1 then wears the unstyled fallback, and since slot 0 has no versus shade that is the placeholder in every mode. Issue #1124 leaves slot 0 on its roster hull #3d7bd6. The literal pin's slot-0 column is what this entry names; older tests that read P1's default hull fail as well.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) versus hulls (issue #1124) slots 1-3 wear their classic shade in FFA and in Teams, and slot 0 keeps the roster hull",
+    "player identity: ring and shell tint the owner palette (issue #1057) versus hulls (issue #1124) slots 1-3 wear their high-contrast shade in FFA and in Teams, and slot 0 keeps the roster hull"
+  ]
+}

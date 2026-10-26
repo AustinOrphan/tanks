@@ -262,7 +262,7 @@ export function createRenderer(
     particles.spawn(events);
     particles.update(dt);
     deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
-    wreck?.spawn(events, curr, entities.bodyColorOf);
+    wreck?.spawn(events, curr, (tank) => entities.bodyColorOf(curr, tank));
     blockedFireRing?.spawn(events, curr, options.blockedFire);
     blockedFireRing?.update(dt);
     blockedFireMuzzle?.spawn(events, curr, options.blockedFire);
