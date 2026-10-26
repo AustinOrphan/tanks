@@ -1,0 +1,98 @@
+{
+  "label": "ffa3-bot",
+  "url": "?dev=1&replay=1&level=1&seed=7&mode=ffa&players=3&bots=1&autoplay=1",
+  "inputs": {
+    "level": 1,
+    "seed": 7,
+    "driver": "autoplay",
+    "flags": {},
+    "mode": "ffa",
+    "players": 3,
+    "bots": 1
+  },
+  "events": [
+    {
+      "wallMs": 0,
+      "kind": "stocks",
+      "stocks": "P1 P2 P3"
+    },
+    {
+      "wallMs": 49844,
+      "kind": "round-over"
+    }
+  ],
+  "shots": [
+    "ffa3-bot-start.png"
+  ],
+  "flashes": [
+    {
+      "t": 8280.599999904633,
+      "color": "#ff8a1e",
+      "records": 2,
+      "stocks": "P1:3 of 3 stocks P2:2 of 3 stocks P3:3 of 3 stocks"
+    },
+    {
+      "t": 23476.300000190735,
+      "color": "#3fd0ff",
+      "records": 2,
+      "stocks": "P1:2 of 3 stocks P2:2 of 3 stocks P3:2 of 3 stocks"
+    },
+    {
+      "t": 37886.59999990463,
+      "color": "#3fd0ff",
+      "records": 2,
+      "stocks": "P1:1 of 3 stocks P2:2 of 3 stocks P3:1 of 3 stocks"
+    },
+    {
+      "t": 43568.800000190735,
+      "color": "#ff8a1e",
+      "records": 2,
+      "stocks": "P1:1 of 3 stocks P2:1 of 3 stocks P3:1 of 3 stocks"
+    },
+    {
+      "t": 53487.59999990463,
+      "color": "#ff8a1e",
+      "records": 2,
+      "stocks": "P1:1 of 3 stocks P2:1 of 3 stocks P3:0 of 3 stocks"
+    }
+  ],
+  "stockLog": [
+    {
+      "t": 21.699999809265137,
+      "stocks": ""
+    },
+    {
+      "t": 578.8000001907349,
+      "stocks": "P1:3 of 3 stocks P2:3 of 3 stocks P3:3 of 3 stocks"
+    },
+    {
+      "t": 8282.699999809265,
+      "stocks": "P1:3 of 3 stocks P2:2 of 3 stocks P3:3 of 3 stocks"
+    },
+    {
+      "t": 22149.400000095367,
+      "stocks": "P1:3 of 3 stocks P2:2 of 3 stocks P3:2 of 3 stocks"
+    },
+    {
+      "t": 23477.300000190735,
+      "stocks": "P1:2 of 3 stocks P2:2 of 3 stocks P3:2 of 3 stocks"
+    },
+    {
+      "t": 28119.800000190735,
+      "stocks": "P1:2 of 3 stocks P2:2 of 3 stocks P3:1 of 3 stocks"
+    },
+    {
+      "t": 37894.199999809265,
+      "stocks": "P1:1 of 3 stocks P2:2 of 3 stocks P3:1 of 3 stocks"
+    },
+    {
+      "t": 43573.40000009537,
+      "stocks": "P1:1 of 3 stocks P2:1 of 3 stocks P3:1 of 3 stocks"
+    },
+    {
+      "t": 46468.90000009537,
+      "stocks": "P1:1 of 3 stocks P2:1 of 3 stocks P3:0 of 3 stocks"
+    }
+  ],
+  "pageErrors": []
+}
