@@ -547,7 +547,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   // undefined so a flag that arrives as an empty string still resolves to the default
   // rather than to a falsy value the renderer would have to interpret.
   const views = createEntityViews(
-    scene, undefined, opts.mineWarn ?? null, opts.identityMarker ?? null, null,
+    scene, undefined, opts.mineWarn ?? null, opts.identityMarker ?? null,
     opts.enemyRole ?? null,
   );
   // Pushed, never inferred -- the same one-way projection `renderer.ts` performs. A gallery

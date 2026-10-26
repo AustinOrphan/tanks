@@ -76,12 +76,6 @@ export const DEFAULTS = {
    */
   shellTrail: null,
   /**
-   * Which arrival/destruction language the moment plays (issue #230), matching the
-   * game's own `?dev=1&arrival=<language>`. Only meaningful on the two moments that
-   * actually stage one of those events -- see the refusal in parseArgs.
-   */
-  arrival: null,
-  /**
    * Which resolved motion policy the scene renders under (issue #651): 'full' or 'reduced'.
    *
    * The gallery builds `createEntityViews`/`createParticleSystem` DIRECTLY rather than
@@ -309,28 +303,6 @@ export function parseArgs(argv) {
     }
   }
 
-  if (out.arrival !== null) {
-    // Hardcoded for --mineWarn's and --identityMarker's reason: this file is .mjs and
-    // cannot import the TypeScript that owns the vocabulary. ARRIVAL_LANGUAGES
-    // (src/presentation/arrival-language.ts) is the source of truth, and args.test.ts
-    // pins the two together in both directions.
-    const languages = ['opposed'];
-    if (!languages.includes(out.arrival)) {
-      throw new Error(`--arrival must be one of ${languages.join('|')}, got '${out.arrival}'`);
-    }
-    // REFUSE rather than shoot a frame with no arrival or destruction in it, the same
-    // call --identityMarker and --blocked-fire make. This language changes exactly two
-    // events; the posed gallery stages NEITHER (it has no sim timeline at all), so
-    // `--elements tank --arrival opposed` would produce an ordinary frame and report
-    // success. That silent no-op is the failure mode issue #637 was filed about.
-    const withEvents = ['respawn', 'destroyed'];
-    if (!withEvents.includes(out.scene)) {
-      throw new Error(
-        `--arrival needs a scene that stages an arrival or a destruction `
-        + `(--scene ${withEvents.join(' or ')}), got --scene '${out.scene}'`,
-      );
-    }
-  }
   if (out.blockedFire !== null) {
     // Named here rather than imported from src/presentation/blocked-fire.ts: this is a
     // plain .mjs the runner loads with no build step, so it cannot read a .ts export.
@@ -482,7 +454,6 @@ export function galleryQuery(args, extra = {}) {
   if (args.identityMarker !== null) p.set('identityMarker', args.identityMarker);
   if (args.shellTrail !== null) p.set('shellTrail', args.shellTrail);
   if (args.enemyRole !== null) p.set('enemyRole', args.enemyRole);
-  if (args.arrival !== null) p.set('arrival', args.arrival);
   if (args.blockedFire !== null) p.set('blockedFire', args.blockedFire);
   if (args.hull) p.set('hull', args.hull);
   if (args.accent) p.set('accent', args.accent);
@@ -505,7 +476,6 @@ export function galleryQuery(args, extra = {}) {
  * `parseArgs` itself, so a recipe and the CLI share one vocabulary and one set of refusals.
  */
 export const GALLERY_ARMS = Object.freeze({
-  arrival: '--arrival',
   identityMarker: '--identityMarker',
   shellTrail: '--shellTrail',
 });

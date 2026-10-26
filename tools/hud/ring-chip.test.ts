@@ -41,7 +41,7 @@ function players(mode: 'ffa' | 'teams', count = XS.length): World {
 /** Each player's identity ring colour, in slot order, read off the real scene. */
 function ringColours(world: World, palette: OwnerPaletteId): number[] {
   const scene = new THREE.Scene();
-  const views = createEntityViews(scene, undefined, null, null, null, null, OWNER_PALETTES[palette]);
+  const views = createEntityViews(scene, undefined, null, null, null, OWNER_PALETTES[palette]);
   views.sync(world, world, 0);
   const byX = new Map<number, number>();
   scene.traverse((o) => {
@@ -61,7 +61,7 @@ function ringColours(world: World, palette: OwnerPaletteId): number[] {
  */
 function spawnRingColour(mode: 'ffa' | 'teams', palette: OwnerPaletteId): number {
   const scene = new THREE.Scene();
-  const views = createEntityViews(scene, undefined, null, null, null, null, OWNER_PALETTES[palette]);
+  const views = createEntityViews(scene, undefined, null, null, null, OWNER_PALETTES[palette]);
   const prev = players(mode, 1);
   const curr = players(mode, 1);
   curr.roundStartTick = prev.roundStartTick + 4; // a round boundary, so the entrance ring plays

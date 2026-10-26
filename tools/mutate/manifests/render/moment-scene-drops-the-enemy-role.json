@@ -1,8 +1,8 @@
 {
   "id": "moment-scene-drops-the-enemy-role",
   "file": "src/render/gallery/moment-scene.ts",
-  "find": "    scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null, opts.enemyRole ?? null,",
-  "replace": "    scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null, null,",
+  "find": "    scene, undefined, opts.mineWarn ?? null, null, opts.enemyRole ?? null,",
+  "replace": "    scene, undefined, opts.mineWarn ?? null, null, null,",
   "expect": "killed",
   "tests": [
     "src/render/gallery/moment-scene.test.ts"

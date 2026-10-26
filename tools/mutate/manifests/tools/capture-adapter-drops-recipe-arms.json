@@ -8,7 +8,7 @@
     "tools/capture/gallery-adapter.test.ts"
   ],
   "killedBy": [
-    "moment recipes naming developer arms (issue #775) carries a recipe's arrival arm into the respawn moment's page request, and nothing without it"
+    "moment recipes naming developer arms (issue #775) carries a recipe's shell-trail arm into the fire moment's page request, and nothing without it"
   ],
-  "why": "The forwarding #775 adds. Without it a recipe that names `arrival: opposed` still validates, still records the arm it asked for, and captures the shipped language -- the silent no-op the gallery's own refusals exist to prevent. The provenance check in the same adapter would also catch it on a real run; this entry pins the argv half, which no real run is needed to see."
+  "why": "The forwarding #775 adds. Without it a recipe that names `shellTrail: segments` still validates, still records the arm it asked for, and captures the shipped render -- the silent no-op the gallery's own refusals exist to prevent. The provenance check in the same adapter would also catch it on a real run; this entry pins the argv half, which no real run is needed to see."
 }

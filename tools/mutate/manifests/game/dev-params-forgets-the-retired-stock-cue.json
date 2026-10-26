@@ -1,14 +1,14 @@
 {
   "id": "dev-params-forgets-the-retired-stock-cue",
   "file": "src/game/dev-params.ts",
-  "find": "export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue', 'ownerPalette'];",
-  "replace": "export const DEPRECATED_DEV_PARAMS: readonly string[] = ['ownerPalette'];",
+  "find": "export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue', 'ownerPalette', 'arrival'];",
+  "replace": "export const DEPRECATED_DEV_PARAMS: readonly string[] = ['ownerPalette', 'arrival'];",
   "expect": "killed",
   "tests": [
     "src/game/dev-params.test.ts",
     "src/game/dev-config.test.ts"
   ],
-  "why": "Drops `stockCue` from the retired-parameter list and leaves `ownerPalette`, a list that never shipped. `stockCue` is the first developer parameter removed for good since the list was built (#413); issue #1022 removed it. With it missing, Exit Developer Mode on an old #230 comparison URL leaves `?stockCue=` behind -- a URL still carrying developer state, which `developerExitSearch`'s own doc forbids -- and `canonicalDevSearch` carries it into canonical URLs as an unrelated parameter. Every other case in both files injects its own list, so only the cases that read the shipped default can see it.",
+  "why": "Drops `stockCue` from the retired-parameter list and leaves `ownerPalette` and `arrival`, a list that never shipped. `stockCue` is the first developer parameter removed for good since the list was built (#413); issue #1022 removed it. With it missing, Exit Developer Mode on an old #230 comparison URL leaves `?stockCue=` behind -- a URL still carrying developer state, which `developerExitSearch`'s own doc forbids -- and `canonicalDevSearch` carries it into canonical URLs as an unrelated parameter. Every other case in both files injects its own list, so only the cases that read the shipped default can see it.",
   "killedBy": [
     "canonicalDevSearch retires stockCue by default, the first developer parameter removed for good (issue #1022)",
     "developerExitSearch drops stockCue with the shipped list, the flag issue #1022 removed"

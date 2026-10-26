@@ -5,13 +5,13 @@ const warp = SPAWN_ANIMATORS.warp;
 const C = 0x3fd0ff;
 
 describe('warp animator', () => {
-  it('entrance: fades and scales the tank in, ring expands', () => {
+  it('entrance: fades and scales the tank in, ring converges', () => {
     const a = warp('entrance', 0, C);
     const b = warp('entrance', 1, C);
     // Mutation that breaks this: an animator that returns a constant frame.
     expect(a.tankOpacity).toBeLessThan(b.tankOpacity);
     expect(a.tankScale).toBeLessThan(b.tankScale);
-    expect(a.ring.radius).toBeLessThan(b.ring.radius);
+    expect(a.ring.radius).toBeGreaterThan(b.ring.radius);
     expect(b.tankOpacity).toBeCloseTo(1, 5); // fully solid by end of entrance
     expect(b.tankScale).toBeCloseTo(1, 5);
   });
@@ -164,45 +164,46 @@ describe('the spawn animators under reduced motion (issue #651)', () => {
 
 describe('converge: an arrival gathers instead of expanding (issue #230)', () => {
   /*
-   * The issue's first complaint is that spawn and death are "hard to tell apart at normal
-   * speed", and the reason is concrete: every shipped entrance grows its ring outward --
-   * warp 0.4 -> 2.0, beacon 0.5 -> 1.7, rise a bump -- and `death-pulse.ts` grows its ring
-   * outward too. Two events, one vocabulary.
+   * The issue's first complaint was that spawn and death are "hard to tell apart at normal
+   * speed", and the reason was concrete: every entrance grew its ring outward -- warp
+   * 0.4 -> 2.0, beacon 0.5 -> 1.7, rise a bump -- and `death-pulse.ts` grows its ring
+   * outward too. Issue #1120 made the converging ring every entrance's, so the two events
+   * now travel in opposite directions.
    *
-   * These assert the OPPOSITION rather than a curve, because the curve is a feel constant
-   * and the opposition is the contract.
+   * These assert the DIRECTION rather than a curve, because the curve is a feel constant
+   * and the direction is the contract.
    */
   const ids = ['warp', 'rise', 'beacon'] as const;
+  const STEPS = 40;
 
-  const sweep = (id: (typeof ids)[number], opposed: boolean) =>
-    Array.from({ length: 41 }, (_, i) =>
-      SPAWN_ANIMATORS[id]('entrance', i / 40, 0, false, opposed).ring.radius,
-    );
+  const sweep = (radius: (p: number) => number) =>
+    Array.from({ length: STEPS + 1 }, (_, i) => radius(i / STEPS));
+  const entrance = (id: (typeof ids)[number]) =>
+    sweep((p) => SPAWN_ANIMATORS[id]('entrance', p, 0).ring.radius);
+  /** Widest AT the start, and finishing strictly inside where it began. */
+  const converges = (r: number[]) => Math.max(...r) === r[0] && r[r.length - 1] < r[0];
 
-  it('shipped: the ring travels OUTWARD, which is why it reads like the death pulse', () => {
-    // The negative control, and the measurement the issue rests on.
-    //
-    // Stated as "widest after the start, never closing onto the tank" rather than
-    // "ends wider", because `rise` is a symmetric bump (0.9 + 0.3 sin(p*pi)) that returns
-    // to its starting radius -- an end-to-end comparison calls rise flat and says nothing
-    // about the outward throw it shares with warp, beacon and the death pulse.
+  it('every style converges', () => {
+    // ALL THREE, not one. The player picks a spawn STYLE; arrival-versus-destruction is a
+    // property of the EVENT, and an entrance that converged for only one style would leave
+    // the other two still reading like deaths.
     for (const id of ids) {
-      const r = sweep(id, false);
-      expect(Math.max(...r), `${id} never travels outward`).toBeGreaterThan(r[0]);
-      expect(r[r.length - 1], `${id} closes onto the tank`).toBeGreaterThanOrEqual(r[0]);
+      expect(converges(entrance(id)), id).toBe(true);
     }
   });
 
-  it('opposed: every style converges instead', () => {
-    // ALL THREE, not one. The player picks a spawn STYLE; arrival-versus-destruction is a
-    // property of the EVENT, and a language that held for only one style would leave the
-    // other two still reading like deaths.
+  it('negative control: the expanding entrances issue #1120 removed do not converge', () => {
+    // The predicate above, applied to the rings it replaced. Synthetic copies, because no
+    // production path draws them any more. `rise` is the one that matters: a symmetric bump
+    // that returns to its starting radius, which a test comparing only the two ends would
+    // call flat rather than outward.
+    const removed: Record<(typeof ids)[number], (p: number) => number> = {
+      warp: (p) => 0.4 + 1.6 * p,
+      rise: (p) => 0.9 + 0.3 * Math.sin(p * Math.PI),
+      beacon: (p) => 0.5 + 1.2 * p,
+    };
     for (const id of ids) {
-      const r = sweep(id, true);
-      // The exact inverse of the control above: widest AT the start, and it finishes
-      // strictly inside where it began.
-      expect(Math.max(...r), `${id} is not widest at the start`).toBe(r[0]);
-      expect(r[r.length - 1], `${id} does not converge`).toBeLessThan(r[0]);
+      expect(converges(sweep(removed[id])), id).toBe(false);
     }
   });
 
@@ -210,39 +211,29 @@ describe('converge: an arrival gathers instead of expanding (issue #230)', () =>
     // The ring ends at the tank's own footprint (radius 1), so the arrival resolves ON the
     // thing that arrived. Collapsing past it would read as the tank being swallowed.
     for (const id of ids) {
-      const end = SPAWN_ANIMATORS[id]('entrance', 1, 0, false, true).ring.radius;
+      const end = SPAWN_ANIMATORS[id]('entrance', 1, 0).ring.radius;
       expect(end, `${id}`).toBeCloseTo(1, 2);
     }
   });
 
   it('brightens as it closes, so the landing is the brightest frame', () => {
     for (const id of ids) {
-      const early = SPAWN_ANIMATORS[id]('entrance', 0.1, 0, false, true).ring.opacity;
-      const late = SPAWN_ANIMATORS[id]('entrance', 0.9, 0, false, true).ring.opacity;
+      const early = SPAWN_ANIMATORS[id]('entrance', 0.1, 0).ring.opacity;
+      const late = SPAWN_ANIMATORS[id]('entrance', 0.9, 0).ring.opacity;
       expect(late, `${id}`).toBeGreaterThan(early);
     }
   });
 
   it('holds still under reduced motion without vanishing', () => {
-    // The rule this file already states, applied to the new arm: scales and radii hold at
-    // their resting value. Not zero opacity -- an invisible ring deletes the cue rather
-    // than calming it, the trap #652 records for `.hud-capacity` and `.hud-count`.
+    // The rule this file already states: scales and radii hold at their resting value. Not
+    // zero opacity -- an invisible ring deletes the cue rather than calming it, the trap
+    // #652 records for `.hud-capacity` and `.hud-count`.
     for (const id of ids) {
       for (const p of [0.1, 0.5, 0.9]) {
-        const f = SPAWN_ANIMATORS[id]('entrance', p, 0, true, true);
+        const f = SPAWN_ANIMATORS[id]('entrance', p, 0, true);
         expect(f.ring.radius, `${id} @${p}`).toBe(1);
         expect(f.ring.opacity, `${id} @${p} vanished`).toBeGreaterThan(0);
       }
-    }
-  });
-
-  it('leaves the INVINCIBLE phase alone, which is a state and not an event', () => {
-    // Opposing a sustained "you are still protected" against a death would be opposing two
-    // things that never occur together.
-    for (const id of ids) {
-      const shipped = SPAWN_ANIMATORS[id]('invincible', 0.4, 0);
-      const opposed = SPAWN_ANIMATORS[id]('invincible', 0.4, 0, false, true);
-      expect(opposed, id).toEqual(shipped);
     }
   });
 });
@@ -285,7 +276,7 @@ describe('the shielded-spawn opacity contract (issue #230)', () => {
     // floor once it has eased in.
     for (const from of [1 / 9, 1 / 3, 0.5]) {
       for (const [name, anim] of VARIANTS) {
-        const first = anim('invincible', from, 0xffffff, false, false, from);
+        const first = anim('invincible', from, 0xffffff, false, from);
         expect(first.tankOpacity, `${name} from ${from}`).toBeCloseTo(1, 5);
       }
       expect(protectedOpacity(0.7, from), `floor after easing in from ${from}`).toBeCloseTo(1 - SHIELD_TRANSLUCENCY, 10);

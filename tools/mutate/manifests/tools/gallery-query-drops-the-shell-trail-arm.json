@@ -1,0 +1,14 @@
+{
+  "id": "gallery-query-drops-the-shell-trail-arm",
+  "file": "tools/gallery/args.mjs",
+  "find": "  if (args.shellTrail !== null) p.set('shellTrail', args.shellTrail);",
+  "replace": "  void args.shellTrail;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/gallery-adapter.test.ts"
+  ],
+  "why": "The last hop before the page, for the arm a moment recipe can name since issue #1120 removed `arrival`, whose line this entry's predecessor pinned. A parsed `--shellTrail segments` that never reaches the page's query would photograph the shipped render under the arm's name, and nothing short of a browser run could tell.",
+  "killedBy": [
+    "moment recipes naming developer arms (issue #775) carries a recipe's shell-trail arm into the fire moment's page request, and nothing without it"
+  ]
+}

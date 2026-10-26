@@ -49,14 +49,6 @@ export interface MomentSceneOptions {
   /** Experimental mine-warning treatment (issue #276 playtest round); null = default. */
   mineWarn?: import('../../render/mine-warning').MineWarnStyle | null;
   /**
-   * Experimental arrival/destruction language (issue #230); null = the shipped pair.
-   * Forwarded to BOTH systems that speak it -- the entrance ring lives in entities.ts and
-   * the death ring in death-pulse.ts -- because the whole point of the language is that
-   * the two events are told apart, and a capture that changed only one of them would be
-   * evidence for a comparison nobody is making.
-   */
-  arrival?: import('../../presentation/arrival-language').ArrivalLanguage | null;
-  /**
    * Experimental shell bounce-trail (issue #688); null = none, the shipped render. Built by
    * the same flag-to-system mapping as renderer.ts, so a moment that fires (`fire`,
    * `ricochet`) shows the count change at the bounce under real timeline motion.
@@ -192,9 +184,9 @@ export function buildMomentScene(
 
   // 4th argument is `identityMarker`, which a moment scene does not yet forward (that
   // flag reaches the POSED gallery only); passed explicitly as null so the 5th,
-  // `arrival`, and the 6th, `enemyRole`, are unmistakably the ones being set here.
+  // `enemyRole`, is unmistakably the one being set here.
   const views = createEntityViews(
-    scene, undefined, opts.mineWarn ?? null, null, opts.arrival ?? null, opts.enemyRole ?? null,
+    scene, undefined, opts.mineWarn ?? null, null, opts.enemyRole ?? null,
   );
   // Same call the game makes (renderer.ts's setPlayerStyle) -- unconditional here,
   // unlike buildGallery's guarded call, because opts.spawnAnim is always meaningful
@@ -222,7 +214,7 @@ export function buildMomentScene(
     views.setPlayerStyle(null, 'solid', null, slot, opts.spawnAnim);
   }
   const particles = createParticleSystem(scene, mulberry32(PARTICLE_SEED));
-  const deathPulse = createDeathPulseSystem(scene, opts.arrival === 'opposed');
+  const deathPulse = createDeathPulseSystem(scene);
   // Three of the systems in this scene that own a reduced treatment, pushed the policy the
   // same way `renderer.ts` pushes it to the game's own; the barrel recoil and the muzzle
   // smoke are built further down and pushed there. The three cue-gated refusal systems

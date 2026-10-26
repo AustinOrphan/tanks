@@ -1,14 +1,16 @@
 {
   "id": "converge-applied-to-only-one-spawn-style",
   "file": "src/render/spawn-anim.ts",
-  "find": "      ring: opposed ? convergeRing(p, reducedMotion) : {\n        radius: reducedMotion ? 1 : 0.9 + 0.3 * Math.sin(p * Math.PI),",
-  "replace": "      ring: {\n        radius: reducedMotion ? 1 : 0.9 + 0.3 * Math.sin(p * Math.PI),",
+  "find": "      tankScale: reducedMotion ? 1 : p, // grows from 0\n      ring: convergeRing(p, reducedMotion),",
+  "replace": "      tankScale: reducedMotion ? 1 : p, // grows from 0\n      ring: {\n        radius: reducedMotion ? 1 : 0.9 + 0.3 * Math.sin(p * Math.PI),\n        opacity: 0.6 * (1 - p),\n        arc: 1,\n      },",
   "expect": "killed",
   "tests": [
     "src/render/spawn-anim.test.ts"
   ],
-  "why": "`rise` left out of the arm. The player picks a spawn STYLE, but arrival-versus-destruction is a property of the EVENT, so a language that holds for warp and beacon and not rise leaves a third of players seeing the exact confusion the issue reports -- and seeing it intermittently, which is the hardest kind to report. Chosen as the mutation because `rise` is the one style whose shipped ring is a symmetric bump rather than an obvious expansion, so it is the one an author is most likely to think already reads differently.",
+  "why": "`rise` given back the ring it drew before issue #1120: a bump that swells out and settles where it began. The player picks a spawn STYLE, but arrival-versus-destruction is a property of the EVENT, so an entrance that converges for warp and beacon and not rise leaves one style still reading like the death pulse. Chosen because `rise` is the one style whose old ring is a symmetric bump rather than an obvious expansion, so it is the one a test comparing only the two ends would call flat, and the one an author is most likely to think already reads differently.",
   "killedBy": [
-    "converge: an arrival gathers instead of expanding (issue #230) opposed: every style converges instead"
+    "converge: an arrival gathers instead of expanding (issue #230) every style converges",
+    "converge: an arrival gathers instead of expanding (issue #230) lands on the tank rather than passing through it",
+    "converge: an arrival gathers instead of expanding (issue #230) brightens as it closes, so the landing is the brightest frame"
   ]
 }

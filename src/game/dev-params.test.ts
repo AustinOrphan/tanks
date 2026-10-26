@@ -50,6 +50,14 @@ describe('developerExitSearch', () => {
       .toBe('?ownerPalette=high-contrast&keep=me');
   });
 
+  it('drops arrival with the shipped list, the flag issue #1120 removed', () => {
+    // An old #665 comparison URL, exited. THE NEGATIVE CONTROL is the same call with the list
+    // before #1120: `arrival` survives Exit as an unrelated parameter.
+    expect(developerExitSearch('?dev=1&arrival=opposed&keep=me')).toBe('?keep=me');
+    expect(developerExitSearch('?dev=1&arrival=opposed&keep=me', ['stockCue', 'ownerPalette']))
+      .toBe('?arrival=opposed&keep=me');
+  });
+
   it('returns an empty string rather than a bare question mark', () => {
     expect(developerExitSearch('?dev=1')).toBe('');
     expect(developerExitSearch('')).toBe('');
