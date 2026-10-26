@@ -427,3 +427,25 @@ describe('death pulse under the reduced-motion policy (issue #289)', () => {
     }
   });
 });
+
+describe('death pulse: the shipped shockwave (issue #1120 keeps it)', () => {
+  /*
+   * The ruling on #718 kept this ring over the `opposed` arm's detonating band, which threw
+   * a fat ring out on an ease-out after holding at full brightness. This one travels and fades
+   * LINEARLY from its first frame; its width is the entrance ring's, since both come from
+   * `makeSpawnRing`, which takes none.
+   */
+  it('travels evenly and fades from its first frame, rather than holding and blasting', () => {
+    const { scene, dp } = setup();
+    const deadTank = makeTank(1, 'player', 5, 8, { controlledBy: 0, alive: false });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 8 }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [deadTank], spawns, lives: 3 });
+    dp.spawn([destroyedEvent(1, 'player', 5, 8)], world, { enemyEnabled: false });
+    dp.update(0.06); // a tenth of the 0.6s life
+    const ring = deathRings(scene)[0];
+    // NEGATIVE CONTROLS, both in the manifest: `death-ring-holds-before-it-fades` reads 1 here
+    // and `death-ring-blasts-out-front-loaded` has covered 27% of the travel, not 10%.
+    expect(ring.material.opacity, 'already fading: 1 - k').toBeCloseTo(0.9, 9);
+    expect(ring.scale.x, 'a tenth of the 2.4 growth').toBeCloseTo(1 + 2.4 * 0.1, 9);
+  });
+});

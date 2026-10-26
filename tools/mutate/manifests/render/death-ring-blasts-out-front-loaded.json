@@ -7,5 +7,8 @@
   "tests": [
     "src/render/death-pulse.test.ts"
   ],
-  "why": "Gives the shipped death ring the ease-out travel of the `opposed` arm that issue #1120 removed, so most of its growth happens in the first third of its life. The ruling on #718 kept the shipped pulse over that arm. The ring still grows to the same size by the same moment and still stops growing under reduced motion, so only the shape of its travel tells the builds apart."
+  "why": "Gives the shipped death ring the ease-out travel of the `opposed` arm that issue #1120 removed, so most of its growth happens in the first third of its life. The ruling on #718 kept the shipped pulse over that arm. The ring still grows to the same size by the same moment and still stops growing under reduced motion, so only the shape of its travel tells the builds apart.",
+  "killedBy": [
+    "death pulse: the shipped shockwave (issue #1120 keeps it) travels evenly and fades from its first frame, rather than holding and blasting"
+  ]
 }
