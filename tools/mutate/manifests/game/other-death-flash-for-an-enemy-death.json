@@ -9,7 +9,7 @@
   ],
   "why": "Drops the player-kind test, so an enemy's death flashes the vignette: an enemy has no controlledBy, reads as slot 0, and no bot holds slot 0, so every kill the player scores flashes the screen -- in single-player too, in the classic red. The presence-only mistake isPlayerDeath's own doc warns about.",
   "killedBy": [
-    "otherHumanDeathFlash (issue #1123) is null for an enemy's death and for a frame with no deaths",
+    "otherHumanDeathFlash (issue #1123) is null for an enemy's death, which reads as slot 0 without the player-kind test",
     "startGameWith: a real player death reaches the HUD flashes nothing for an enemy's death (issue #1123)"
   ]
 }
