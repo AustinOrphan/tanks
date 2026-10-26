@@ -194,9 +194,9 @@ describe('converge: an arrival gathers instead of expanding (issue #230)', () =>
 
   it('negative control: the expanding entrances issue #1120 removed do not converge', () => {
     // The predicate above, applied to the rings it replaced. Synthetic copies, because no
-    // production path draws them any more. `rise` is the one that matters: a symmetric bump
-    // that returns to its starting radius, which a test comparing only the two ends would
-    // call flat rather than outward.
+    // production path draws them any more. Warp and beacon end wider than they began; `rise`
+    // is a bump that swells out and settles back, so it fails on "widest at the start", the
+    // half a comparison of the two ends alone would not have.
     const removed: Record<(typeof ids)[number], (p: number) => number> = {
       warp: (p) => 0.4 + 1.6 * p,
       rise: (p) => 0.9 + 0.3 * Math.sin(p * Math.PI),
