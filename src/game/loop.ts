@@ -208,7 +208,6 @@ export interface GameDeps {
       mineWarn?: import('../render/mine-warning').MineWarnStyle | null;
       identityMarker?: import('../presentation/identity-marker').IdentityMarkerStyle | null;
       shellTrail?: import('../presentation/shell-trail').ShellTrailStyle | null;
-      arrival?: import('../presentation/arrival-language').ArrivalLanguage | null;
       enemyRole?: import('../presentation/enemy-role').EnemyRoleCue | null;
       ownerPalette?: OwnerPalette;
       playerColor?: string;
@@ -2057,7 +2056,6 @@ export function startGameWith(
     // the setup pane (`applyVersusToDeps`) or `?dev=1&mode=` has already put on its flags.
     identityMarker: sessionIdentityMarker(deps.devFlags.identityMarker, deps.devFlags.mode),
     shellTrail: deps.devFlags.shellTrail,
-    arrival: deps.devFlags.arrival,
     enemyRole: deps.devFlags.enemyRole,
     ownerPalette: sessionOwnerPalette,
     // The paint shop's saved colour, skin and accent, applied from the first frame.

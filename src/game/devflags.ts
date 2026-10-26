@@ -13,11 +13,6 @@ import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import { QUALITY_PRESET_IDS, type QualityPreset } from '../presentation/quality';
 import { BENCH_WORKLOAD_IDS, BENCH_WORKLOADS, type BenchWorkloadId } from './bench';
 import type { AiTargetPerception } from '../sim/types';
-import {
-  ARRIVAL_LANGUAGES,
-  isArrivalLanguage,
-  type ArrivalLanguage,
-} from '../presentation/arrival-language';
 import { WRECK_EFFECTS, isWreckEffect, type WreckEffect } from '../presentation/wreck';
 import { HUD_FONTS, isHudFont, type HudFont } from '../presentation/hud-font';
 import {
@@ -435,13 +430,6 @@ export interface DevFlags {
    */
   shellTrail: ShellTrailStyle | null;
   /**
-   * Which experimental ARRIVAL/DESTRUCTION language to speak (issue #230). `null` keeps the
-   * shipped pair, where a spawn entrance and a death pulse both expand a ring and are, in
-   * the issue's words, "hard to tell apart at normal speed". `opposed` converges the
-   * entrance and detonates the death. See presentation/arrival-language.ts.
-   */
-  arrival: ArrivalLanguage | null;
-  /**
    * Leaves a temporary hull silhouette where a tank died (issue #232), one of three
    * removal arms. Null -- absent or unrecognised -- is the shipped board, which leaves
    * nothing behind. Temporary: deleted once an arm is chosen, or once the idea is.
@@ -572,7 +560,6 @@ export const DEV_FLAGS_OFF: DevFlags = {
   identityMarker: null,
   enemyRole: null,
   shellTrail: null,
-  arrival: null,
   wreck: null,
   hudFont: null,
   versusActions: null,
@@ -766,13 +753,6 @@ function asVersusActions(params: URLSearchParams): VersusActionLayout | null {
   return isVersusActionLayout(raw) ? raw : null;
 }
 
-/** One of the named arrival languages, or null when absent or unrecognised. */
-function asArrival(params: URLSearchParams): ArrivalLanguage | null {
-  const raw = params.get('arrival');
-  if (raw === null) return null;
-  return isArrivalLanguage(raw) ? raw : null;
-}
-
 /** One of the named wreck removal arms, or null when absent or unrecognised. */
 function asWreck(params: URLSearchParams): WreckEffect | null {
   const raw = params.get('wreck');
@@ -954,7 +934,6 @@ export function parseDevFlags(search: string): DevFlags {
     identityMarker: asIdentityMarker(params),
     enemyRole: asEnemyRole(params),
     shellTrail: asShellTrail(params),
-    arrival: asArrival(params),
     wreck: asWreck(params),
     hudFont: asHudFont(params),
     versusActions: asVersusActions(params),
@@ -1409,14 +1388,6 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       + 'pane title (issue #668). The shipped bar carries Start and Back together at the '
       + 'foot, which costs less of a small screen; \'header\' keeps the title visible while '
       + 'scrolling, at 49px of permanent chrome.',
-  },
-  arrival: {
-    kind: 'valued',
-    values: [...ARRIVAL_LANGUAGES],
-    description:
-      'Speaks an experimental arrival/destruction language (issue #230). The shipped pair '
-      + 'both expand a ring and read alike at speed; \'opposed\' converges the spawn '
-      + 'entrance onto the tank and throws a fat, hard-attacked band outward on death.',
   },
   wreck: {
     kind: 'valued',

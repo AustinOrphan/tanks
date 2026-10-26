@@ -29,7 +29,6 @@ const mineWarnParam = params.get('mineWarn') as import('../../src/render/mine-wa
 const motionParam = params.get('motion') === 'reduced' ? 'reduced' : 'full';
 const identityMarkerParam = params.get('identityMarker') as import('../../src/presentation/identity-marker').IdentityMarkerStyle | null;
 const blockedFireParam = params.get('blockedFire') as import('../../src/presentation/blocked-fire').BlockedFireCue | null;
-const arrivalParam = params.get('arrival') as import('../../src/presentation/arrival-language').ArrivalLanguage | null;
 // Forwarded to BOTH branches, for the reason the motion note above gives.
 const shellTrailParam = params.get('shellTrail') as import('../../src/presentation/shell-trail').ShellTrailStyle | null;
 const enemyRoleParam = params.get('enemyRole') as import('../../src/presentation/enemy-role').EnemyRoleCue | null;
@@ -57,7 +56,6 @@ const g = moment
       spawnAnim: spawnAnimParam ?? DEFAULT_SPAWN_ANIM,
       mineWarn: mineWarnParam,
       blockedFire: blockedFireParam,
-      arrival: arrivalParam,
       shellTrail: shellTrailParam,
       // Forwarded here too (issue #1018): only a moment fires, so only a moment can show the
       // role cue under the muzzle smoke and barrel recoil.

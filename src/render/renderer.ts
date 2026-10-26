@@ -9,7 +9,6 @@ import { DEFAULT_QUALITY_PRESET } from '../presentation/quality';
 import { createEntityViews, type EntityViews } from './entities';
 import type { MineWarnStyle } from './mine-warning';
 import type { IdentityMarkerStyle } from '../presentation/identity-marker';
-import type { ArrivalLanguage } from '../presentation/arrival-language';
 import type { EnemyRoleCue } from '../presentation/enemy-role';
 import type { OwnerPalette } from '../presentation/identity';
 import { createParticleSystem, type ParticleSystem } from './particles';
@@ -109,9 +108,6 @@ export interface RendererOptions {
   /** Second identity channel (issues #630, #922), already resolved by the game layer: an
    *  FFA session passes the shipped `shape`; absent = the solid hue-only ring. */
   readonly identityMarker?: IdentityMarkerStyle | null;
-  /** Experimental arrival/destruction language (`arrival` dev flag, issue #230); absent =
-   *  the shipped pair, which both expand a ring. */
-  readonly arrival?: ArrivalLanguage | null;
   /** Experimental non-colour role cue (`enemyRole` dev flag, issues #357/#773); absent =
    *  the shipped board, where what a tank does is carried by hue alone. */
   readonly enemyRole?: EnemyRoleCue | null;
@@ -191,7 +187,7 @@ export function createRenderer(
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary, options.quality);
   const entities: EntityViews = createEntityViews(
     ctx.scene, ctx.textures, options.mineWarn ?? null, options.identityMarker ?? null,
-    options.arrival ?? null, options.enemyRole ?? null, options.ownerPalette,
+    options.enemyRole ?? null, options.ownerPalette,
   );
   if (options.playerColor || options.playerSkin || options.playerAccent) {
     entities.setPlayerStyle(
@@ -201,9 +197,7 @@ export function createRenderer(
     );
   }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
-  const deathPulse: DeathPulseSystem = createDeathPulseSystem(
-    ctx.scene, options.arrival === 'opposed', options.ownerPalette,
-  );
+  const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene, options.ownerPalette);
   // Constructed only when an arm is asked for: an absent flag must leave the scene graph
   // byte-identical to the shipped one, not merely quiet.
   const wreck: WreckSystem | null = options.wreck ? createWreckSystem(ctx.scene, options.wreck) : null;

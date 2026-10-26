@@ -2450,7 +2450,7 @@ describe('player identity: ring and shell tint', () => {
     function views(palette?: 'high-contrast'): { scene: THREE.Scene; v: ReturnType<typeof createEntityViews> } {
       const scene = new THREE.Scene();
       const p = palette === undefined ? undefined : OWNER_PALETTES[palette];
-      return { scene, v: createEntityViews(scene, undefined, null, null, null, null, p) };
+      return { scene, v: createEntityViews(scene, undefined, null, null, null, p) };
     }
 
     /** The spawn ring's colour, by walking up to the tank group sitting at world x. */
@@ -2608,8 +2608,9 @@ describe('spawn animation (#199)', () => {
     // `ring.radius` is a direct world-space radius" -- that contract breaks if the ring
     // is a scaled child of a parent that is ALSO scaled (three composes parent x child
     // scale). DEFAULT_SPAWN_ANIM is 'warp'; at entrance progress 0.5 its tankScale is
-    // 0.6 + 0.4*0.5 = 0.8 (provably not 1) and its ring.radius is 0.4 + 1.6*0.5 = 1.2.
-    // dt 0.25 against ENTRANCE_SECONDS 0.5 lands exactly on that midpoint.
+    // 0.6 + 0.4*0.5 = 0.8 (provably not 1) and its converging ring.radius is
+    // 2.4 - 1.4*0.5 = 1.7. dt 0.25 against ENTRANCE_SECONDS 0.5 lands exactly on that
+    // midpoint.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const prev = deadPlayerWorld();
@@ -2622,9 +2623,9 @@ describe('spawn animation (#199)', () => {
     // ancestor chain at scale 1 -- getWorldScale is the composed, on-screen scale,
     // not the ring's own local `.scale`, so it catches exactly that composition bug.
     const worldScale = ring.getWorldScale(new THREE.Vector3());
-    expect(worldScale.x).toBeCloseTo(1.2, 5);
-    expect(worldScale.y).toBeCloseTo(1.2, 5);
-    expect(worldScale.z).toBeCloseTo(1.2, 5);
+    expect(worldScale.x).toBeCloseTo(1.7, 5);
+    expect(worldScale.y).toBeCloseTo(1.7, 5);
+    expect(worldScale.z).toBeCloseTo(1.7, 5);
     views.dispose();
   });
 
@@ -3204,7 +3205,7 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
     // tank that cannot lay one -- the cue contradicting the one thing it exists to report.
     // Keyed on the tank's own budget, inside the gate, the deck is clean.
     const scene = new THREE.Scene();
-    const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+    const views = createEntityViews(scene, undefined, null, null, 'riser');
     const w = worldWith('teal', 0);
     views.sync(w, w, 0);
     expect(mineBlocks(scene)).toHaveLength(0);
@@ -3215,7 +3216,7 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
     // The control for the case above, and the proof the absence there is the override rather
     // than a cue that never draws: the same kind, the same cue, no `mineCap`.
     const scene = new THREE.Scene();
-    const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+    const views = createEntityViews(scene, undefined, null, null, 'riser');
     const w = worldWith('teal');
     views.sync(w, w, 0);
     expect(mineBlocks(scene)).toHaveLength(1);
@@ -3230,7 +3231,7 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
     for (const kind of ['grey', 'teal'] as const) {
       const scenes = [2, 4].map((cap) => {
         const scene = new THREE.Scene();
-        const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+        const views = createEntityViews(scene, undefined, null, null, 'riser');
         const w = worldWith(kind, cap);
         views.sync(w, w, 0);
         return { scene, views };
@@ -3247,7 +3248,7 @@ describe('enemy role cues read the tank, not its kind (issues #357, #773)', () =
     // Population: brown and green, the two kinds with a roster capacity (2) and no MINE_LAYER.
     for (const kind of ['brown', 'green'] as const) {
       const scene = new THREE.Scene();
-      const views = createEntityViews(scene, undefined, null, null, null, 'riser');
+      const views = createEntityViews(scene, undefined, null, null, 'riser');
       const w = worldWith(kind, 4);
       views.sync(w, w, 0);
       expect(mineBlocks(scene), `${kind} with mineCap 4`).toHaveLength(0);
@@ -3283,7 +3284,7 @@ describe('the mine cue follows MINE_LAYER, not mine capacity (issues #357, #1059
     mineCaps: Partial<Record<Tank['kind'], number>> = {},
   ): ReturnType<typeof createEntityViews> {
     const scene = new THREE.Scene();
-    const views = createEntityViews(scene, undefined, null, null, null, cue);
+    const views = createEntityViews(scene, undefined, null, null, cue);
     const tanks = kinds.map((kind, i) => {
       const cap = mineCaps[kind];
       return { ...makeTank(i + 1, kind, 2 + i * 2, 5), ...(cap === undefined ? {} : { mineCap: cap }) };
@@ -3438,7 +3439,7 @@ describe('the role cue under reduced motion (issue #1018)', () => {
 
   function rig(reduced: boolean): { views: ReturnType<typeof createEntityViews>; w: World } {
     const scene = new THREE.Scene();
-    const views = createEntityViews(scene, undefined, null, null, null, 'both');
+    const views = createEntityViews(scene, undefined, null, null, 'both');
     // BEFORE the first sync, so the tanks are built under the preference: a cue that read it
     // at construction would differ here, which is the dependency this guards against.
     views.setReducedMotion(reduced);

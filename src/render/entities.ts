@@ -8,7 +8,6 @@ import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
 import { identityApplies, resolveOwnerColor, type OwnerPalette } from '../presentation/identity';
 import { identityMarkerGeometry } from './identity-marker';
-import type { ArrivalLanguage } from '../presentation/arrival-language';
 import {
   weaponLever, mineLever, weaponShapeFor, mineShapeFor, type EnemyRoleCue,
 } from '../presentation/enemy-role';
@@ -458,12 +457,6 @@ export function createEntityViews(
    * See identity-marker.ts.
    */
   identityMarker: IdentityMarkerStyle | null = null,
-  /**
-   * Experimental arrival/destruction language (the `arrival` dev flag, issue #230);
-   * null/absent = the shipped entrance, which expands its ring exactly as the death pulse
-   * does. See presentation/arrival-language.ts.
-   */
-  arrival: ArrivalLanguage | null = null,
   /**
    * Experimental non-colour cues for what a tank's weapon and mine load DO (the `enemyRole`
    * dev flag, issue #357); null/absent = the shipped board, where every kind shares one hull
@@ -1456,10 +1449,6 @@ export function createEntityViews(
               spawn.elapsed / ENTRANCE_SECONDS,
               0,
               reducedMotion,
-              // ENTRANCE ONLY. The invincible arm below is untouched by the arm: it is a
-              // sustained STATE ("you are still protected"), not an event, and opposing it
-              // against a death would be opposing two things that never occur together.
-              arrival === 'opposed',
             );
           } else if (shieldLeft > 0) {
             const p = 1 - shieldLeft / RESPAWN_SHIELD_TICKS; // 0 fresh -> 1 ending
@@ -1471,7 +1460,7 @@ export function createEntityViews(
             // instead. `p` itself stays the live shield progress, so the rings, beacon's timer
             // arc and the ease-out are what they were.
             spawn.protectedFrom ??= p;
-            frame = SPAWN_ANIMATORS[spawn.variant]('invincible', p, 0, reducedMotion, false, spawn.protectedFrom);
+            frame = SPAWN_ANIMATORS[spawn.variant]('invincible', p, 0, reducedMotion, spawn.protectedFrom);
           } else {
             // Done: restore solid, drop the ring, clear state.
             setTankOpacity(view, 1);

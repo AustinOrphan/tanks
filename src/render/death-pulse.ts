@@ -69,31 +69,8 @@ const MAX_RINGS = 16;
 const LIFETIME_SECONDS = 0.6;
 const GROWTH = 2.4;
 
-/**
- * DETONATE (issue #230, the `opposed` arm): the same shockwave with an attack envelope.
- *
- * The shipped ring grows LINEARLY and fades linearly, which is a swell rather than a blast
- * -- and the spawn entrances swell too, which is the whole of why the issue says the two
- * are "hard to tell apart at normal speed".
- *
- * Three changes, all envelope, none of them new geometry:
- *  - growth is ease-OUT (`1 - (1-k)^3`), so most of the travel happens in the first third.
- *    A blast is fast then slow; a swell is even.
- *  - opacity HOLDS at full for the first `ATTACK` of the life, then falls. That hold is
- *    the "hard attack" -- a frame of solid ring before anything fades, which is what the
- *    eye reads as an impact rather than an arrival.
- *  - the band is `DETONATE_WIDTH` times fatter (spawn-anim.ts), so weight separates the
- *    two events as well as direction. Direction alone is legible in a still and much less
- *    so at speed.
- */
-const ATTACK = 0.18;
-
 export function createDeathPulseSystem(
   scene: THREE.Scene,
-  /** Issue #230's `opposed` arm -- see ATTACK above. Construction-time because it decides
-   *  the ring's GEOMETRY (a fat band), which a per-frame flag could not change without
-   *  rebuilding a pooled mesh every death. */
-  opposed = false,
   /** The session's owner palette (issue #1057); absent = the shipped default. Read per
    *  death, so a pooled ring takes it from `acquire`'s recolour as a fresh one does, and
    *  only where identity applies -- see `spawn`. */
@@ -107,7 +84,7 @@ export function createDeathPulseSystem(
     let r = pool.pop();
     if (!r) {
       if (active.length >= MAX_RINGS) return null;
-      const mesh = makeSpawnRing(color, opposed) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+      const mesh = makeSpawnRing(color) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
       // Renamed so a same-frame respawn's own spawn-ring (entities.ts) stays
       // separable -- see the file doc comment.
       mesh.name = 'death-ring';
@@ -167,18 +144,8 @@ export function createDeathPulseSystem(
       // motion, which carries no information the fade does not, is gone. Nothing else about
       // the effect's lifetime changes, so a reduced ring and a full one recycle on the same
       // frame.
-      if (opposed) {
-        // Ease-out travel, and an opacity that holds before it falls. Under reduced motion
-        // the travel is dropped exactly as the shipped arm drops it -- the hold stays,
-        // because it is timing rather than movement, and it is what distinguishes the
-        // event. Calming a cue must not silently delete the thing being compared.
-        const eased = 1 - (1 - k) ** 3;
-        r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * eased);
-        r.mesh.material.opacity = k < ATTACK ? 1 : 1 - (k - ATTACK) / (1 - ATTACK);
-      } else {
-        r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);
-        r.mesh.material.opacity = 1 - k;
-      }
+      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);
+      r.mesh.material.opacity = 1 - k;
     }
   }
 

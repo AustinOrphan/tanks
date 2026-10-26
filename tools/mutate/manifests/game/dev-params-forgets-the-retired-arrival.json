@@ -1,0 +1,17 @@
+{
+  "id": "dev-params-forgets-the-retired-arrival",
+  "file": "src/game/dev-params.ts",
+  "find": "export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue', 'ownerPalette', 'arrival'];",
+  "replace": "export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue', 'ownerPalette'];",
+  "expect": "killed",
+  "tests": [
+    "src/game/dev-params.test.ts",
+    "src/game/dev-config.test.ts"
+  ],
+  "why": "Drops `arrival`, the entry issue #1120 added, and leaves the list as it stood before #1120. With the flag gone, `?arrival=` is an unknown parameter, so Exit Developer Mode on an old #665 or #718 comparison URL leaves it behind -- a URL still carrying developer state, which `developerExitSearch`'s own doc forbids -- and `canonicalDevSearch` carries it into canonical URLs as an unrelated parameter. Every other case in both files injects its own list, so only the cases that read the shipped default can see it.",
+  "killedBy": [
+    "canonicalDevSearch retires stockCue by default, the first developer parameter removed for good (issue #1022)",
+    "canonicalDevSearch retires arrival by default, the flag the converging entrance replaced (issue #1120)",
+    "developerExitSearch drops arrival with the shipped list, the flag issue #1120 removed"
+  ]
+}

@@ -162,7 +162,7 @@ describe('death pulse: the owner palette (issue #1057)', () => {
       const world = fourDead(mode);
       const events = ids.map((id) => destroyedEvent(id, 'player', id * 2, 3));
       const hcScene = new THREE.Scene();
-      const hc = createDeathPulseSystem(hcScene, false, OWNER_PALETTES['high-contrast']);
+      const hc = createDeathPulseSystem(hcScene, OWNER_PALETTES['high-contrast']);
       hc.spawn(events, world, { enemyEnabled: false });
       expect(ids.map((id) => ringAt(hcScene, id * 2)), mode).toEqual([...high]);
       // NEGATIVE CONTROL: no palette is Classic.
@@ -177,7 +177,7 @@ describe('death pulse: the owner palette (issue #1057)', () => {
     // recoloured with setHex. Slot 0 dies, its ring expires into the pool, then slot 1 dies
     // and is handed that same mesh.
     const scene = new THREE.Scene();
-    const dp = createDeathPulseSystem(scene, false, OWNER_PALETTES['high-contrast']);
+    const dp = createDeathPulseSystem(scene, OWNER_PALETTES['high-contrast']);
     const world = fourDead('ffa');
     dp.spawn([destroyedEvent(1, 'player', 2, 3)], world, { enemyEnabled: false });
     const first = deathRings(scene)[0];
@@ -194,7 +194,7 @@ describe('death pulse: the owner palette (issue #1057)', () => {
     // A player death rings at one player too, in slot 0's colour -- the one owner colour a
     // single-player game draws. The palette applies only where identity does.
     const scene = new THREE.Scene();
-    const dp = createDeathPulseSystem(scene, false, OWNER_PALETTES['high-contrast']);
+    const dp = createDeathPulseSystem(scene, OWNER_PALETTES['high-contrast']);
     const solo = makeTank(1, 'player', 5, 5, { controlledBy: 0, alive: false });
     const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
     const world = createWorld({ walls: [], tanks: [solo], spawns, lives: 3 });
@@ -428,82 +428,24 @@ describe('death pulse under the reduced-motion policy (issue #289)', () => {
   });
 });
 
-describe('detonate: a destruction blasts instead of swelling (issue #230)', () => {
+describe('death pulse: the shipped shockwave (issue #1120 keeps it)', () => {
   /*
-   * The complement of spawn-anim.test.ts's converge block. The issue's complaint is that
-   * spawn and death are "hard to tell apart at normal speed"; converge changes where the
-   * ARRIVAL ring goes, and this changes how the DESTRUCTION ring gets there.
-   *
-   * Shipped growth and fade are both linear, which is a swell. These pin the three things
-   * that make it a blast -- front-loaded travel, an attack hold, and a fat band -- against
-   * the shipped arm as the negative control in every case.
+   * The ruling on #718 kept this ring over the `opposed` arm's detonating band, which threw
+   * a fat ring out on an ease-out after holding at full brightness. This one travels and fades
+   * LINEARLY from its first frame; its width is the entrance ring's, since both come from
+   * `makeSpawnRing`, which takes none.
    */
-  function ring(opposed: boolean, seconds: number, reduced = false) {
-    const scene = new THREE.Scene();
-    const dp = createDeathPulseSystem(scene, opposed);
+  it('travels evenly and fades from its first frame, rather than holding and blasting', () => {
+    const { scene, dp } = setup();
     const deadTank = makeTank(1, 'player', 5, 8, { controlledBy: 0, alive: false });
     const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 8 }, angle: 0 }];
     const world = createWorld({ walls: [], tanks: [deadTank], spawns, lives: 3 });
-    dp.setReducedMotion(reduced);
     dp.spawn([destroyedEvent(1, 'player', 5, 8)], world, { enemyEnabled: false });
-    dp.update(seconds);
-    const m = deathRings(scene)[0];
-    return m
-      ? { scale: m.scale.x, opacity: m.material.opacity, present: true, mesh: m }
-      : { scale: 0, opacity: 0, present: false, mesh: null };
-  }
-
-  it('throws the ring out FRONT-LOADED, where the shipped one travels evenly', () => {
-    // Mutation this catches: dropping the ease-out and reusing the linear `k`. At a third
-    // of the life an eased ring has covered ~70% of its travel and a linear one exactly
-    // a third -- a blast is fast then slow, a swell is even.
-    const early = 0.6 / 3;
-    const blast = ring(true, early).scale;
-    const swell = ring(false, early).scale;
-    expect(blast).toBeGreaterThan(swell);
-    // ...and both still arrive at the same place, so this is envelope and not reach.
-    // Sampled just short of expiry, since the ring recycles exactly at its lifetime.
-    expect(ring(true, 0.599).scale).toBeCloseTo(ring(false, 0.599).scale, 1);
-  });
-
-  it('HOLDS at full brightness before it fades, which is the impact frame', () => {
-    // Mutation this catches: dropping the `k < ATTACK` branch. Without the hold the ring
-    // starts dimming on the first frame, and a fade that begins immediately reads as
-    // something leaving rather than something breaking.
-    const inAttack = 0.6 * 0.1; // inside ATTACK (0.18)
-    expect(ring(true, inAttack).opacity).toBe(1);
-    expect(ring(false, inAttack).opacity).toBeLessThan(1); // the shipped ring is already fading
-    // And it does fade afterwards -- a hold that never released would be a ring that
-    // vanishes at full brightness.
-    expect(ring(true, 0.6 * 0.5).opacity).toBeLessThan(1);
-  });
-
-  it('carries a FATTER band, so weight separates the events as well as direction', () => {
-    // Direction alone reads in a still frame and much less well at speed, which is exactly
-    // where the issue's complaint lives. Asserted on the geometry because the width is
-    // baked in at construction, not animated.
-    const fat = ring(true, 0.01).mesh!.geometry as THREE.RingGeometry;
-    const thin = ring(false, 0.01).mesh!.geometry as THREE.RingGeometry;
-    expect(fat.parameters.innerRadius).toBeLessThan(thin.parameters.innerRadius);
-    expect(fat.parameters.outerRadius).toBe(thin.parameters.outerRadius); // grown inward
-  });
-
-  it('keeps the attack under reduced motion while dropping the travel', () => {
-    // The rule the file already states, applied to the new arm. The hold is TIMING, not
-    // movement, and it is the thing that distinguishes the event -- calming a cue must not
-    // quietly delete what was being compared. #652's `.hud-capacity` trap, again.
-    const reduced = ring(true, 0.6 * 0.1, true);
-    expect(reduced.scale).toBe(1);
-    expect(reduced.opacity).toBe(1);
-    expect(ring(true, 0.6 * 0.5, true).opacity).toBeLessThan(1);
-  });
-
-  it('recycles on the same frame either way: the arm changes look, not pacing', () => {
-    // Same reasoning as the reduced-motion block above. If `opposed` also changed when a
-    // ring expired, an experiment flag would be altering felt pacing, and the owner's
-    // read on the LANGUAGE would be confounded by a read on the timing.
-    for (const seconds of [0.4, 1.0, 2.0]) {
-      expect(ring(true, seconds).present).toBe(ring(false, seconds).present);
-    }
+    dp.update(0.06); // a tenth of the 0.6s life
+    const ring = deathRings(scene)[0];
+    // NEGATIVE CONTROLS, both in the manifest: `death-ring-holds-before-it-fades` reads 1 here
+    // and `death-ring-blasts-out-front-loaded` has covered 27% of the travel, not 10%.
+    expect(ring.material.opacity, 'already fading: 1 - k').toBeCloseTo(0.9, 9);
+    expect(ring.scale.x, 'a tenth of the 2.4 growth').toBeCloseTo(1 + 2.4 * 0.1, 9);
   });
 });

@@ -38,12 +38,15 @@ export function toParams(search: string): URLSearchParams {
  * (#1058) as the one selector of the owner palette, so an old #1057 or #586 evidence URL still
  * carries `?ownerPalette=`.
  *
+ * `arrival` is the third: issue #1120 made the converging entrance it compared the only one and
+ * removed the flag, so an old #665 or #718 comparison URL still carries `?arrival=opposed`.
+ *
  * Without this list the configuration model CANNOT tell a deprecated developer parameter
  * from an unrelated application one -- both are simply "not known". `unknownParams` still
  * reports them together, since the menu has no deprecated category (`dev-config-menu.ts`);
  * that is a stated limit, not an oversight.
  */
-export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue', 'ownerPalette'];
+export const DEPRECATED_DEV_PARAMS: readonly string[] = ['stockCue', 'ownerPalette', 'arrival'];
 
 /**
  * The query string to leave developer mode with (issue #243).

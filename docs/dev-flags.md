@@ -55,13 +55,12 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (29)
+## Valued flags (28)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
 | `aiPerception` | `aiPerception` | `full`, `los` | `null` | Bounds AI target SELECTION by line of sight (`los`) instead of the shipped full-board default. Selection only -- aiming and firing always require a real line of sight. Measured before the default changed: the bound was never reached by a banking profile and left a non-banking one with no target for most of its life. |
 | `antialias` | `antialias` | `on`, `off` | `null` | Overrides whether the game renderer's WebGL context is created with antialiasing, leaving every other render setting at the preset. |
-| `arrival` | `arrival` | `opposed` | `null` | Speaks an experimental arrival/destruction language (issue #230). The shipped pair both expand a ring and read alike at speed; 'opposed' converges the spawn entrance onto the tank and throws a fat, hard-attacked band outward on death. |
 | `backdrop` | `backdrop` | `felt` | `null` | Draws the application backdrop with a named alternative treatment; the shipped default is the flat application ground. |
 | `bench` | `bench` | `versus-bots`, `preview` | `null` | Records frame times for a named benchmark workload and publishes the report as `__tanks.bench()`: rAF interval and frame-callback time percentiles, long-frame counts, the quality preset, pixel ratio, viewport, build and session. |
 | `blockedFire` | `blockedFire` | `ring`, `muzzle`, `pips`, `hud`, `audio`, `click`, `clunk`, `thunk-soft`, `pitch-empty`, `haptic`, `haptic-tap`, `haptic-double`, `haptic-long`, `haptic-rise`, `haptic-audio`, `ring-audio` | `null` | Plays an experimental cue when the active-shell cap refuses a shot; the shipped default adds none of them. |

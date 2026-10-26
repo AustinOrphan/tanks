@@ -29,11 +29,6 @@ export type SpawnAnimator = (
   progress: number,
   color: number,
   reducedMotion?: boolean,
-  /** Issue #230's `opposed` arm: the entrance ring converges instead of expanding. A
-   *  parameter for the same reason `reducedMotion` is one -- the direction is baked into
-   *  each style's own radius curve, and nothing downstream can invert a number it cannot
-   *  tell from a resting value. Defaulted, so every existing caller reads unchanged. */
-  opposed?: boolean,
   /** INVINCIBLE ONLY: the progress at which this tank's protected phase began -- where its
    *  entrance ended, which is not p = 0, because the shield counts down from the revival tick
    *  while the entrance plays. The opacity eases in from here (see `protectedOpacity`).
@@ -53,25 +48,10 @@ const RING_WIDTH = 0.12;
 const RING_Y = 0.06;
 const RING_SEGMENTS = 48;
 
-/**
- * How much fatter a DETONATE band is than the shipped shockwave ring (issue #230).
- *
- * The complaint this answers is that spawn and death "are easy to miss and hard to tell
- * apart at normal speed", and they were: every spawn entrance grows its ring outward
- * (warp 0.4->2.0, beacon 0.5->1.7, rise a bump) and so does the death pulse. Two events,
- * one expanding-ring vocabulary.
- *
- * Weight is half of what separates them under the `opposed` arm -- an arrival is a thin
- * line closing in, a destruction is a heavy band thrown out. Direction alone reads at a
- * still frame and much less well at speed, which is where the complaint lives.
- */
-const DETONATE_WIDTH = 3.2;
-
 /** A flat additive ring, same family as entities.ts's makeIdentityRing. */
-export function makeSpawnRing(color: number, fat = false): THREE.Mesh {
-  const width = RING_WIDTH * (fat ? DETONATE_WIDTH : 1);
+export function makeSpawnRing(color: number): THREE.Mesh {
   const mesh = new THREE.Mesh(
-    new THREE.RingGeometry(RING_BASE_R - width, RING_BASE_R, RING_SEGMENTS),
+    new THREE.RingGeometry(RING_BASE_R - RING_WIDTH, RING_BASE_R, RING_SEGMENTS),
     new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -93,18 +73,19 @@ export function makeSpawnRing(color: number, fat = false): THREE.Mesh {
 }
 
 /**
- * CONVERGE: the entrance ring collapses inward instead of expanding (issue #230, the
- * `opposed` arm).
+ * THE ENTRANCE RING: it gathers from wide and closes onto the tank as the tank materializes
+ * (issue #230's converging arrival, the entrance of every spawn since issue #1120).
  *
- * Every shipped entrance grows its ring outward and so does the death pulse, which is why
- * the two are "hard to tell apart at normal speed". Under this arm an arrival gathers --
- * the ring starts wide and thin and closes onto the tank as it materialises -- and a
- * destruction throws a fat band out. Opposed direction AND opposed weight, because
- * direction alone is legible in a still frame and much less so at speed.
+ * The death pulse (`death-pulse.ts`) throws its ring OUTWARD, so an arrival and a destruction
+ * travel in opposite directions. Every entrance used to grow its ring outward too (warp
+ * 0.4->2.0, beacon 0.5->1.7, rise a bump), which is why issue #230 found the two events
+ * "hard to tell apart at normal speed". Both rings are thin, so direction alone separates
+ * them, and direction reads in a still frame much better than in motion: the 2026-10-26
+ * ruling on #718 accepted that, keeping the shipped death pulse over a fatter band.
  *
- * Applied to all three styles rather than to one: the player picks a SPAWN STYLE
- * (`spawnAnim`), but arrival-versus-destruction is a property of the EVENT, and a language
- * that only held for one style would leave the other two reading like deaths.
+ * One curve for all three styles rather than one each: the player picks a SPAWN STYLE
+ * (`spawnAnim`), but arrival-versus-destruction is a property of the EVENT, and an entrance
+ * that converged for one style only would leave the other two reading like deaths.
  *
  * Radius runs 2.4 -> 1.0, landing exactly on the tank's own footprint rather than passing
  * through it; opacity rises with progress so the ring is brightest at the moment it lands,
@@ -181,15 +162,14 @@ export function protectedOpacity(p: number, from = 0): number {
   return 1 - SHIELD_TRANSLUCENCY * ramp;
 }
 
-const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false, protectedFrom = 0) => {
+const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, protectedFrom = 0) => {
   const p = clamp01(progress);
   if (phase === 'entrance') {
     return {
       // The fade stays: it is what says a tank is arriving rather than standing there.
       tankOpacity: p,
       tankScale: reducedMotion ? 1 : 0.6 + 0.4 * p,
-      ring: opposed ? convergeRing(p, reducedMotion)
-        : { radius: reducedMotion ? 1 : 0.4 + 1.6 * p, opacity: 1 - p, arc: 1 },
+      ring: convergeRing(p, reducedMotion),
     };
   }
   // invincible: eases into translucency and back out, meeting the entrance at opaque and the
@@ -201,17 +181,13 @@ const warp: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opp
   };
 };
 
-const rise: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false, protectedFrom = 0) => {
+const rise: SpawnAnimator = (phase, progress, _color, reducedMotion = false, protectedFrom = 0) => {
   const p = clamp01(progress);
   if (phase === 'entrance') {
     return {
       tankOpacity: clamp01(p * 1.4),
       tankScale: reducedMotion ? 1 : p, // grows from 0
-      ring: opposed ? convergeRing(p, reducedMotion) : {
-        radius: reducedMotion ? 1 : 0.9 + 0.3 * Math.sin(p * Math.PI),
-        opacity: 0.6 * (1 - p),
-        arc: 1,
-      },
+      ring: convergeRing(p, reducedMotion),
     };
   }
   // pulse faster as the shield ends: frequency rises with p.
@@ -230,14 +206,13 @@ const rise: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opp
   };
 };
 
-const beacon: SpawnAnimator = (phase, progress, _color, reducedMotion = false, opposed = false, protectedFrom = 0) => {
+const beacon: SpawnAnimator = (phase, progress, _color, reducedMotion = false, protectedFrom = 0) => {
   const p = clamp01(progress);
   if (phase === 'entrance') {
     return {
       tankOpacity: clamp01(p * 1.6), // materializes to opaque quickly
       tankScale: 1,
-      ring: opposed ? convergeRing(p, reducedMotion)
-        : { radius: reducedMotion ? 1 : 0.5 + 1.2 * p, opacity: 1 - p, arc: 1 },
+      ring: convergeRing(p, reducedMotion),
     };
   }
   // The invincible frame below is UNCHANGED under reduced motion, deliberately: its ring

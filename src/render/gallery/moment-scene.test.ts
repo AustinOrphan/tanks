@@ -87,16 +87,16 @@ afterEach(() => {
 
 describe('buildMomentScene wiring (issue #1018)', () => {
   it('hands its enemyRole to createEntityViews -- population: every cue in ENEMY_ROLE_CUES', () => {
-    // `createEntityViews`' sixth parameter, the slot renderer.ts fills from the same option.
+    // `createEntityViews`' fifth parameter, the slot renderer.ts fills from the same option.
     for (const cue of ENEMY_ROLE_CUES) {
       build({ enemyRole: cue });
-      expect(calls.entityArgs.at(-1)?.[5], cue).toBe(cue);
+      expect(calls.entityArgs.at(-1)?.[4], cue).toBe(cue);
     }
   });
 
   it('builds the shipped board without one', () => {
     build({});
-    expect(calls.entityArgs.at(-1)?.[5]).toBeNull();
+    expect(calls.entityArgs.at(-1)?.[4]).toBeNull();
   });
 
   it('pushes a reduced motion policy to the barrel recoil and the muzzle smoke', () => {

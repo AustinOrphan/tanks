@@ -80,7 +80,6 @@ export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   identityMarker: 'Rendering',
   enemyRole: 'Rendering',
   shellTrail: 'Rendering',
-  arrival: 'Rendering',
   // With the render treatments for the reason the topbar note below gives: the HUD's
   // typeface is chrome the player looks at, and swapping it changes no rule of the match.
   hudFont: 'Rendering',

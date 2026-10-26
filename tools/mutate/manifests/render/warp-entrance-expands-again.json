@@ -1,0 +1,17 @@
+{
+  "id": "warp-entrance-expands-again",
+  "file": "src/render/spawn-anim.ts",
+  "find": "      tankScale: reducedMotion ? 1 : 0.6 + 0.4 * p,\n      ring: convergeRing(p, reducedMotion),",
+  "replace": "      tankScale: reducedMotion ? 1 : 0.6 + 0.4 * p,\n      ring: { radius: reducedMotion ? 1 : 0.4 + 1.6 * p, opacity: 1 - p, arc: 1 },",
+  "expect": "killed",
+  "tests": [
+    "src/render/spawn-anim.test.ts",
+    "src/render/entities.test.ts"
+  ],
+  "why": "`warp` given back the expanding ring it drew before issue #1120 (0.4 -> 2.0, fading out). Warp is the default style and the only one a player can choose, so this is the entrance the ruling on #718 was about: the arrival would again grow outward exactly as the death pulse does, the confusion issue #230 reported. Killed both at the animator and through `createEntityViews`, whose mid-entrance ring radius is the converging curve's.",
+  "killedBy": [
+    "converge: an arrival gathers instead of expanding (issue #230) every style converges",
+    "warp animator entrance: fades and scales the tank in, ring converges",
+    "spawn animation (#199) holds the spawn ring at its OWN world-space radius, independent of the tank's scale"
+  ]
+}

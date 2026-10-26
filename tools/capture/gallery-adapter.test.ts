@@ -17,7 +17,7 @@ afterEach(async () => {
   await Promise.all(cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
-const NO_ARMS = { arrival: null, identityMarker: null, shellTrail: null };
+const NO_ARMS = { identityMarker: null, shellTrail: null };
 
 /** Runs the adapter over a faked gallery process whose report claims `arms` were applied. */
 async function runFakeMoment(root: string, outputDirectory: string, recipe: any, arms: unknown) {
@@ -131,7 +131,7 @@ describe('gallery moment adapter arguments', () => {
 });
 
 describe('moment recipes naming developer arms (issue #775)', () => {
-  const ARM_FLAGS = ['--arrival', '--identityMarker', '--shellTrail'];
+  const ARM_FLAGS = ['--identityMarker', '--shellTrail'];
   /** A moment recipe re-pointed at another scene, still valid by the schema. */
   const momentAt = (scenarioId: string, arms?: Record<string, string>) => {
     const recipe = clone(0);
@@ -155,14 +155,14 @@ describe('moment recipes naming developer arms (issue #775)', () => {
     }
   });
 
-  it("carries a recipe's arrival arm into the respawn moment's page request, and nothing without it", () => {
-    const shipped = momentAt('respawn');
-    const opposed = momentAt('respawn', { arrival: 'opposed' });
+  it("carries a recipe's shell-trail arm into the fire moment's page request, and nothing without it", () => {
+    const shipped = momentAt('fire');
+    const trail = momentAt('fire', { shellTrail: 'segments' });
     expect(() => validateRecipe(shipped)).not.toThrow();
-    expect(() => validateRecipe(opposed)).not.toThrow();
-    expect(pageQuery(opposed).get('arrival')).toBe('opposed');
-    expect(pageQuery(shipped).get('arrival')).toBeNull();
-    expect(pageQuery(opposed).get('scene')).toBe('respawn');
+    expect(() => validateRecipe(trail)).not.toThrow();
+    expect(pageQuery(trail).get('shellTrail')).toBe('segments');
+    expect(pageQuery(shipped).get('shellTrail')).toBeNull();
+    expect(pageQuery(trail).get('scene')).toBe('fire');
   });
 
   it('records the arms the gallery applied, and refuses a report that applied something else', async () => {
@@ -182,7 +182,7 @@ describe('moment recipes naming developer arms (issue #775)', () => {
     expect(() => validateRecipe(momentAt('fire', { shellTrail: 'segments' }))).not.toThrow();
     expect(() => validateRecipe(momentAt('fire', { shellTrail: 'comet' }))).toThrow(/variant\.arms.*--shellTrail must be one of/);
     // A real arm on a scene where it shows nothing: the gallery's own applicability refusal.
-    expect(() => validateRecipe(momentAt('fire', { arrival: 'opposed' }))).toThrow(/variant\.arms.*--arrival needs a scene/);
+    expect(() => validateRecipe(momentAt('respawn', { shellTrail: 'segments' }))).toThrow(/variant\.arms.*--shellTrail needs a shell in the frame/);
     expect(() => validateRecipe(momentAt('fire', { stockCue: 'pips' }))).toThrow(/variant\.arms\.stockCue.*not an allowed field/);
     expect(() => validateRecipe(momentAt('fire', {}))).toThrow(/variant\.arms.*at least one arm/);
     const screen = structuredClone(CAPTURE_RECIPES.find((e: any) => e.recipe.producer.kind === 'screen').recipe);

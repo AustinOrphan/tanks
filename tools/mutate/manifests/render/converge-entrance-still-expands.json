@@ -7,8 +7,8 @@
   "tests": [
     "src/render/spawn-anim.test.ts"
   ],
-  "why": "The whole of issue #230's arrival half. With the direction flipped back, `?dev=1&arrival=opposed` still renames the language, still reports as accepted, and still draws a ring that expands exactly like the death pulse it was supposed to be told apart from -- so the owner would play the arm, see no separation, and conclude the language does not work rather than that it never ran. An experiment flag that silently does nothing is worse than one that errors.",
+  "why": "The direction of the shared entrance ring flipped back, so every style's arrival grows outward again, exactly like the death pulse it is told apart from (issue #230's complaint, which issue #1120 answered by shipping the converging ring). The flipped ring (1.0 -> 2.4) still appears and still brightens, so nothing but its direction, and with it the reading, separates the two builds.",
   "killedBy": [
-    "converge: an arrival gathers instead of expanding (issue #230) opposed: every style converges instead"
+    "converge: an arrival gathers instead of expanding (issue #230) every style converges"
   ]
 }
