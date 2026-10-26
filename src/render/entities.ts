@@ -539,8 +539,8 @@ export function createEntityViews(
    * ring with no entry falls back to the placeholder, which `entities.test.ts` would show as a
    * slot missing its shade. The same hull in FFA and Teams, where the ring takes the team
    * colour instead. Rejected: the exact ring colour, which #579 measured as carrying no
-   * information beside its own ring, and team-coloured hulls, which P1's own paint never
-   * matches.
+   * information beside its own ring, and team-coloured hulls, which P1, in its own paint,
+   * could never match.
    *
    * AUTHORED, NOT DERIVED. Every uniform darkening tried (sRGB and linear-light scaling, OKLab
    * lightness scaled or lowered 0.20-0.30, at several chroma factors) left some pair under
