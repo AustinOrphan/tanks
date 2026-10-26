@@ -10,7 +10,9 @@ import {
 } from './entities';
 import { hullGeometry, tankParts, HULL_CORNER, HULL_NOSE } from './tank-model';
 import { weaponShapeFor, type EnemyRoleCue } from '../presentation/enemy-role';
-import { IDENTITY_RING_COLORS, OWNER_PALETTES, TEAM_COLORS, TEAM_LABELS } from '../presentation/identity';
+import {
+  IDENTITY_RING_COLORS, OWNER_PALETTE_IDS, OWNER_PALETTES, TEAM_COLORS, TEAM_LABELS, type OwnerPaletteId,
+} from '../presentation/identity';
 import { distance, overFelt, OWNER_FLOOR, TEAM_FLOOR } from '../presentation/colour-distance';
 import { protectedOpacity, SPAWN_ANIMATORS } from './spawn-anim';
 import type { SpawnAnimId } from '../presentation/customization';
@@ -2215,7 +2217,7 @@ describe('player identity: ring and shell tint', () => {
     return createWorld({ walls: [], tanks: [p0, p1, p2, p3], spawns, lives: 3, mode: 'teams' });
   }
 
-  it('team colours, both owner palettes: exactly 3 hues, measurably clear of each other, the player hull and the placeholder', () => {
+  it('team colours, both owner palettes: exactly 3 hues, measurably clear of each other and the player hull', () => {
     // THREE since issue #281: four-player Teams may use two or three teams (2v2 or
     // 2v1v1). Two entries left `teamColor(2)` falling through to the white fallback,
     // which is also the unstyled-slot placeholder -- so a 2v1v1 rendered one whole side
@@ -2248,31 +2250,19 @@ describe('player identity: ring and shell tint', () => {
     // would silently render as the '?' fallback.
     expect(TEAM_LABELS).toHaveLength(TEAM_COLORS.length);
     expect(new Set(TEAM_LABELS).size, 'two teams share a letter').toBe(TEAM_LABELS.length);
-    // Real rendered placeholder, same method as the identity-ring sweep above.
-    const scene = new THREE.Scene();
-    const views = createEntityViews(scene);
-    views.sync(twoPlayerWorld(), twoPlayerWorld(), 0);
-    let placeholder = -1;
-    scene.traverse((o) => {
-      if (o.name !== 'hull') return;
-      let g: THREE.Object3D | null = o;
-      while (g.parent && g.parent.type !== 'Scene') g = g.parent;
-      if (g && (g as THREE.Group).position.x === 9) {
-        placeholder = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
-      }
-    });
-    expect(placeholder).not.toBe(-1);
     // The tanks a team ring can actually sit beside. NOT every roster kind: team colours
     // render only in `teams` mode, which is versus-only, and `loadArena` strips every
     // non-player spawn there -- so brown, teal and the rest never share a screen with these.
     // Asserting against them would be over-constraint dressed up as rigour. Measured
-    // minimums: Classic 33.36 vs the hull (team B) and 25.54 vs the placeholder (team A);
-    // High contrast 25.29 (team A) and 37.67 (team C).
+    // minimums: Classic 33.36 vs the player hull (team B), High contrast 25.29 (team A).
+    //
+    // The unstyled placeholder was the other hull here until issue #1124 gave versus slots 1-3
+    // their own shades: a team ring no longer sits beside it, so the versus hull sweep in the
+    // owner palette block below measures every team against those shades instead.
     const player = parseInt(configFor('player').color.slice(1), 16);
     for (const [id, teams] of teamSets) {
       for (const team of teams) {
         expect(distance(overFelt(team), player), `${id}: team vs the player hull`).toBeGreaterThan(OWNER_FLOOR);
-        expect(distance(overFelt(team), placeholder), `${id}: team vs unstyled placeholder`).toBeGreaterThan(OWNER_FLOOR);
       }
     }
 
@@ -2282,7 +2272,6 @@ describe('player identity: ring and shell tint', () => {
     // two palettes that cannot appear together, by byte inequality, which made it doubly
     // uninformative. Removing it is the point of issue #579, not a gap in it.
     expect(IDENTITY_RING_COLORS.length, 'the identity palette still exists, it is just not compared here').toBe(4);
-    views.dispose();
   });
 
   it('teams mode colours every ring by TEAM, not by slot -- slots 0/2 (team 0) match, slots 1/3 (team 1) match, and the two teams differ', () => {
@@ -2545,6 +2534,123 @@ describe('player identity: ring and shell tint', () => {
       });
       expect(spawn, 'the single-player entrance ring is Classic slot 0').toBe(0x3fd0ff);
       hc.v.dispose();
+    });
+
+    /**
+     * VERSUS HULLS (issue #1124): an unstyled slot 1-3 in FFA or Teams wears a darker shade of
+     * the ring its session's palette draws for it, where co-op keeps the placeholder. Population:
+     * 4 slots x 2 modes x 2 palettes for the shades, both palettes for co-op and for the
+     * measured sweep, whose 18 pairs per palette are counted below.
+     */
+    describe('versus hulls (issue #1124)', () => {
+      // entities.ts's VERSUS_HULL_SHADES written out per palette, so a shade cannot move and
+      // take its own expectation with it. Keyed by id, so a third palette does not typecheck
+      // until its three shades are chosen and measured here.
+      const SHADES: Record<OwnerPaletteId, readonly [number, number, number]> = {
+        classic: [0x9a5000, 0x8a1618, 0x580c80],
+        'high-contrast': [0x4f8a00, 0x9e5868, 0xa89a40],
+      };
+      const ROSTER_PLAYER = parseInt(configFor('player').color.slice(1), 16);
+
+      /** Each tank's hull colour, by the tank group sitting at world x: the material as drawn. */
+      function hullsDrawn(palette: OwnerPaletteId, w: World): number[] {
+        const scene = new THREE.Scene();
+        const v = createEntityViews(scene, undefined, null, null, null, null, OWNER_PALETTES[palette]);
+        v.sync(w, w, 0);
+        const hulls = XS.map((x) => {
+          let c = -1;
+          scene.traverse((o) => {
+            if (o.name !== 'hull') return;
+            let g: THREE.Object3D | null = o;
+            while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+            if ((g as THREE.Group).position.x === x) {
+              c = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+            }
+          });
+          return c;
+        });
+        v.dispose();
+        return hulls;
+      }
+
+      /**
+       * Every pair the sweep holds to OWNER_FLOOR, named, with its CIEDE2000 distance as drawn:
+       * each ring composited over the felt as `makeIdentityRing` draws it, each hull opaque.
+       * `ffaHulls` and `teamsHulls` are indexed by slot, slot 0 being P1's hull.
+       */
+      function versusPairs(
+        rings: readonly number[], teams: readonly number[], ffaHulls: number[], teamsHulls: number[],
+      ): [string, number][] {
+        const pairs: [string, number][] = [];
+        for (const s of [1, 2, 3]) {
+          pairs.push([`ring${s} vs hull${s}`, distance(overFelt(rings[s]), ffaHulls[s])]);
+          // Every team against every hull: the setup pane lets any slot pick any team.
+          teams.forEach((t, i) => pairs.push([`team ${'ABC'[i]} vs hull${s}`, distance(overFelt(t), teamsHulls[s])]));
+          pairs.push([`P1's hull vs hull${s}`, distance(ffaHulls[0], ffaHulls[s])]);
+          for (let o = s + 1; o <= 3; o++) pairs.push([`hull${s} vs hull${o}`, distance(ffaHulls[s], ffaHulls[o])]);
+        }
+        return pairs;
+      }
+      const underFloor = (pairs: [string, number][]): string[] =>
+        pairs.filter(([, d]) => d <= OWNER_FLOOR).map(([name]) => name);
+
+      it.each(OWNER_PALETTE_IDS)(
+        'slots 1-3 wear their %s shade in FFA and in Teams, and slot 0 keeps the roster hull',
+        (palette) => {
+          // The same hull in both modes, which is the ruling: in Teams the RING takes the team
+          // colour and the hull stays the slot's own. Slot 0 is P1's paint, never a shade.
+          for (const mode of ['ffa', 'teams'] as const) {
+            expect(hullsDrawn(palette, fourPlayers(mode)), `${palette}, ${mode}`).toEqual([
+              ROSTER_PLAYER, ...SHADES[palette],
+            ]);
+          }
+        },
+      );
+
+      it('developer co-op keeps one placeholder on every unstyled slot under either palette, not the versus shades', () => {
+        // Campaign enemies share a co-op screen and the shades would not stay clear of them:
+        // Classic hull 1 sits 6.78 from the brown tank. The placeholder's hex is a feel value the
+        // co-op block above does not pin, so this pins its shape instead: slots 1-3 collapse to
+        // ONE colour that is none of the three shades, which makes the set below exactly four.
+        for (const palette of OWNER_PALETTE_IDS) {
+          const coop = hullsDrawn(palette, fourPlayerWorld()).slice(1);
+          expect(new Set([...coop, ...SHADES[palette]]).size, `${palette}: co-op hulls ${coop.map((c) => c.toString(16))}`).toBe(4);
+        }
+      });
+
+      it.each(OWNER_PALETTE_IDS)(
+        "the %s hulls clear OWNER_FLOOR as drawn: from the ring around each, every team ring, each other and P1's hull",
+        (palette) => {
+          // Measured minimums (colour-distance.ts, 2026-10-25, origin/main 72b0b2bf plus #1124):
+          // Classic 19.83 (ring3 vs hull3), High contrast 19.29 (hull1 vs hull3). The full table
+          // is on VERSUS_HULL_SHADES. Rings come from the palette, whose drawing the site tests
+          // above pin; the hulls are read off the rendered FFA and Teams worlds.
+          const { rings, teams } = OWNER_PALETTES[palette];
+          const pairs = versusPairs(rings, teams, hullsDrawn(palette, fourPlayers('ffa')), hullsDrawn(palette, fourPlayers('teams')));
+          expect(pairs, '3 rings vs their hulls + 3 teams x 3 hulls + 3 vs P1 + 3 hull pairs').toHaveLength(18);
+          expect(underFloor(pairs), `${palette}: pairs at or under OWNER_FLOOR`).toEqual([]);
+        },
+      );
+
+      it('the sweep fails the two rejected hulls and a collision in each family (known-bad controls)', () => {
+        // Negative fixtures for every family the sweep measures, run through the same
+        // `versusPairs`. The two options issue #1124 rejected come first: a hull in its ring's
+        // exact colour (#579: a ring beside its own colour carries no information) and a hull in
+        // a team colour, which is the ring that hull wears in Teams.
+        for (const palette of OWNER_PALETTE_IDS) {
+          const { rings, teams } = OWNER_PALETTES[palette];
+          const [h1, h2, h3] = SHADES[palette];
+          const failing = (hulls: number[]): string[] => underFloor(versusPairs(rings, teams, hulls, hulls));
+          expect(failing([ROSTER_PLAYER, rings[1], rings[2], rings[3]]), `${palette}: exact rings`).toEqual(
+            expect.arrayContaining(['ring1 vs hull1', 'ring2 vs hull2', 'ring3 vs hull3']),
+          );
+          expect(failing([ROSTER_PLAYER, teams[0], teams[1], teams[2]]), `${palette}: team-coloured`).toEqual(
+            expect.arrayContaining(['team A vs hull1', 'team B vs hull2', 'team C vs hull3']),
+          );
+          expect(failing([ROSTER_PLAYER, h1, h1, h3]), `${palette}: two hulls alike`).toContain('hull1 vs hull2');
+          expect(failing([ROSTER_PLAYER, h1, h2, ROSTER_PLAYER]), `${palette}: P1's hull`).toContain("P1's hull vs hull3");
+        }
+      });
     });
   });
 });

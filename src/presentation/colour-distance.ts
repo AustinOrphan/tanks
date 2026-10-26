@@ -42,7 +42,10 @@ export const ARENA_FELT = 0x2f6d4f;
  * 25.54 (team A). The floor sits below all four with room, and would have caught the 2.09
  * collision between the old blue team B and the player hull that motivated it (#579). The
  * High contrast palette is also held to it against the 6 hull paints; Classic is not, since
- * #586 tolerates its ring 1 sitting 1.17 from the orange paint.
+ * #586 tolerates its ring 1 sitting 1.17 from the orange paint. Since issue #1124 the versus
+ * hulls of slots 1-3 are held to it too, against the ring around each, every team ring, each
+ * other and P1's hull: 19.29 at worst (High contrast hull 1 vs hull 3, measured 2026-10-25).
+ * Those hulls replaced the placeholder in versus, so no team ring sits beside it any longer.
  *
  * TEAM_FLOOR 25: teammates share a colour, so telling two SIDES apart matters more than
  * telling two slots apart, and the trio has more room to spend. Worst pairs: Classic 35.98
