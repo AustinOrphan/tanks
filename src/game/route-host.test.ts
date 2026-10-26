@@ -999,6 +999,8 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
     // `announce: false` above, not the default-looking `true`, so a facade that forwarded a
     // constant in its place could not pass (issue #925's co-op death toast relies on it).
     expect(f.hud.argsOf('signalPlayerDeath').at(-1)).toEqual([0xb41e1e, { announce: false }]);
+    // Not the classic red, so a facade that forwarded the single-player default cannot pass.
+    expect(f.hud.argsOf('signalDeathVignette').at(-1)).toEqual([0x3fd0ff]);
   });
 
   it('drops EVERY push from a session that has already been replaced', () => {

@@ -395,6 +395,21 @@ describe('live status announcements (issue #629)', () => {
     expect(spoken(root)).toBe('Life lost. 2 lives remaining.');
   });
 
+  it("speaks no Life lost line for another player's flash (issue #1123)", () => {
+    // A co-op partner's death under a shared pool: the lives drop and the vignette flashes in
+    // the partner's color, but the line is the tracked player's, and the partner's death
+    // already has #925's toast as its sentence.
+    const { hud: h, root } = mount();
+    h.setStatus(campaign({ lives: 3 }));
+    h.signalDeathVignette(0xff8a1e);
+    h.setStatus(campaign({ lives: 2 }));
+    expect(spoken(root), "a Life lost line for another player's death").toBe('');
+    // The control, on the same HUD: the tracked player's own death still owes its line.
+    h.signalPlayerDeath(0xff0000, { announce: true });
+    h.setStatus(campaign({ lives: 1 }));
+    expect(spoken(root)).toBe('Life lost. 1 life remaining.');
+  });
+
   it('says "1 life", not "1 lives"', () => {
     const { hud: h, root } = mount();
     h.setStatus(campaign({ lives: 2 }));

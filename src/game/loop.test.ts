@@ -100,6 +100,7 @@ function locationForSurface(
 }
 import {
   isPlayerDeath,
+  otherHumanDeathFlash,
   deathVignetteColor,
   tallyCoopKills,
   tallyVersusAccuracy,
@@ -3869,6 +3870,58 @@ describe('isPlayerDeath', () => {
   });
 });
 
+describe('otherHumanDeathFlash (issue #1123)', () => {
+  // Three FFA slots, tank id = slot + 1, with the tracked player (slot 0) at id 1.
+  const TRACKED = 1;
+  const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
+    ({ id, kind, controlledBy }) as Tank;
+  const ffa = {
+    rules: resolveWorldRules({ mode: 'ffa' }),
+    tanks: [0, 1, 2].map((slot) => mkTank(slot + 1, 'player', slot)),
+  } as World;
+  const died = (kind: string, tankId: number): SimEvent =>
+    ({ type: 'tank-destroyed', tankId, kind, pos: { x: 0, y: 0 } }) as SimEvent;
+  const NO_BOTS = new Set<number>();
+
+  it("is the dying tank of a human slot that is not the tracked player's", () => {
+    expect(otherHumanDeathFlash([died('player', 2)], ffa, NO_BOTS, TRACKED)).toBe(2);
+    expect(otherHumanDeathFlash([died('player', 3)], ffa, NO_BOTS, TRACKED)).toBe(3);
+  });
+
+  it("is null for a bot slot's death, which the same slot flashes once a person drives it", () => {
+    expect(otherHumanDeathFlash([died('player', 3)], ffa, new Set([2]), TRACKED)).toBeNull();
+    // The control: the same death with slot 2 human.
+    expect(otherHumanDeathFlash([died('player', 3)], ffa, NO_BOTS, TRACKED)).toBe(3);
+    // A bot's death ahead of a human's in one frame is passed over, not taken as the frame's.
+    expect(otherHumanDeathFlash([died('player', 3), died('player', 2)], ffa, new Set([2]), TRACKED))
+      .toBe(2);
+  });
+
+  it("is null when the tracked player died in the frame, even beside another human's death", () => {
+    // Their own signalPlayerDeath is the frame's flash, so nothing may restart it in another color,
+    // including when the sim reported the other death first.
+    expect(otherHumanDeathFlash([died('player', 2), died('player', TRACKED)], ffa, NO_BOTS, TRACKED))
+      .toBeNull();
+    expect(otherHumanDeathFlash([died('player', TRACKED)], ffa, NO_BOTS, TRACKED)).toBeNull();
+  });
+
+  it("takes the frame's first human death when two die in it, not the last or the lowest slot", () => {
+    expect(otherHumanDeathFlash([died('player', 3), died('player', 2)], ffa, NO_BOTS, TRACKED)).toBe(3);
+    expect(otherHumanDeathFlash([died('player', 2), died('player', 3)], ffa, NO_BOTS, TRACKED)).toBe(2);
+  });
+
+  it("is null for an enemy's death, which reads as slot 0 without the player-kind test", () => {
+    // A campaign co-op board. The enemy carries no controlledBy, and no bot holds slot 0.
+    const coop = {
+      rules: resolveWorldRules(),
+      tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(5, 'brown')],
+    } as World;
+    expect(otherHumanDeathFlash([died('brown', 5)], coop, NO_BOTS, TRACKED)).toBeNull();
+    // The control: a partner's death on the same board flashes.
+    expect(otherHumanDeathFlash([died('player', 2)], coop, NO_BOTS, TRACKED)).toBe(2);
+  });
+});
+
 describe('deathVignetteColor', () => {
   // Same mkTank shape tallyCoopKills' own tests use just below.
   const mkTank = (id: number, kind: string, controlledBy?: number, team?: number): Tank =>
@@ -4254,10 +4307,11 @@ describe('startGameWith: a real player death reaches the HUD', () => {
     });
   }
 
-  it('names a co-op partner who dies in the toast rail, though no vignette flashes for them (issue #925)', () => {
+  it('names a co-op partner who dies in the toast rail, beside their own vignette and no Life lost line (issues #925, #1123)', () => {
     // death-toast.ts's own tests call the cue directly; this is the frame handler handing it
-    // a real death. Slot 1 is not the tracked player, so the vignette stays dark and the
-    // toast is the only thing that says who went down.
+    // a real death. Slot 1 is a person, so the vignette flashes in its color (issue #1123) and
+    // the toast says who went down. Neither goes through the tracked player's
+    // signalPlayerDeath, whose owed "Life lost" line would be a second sentence beside it.
     const h = boot(makeDeps({ devFlags: { players: 2 } }));
     const world = h.rec.builtWorlds[0];
     const [, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
@@ -4265,7 +4319,8 @@ describe('startGameWith: a real player death reaches the HUD', () => {
     h.setState('playing');
     h.fireFrame(20);
     expect(h.rec.plainToasts).toEqual(['P2 out']);
-    expect(h.rec.deathSignals, "a partner's death flashes no vignette").toBe(0);
+    expect(h.rec.vignetteFlashes, "the partner's own flash").toEqual([IDENTITY_RING_COLORS[1]]);
+    expect(h.rec.deathSignals, "a partner's death is not the tracked player's").toBe(0);
     h.handle.dispose();
   });
 
@@ -4350,6 +4405,113 @@ describe('startGameWith: a real player death reaches the HUD', () => {
     h.setState('playing');
     h.fireFrame(40);
     expect(h.rec.plainToasts).toEqual(['P2 out', 'P2 out']);
+    h.handle.dispose();
+  });
+
+  /**
+   * Issue #1123: every human player's death flashes the vignette in its own color; a bot's
+   * flashes nothing. Versus boards hold no enemies, so these shells are a player's own: one
+   * sits on each victim and resolves on the first tick, in array order (see `shellOn`).
+   */
+  function versusShellOn(world: World, owner: Tank, victim: Tank, id: number): void {
+    world.bullets.push({
+      id, ownerId: owner.id, type: 'normal', pos: { x: victim.pos.x, y: victim.pos.y },
+      vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+    });
+  }
+  /** Did `tankId` die in any frame the session has driven? Read from what the director saw. */
+  function diedInSession(h: { rec: Recorder }, tankId: number): boolean {
+    return h.rec.directed.flat().some((e) => e.type === 'tank-destroyed' && e.tankId === tankId);
+  }
+
+  it("flashes a human P2's death in P2's own color under the session palette, through the vignette alone (issue #1123)", () => {
+    // Under a stored High contrast, so the color is P2's slot in that palette: not P1's
+    // (0x63d1fd) and not Classic's (0xff8a1e). And the vignette alone: slot 0's
+    // signalPlayerDeath, with its Lives pulse and owed "Life lost" line, is not P2's.
+    const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' }, savedOwnerPalette: 'high-contrast' }));
+    const world = h.rec.builtWorlds[0];
+    const [p1, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    versusShellOn(world, p1, p2, 900);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.vignetteFlashes).toEqual([0x8ffd00]);
+    expect(h.rec.deathSignals, "P2's death reached the tracked player's signal").toBe(0);
+    h.handle.dispose();
+  });
+
+  it("flashes nothing for a bot slot's death, though a human slot's death on the same board flashes (issue #1123)", () => {
+    // Three FFA slots, `bots: 1` claiming the last. P1's shell on the bot, then, as the
+    // control, a fresh session with P1's shell on P2, a person.
+    for (const [victimSlot, want] of [[2, []], [1, [IDENTITY_RING_COLORS[1]]]] as const) {
+      const h = boot(makeDeps({ devFlags: { players: 3, mode: 'ffa', bots: 1 } }));
+      const world = h.rec.builtWorlds[0];
+      const players = world.tanks.filter((t: Tank) => t.kind === 'player');
+      const victim = players.find((t: Tank) => t.controlledBy === victimSlot) as Tank;
+      versusShellOn(world, players[0], victim, 900);
+      h.setState('playing');
+      h.fireFrame(20);
+      expect(diedInSession(h, victim.id), `slot ${victimSlot} really died`).toBe(true);
+      expect(h.rec.vignetteFlashes, `slot ${victimSlot}`).toEqual(want);
+      h.handle.dispose();
+    }
+  });
+
+  it("flashes once, in the tracked player's color, when they die on the frame another human does (issue #1123)", () => {
+    // P2's shell is first in the array, so the sim reports P2's death before P1's. P1's flash
+    // is still the frame's, and nothing restarts it in P2's color.
+    const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+    const world = h.rec.builtWorlds[0];
+    const [p1, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    versusShellOn(world, p1, p2, 900);
+    versusShellOn(world, p2, p1, 901);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(diedInSession(h, p2.id), 'P2 died on the same frame').toBe(true);
+    expect(h.rec.deathColors).toEqual([IDENTITY_RING_COLORS[0]]);
+    expect(h.rec.vignetteFlashes, "a second flash repaints P1's").toEqual([]);
+    h.handle.dispose();
+  });
+
+  it("flashes once, for the frame's first death, when two other humans die on one frame (issue #1123)", () => {
+    // Three FFA slots, P1's shells on P3 and then P2: the sim reports P3's death first, so the
+    // flash is P3's, not that of the frame's last death or of the lower slot.
+    const h = boot(makeDeps({ devFlags: { players: 3, mode: 'ffa' } }));
+    const world = h.rec.builtWorlds[0];
+    const [p1, p2, p3] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    versusShellOn(world, p1, p3, 900);
+    versusShellOn(world, p1, p2, 901);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(diedInSession(h, p2.id) && diedInSession(h, p3.id), 'both died').toBe(true);
+    expect(h.rec.vignetteFlashes).toEqual([IDENTITY_RING_COLORS[2]]);
+    h.handle.dispose();
+  });
+
+  it("flashes a teams death in the dying tank's team color (issue #1123)", () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, mode: 'teams' } }));
+    const world = h.rec.builtWorlds[0];
+    const [p1, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
+    // Fixture: two teams, so the tracked player's team color is a wrong answer here.
+    expect(TEAM_COLORS[p2.team as number]).not.toBe(TEAM_COLORS[p1.team as number]);
+    versusShellOn(world, p1, p2, 900);
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.vignetteFlashes).toEqual([TEAM_COLORS[p2.team as number]]);
+    h.handle.dispose();
+  });
+
+  it("flashes nothing for an enemy's death (issue #1123)", () => {
+    // Single-player, one enemy's shell on another. An enemy carries no slot, so without the
+    // player-kind test it reads as slot 0, which no bot holds, and every kill would flash.
+    const base = createArenaWorld(1);
+    const [enemy, other] = base.tanks.filter((t) => t.kind !== 'player');
+    const world = { ...base, roundStartTick: -1000, bullets: [] as World['bullets'] };
+    versusShellOn(world, other, enemy, 901);
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(diedInSession(h, enemy.id), 'the enemy really died').toBe(true);
+    expect(h.rec.vignetteFlashes).toEqual([]);
     h.handle.dispose();
   });
 });
