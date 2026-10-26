@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-accepts-unmatched-developer-chrome",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "        if (!(element?.matched > 0)) shown.push(",
+  "replace": "        if (element === undefined) shown.push(",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "hiding the developer chrome (issue #258) fails when a selector matched no element or was not measured"
+  ],
+  "why": "Every element of an empty match computes display: none, vacuously. A renamed class would hide nothing while the gate reported the chrome hidden, with the badge drawn under its new name in every frame."
+}

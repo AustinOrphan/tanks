@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-drops-hide-developer-chrome",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "    ...(variant.hideDeveloperChrome === true ? ['--hide-developer-chrome'] : []),",
+  "replace": "    ...[],",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "hiding the developer chrome (issue #258) forwards the switch to the recorder only when the recipe sets it true"
+  ],
+  "why": "The recipe is where a documentation capture asks for the DEV badge and the PRACTICE chip to be hidden. An adapter that never passes the switch records both in every frame, which is the first take issue #258 ruled on."
+}

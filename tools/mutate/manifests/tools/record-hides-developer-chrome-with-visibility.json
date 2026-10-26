@@ -1,0 +1,14 @@
+{
+  "id": "record-hides-developer-chrome-with-visibility",
+  "file": "tools/screens/record.mjs",
+  "find": "`${selector} { display: none !important; }`",
+  "replace": "`${selector} { visibility: hidden !important; }`",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "developer chrome in a documentation capture (issue #258) hides exactly the two selectors, each with display: none"
+  ],
+  "why": "visibility: hidden keeps the chip's box, so the topbar lays out around an empty gap no campaign run has. The ruling names display: none for that reason."
+}

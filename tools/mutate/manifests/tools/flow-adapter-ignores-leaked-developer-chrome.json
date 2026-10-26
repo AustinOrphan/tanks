@@ -1,0 +1,15 @@
+{
+  "id": "flow-adapter-ignores-leaked-developer-chrome",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "    hideDeveloperChrome: developerChromeHidden(p.developerChrome),",
+  "replace": "    hideDeveloperChrome: recipe.variant.hideDeveloperChrome === true,",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "hiding the developer chrome (issue #258) holds a recipe that did not ask to nothing hidden, through the identity gate",
+    "hiding the developer chrome (issue #258) fails identity when the recipe asked but the page never carried the stylesheet"
+  ],
+  "why": "Identity is what holds a capture that did not ask to nothing hidden. Echoing the recipe instead of reading the page lets the switch leak into a review capture, or vanish from a documentation one, with the gate still green."
+}

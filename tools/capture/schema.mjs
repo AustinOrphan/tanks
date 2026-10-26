@@ -126,7 +126,10 @@ function validateFlowVariant(recipe) {
   // only has to admit them; listing them as optional keys keeps a recipe naming just one of
   // them a schema error rather than a silently campaign-shaped capture.
   const variant = exactKeys(
-    recipe.variant, 'variant', ['level', 'driver', 'flags'], ['minimumDeliveredFps', 'mode', 'players'],
+    recipe.variant,
+    'variant',
+    ['level', 'driver', 'flags'],
+    ['minimumDeliveredFps', 'mode', 'players', 'hideDeveloperChrome'],
   );
   try {
     validateFlowInputs({
@@ -144,6 +147,12 @@ function validateFlowVariant(recipe) {
   }
   if (Object.hasOwn(variant, 'minimumDeliveredFps')) {
     numberAt(variant.minimumDeliveredFps, 'variant.minimumDeliveredFps', { min: 1, max: 240 });
+  }
+  // Issue #258: a documentation capture hides the DEV badge and the PRACTICE chip. A boolean
+  // and nothing looser, because the adapter forwards the switch only for `true`: a string
+  // "true" would otherwise read as on in review and record with the chrome showing.
+  if (Object.hasOwn(variant, 'hideDeveloperChrome') && typeof variant.hideDeveloperChrome !== 'boolean') {
+    fail('variant.hideDeveloperChrome', 'must be a boolean');
   }
 }
 

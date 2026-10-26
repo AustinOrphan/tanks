@@ -215,6 +215,112 @@ describe('judgeFlowReport: every gate, both ways (issue #815)', () => {
   });
 });
 
+describe('hiding the developer chrome (issue #258)', () => {
+  // A documentation recipe asks for the DEV badge and the PRACTICE chip to be hidden. The
+  // fixture report is a capture that did not ask: no stylesheet, both drawn. `hiddenReport`
+  // is the same capture with the stylesheet in the page and both hidden at both ends.
+  const asks = () => recipe({ variant: { level: 1, driver: 'autoplay', flags: {}, hideDeveloperChrome: true } });
+  const sample = (badgeHidden: boolean, chipHidden: boolean) => ({
+    injected: true,
+    elements: { '.hud-devbadge': { matched: 1, hidden: badgeHidden }, '.hud-practice': { matched: 1, hidden: chipHidden } },
+  });
+  async function hiddenReport() {
+    const report = await fixtureReport();
+    report.producer.developerChrome = {
+      requested: true, selectors: ['.hud-devbadge', '.hud-practice'], atStart: sample(true, true), atEnd: sample(true, true),
+    };
+    return report;
+  }
+  const identity = (r: Record<string, any>, report: any) => byKind(judgeFlowReport(r, report, source))['flow-report-identity'];
+
+  it('forwards the switch to the recorder only when the recipe sets it true', () => {
+    const on = buildFlowArguments(asks(), 'tmp/x');
+    expect(on.filter((a: string) => a === '--hide-developer-chrome')).toHaveLength(1);
+    // A switch: what follows it is the next option, not a value.
+    expect(on[on.indexOf('--hide-developer-chrome') + 1]).toBe('--seconds');
+    const off = recipe({ variant: { level: 1, driver: 'autoplay', flags: {}, hideDeveloperChrome: false } });
+    expect(buildFlowArguments(off, 'tmp/x')).not.toContain('--hide-developer-chrome');
+    expect(buildFlowArguments(recipe(), 'tmp/x')).not.toContain('--hide-developer-chrome');
+  });
+
+  it('passes when both selectors computed display: none at the start and the end of the window', async () => {
+    const verdicts = byKind(judgeFlowReport(asks(), await hiddenReport(), source));
+    expect(verdicts['flow-developer-chrome-hidden'].passed).toBe(true);
+    expect(verdicts['flow-developer-chrome-hidden'].diagnostic).toMatch(/\.hud-devbadge and \.hud-practice computed display: none/);
+    expect(verdicts['flow-report-identity'].passed).toBe(true);
+    expect(Object.values(verdicts).filter((v: any) => !v.passed)).toEqual([]);
+  });
+
+  it('fails, naming the DEV badge, when it was visible at either end of the window', async () => {
+    for (const [end, at] of [['atStart', 'start'], ['atEnd', 'end']] as const) {
+      const report = await hiddenReport();
+      report.producer.developerChrome[end] = sample(false, true);
+      const v = byKind(judgeFlowReport(asks(), report, source))['flow-developer-chrome-hidden'];
+      expect(v.passed, end).toBe(false);
+      expect(v.diagnostic).toContain(`.hud-devbadge was visible at the ${at}`);
+      expect(v.diagnostic, 'the chip was hidden and must not be named').not.toContain('.hud-practice');
+    }
+  });
+
+  it('fails, naming the PRACTICE chip, when it was visible at either end of the window', async () => {
+    for (const [end, at] of [['atStart', 'start'], ['atEnd', 'end']] as const) {
+      const report = await hiddenReport();
+      report.producer.developerChrome[end] = sample(true, false);
+      const v = byKind(judgeFlowReport(asks(), report, source))['flow-developer-chrome-hidden'];
+      expect(v.passed, end).toBe(false);
+      expect(v.diagnostic).toContain(`.hud-practice was visible at the ${at}`);
+      expect(v.diagnostic, 'the badge was hidden and must not be named').not.toContain('.hud-devbadge');
+    }
+  });
+
+  it('fails when a selector matched no element or was not measured', async () => {
+    // Every element of an empty match computes display: none, vacuously: what a renamed class
+    // looks like to the recorder.
+    const renamed = await hiddenReport();
+    renamed.producer.developerChrome.atEnd.elements['.hud-devbadge'] = { matched: 0, hidden: true };
+    const r = byKind(judgeFlowReport(asks(), renamed, source))['flow-developer-chrome-hidden'];
+    expect(r.passed).toBe(false);
+    expect(r.diagnostic).toContain('.hud-devbadge matched no element at the end');
+    const unmeasured = await hiddenReport();
+    delete unmeasured.producer.developerChrome;
+    const u = byKind(judgeFlowReport(asks(), unmeasured, source))['flow-developer-chrome-hidden'];
+    expect(u.passed).toBe(false);
+    expect(u.diagnostic).toContain('.hud-devbadge was not measured at the start');
+  });
+
+  it('holds a recipe that did not ask to nothing hidden, through the identity gate', async () => {
+    const plain = byKind(judgeFlowReport(recipe(), await fixtureReport(), source));
+    expect(plain['flow-report-identity'].passed).toBe(true);
+    expect(plain['flow-developer-chrome-hidden'], 'no hiding gate for a recipe that did not ask').toBeUndefined();
+    // The leak: the page carried the stylesheet though the recipe did not ask, absent or false.
+    const leaked = await hiddenReport();
+    const l = identity(recipe(), leaked);
+    expect(l.passed).toBe(false);
+    expect(l.details.reported.hideDeveloperChrome).toBe(true);
+    expect(l.diagnostic).toMatch(/recipe requested/);
+    const off = recipe({ variant: { level: 1, driver: 'autoplay', flags: {}, hideDeveloperChrome: false } });
+    expect(identity(off, leaked).passed).toBe(false);
+    // The stylesheet at one end only, and a report that measured nothing, are not evidence that
+    // nothing was hidden.
+    const once = await fixtureReport();
+    once.producer.developerChrome.atEnd.injected = true;
+    expect(identity(recipe(), once).passed).toBe(false);
+    const unmeasured = await fixtureReport();
+    delete unmeasured.producer.developerChrome;
+    expect(identity(recipe(), unmeasured).passed).toBe(false);
+  });
+
+  it('fails identity when the recipe asked but the page never carried the stylesheet', async () => {
+    const report = await hiddenReport();
+    report.producer.developerChrome.atStart.injected = false;
+    report.producer.developerChrome.atEnd.injected = false;
+    const v = identity(asks(), report);
+    expect(v.passed).toBe(false);
+    expect(v.details.requested.hideDeveloperChrome).toBe(true);
+    expect(v.details.reported.hideDeveloperChrome).toBe(false);
+  });
+});
+
 describe('runFlow: the recorder run and the result handed to the runner (issue #815)', () => {
   async function context(over: Record<string, any> = {}) {
     const root = await mkdtemp(join(tmpdir(), 'flow-adapter-'));

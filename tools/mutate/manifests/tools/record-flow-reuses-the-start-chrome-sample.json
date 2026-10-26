@@ -1,0 +1,14 @@
+{
+  "id": "record-flow-reuses-the-start-chrome-sample",
+  "file": "tools/screens/record.mjs",
+  "find": "    const chromeAtEnd = await page.evaluate(DEVELOPER_CHROME_IN);",
+  "replace": "    const chromeAtEnd = chromeAtStart;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "developer chrome in a documentation capture (issue #258) prepares the chrome before the screencast starts and samples it again after"
+  ],
+  "why": "The end sample is what shows the chrome stayed hidden for the whole window. A copy of the start sample would pass a page that redrew the badge mid-recording."
+}

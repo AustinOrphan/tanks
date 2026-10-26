@@ -44,6 +44,39 @@
       "expectedArenaId": "arena-01",
       "practice": true
     },
+    "developerChrome": {
+      "requested": false,
+      "selectors": [
+        ".hud-devbadge",
+        ".hud-practice"
+      ],
+      "atStart": {
+        "injected": false,
+        "elements": {
+          ".hud-devbadge": {
+            "matched": 1,
+            "hidden": false
+          },
+          ".hud-practice": {
+            "matched": 1,
+            "hidden": false
+          }
+        }
+      },
+      "atEnd": {
+        "injected": false,
+        "elements": {
+          ".hud-devbadge": {
+            "matched": 1,
+            "hidden": false
+          },
+          ".hud-practice": {
+            "matched": 1,
+            "hidden": false
+          }
+        }
+      }
+    },
     "readiness": {
       "readyAfterMs": 500,
       "countdownMs": 3000,

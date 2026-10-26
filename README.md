@@ -4,6 +4,10 @@ A top-down arena tank game. Clear the arena; one shot kills anything, including 
 
 [Play it](https://austinorphan.com/tanks/)
 
+![A blue tank fights teal, olive, grey, green and orange enemy tanks across a green arena of stone walls and wooden crates, white shells crossing between them.](docs/media/showcase/campaign-combat.gif)
+
+*Campaign level 4 at normal speed, played by the scripted player.*
+
 ## Project status
 
 This repository is the **Public Prototype** of Tanks!: a playable prototype and engineering

@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-forwards-hide-developer-chrome-when-false",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "variant.hideDeveloperChrome === true ? ['--hide-developer-chrome']",
+  "replace": "variant.hideDeveloperChrome !== undefined ? ['--hide-developer-chrome']",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "hiding the developer chrome (issue #258) forwards the switch to the recorder only when the recipe sets it true"
+  ],
+  "why": "A recipe that sets the key false asks for the chrome as the page draws it. Forwarding the switch for any present value would hide it there too, and the manifest would say the recipe asked for nothing."
+}

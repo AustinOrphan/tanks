@@ -69,6 +69,23 @@ a link into the `pr-media` branch, fails. A reference inside a code block counts
 
 No workflow commits regenerated binaries. A clip changes only through a reviewed pull request.
 
+## Published clips
+
+| Clip | Shown in | Caption |
+| --- | --- | --- |
+| `campaign-combat` | `README.md` | Campaign level 4 at normal speed, played by the scripted player. |
+
+`campaign-combat` is `flow.campaign-round.docs` at seed 8, with the DEV badge and the PRACTICE
+chip hidden (#258). The recipe renders on the host GPU, which on macOS is ANGLE over Metal, so
+it is recorded on a workstation rather than the hosted capture runner. To reproduce it:
+
+```sh
+VITE_BUILD_SHA=$(git rev-parse HEAD) npm run build
+npm run capture -- --recipe flow.campaign-round.docs
+```
+
+The ricochet, mine and versus clips that #258 also approved wait for #978 and #1011.
+
 ## Checking
 
 ```sh

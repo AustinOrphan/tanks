@@ -1,0 +1,14 @@
+{
+  "id": "flow-adapter-reads-unmeasured-chrome-as-shown",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "  return injected.every((value) => value === false) ? false : null;",
+  "replace": "  return false;",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "hiding the developer chrome (issue #258) holds a recipe that did not ask to nothing hidden, through the identity gate"
+  ],
+  "why": "A report that measured nothing, or saw the stylesheet at only one end of the window, is not evidence that nothing was hidden. Reading it as 'not hidden' passes a capture the recorder never measured."
+}

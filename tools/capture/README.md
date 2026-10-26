@@ -272,8 +272,19 @@ A flow recipe:
   the requested level);
 - carries the seed in `fixture.seed` (1 or more: the page derives a clock seed from 0);
 - carries `variant: { level, driver: 'autoplay', flags: { pp1Roles?: boolean },
-  minimumDeliveredFps? }`. The page URL is BUILT from these in a fixed order; a recipe never
-  supplies query text, and `flags` is an allowlist checked against the dev-flag registry;
+  minimumDeliveredFps?, hideDeveloperChrome?: boolean }`. The page URL is BUILT from these in
+  a fixed order; a recipe never supplies query text, and `flags` is an allowlist checked
+  against the dev-flag registry;
+- may set `hideDeveloperChrome: true` for documentation footage (issue #258). Every flow
+  needs `?dev=1` for its seed and driver, which draws the DEV badge (`.hud-devbadge`), and a
+  level jump plays as practice, which draws the PRACTICE chip (`.hud-practice`); a campaign
+  player sees neither. Once the round is playing, the recorder injects a stylesheet giving
+  both `display: none !important` (`display`, so the topbar lays out as a campaign run's
+  does) before the first recorded frame. Absent or `false`, nothing is hidden. Either way the
+  manifest's `metadata.flow.developerChrome` records what was asked and, at the start and
+  the end of the window, whether the stylesheet was in the page and whether every element
+  each selector matched computed `display: none`. `world.practice` still reports what the
+  page decided: it is read from the chip's class, which the stylesheet does not change;
 - uses `schedule: { kind: 'realtime', durationSeconds }` (1 to 60 s) with `playback.rate` 1
   and an `intendedFps` that gives a whole frame count, `profile.motion` `full`, and
   `profile.visual` `software-gl` (SwiftShader) or `host-gpu` (the machine's GPU; on macOS
@@ -283,7 +294,7 @@ A flow recipe:
 **The manifest's timing evidence** lives in `producer.metadata.flow.timing` and in the
 assertions the adapter judges the recording by:
 
-- `flow-report-identity`: the recorder played the level, seed, driver and flags the recipe asked for
+- `flow-report-identity`: the recorder played the level, seed, driver and flags the recipe asked for, and the page carried the developer-chrome stylesheet at both ends of the window exactly when `variant.hideDeveloperChrome` is true -- at neither when it is not, so the switch cannot leak into a capture that did not ask
 - `flow-config-effective`: the page's own diagnostics report opened developer mode and refused none of the parameters
 - `flow-build-identity`: the page names the checkout's commit; build with `VITE_BUILD_SHA=$(git rev-parse HEAD) npm run build`
 - `flow-world-identity`: the replay surface reports the recipe's seed and the level's arena
@@ -292,6 +303,7 @@ assertions the adapter judges the recording by:
 - `flow-simulation-rate`: the replay surface advanced 60 ticks per wall-clock second within 3%
 - `flow-frame-size` and `flow-frame-count`: every staged frame is the viewport at its DPR, and there are exactly `durationSeconds x intendedFps` of them
 - `flow-delivered-rate`: only when `variant.minimumDeliveredFps` is set: the compositor delivered at least that many frames per second
+- `flow-developer-chrome-hidden`: only when `variant.hideDeveloperChrome` is true: `.hud-devbadge` and `.hud-practice` each matched at least one element, and every one computed `display: none` at the start and the end of the window; the diagnostic names each selector that was visible or matched nothing
 
 The simulation-rate and clamp assertions are the normal-speed proof, and they hold under
 SwiftShader too: the game's driver catches up in whole ticks, so simulated time tracks the

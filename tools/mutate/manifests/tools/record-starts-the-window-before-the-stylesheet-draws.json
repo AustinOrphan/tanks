@@ -1,0 +1,14 @@
+{
+  "id": "record-starts-the-window-before-the-stylesheet-draws",
+  "file": "tools/screens/record.mjs",
+  "find": "    await page.evaluate(AFTER_TWO_FRAMES);",
+  "replace": "    void AFTER_TWO_FRAMES;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "developer chrome in a documentation capture (issue #258) when asked, injects the stylesheet, waits for a frame drawn with it, then measures"
+  ],
+  "why": "Without the frame wait the screencast can start on a frame drawn before the stylesheet applied, putting the DEV badge in the clip's first frame."
+}
