@@ -2,7 +2,8 @@
  * Record a real-time application capture (issue #815).
  *
  *   node tools/screens/record.mjs --flow campaign-round --level 1 --seed 7 --driver autoplay \
- *     [--flag pp1Roles] --seconds 10 --fps 30 --w 1280 --h 800 --dpr 1 --visual host-gpu \
+ *     [--flag pp1Roles] [--hide-developer-chrome] \
+ *     --seconds 10 --fps 30 --w 1280 --h 800 --dpr 1 --visual host-gpu \
  *     --dist dist --out tmp/producer --report tmp/producer/producer.json --timeout 120000
  *
  * The built page is served and driven exactly as the screen states are: one static server,
@@ -33,6 +34,7 @@ import { audioContextOverrideSource } from '../shared/audio-context.mjs';
 import { loadChromium } from '../shared/playwright.mjs';
 import { serve as serveDist } from './capture.mjs';
 import {
+  DEVELOPER_CHROME_SELECTORS,
   FLOW_FLAG_IDS,
   FLOW_VISUALS,
   REALTIME_STOPS,
@@ -78,10 +80,18 @@ export function launchArgumentsFor(visual, platform = process.platform) {
 export function parseRecordArgs(argv) {
   const values = new Map();
   const flags = [];
+  let hideDeveloperChrome = false;
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (!token.startsWith('--')) throw new Error(`unexpected argument '${token}'`);
     const name = token.slice(2);
+    if (name === 'hide-developer-chrome') {
+      // The one option without a value (issue #258): the adapter passes it only when the
+      // recipe asks, and its absence leaves the chrome as the page draws it.
+      if (hideDeveloperChrome) throw new Error(`--${name} given twice`);
+      hideDeveloperChrome = true;
+      continue;
+    }
     const value = argv[i + 1];
     if (value === undefined || value.startsWith('--')) throw new Error(`--${name} needs a value`);
     i++;
@@ -145,6 +155,7 @@ export function parseRecordArgs(argv) {
     out: values.get('out'),
     report: values.get('report'),
     timeout,
+    hideDeveloperChrome,
   };
 }
 
@@ -224,6 +235,38 @@ const START_RAF_SAMPLER = `(() => {
   requestAnimationFrame(step);
 })()`;
 
+/** The id the capture's own stylesheet carries, so the page can be asked whether it is there. */
+export const DEVELOPER_CHROME_STYLE_ID = 'capture-hide-developer-chrome';
+
+/**
+ * The stylesheet a documentation capture injects (issue #258). `display`, not `visibility`:
+ * the chip is a topbar item, and a campaign run's topbar lays out without it rather than
+ * around an invisible gap. `!important` because the page's own rules decide these elements'
+ * display, and this must win over all of them for the whole window.
+ */
+export function developerChromeStylesheet() {
+  return DEVELOPER_CHROME_SELECTORS.map((selector) => `${selector} { display: none !important; }`).join('\n');
+}
+
+/**
+ * What the page draws of the developer chrome: whether the capture's stylesheet is in it, and
+ * for each selector how many elements match and whether every one computes `display: none`.
+ * Measured whether or not anything was hidden, so a report always says what the clip shows.
+ */
+const DEVELOPER_CHROME_IN = `(() => {
+  const selectors = ${JSON.stringify(DEVELOPER_CHROME_SELECTORS)};
+  return {
+    injected: document.getElementById(${JSON.stringify(DEVELOPER_CHROME_STYLE_ID)}) !== null,
+    elements: Object.fromEntries(selectors.map((selector) => {
+      const found = [...document.querySelectorAll(selector)];
+      return [selector, { matched: found.length, hidden: found.every((el) => getComputedStyle(el).display === 'none') }];
+    })),
+  };
+})()`;
+
+/** Resolves once two animation frames have run, i.e. after a frame drawn since the call began. */
+const AFTER_TWO_FRAMES = 'new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(() => ok())))';
+
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 /**
@@ -270,6 +313,28 @@ async function reachPlaying(page, flow, inputs, timeout) {
     countdownMs: Date.now() - playingAt,
     practice: seen.practice,
   };
+}
+
+/**
+ * Hide the developer chrome when asked (issue #258), then measure it either way; the result
+ * is the window's start sample. Called once the round is playing, so nothing that drives the
+ * page there runs under the stylesheet, and `reachPlaying`'s practice reading comes from the
+ * chip's class, which the stylesheet does not touch: it still says what the page decided.
+ *
+ * The two animation frames are what put the stylesheet ahead of the first recorded frame:
+ * the second callback runs only after a frame drawn with it, and the screencast starts later.
+ */
+export async function prepareDeveloperChrome(page, hide) {
+  if (hide) {
+    await page.evaluate(({ id, css }) => {
+      const style = document.createElement('style');
+      style.id = id;
+      style.textContent = css;
+      document.head.append(style);
+    }, { id: DEVELOPER_CHROME_STYLE_ID, css: developerChromeStylesheet() });
+    await page.evaluate(AFTER_TWO_FRAMES);
+  }
+  return page.evaluate(DEVELOPER_CHROME_IN);
 }
 
 /**
@@ -402,7 +467,7 @@ export async function recordFlow(options, deps = {}) {
   const chromiumLoader = deps.loadChromium ?? loadChromium;
   const serve = deps.serve ?? serveDist;
   const run = deps.runProcess ?? runProcess;
-  const { flow, inputs, seconds, fps, frameCount, viewport, visual, stop, dist, out, report, timeout, signal } = options;
+  const { flow, inputs, seconds, fps, frameCount, viewport, visual, stop, dist, out, report, timeout, hideDeveloperChrome, signal } = options;
   if (!existsSync(resolve(dist, 'index.html'))) throw new Error(`no index.html under ${dist}; build first`);
   await mkdir(out, { recursive: true });
   const url = buildFlowUrl(inputs);
@@ -438,7 +503,9 @@ export async function recordFlow(options, deps = {}) {
     const { diagnostics, readyAfterMs, countdownMs, practice } = await reachPlaying(page, flow, inputs, timeout);
     const world = await page.evaluate(WORLD_IN);
     const renderer = await page.evaluate(RENDERER_IN);
+    const chromeAtStart = await prepareDeveloperChrome(page, hideDeveloperChrome);
     const recorded = await recordWindow(page, context, { seconds, viewport, out, signal, stop });
+    const chromeAtEnd = await page.evaluate(DEVELOPER_CHROME_IN);
     const window = playingWindow(recorded.samples, stop);
     // Frames after the cut are dropped before anything is laid on the timeline. The screencast
     // stamps frames with epoch seconds and the samples carry epoch milliseconds, so the two
@@ -465,6 +532,13 @@ export async function recordFlow(options, deps = {}) {
       dist: fingerprint,
       diagnostics,
       world: { ...world, expectedArenaId: campaignArenaId(inputs.level), practice },
+      // Issue #258: what was asked, and what the page drew at both ends of the window.
+      developerChrome: {
+        requested: hideDeveloperChrome,
+        selectors: DEVELOPER_CHROME_SELECTORS,
+        atStart: chromeAtStart,
+        atEnd: chromeAtEnd,
+      },
       readiness: {
         readyAfterMs,
         countdownMs,

@@ -15,7 +15,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FLOW_FLAG_IDS, campaignArenaId } from '../screens/flow.mjs';
+import { DEVELOPER_CHROME_SELECTORS, FLOW_FLAG_IDS, campaignArenaId } from '../screens/flow.mjs';
 import { PRODUCER_RESULT_SCHEMA_VERSION } from './producer.mjs';
 import { runProcess } from './process.mjs';
 import { inspectSourceState } from './provenance.mjs';
@@ -49,6 +49,9 @@ export function buildFlowArguments(recipe, outputRelative) {
       if (value === undefined || value === false) return [];
       return ['--flag', value === true ? id : `${id}=${value}`];
     }),
+    // Issue #258: a switch with no value, passed only when the recipe asks, so a recipe that
+    // leaves it out or sets it false records the chrome exactly as the page draws it.
+    ...(variant.hideDeveloperChrome === true ? ['--hide-developer-chrome'] : []),
     '--seconds', String(schedule.durationSeconds),
     '--fps', String(playback.intendedFps),
     '--w', String(viewport.width),
@@ -69,6 +72,18 @@ const assertion = (kind, passed, diagnostic, details) => ({ kind, passed, diagno
 const onFlags = (flags) => Object.fromEntries(FLOW_FLAG_IDS.filter((id) => flags?.[id] === true).map((id) => [id, true]));
 
 /**
+ * Whether the capture's own stylesheet hid the developer chrome (issue #258), read from the
+ * PAGE at both ends of the window rather than from the recorder's argv: `true` at both,
+ * `false` at neither, and `null`, which no recipe requests, for anything else -- a report
+ * that measured nothing included. A recorder that hid the chrome unasked fails identity.
+ */
+function developerChromeHidden(chrome) {
+  const injected = [chrome?.atStart?.injected, chrome?.atEnd?.injected];
+  if (injected.every((value) => value === true)) return true;
+  return injected.every((value) => value === false) ? false : null;
+}
+
+/**
  * Every gate, from the recorder's report and the recipe it served, against the checkout the
  * shared runner recorded. Pure: the report is data, and the negative controls in the test
  * file flip one field each.
@@ -82,14 +97,20 @@ export function judgeFlowReport(recipe, report, source) {
   const t = p.timing;
   const out = [];
 
-  const requested = { level: recipe.variant.level, seed: recipe.fixture.seed, driver: recipe.variant.driver, flags: onFlags(recipe.variant.flags) };
-  const reported = { level: p.inputs?.level, seed: p.inputs?.seed, driver: p.inputs?.driver, flags: onFlags(p.inputs?.flags) };
+  const requested = {
+    level: recipe.variant.level, seed: recipe.fixture.seed, driver: recipe.variant.driver, flags: onFlags(recipe.variant.flags),
+    hideDeveloperChrome: recipe.variant.hideDeveloperChrome === true,
+  };
+  const reported = {
+    level: p.inputs?.level, seed: p.inputs?.seed, driver: p.inputs?.driver, flags: onFlags(p.inputs?.flags),
+    hideDeveloperChrome: developerChromeHidden(p.developerChrome),
+  };
   const sameInputs = JSON.stringify(requested) === JSON.stringify(reported);
   out.push(assertion(
     'flow-report-identity',
     p.kind === 'flow' && p.flowId === recipe.producer.scenarioId && sameInputs,
     p.kind === 'flow' && p.flowId === recipe.producer.scenarioId && sameInputs
-      ? `recorded flow '${p.flowId}' with the requested level, seed, driver and flags`
+      ? `recorded flow '${p.flowId}' with the requested level, seed, driver, flags and developer chrome`
       : `recorder reported ${p.kind}:${p.flowId} with inputs ${JSON.stringify(reported)}; recipe requested ${JSON.stringify(requested)}`,
     { requested, reported },
   ));
@@ -210,6 +231,30 @@ export function judgeFlowReport(recipe, report, source) {
         ? `the compositor delivered ${delivered.toFixed(1)} frames per second, at least the ${minimum} the recipe requires`
         : `the compositor delivered ${delivered === null ? 'no measurable' : delivered.toFixed(1)} frames per second under ${p.browser?.renderer ?? 'an unknown renderer'}; the recipe requires ${minimum}`,
       { deliveredFps: delivered, minimum, renderer: p.browser?.renderer ?? null, visual: p.browser?.visual ?? null, maxConsecutiveHold: t?.resample?.maxConsecutiveHold ?? null },
+    ));
+  }
+
+  // Issue #258. Only when the recipe asks; a recipe that does not is held to "nothing hidden"
+  // by the identity gate above. Every element a selector matches must compute display: none
+  // at both ends of the window, and each selector must match something: a renamed class would
+  // otherwise hide nothing and pass, with the badge drawn in every frame.
+  if (recipe.variant.hideDeveloperChrome === true) {
+    const chrome = p.developerChrome ?? {};
+    const shown = [];
+    for (const [at, sample] of [['start', chrome.atStart], ['end', chrome.atEnd]]) {
+      for (const selector of DEVELOPER_CHROME_SELECTORS) {
+        const element = sample?.elements?.[selector];
+        if (!(element?.matched > 0)) shown.push(`${selector} ${element === undefined ? 'was not measured' : 'matched no element'} at the ${at}`);
+        else if (element.hidden !== true) shown.push(`${selector} was visible at the ${at}`);
+      }
+    }
+    out.push(assertion(
+      'flow-developer-chrome-hidden',
+      shown.length === 0,
+      shown.length === 0
+        ? `every ${DEVELOPER_CHROME_SELECTORS.join(' and ')} computed display: none at the start and the end of the window`
+        : `the recipe hides the developer chrome, but ${shown.join('; ')}`,
+      { selectors: DEVELOPER_CHROME_SELECTORS, atStart: chrome.atStart ?? null, atEnd: chrome.atEnd ?? null },
     ));
   }
   return out;

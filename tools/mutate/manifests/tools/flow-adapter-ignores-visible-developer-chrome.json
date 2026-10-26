@@ -1,0 +1,15 @@
+{
+  "id": "flow-adapter-ignores-visible-developer-chrome",
+  "file": "tools/capture/flow-adapter.mjs",
+  "find": "        else if (element.hidden !== true) shown.push(",
+  "replace": "        else if (false) shown.push(",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/flow-adapter.test.ts"
+  ],
+  "killedBy": [
+    "hiding the developer chrome (issue #258) fails, naming the DEV badge, when it was visible at either end of the window",
+    "hiding the developer chrome (issue #258) fails, naming the PRACTICE chip, when it was visible at either end of the window"
+  ],
+  "why": "The gate is the measured proof that the published clip shows no developer chrome. Ignoring a selector the page still drew passes a capture with the DEV badge or the PRACTICE chip in its frames."
+}

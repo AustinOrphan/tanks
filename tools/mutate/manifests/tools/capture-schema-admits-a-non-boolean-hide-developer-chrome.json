@@ -1,0 +1,14 @@
+{
+  "id": "capture-schema-admits-a-non-boolean-hide-developer-chrome",
+  "file": "tools/capture/schema.mjs",
+  "find": "  if (Object.hasOwn(variant, 'hideDeveloperChrome') && typeof variant.hideDeveloperChrome !== 'boolean') {",
+  "replace": "  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/capture/schema.test.ts"
+  ],
+  "killedBy": [
+    "flow recipes (issue #815) admits hideDeveloperChrome as a boolean on a flow recipe only (issue #258)"
+  ],
+  "why": "The adapter forwards the switch only for true. A string \"true\" would pass validation, read as on in review, and record with the chrome showing."
+}

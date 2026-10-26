@@ -1,0 +1,14 @@
+{
+  "id": "record-args-ignore-hide-developer-chrome",
+  "file": "tools/screens/record.mjs",
+  "find": "      hideDeveloperChrome = true;\n      continue;",
+  "replace": "      continue;",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "parseRecordArgs (issue #815) reads --hide-developer-chrome as a switch with no value, once (issue #258)"
+  ],
+  "why": "The recorder accepting the switch and then dropping it records the chrome the recipe asked to hide, with no refusal to say so until the adapter's gate."
+}

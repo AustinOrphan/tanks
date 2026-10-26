@@ -1,0 +1,14 @@
+{
+  "id": "record-never-injects-developer-chrome",
+  "file": "tools/screens/record.mjs",
+  "find": "export async function prepareDeveloperChrome(page, hide) {\n  if (hide) {",
+  "replace": "export async function prepareDeveloperChrome(page, hide) {\n  if (false) {",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "developer chrome in a documentation capture (issue #258) when asked, injects the stylesheet, waits for a frame drawn with it, then measures"
+  ],
+  "why": "A recorder that measures without injecting reports the chrome as drawn, and every documentation capture fails its gate with the badge in frame."
+}

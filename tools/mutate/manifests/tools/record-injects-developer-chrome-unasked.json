@@ -1,0 +1,14 @@
+{
+  "id": "record-injects-developer-chrome-unasked",
+  "file": "tools/screens/record.mjs",
+  "find": "export async function prepareDeveloperChrome(page, hide) {\n  if (hide) {",
+  "replace": "export async function prepareDeveloperChrome(page, hide) {\n  if (true) {",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "developer chrome in a documentation capture (issue #258) when not asked, only measures"
+  ],
+  "why": "Hiding the chrome in a capture that did not ask would change what a review clip shows -- the PRACTICE chip is how it says the round is not a campaign run."
+}

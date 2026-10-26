@@ -1,0 +1,14 @@
+{
+  "id": "record-flow-never-hides-developer-chrome",
+  "file": "tools/screens/record.mjs",
+  "find": "    const chromeAtStart = await prepareDeveloperChrome(page, hideDeveloperChrome);",
+  "replace": "    const chromeAtStart = await prepareDeveloperChrome(page, false);",
+  "expect": "killed",
+  "tests": [
+    "tools/screens/record.test.ts"
+  ],
+  "killedBy": [
+    "developer chrome in a documentation capture (issue #258) prepares the chrome before the screencast starts and samples it again after"
+  ],
+  "why": "The parsed switch has to reach the page. Dropping it at the call site parses, reports and judges correctly and still records the chrome."
+}

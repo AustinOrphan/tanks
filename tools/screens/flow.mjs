@@ -115,6 +115,14 @@ export const FLOW_VISUALS = Object.freeze(['software-gl', 'host-gpu']);
 export const REALTIME_STOPS = Object.freeze(['window', 'round-end']);
 
 /**
+ * The developer-only chrome a documentation capture may hide (issue #258): the DEV badge,
+ * drawn because every flow needs `?dev=1` for its seed and driver, and the PRACTICE chip,
+ * drawn because a level jump plays as practice. A campaign player sees neither. Shared here
+ * because the recorder hides and measures exactly these and the adapter judges exactly these.
+ */
+export const DEVELOPER_CHROME_SELECTORS = Object.freeze(['.hud-devbadge', '.hud-practice']);
+
+/**
  * Whether the poll that saw `surface` ends the recording.
  *
  * Pure, because the loop it governs runs only against a live page: a `round-end` recording

@@ -3233,7 +3233,7 @@
   },
   {
     "schemaVersion": 1,
-    "recipeVersion": 1,
+    "recipeVersion": 2,
     "id": "flow.campaign-round.docs",
     "producer": {
       "kind": "flow",
@@ -3247,7 +3247,8 @@
       "level": 4,
       "driver": "autoplay",
       "flags": {},
-      "minimumDeliveredFps": 45
+      "minimumDeliveredFps": 45,
+      "hideDeveloperChrome": true
     },
     "viewport": {
       "width": 640,
@@ -3284,7 +3285,7 @@
       "allowUnexpectedEvents": true
     },
     "title": "Campaign combat at normal speed, in a documentation profile",
-    "description": "Campaign level 4, seed 1, the scripted player, shipped behaviour and no experimental flags: the full enemy roster fighting at wall-clock pace, recorded from the compositor. A DOCUMENTATION profile rather than a review profile -- 640x400, an 8 s window and 15 fps, so the GIF preview fits a repository page instead of the 1280x800/60 s/30 fps that `flow.campaign-round.pp1roles-off` uses for frame-accurate review. The MP4 remains the timing-faithful artifact; the GIF is a preview. A flow evaluates no simulation events, so this recipe cannot assert that a shot or a hit falls inside the window -- that is what the editorial review is for. Needs a build that names its commit (VITE_BUILD_SHA) and a host GPU for the delivered-rate gate: the gate is the same 45 every flow recipe uses, and neither a SwiftShader host nor the hosted capture runner can hold it, so publication footage is generated on a workstation.",
+    "description": "Campaign level 4, seed 1, the scripted player, shipped behaviour and no experimental flags: the full enemy roster fighting at wall-clock pace, recorded from the compositor. A DOCUMENTATION profile rather than a review profile -- 640x400, an 8 s window and 15 fps, so the GIF preview fits a repository page instead of the 1280x800/60 s/30 fps that `flow.campaign-round.pp1roles-off` uses for frame-accurate review. The MP4 remains the timing-faithful artifact; the GIF is a preview. A flow evaluates no simulation events, so this recipe cannot assert that a shot or a hit falls inside the window -- that is what the editorial review is for. Needs a build that names its commit (VITE_BUILD_SHA). The delivered-rate gate is the same 45 every flow recipe uses, and SwiftShader holds it at 640x400: measured 2026-10-25 on an M1 Max, it delivered 52.0 fps (35.9 rendered) and passed all 11 assertions the recipe then carried. The hosted capture runner has not been measured for this recipe.",
     "altText": "Animation of a Tanks! campaign round in play, the player's tank fighting several enemy tanks across a walled arena.",
     "timeoutMs": 180000,
     "outputBudgetBytes": 12000000
