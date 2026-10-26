@@ -1,0 +1,15 @@
+{
+  "id": "other-death-flash-takes-the-frames-last-death",
+  "file": "src/game/loop.ts",
+  "find": "  for (const e of events) {\n    if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;\n    // `tank-destroyed` carries no slot; a destroyed tank stays in `world.tanks`.",
+  "replace": "  for (const e of [...events].reverse()) {\n    if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;\n    // `tank-destroyed` carries no slot; a destroyed tank stays in `world.tanks`.",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #1123's multi-death rule picks the frame's FIRST human death, the order death-toast.ts names deaths in, so a co-op toast raised for that death names the player the flash is tinted for. Reading the frame backwards picks the last.",
+  "killedBy": [
+    "otherHumanDeathFlash (issue #1123) takes the frame's first human death when two die in it, not the last or the lowest slot",
+    "startGameWith: a real player death reaches the HUD flashes once, for the frame's first death, when two other humans die on one frame (issue #1123)"
+  ]
+}

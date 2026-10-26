@@ -1,0 +1,14 @@
+{
+  "id": "other-death-flash-pulses-the-lives-counter",
+  "file": "src/game/hud.ts",
+  "find": "    signalDeathVignette(color: number): void {\n      flashDeathVignette(color);\n    },",
+  "replace": "    signalDeathVignette(color: number): void {\n      flashDeathVignette(color);\n      livesEl.classList.add('hud-lives--hit');\n    },",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "Another player's flash (issue #1123) also pulses the Lives counter, which is the tracked player's campaign readout; only the vignette is extended.",
+  "killedBy": [
+    "hud: losing a life flashes the vignette alone for another player's death: its color, the same class, no Lives pulse (issue #1123)"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "route-host-fixes-the-other-death-flash-color",
+  "file": "src/game/route-host.ts",
+  "find": "          if (current()) hud.signalDeathVignette(color);",
+  "replace": "          if (current()) hud.signalDeathVignette(0xb41e1e);",
+  "expect": "killed",
+  "tests": [
+    "src/game/route-host.test.ts"
+  ],
+  "why": "The slot's guarded HUD forwards another player's flash (issue #1123) in the single-player red instead of the color the session resolved, so every non-P1 death in versus flashes red.",
+  "killedBy": [
+    "createRouteHost: the slot's gameplay HUD reaches the page HUD while the session holds the slot"
+  ]
+}

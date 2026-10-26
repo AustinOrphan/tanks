@@ -681,6 +681,19 @@ describe('hud: losing a life', () => {
     );
     hud.dispose();
   });
+
+  it("flashes the vignette alone for another player's death: its color, the same class, no Lives pulse (issue #1123)", () => {
+    // The same class signalPlayerDeath plays, so reduced motion, which hud.css keys off
+    // `.hud--reduced-motion .hud-damage--hit`, treats this flash exactly as it treats P1's.
+    // The Lives counter is the tracked player's, so it does not pulse for someone else.
+    const { root, hud } = mount();
+    hud.signalDeathVignette(0x3fd0ff);
+    const damage = root.querySelector('.hud-damage') as HTMLElement;
+    expect(damage.className).toContain('hud-damage--hit');
+    expect(damage.style.getPropertyValue('--hud-damage-color')).toBe(expectedCssColor(0x3fd0ff));
+    expect(root.querySelector('.hud-lives')?.className).not.toContain('hud-lives--hit');
+    hud.dispose();
+  });
 });
 
 describe('hud: round-start countdown', () => {

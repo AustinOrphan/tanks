@@ -1,0 +1,15 @@
+{
+  "id": "bot-slot-death-flashes-the-vignette",
+  "file": "src/game/loop.ts",
+  "find": "    if (tank && !botSlots.has(tank.controlledBy ?? 0)) return tank.id;",
+  "replace": "    if (tank) return tank.id;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #1123's ruling excludes bots: a Bot slot's death flashes nothing, or with three bots the shared screen flashes for deaths nobody is playing. Dropping the bot-slot test flashes every player-kind death.",
+  "killedBy": [
+    "otherHumanDeathFlash (issue #1123) is null for a bot slot's death, which the same slot flashes once a person drives it",
+    "startGameWith: a real player death reaches the HUD flashes nothing for a bot slot's death, though a human slot's death on the same board flashes (issue #1123)"
+  ]
+}

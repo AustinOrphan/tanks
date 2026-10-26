@@ -9,7 +9,7 @@
   ],
   "why": "Issue #925. The frame handler never hands the cue its events, so death-toast.ts's own tests stay green while no co-op death is ever named. Only a driven frame can see the seam.",
   "killedBy": [
-    "startGameWith: a real player death reaches the HUD names a co-op partner who dies in the toast rail, though no vignette flashes for them (issue #925)",
+    "startGameWith: a real player death reaches the HUD names a co-op partner who dies in the toast rail, beside their own vignette and no Life lost line (issues #925, #1123)",
     "startGameWith: a real player death reaches the HUD names the tracked player when a co-op multi-kill takes them, beside their vignette (issue #925)",
     "startGameWith: a real player death reaches the HUD starts the death toast's window over when a new world is built (issue #925)"
   ]

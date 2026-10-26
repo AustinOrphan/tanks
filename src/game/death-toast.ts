@@ -10,8 +10,9 @@ import type { FrameEvent } from './driver';
  * THE GAP, MEASURED BEFORE THIS WAS BUILT. At two or more player tanks the death vignette
  * tints to the dying tank's owner color (`deathVignetteColor` in loop.ts), and it fires for
  * the TRACKED player alone -- slot 0, the first player-kind tank -- as section 6 of the
- * identity spawn/death spec decided ("the primary player's fires the vignette"). What else
- * names a dying player at that moment depends on the session:
+ * identity spawn/death spec decided ("the primary player's fires the vignette"; issue #1123
+ * has since extended the flash to every human player's death). What else names a dying
+ * player at that moment depends on the session:
  *
  *  - VERSUS (FFA and teams) already names every death without color. Each stock strip entry
  *    is labeled `P<n>` (with the team letter under teams, and drawn as the slot's shape marks
@@ -58,12 +59,19 @@ import type { FrameEvent } from './driver';
  * Each death is placed at the tick that produced it (`FrameEvent.tick`), not at the frame's
  * last tick: a catch-up frame runs several ticks and hands over their events as one batch.
  *
- * THE VIGNETTE'S OWNER IS ALWAYS NAMED. The tracked player's death is taken first among the
+ * THE TRACKED PLAYER IS ALWAYS NAMED. The tracked player's death is taken first among the
  * deaths of one tick, so a multi-kill that includes them names them, and the window never
  * suppresses it: the vignette flashes for that death on the same frame, and a toast naming
  * another player beside it would attribute the flash to the wrong player. The cost is a
  * second toast when the tracked player dies a few ticks after another player in the same
  * blast.
+ *
+ * Another human's death flashes the vignette too since issue #1123, in its own color, and is
+ * NOT exempt: exempting every human would narrate every human death of a multi-kill, which
+ * the throttle exists to stop. So a later human death inside one blast's window flashes with
+ * no toast of its own. Within a frame the two agree where they can: when its first death is
+ * a human's and raises a toast, that toast names the player the flash is tinted for (loop.ts's
+ * `otherHumanDeathFlash` takes the frame's first human death).
  *
  * In `src/game/` beside `blocked-fire-hud.ts`, for that module's reason: loop.ts stays
  * wiring, and the policy's tests live here rather than among loop.test.ts's thousand
@@ -95,7 +103,7 @@ export interface DeathToastCue {
   /**
    * Toast this frame's player deaths, where this session names them. `sessionKind` is the
    * session's descriptor kind, the input that decides whether the HUD draws a stock strip;
-   * `trackedId` is the vignette's owner, loop.ts's `playerId`.
+   * `trackedId` is the tracked player, loop.ts's `playerId`.
    */
   handle(events: FrameEvent[], world: World, sessionKind: SessionDescriptorKind, trackedId: number): void;
   /** A new world: its tick clock starts over, so the window does too. */

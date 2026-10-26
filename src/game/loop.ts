@@ -818,7 +818,47 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
 }
 
 /**
- * Which colour signalPlayerDeath's screen vignette tints to (death-pulse, issue #200).
+ * The tank whose death flashes the vignette this frame BESIDE the tracked player's own path,
+ * or `null` (issue #1123).
+ *
+ * Ruled 2026-10-26: on a shared screen every HUMAN player's death flashes the vignette, in
+ * that tank's own color, and a bot's death flashes nothing (with three bots the screen would
+ * flash for deaths nobody is playing). Human means no bot drives the slot: `botSlots` is the
+ * session's live bot set, which a controller reassignment changes mid-match. Developer co-op
+ * follows the same rule, since its other slots are human too. Player-kind only: a campaign
+ * enemy's death is the players' success.
+ *
+ * The tracked player (slot 0) is not this function's to answer for. Its death keeps the path
+ * it always had in `onFrameEvents` -- vignette, Lives pulse, its "Life lost" rule and the
+ * run's lives -- when a person or autoplay drives it. A bot driving slot 0 is not tracked:
+ * the caller passes `trackedId` -1, and `botSlots` keeps its own death quiet.
+ *
+ * ONE FLASH PER FRAME. The vignette is one element whose animation each call restarts, so
+ * two calls in one frame would show only the second. When the tracked player died in the
+ * frame this returns `null`: their flash, in their color, is the frame's, exactly as before.
+ * Otherwise it is the frame's FIRST human death in event order (tick order, then the sim's
+ * order within a tick), which is the order the co-op death toast reads deaths in
+ * (death-toast.ts).
+ */
+export function otherHumanDeathFlash(
+  events: SimEvent[],
+  world: World,
+  botSlots: Pick<ReadonlySet<number>, 'has'>,
+  trackedId: number,
+): number | null {
+  if (isPlayerDeath(events, trackedId)) return null;
+  for (const e of events) {
+    if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;
+    // `tank-destroyed` carries no slot; a destroyed tank stays in `world.tanks`.
+    const tank = world.tanks.find((t) => t.id === e.tankId);
+    if (tank && !botSlots.has(tank.controlledBy ?? 0)) return tank.id;
+  }
+  return null;
+}
+
+/**
+ * Which colour the screen's death vignette tints to (death-pulse, issue #200), for the
+ * tracked player's `signalPlayerDeath` and another human's `signalDeathVignette` alike.
  *
  * Single-player (`playerCount` 1) always gets the classic red -- `SINGLE_PLAYER_DEATH_
  * VIGNETTE` -- unconditionally, so existing single-player behaviour cannot move. At
@@ -2281,7 +2321,7 @@ export function startGameWith(
   const slot = routeHost.attach({ relaunchTarget });
   const { sm, routeUi } = routeHost;
   /**
-   * THIS SESSION'S HUD: the eleven gameplay members, behind the slot's generation guard.
+   * THIS SESSION'S HUD: the twelve gameplay members, behind the slot's generation guard.
    *
    * Not `routeHost.hud`, which no longer exists on the type a session is handed (issue
    * #324, step S8). Two things follow, and both used to be one careful convention away
@@ -2852,19 +2892,37 @@ export function startGameWith(
     // docs/agent/testing-and-review.md warns about. Discriminate on tankId: kind alone stops
     // being unique the moment a second player-kind tank exists (the co-op foundation).
     onFrameEvents(events): void {
+      // A bot driving slot 0 (a Versus Setup role, or `bots` covering every slot) dies as
+      // quietly as any bot (issue #1123). Autoplay wins slot 0 over a bot and stands in for
+      // the person, so it keeps the tracked player's signal.
+      const trackedIsBot = !deps.devFlags.autoplay && botSources.has(0);
       if (isPlayerDeath(events, playerId ?? -1)) {
-        hud.signalPlayerDeath(
-          deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette),
-          // Where the co-op toast below names this death, it is the death's only sentence, so
-          // the HUD owes no "Life lost" line beside it (issue #925, death-toast.ts).
-          { announce: !deathToastNamesDeaths(driver.world, currentDescriptor.kind) },
-        );
+        if (!trackedIsBot) {
+          hud.signalPlayerDeath(
+            deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette),
+            // Where the co-op toast below names this death, it is the death's only sentence,
+            // so the HUD owes no "Life lost" line beside it (issue #925, death-toast.ts).
+            { announce: !deathToastNamesDeaths(driver.world, currentDescriptor.kind) },
+          );
+        }
         // The #152 fix: persist the reduced life count on the RUN before the player
         // can escape it by refreshing or leaving gameplay -- not deferred to any
         // later click. `driver.world.lives` is already the post-step count: the
         // driver assigns `curr = result.world` before calling onFrameEvents.
         // Practice/sandbox never reach here -- see campaignActive.
         if (campaignActive()) deps.run.setLivesRemaining(driver.world.lives);
+      }
+      // Every other human's death flashes the vignette too, in its own color, and does
+      // nothing else: a lost stock is narrated by the strip and a co-op death by the toast
+      // below (issue #1123). `botSources` is the live bot set, reassignments included.
+      // A bot in slot 0 is no tracked player: its death preempts nobody's flash.
+      const flashId = otherHumanDeathFlash(
+        events, driver.world, botSources, trackedIsBot ? -1 : playerId ?? -1,
+      );
+      if (flashId !== null) {
+        hud.signalDeathVignette(
+          deathVignetteColor(driver.world, flashId, playerCount, sessionOwnerPalette),
+        );
       }
       // The same frame's deaths, named where nothing else on screen names them (issue #925).
       // The session's own kind, as `pushStatus` reads it: versus has a stock strip for this.

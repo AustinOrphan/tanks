@@ -1,0 +1,15 @@
+{
+  "id": "other-human-death-flashes-nothing",
+  "file": "src/game/loop.ts",
+  "find": "      if (flashId !== null) {",
+  "replace": "      if (false) {",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #1123's regression shape: only slot 0's death flashes the vignette again, so in versus a second human's death leaves the shared screen dark, the P1-only behavior the 2026-10-26 ruling rejected as arbitrary. otherHumanDeathFlash's own tests call the helper directly and cannot see the frame handler stop asking it; the driven deaths read what the HUD was handed.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD flashes a human P2's death in P2's own color under the session palette, through the vignette alone (issue #1123)",
+    "startGameWith: a real player death reaches the HUD names a co-op partner who dies in the toast rail, beside their own vignette and no Life lost line (issues #925, #1123)"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "other-death-flash-tinted-for-the-tracked-player",
+  "file": "src/game/loop.ts",
+  "find": "          deathVignetteColor(driver.world, flashId, playerCount, sessionOwnerPalette),",
+  "replace": "          deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette),",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Another human's flash takes the tracked player's color instead of the dying tank's (issue #1123), so in FFA every death reads as P1's and in teams as P1's team. The vignette means whose death it was.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD flashes a human P2's death in P2's own color under the session palette, through the vignette alone (issue #1123)",
+    "startGameWith: a real player death reaches the HUD flashes a teams death in the dying tank's team color (issue #1123)"
+  ]
+}

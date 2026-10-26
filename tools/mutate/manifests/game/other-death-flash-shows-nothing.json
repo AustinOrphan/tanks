@@ -1,0 +1,14 @@
+{
+  "id": "other-death-flash-shows-nothing",
+  "file": "src/game/hud.ts",
+  "find": "    signalDeathVignette(color: number): void {\n      flashDeathVignette(color);\n    },",
+  "replace": "    signalDeathVignette(color: number): void {\n      void color;\n    },",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.surfaces.test.ts"
+  ],
+  "why": "The HUD accepts another player's death (issue #1123) and draws nothing, so the frame handler's call reaches a no-op. Loop tests read a fake HUD and cannot see it.",
+  "killedBy": [
+    "hud: losing a life flashes the vignette alone for another player's death: its color, the same class, no Lives pulse (issue #1123)"
+  ]
+}

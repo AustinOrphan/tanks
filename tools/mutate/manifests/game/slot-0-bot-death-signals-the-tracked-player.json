@@ -1,0 +1,14 @@
+{
+  "id": "slot-0-bot-death-signals-the-tracked-player",
+  "file": "src/game/loop.ts",
+  "find": "      const trackedIsBot = !deps.devFlags.autoplay && botSources.has(0);",
+  "replace": "      const trackedIsBot = false;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #1123's ruling keeps every bot's death quiet, and a Versus Setup role can put a bot in slot 0. Treating slot 0 as tracked whoever drives it flashes the vignette and owes a Life lost line for a bot.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD signals nothing for a bot driving slot 0, unless autoplay stands in for the person (issue #1123)"
+  ]
+}
