@@ -3241,7 +3241,7 @@
     },
     "fixture": {
       "id": "campaign-round",
-      "seed": 1
+      "seed": 8
     },
     "variant": {
       "level": 4,
@@ -3256,7 +3256,7 @@
       "devicePixelRatio": 1
     },
     "profile": {
-      "visual": "software-gl",
+      "visual": "host-gpu",
       "motion": "full",
       "capability": "headless-desktop",
       "reducedMotion": false
@@ -3285,7 +3285,7 @@
       "allowUnexpectedEvents": true
     },
     "title": "Campaign combat at normal speed, in a documentation profile",
-    "description": "Campaign level 4, seed 1, the scripted player, shipped behaviour and no experimental flags: the full enemy roster fighting at wall-clock pace, recorded from the compositor. A DOCUMENTATION profile rather than a review profile -- 640x400, an 8 s window and 15 fps, so the GIF preview fits a repository page instead of the 1280x800/60 s/30 fps that `flow.campaign-round.pp1roles-off` uses for frame-accurate review. The MP4 remains the timing-faithful artifact; the GIF is a preview. A flow evaluates no simulation events, so this recipe cannot assert that a shot or a hit falls inside the window -- that is what the editorial review is for. Needs a build that names its commit (VITE_BUILD_SHA). The delivered-rate gate is the same 45 every flow recipe uses, and SwiftShader holds it at 640x400: measured 2026-10-25 on an M1 Max, it delivered 52.0 fps (35.9 rendered) and passed all 11 assertions the recipe then carried. The hosted capture runner has not been measured for this recipe.",
+    "description": "Campaign level 4, seed 8, the scripted player, shipped behavior and no experimental flags, with the developer chrome hidden: the full enemy roster fighting at wall-clock pace. Seed 8 was picked in #258's review; of seeds 1-9 the scripted player survives the 8 s window only at 3, 5, 6 and 8. A DOCUMENTATION profile -- 640x400, an 8 s window and 15 fps, so the GIF fits a repository page; `flow.campaign-round.pp1roles-off` is the frame-accurate review profile. The MP4 is the timing-faithful artifact; the GIF is a preview. A flow evaluates no simulation events, so the editorial review confirms the action. Needs a build that names its commit (VITE_BUILD_SHA). Rendered on the host GPU for the 45 delivered-rate gate: on an M1 Max under load, SwiftShader delivered 45.1 fps (2026-10-25) while the GPU rendered 120 fps at 60.0 ticks/s (2026-10-26). The hosted capture runner has no GPU.",
     "altText": "Animation of a Tanks! campaign round in play, the player's tank fighting several enemy tanks across a walled arena.",
     "timeoutMs": 180000,
     "outputBudgetBytes": 12000000
