@@ -1,0 +1,14 @@
+{
+  "id": "other-human-death-flash-only-for-the-tracked-player",
+  "file": "src/game/loop.ts",
+  "find": "    if (tank && !botSlots.has(tank.controlledBy ?? 0)) return tank.id;",
+  "replace": "    if (tank && !botSlots.has(tank.controlledBy ?? 0) && tank.id === trackedId) return tank.id;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "The helper's half of 'only slot 0 flashes again' (issue #1123): it answers only for the tracked player, whose death has already returned null, so no other human's death ever flashes. The wiring entry beside it cannot see this, since the frame handler still asks.",
+  "killedBy": [
+    "otherHumanDeathFlash (issue #1123) is the dying tank of a human slot that is not the tracked player's"
+  ]
+}

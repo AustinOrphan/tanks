@@ -227,8 +227,12 @@ describe('HUD ownership boundary (issue #324)', () => {
     // Issue #1058 adds TWO, both route-owned: the Player colors control's `setOwnerPalette`
     // and `onOwnerPaletteChange`. 93 -> 95. ROUTE for quality's reason: the page paints
     // Settings from the store, and a session reads the palette once, when it is built.
-    expect(frame.size + route.size + gameplay.size).toBe(95);
-    expect(gameplay.size, 'what a live match may write').toBe(11);
+    //
+    // Issue #1123 adds ONE, gameplay-owned: `signalDeathVignette`. 95 -> 96, and gameplay
+    // 11 -> 12. GAMEPLAY for `signalPlayerDeath`'s reason: it is the same flash, for another
+    // human player's death in the match the session owns.
+    expect(frame.size + route.size + gameplay.size).toBe(96);
+    expect(gameplay.size, 'what a live match may write').toBe(12);
   });
 
   /** Every route/frame member a source calls that the session is not entitled to. */

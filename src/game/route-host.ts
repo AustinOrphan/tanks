@@ -159,7 +159,7 @@ export interface GameplaySlot {
   /**
    * WHAT A LIVE MATCH MAY PAINT, and the only HUD a session ever holds (issue #324, S8).
    *
-   * `GameplayHud` is `hud.ts`'s own classification of the eleven members a match owns, so
+   * `GameplayHud` is `hud.ts`'s own classification of the twelve members a match owns, so
    * every application-route member -- the Settings sliders, the Levels grid, the Records
    * tables, the relaunch target -- is simply absent from the type rather than present and
    * discouraged. The debt list in `hud-ownership.test.ts` reached empty by S7; this is
@@ -1101,11 +1101,11 @@ export function createRouteHost(
    * touch thumbs), so anything a quitting match failed to overwrite simply stayed up.
    *
    * The five members here are exactly the RETAINED half of `GameplayHudKey`; the other
-   * five (`signalShellCapacity`, `signalPlayerDeath`, `signalPlayerFire`,
-   * `showAchievementToasts`, `showToast`) are transient signals that expire on their own
-   * and have no cleared state to push. The eleventh, `setStockPalette` (issue #1057), paints
-   * nothing itself: every session states it before its first status push, so a released
-   * slot leaves nothing of it on screen.
+   * six (`signalShellCapacity`, `signalPlayerDeath`, `signalDeathVignette`,
+   * `signalPlayerFire`, `showAchievementToasts`, `showToast`) are transient signals that
+   * expire on their own and have no cleared state to push. The twelfth, `setStockPalette`
+   * (issue #1057), paints nothing itself: every session states it before its first status
+   * push, so a released slot leaves nothing of it on screen.
    *
    * `null` throughout rather than a campaign-shaped substitute: a page has no world, so it
    * can state no lives, no enemy count, no stock strip and no tally. The touch indicator
@@ -1185,6 +1185,9 @@ export function createRouteHost(
         },
         signalPlayerDeath: (color, opts) => {
           if (current()) hud.signalPlayerDeath(color, opts);
+        },
+        signalDeathVignette: (color) => {
+          if (current()) hud.signalDeathVignette(color);
         },
         signalPlayerFire: () => {
           if (current()) hud.signalPlayerFire();

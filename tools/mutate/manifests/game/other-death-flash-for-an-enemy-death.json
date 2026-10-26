@@ -1,0 +1,15 @@
+{
+  "id": "other-death-flash-for-an-enemy-death",
+  "file": "src/game/loop.ts",
+  "find": "    if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;\n    // `tank-destroyed` carries no slot; a destroyed tank stays in `world.tanks`.",
+  "replace": "    if (e.type !== 'tank-destroyed') continue;\n    // `tank-destroyed` carries no slot; a destroyed tank stays in `world.tanks`.",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Drops the player-kind test, so an enemy's death flashes the vignette: an enemy has no controlledBy, reads as slot 0, and no bot holds slot 0, so every kill the player scores flashes the screen -- in single-player too, in the classic red. The presence-only mistake isPlayerDeath's own doc warns about.",
+  "killedBy": [
+    "otherHumanDeathFlash (issue #1123) is null for an enemy's death and for a frame with no deaths",
+    "startGameWith: a real player death reaches the HUD flashes nothing for an enemy's death (issue #1123)"
+  ]
+}

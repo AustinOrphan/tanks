@@ -1,0 +1,14 @@
+{
+  "id": "other-death-flash-ignores-the-owner-palette",
+  "file": "src/game/loop.ts",
+  "find": "          deathVignetteColor(driver.world, flashId, playerCount, sessionOwnerPalette),",
+  "replace": "          deathVignetteColor(driver.world, flashId, playerCount),",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Another human's flash (issue #1123) stops passing the session palette, so it flashes Classic under High contrast while the ring it should match is drawn in the session's palette (issue #1057). The sibling entry on slot 0's call cannot see this one.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD flashes a human P2's death in P2's own color under the session palette, through the vignette alone (issue #1123)"
+  ]
+}

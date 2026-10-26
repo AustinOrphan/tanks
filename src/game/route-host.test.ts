@@ -959,7 +959,7 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
    *
    * The name is typed `keyof GameplayHud`, so a member that is renamed or removed fails
    * the build here rather than quietly dropping out of the sweep. The COUNT is asserted
-   * below against the same eleven `hud-ownership.test.ts` states, which is the half a type
+   * below against the same twelve `hud-ownership.test.ts` states, which is the half a type
    * cannot check: a member ADDED to the union would compile fine as an absence.
    */
   const GAMEPLAY_PUSHES: ReadonlyArray<
@@ -971,6 +971,7 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
     ['setShellCount', (s) => s.hud.setShellCount(null)],
     ['signalShellCapacity', (s) => s.hud.signalShellCapacity({ inFlight: 3, cap: 3 })],
     ['signalPlayerDeath', (s) => s.hud.signalPlayerDeath(0xb41e1e, { announce: false })],
+    ['signalDeathVignette', (s) => s.hud.signalDeathVignette(0x3fd0ff)],
     ['signalPlayerFire', (s) => s.hud.signalPlayerFire()],
     [
       'setTouchIndicator',
@@ -982,11 +983,12 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
   ];
 
   it('reaches the page HUD while the session holds the slot', () => {
-    // Eleven, the number `hud-ownership.test.ts` asserts `GameplayHudKey` holds. Stated here
+    // Twelve, the number `hud-ownership.test.ts` asserts `GameplayHudKey` holds. Stated here
     // because the sweep below is only exhaustive if this list is: a member added to the
     // union would make the facade forward it and leave this list one short, and nothing
     // else in either file would notice. Issue #1057 added `setStockPalette`: 10 -> 11.
-    expect(GAMEPLAY_PUSHES, 'GameplayHud has eleven members').toHaveLength(11);
+    // Issue #1123 added `signalDeathVignette`: 11 -> 12.
+    expect(GAMEPLAY_PUSHES, 'GameplayHud has twelve members').toHaveLength(12);
     const f = fixture({ launchDismissed: true });
     const slot = f.host.attach(CAMPAIGN);
     for (const [, push] of GAMEPLAY_PUSHES) push(slot);
@@ -1000,9 +1002,9 @@ describe('createRouteHost: the slot\'s gameplay HUD', () => {
   });
 
   it('drops EVERY push from a session that has already been replaced', () => {
-    // Exhaustive on purpose: a facade that guarded ten members and forwarded the eleventh
+    // Exhaustive on purpose: a facade that guarded eleven members and forwarded the twelfth
     // is the shape this whole step exists to rule out, and a spot check of one member
-    // cannot tell that apart from a facade that guards all eleven.
+    // cannot tell that apart from a facade that guards all twelve.
     const f = fixture({ launchDismissed: true });
     const retired = f.host.attach(CAMPAIGN);
     const live = f.host.attach(VERSUS_SHAPE);

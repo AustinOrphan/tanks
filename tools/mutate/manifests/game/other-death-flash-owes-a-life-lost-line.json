@@ -1,0 +1,14 @@
+{
+  "id": "other-death-flash-owes-a-life-lost-line",
+  "file": "src/game/hud.ts",
+  "find": "    signalDeathVignette(color: number): void {\n      flashDeathVignette(color);\n    },",
+  "replace": "    signalDeathVignette(color: number): void {\n      deathPending = true;\n      flashDeathVignette(color);\n    },",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.a11y.test.ts"
+  ],
+  "why": "Another player's flash (issue #1123) owes the 'Life lost. N lives remaining.' line at the next status push, so a co-op partner's death speaks it beside #925's toast. Only the tracked player's death may owe it.",
+  "killedBy": [
+    "live status announcements (issue #629) speaks no Life lost line for another player's flash (issue #1123)"
+  ]
+}

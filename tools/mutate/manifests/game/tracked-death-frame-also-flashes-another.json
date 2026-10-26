@@ -1,0 +1,15 @@
+{
+  "id": "tracked-death-frame-also-flashes-another",
+  "file": "src/game/loop.ts",
+  "find": "  if (isPlayerDeath(events, trackedId)) return null;",
+  "replace": "  void trackedId;",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Issue #1123's multi-death rule: when the tracked player dies on the same frame as another human, their own flash is the frame's, in their color, exactly as before. Without the early return the frame handler restarts the vignette a second time, and a death the sim reported before slot 0's repaints slot 0's flash in another player's color.",
+  "killedBy": [
+    "otherHumanDeathFlash (issue #1123) is null when the tracked player died in the frame, even beside another human's death",
+    "startGameWith: a real player death reaches the HUD flashes once, in the tracked player's color, when they die on the frame another human does (issue #1123)"
+  ]
+}

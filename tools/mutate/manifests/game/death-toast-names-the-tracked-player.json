@@ -7,7 +7,7 @@
   "tests": [
     "src/game/death-toast.test.ts"
   ],
-  "why": "Issue #925. Looks the slot up from the tracked player rather than the tank that died, so every co-op death reads \"P1 out\": the shape of a toast written against the vignette, which fires for the tracked player alone. A test whose only victim is the tracked player cannot see it.",
+  "why": "Issue #925. Looks the slot up from the tracked player rather than the tank that died, so every co-op death reads \"P1 out\": the shape of a toast written against the vignette as it stood before issue #1123, when it fired for the tracked player alone. A test whose only victim is the tracked player cannot see it.",
   "killedBy": [
     "the co-op death toast (issue #925) names the player who died, not the tracked player"
   ]

@@ -214,6 +214,8 @@ interface Recorder {
   deathColors: number[];
   /** Every `announce` passed to signalPlayerDeath, in order (issue #925). */
   deathAnnounces: boolean[];
+  /** Every colour passed to signalDeathVignette, another human's flash, in order (#1123). */
+  vignetteFlashes: number[];
   /**
    * Every palette passed to hud.setStockPalette, in order (issue #1057). Also logged to
    * `hudCallLog` as `stockPalette`, so a case can read it against the first status push.
@@ -579,6 +581,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     deathSignals: 0,
     deathColors: [],
     deathAnnounces: [],
+    vignetteFlashes: [],
     stockPalettes: [],
     inputClears: 0,
     minePresses: 0,
@@ -1284,6 +1287,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           rec.deathColors.push(color);
           rec.deathAnnounces.push(announce);
         },
+        signalDeathVignette: (color: number) => rec.vignetteFlashes.push(color),
         setStockPalette: (palette: OwnerPalette) => {
           rec.stockPalettes.push(palette);
           rec.hudCallLog.push('stockPalette');

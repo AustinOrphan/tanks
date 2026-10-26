@@ -805,6 +805,13 @@ export interface Hud {
    * be a second one for the same death.
    */
   signalPlayerDeath(color: number, opts: { announce: boolean }): void;
+  /**
+   * Another human player died: the death vignette alone, in `color` (issue #1123). The
+   * same flash `signalPlayerDeath` plays, without its Lives pulse or its owed "Life lost"
+   * line, both of which belong to the tracked player: versus narrates a lost stock through
+   * its strip, and co-op through issue #925's death toast.
+   */
+  signalDeathVignette(color: number): void;
   onMuteToggle(cb: () => void): void;
   onVolumeChange(cb: (v: number) => void): void;
   /**
@@ -1444,7 +1451,7 @@ export type RouteHudKey =
 
 /**
  * What a live match may write, and the ONLY part of `Hud` a gameplay session ever holds.
- * Ten members plus the lent `showToast`.
+ * Eleven members plus the lent `showToast`.
  *
  * "Ever holds" literally, since issue #324's step S8: `GameplaySlot.hud` (route-host.ts)
  * IS this `Pick`, forwarded member by member behind the slot's generation guard, and it is
@@ -1464,7 +1471,7 @@ export type GameplayHudKey =
   | 'setStatus'
   | 'setOutcome'
   | 'setRoundPhase' | 'setShellCount' | 'signalShellCapacity'
-  | 'signalPlayerDeath' | 'signalPlayerFire' | 'setTouchIndicator'
+  | 'signalPlayerDeath' | 'signalDeathVignette' | 'signalPlayerFire' | 'setTouchIndicator'
   | 'showAchievementToasts'
   // Issue #1057. Gameplay rather than route because the SESSION picks the palette, once,
   // for its renderer and its chips together; a route push could repaint chips mid-match.
@@ -8460,6 +8467,23 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       `translate(${thumb.originX + v.x * STICK_RADIUS_PX}px, ${thumb.originY + v.y * STICK_RADIUS_PX}px)`;
   }
 
+  /**
+   * The death vignette in `color`, (re)started. One body for `signalPlayerDeath` and
+   * `signalDeathVignette` (issue #1123), so another player's flash cannot drift from the
+   * tracked player's; reduced motion reaches both through the class (`hud.css`).
+   */
+  function flashDeathVignette(color: number): void {
+    // Set before the (re)trigger below, so the very first paint of the replayed
+    // animation already carries the right colour rather than one frame of the old one.
+    damageEl.style.setProperty('--hud-damage-color', cssColor(color));
+    // Restart the animation even if one is already running: two deaths in
+    // quick succession must read as two, not one. Removing the class and
+    // forcing a reflow is what makes the browser replay it.
+    damageEl.classList.remove('hud-damage--hit');
+    void damageEl.offsetWidth;
+    damageEl.classList.add('hud-damage--hit');
+  }
+
   return {
     setStockPalette(palette: OwnerPalette): void {
       // Stored, not painted: the next status push redraws the strip, and the session states
@@ -8640,17 +8664,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // push -- this cue and the topbar would otherwise be a frame out of step. Not
       // recorded where the caller says the co-op toast already names the death (#925).
       if (announce) deathPending = true;
-      // Set before the (re)trigger below, so the very first paint of the replayed
-      // animation already carries the right colour rather than one frame of the old one.
-      damageEl.style.setProperty('--hud-damage-color', cssColor(color));
-      // Restart the animation even if one is already running: two deaths in
-      // quick succession must read as two, not one. Removing the class and
-      // forcing a reflow is what makes the browser replay it.
-      damageEl.classList.remove('hud-damage--hit');
+      flashDeathVignette(color);
+      // The Lives pulse, replayed the same way and for the same reason.
       livesEl.classList.remove('hud-lives--hit');
-      void damageEl.offsetWidth;
-      damageEl.classList.add('hud-damage--hit');
+      void livesEl.offsetWidth;
       livesEl.classList.add('hud-lives--hit');
+    },
+    signalDeathVignette(color: number): void {
+      flashDeathVignette(color);
     },
     signalPlayerFire(): void {
       // Same restart trick as signalPlayerDeath: two shots in quick succession must read
