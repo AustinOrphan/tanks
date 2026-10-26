@@ -7,8 +7,11 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  DEVELOPER_CHROME_STYLE_ID,
+  developerChromeStylesheet,
   launchArgumentsFor,
   parseRecordArgs,
+  prepareDeveloperChrome,
   recordFlow,
   simulationFromSamples,
 } from './record.mjs';
@@ -41,6 +44,82 @@ describe('parseRecordArgs (issue #815)', () => {
     expect(() => parseRecordArgs(ARGV.map((a) => (a === 'host-gpu' ? 'metal' : a)))).toThrow(/--visual must be one of/);
     expect(() => parseRecordArgs(ARGV.map((a) => (a === 'window' ? 'first-kill' : a)))).toThrow(/--stop must be one of/);
     expect(() => parseRecordArgs(['stray'])).toThrow(/unexpected argument 'stray'/);
+  });
+
+  it('reads --hide-developer-chrome as a switch with no value, once (issue #258)', () => {
+    expect(parseRecordArgs(ARGV).hideDeveloperChrome).toBe(false);
+    expect(parseRecordArgs([...ARGV, '--hide-developer-chrome']).hideDeveloperChrome).toBe(true);
+    // A switch takes nothing after it: placed first, it leaves --flow its value.
+    const first = parseRecordArgs(['--hide-developer-chrome', ...ARGV]);
+    expect(first.hideDeveloperChrome).toBe(true);
+    expect(first.flow.id).toBe('campaign-round');
+    expect(() => parseRecordArgs([...ARGV, '--hide-developer-chrome', '--hide-developer-chrome']))
+      .toThrow(/--hide-developer-chrome given twice/);
+    expect(() => parseRecordArgs([...ARGV, '--hide-developer-chrome', 'true'])).toThrow(/unexpected argument 'true'/);
+  });
+});
+
+describe('developer chrome in a documentation capture (issue #258)', () => {
+  // A fake page that records what it was asked to run, in order, and answers the measurement.
+  function fakePage(measurement: unknown) {
+    const calls: Array<{ script: unknown; arg: unknown }> = [];
+    const page = {
+      evaluate: vi.fn(async (script: unknown, arg?: unknown) => {
+        calls.push({ script, arg });
+        return typeof script === 'string' && script.includes('getComputedStyle') ? measurement : undefined;
+      }),
+    };
+    return { page, calls };
+  }
+
+  it('hides exactly the two selectors, each with display: none', () => {
+    // Spelled out rather than built from the shared list, so a selector dropped from that list
+    // fails here instead of vanishing from both sides at once.
+    expect(developerChromeStylesheet()).toBe(
+      '.hud-devbadge { display: none !important; }\n.hud-practice { display: none !important; }',
+    );
+  });
+
+  it('when asked, injects the stylesheet, waits for a frame drawn with it, then measures', async () => {
+    const measured = { injected: true, elements: {} };
+    const { page, calls } = fakePage(measured);
+    await expect(prepareDeveloperChrome(page, true)).resolves.toBe(measured);
+    expect(calls).toHaveLength(3);
+    expect(calls[0].arg).toEqual({ id: DEVELOPER_CHROME_STYLE_ID, css: developerChromeStylesheet() });
+    expect(String(calls[1].script)).toMatch(/requestAnimationFrame\(\(\) => requestAnimationFrame\(/);
+    expect(String(calls[2].script)).toContain('getComputedStyle');
+    // ...and the in-page half puts that text, under that id, into the document's head.
+    const appended: unknown[] = [];
+    vi.stubGlobal('document', { createElement: (tag: string) => ({ tag }), head: { append: (el: unknown) => appended.push(el) } });
+    try {
+      (calls[0].script as (arg: unknown) => void)(calls[0].arg);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(appended).toEqual([{ tag: 'style', id: DEVELOPER_CHROME_STYLE_ID, textContent: developerChromeStylesheet() }]);
+  });
+
+  it('when not asked, only measures', async () => {
+    const measured = { injected: false, elements: {} };
+    const { page, calls } = fakePage(measured);
+    await expect(prepareDeveloperChrome(page, false)).resolves.toBe(measured);
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0].script)).toContain('getComputedStyle');
+  });
+
+  it('prepares the chrome before the screencast starts and samples it again after', () => {
+    // Source text, like the AudioContext and outcome checks in this file: this wiring runs only
+    // in a real browser, past every point the fakes above reach.
+    const src = readFileSync(new URL('./record.mjs', import.meta.url), 'utf8');
+    const start = src.search(/^ {4}const chromeAtStart = await prepareDeveloperChrome\(page, hideDeveloperChrome\);$/m);
+    const window = src.search(/^ {4}const recorded = await recordWindow\(page, context, /m);
+    const end = src.search(/^ {4}const chromeAtEnd = await page\.evaluate\(DEVELOPER_CHROME_IN\);$/m);
+    expect(start, 'the start sample is gone, conditional, or no longer takes the parsed switch').toBeGreaterThan(-1);
+    expect(window, 'the recording window call was not found').toBeGreaterThan(-1);
+    expect(end, 'the end sample is gone or no longer measures the page').toBeGreaterThan(-1);
+    expect(start, 'the chrome is prepared after the screencast starts').toBeLessThan(window);
+    expect(window, 'the end sample is taken before the window closes').toBeLessThan(end);
+    expect(src).toMatch(/atStart: chromeAtStart,\n\s+atEnd: chromeAtEnd,/);
   });
 });
 

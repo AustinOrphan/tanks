@@ -319,6 +319,27 @@ describe('flow recipes (issue #815)', () => {
     }
   });
 
+  it('admits hideDeveloperChrome as a boolean on a flow recipe only (issue #258)', () => {
+    for (const value of [true, false]) {
+      const flow = flowRecipe();
+      flow.variant.hideDeveloperChrome = value;
+      expect(() => validateRecipe(flow), String(value)).not.toThrow();
+    }
+    for (const value of ['true', 1, null, {}]) {
+      const flow = flowRecipe();
+      flow.variant.hideDeveloperChrome = value;
+      expect(() => validateRecipe(flow), JSON.stringify(value)).toThrow(/variant\.hideDeveloperChrome: must be a boolean/);
+    }
+    // ...and nowhere else: only the flow recorder has a page to hide anything on.
+    const moment = recipe();
+    moment.variant.hideDeveloperChrome = true;
+    expect(() => validateRecipe(moment)).toThrow(/variant\.hideDeveloperChrome: is not an allowed field/);
+    const screen = recipe();
+    screen.producer = { kind: 'screen', scenarioId: 'screen.main-menu' };
+    screen.variant = { hideDeveloperChrome: true };
+    expect(() => validateRecipe(screen)).toThrow(/variant\.hideDeveloperChrome: is not an allowed field/);
+  });
+
   it('keeps realtime for the flow producer alone', () => {
     const moment = recipe(1); // a temporal gallery recipe, so artifacts already fit a clip
     moment.schedule = { kind: 'realtime', durationSeconds: 2 };
