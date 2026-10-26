@@ -2585,9 +2585,13 @@ describe('player identity: ring and shell tint', () => {
         for (const s of [1, 2, 3]) {
           pairs.push([`ring${s} vs hull${s}`, distance(overFelt(rings[s]), ffaHulls[s])]);
           // Every team against every hull: the setup pane lets any slot pick any team.
-          teams.forEach((t, i) => pairs.push([`team ${'ABC'[i]} vs hull${s}`, distance(overFelt(t), teamsHulls[s])]));
+          teams.forEach((t, i) => {
+            pairs.push([`team ${'ABC'[i]} vs hull${s}`, distance(overFelt(t), teamsHulls[s])]);
+          });
           pairs.push([`P1's hull vs hull${s}`, distance(ffaHulls[0], ffaHulls[s])]);
-          for (let o = s + 1; o <= 3; o++) pairs.push([`hull${s} vs hull${o}`, distance(ffaHulls[s], ffaHulls[o])]);
+          for (let o = s + 1; o <= 3; o++) {
+            pairs.push([`hull${s} vs hull${o}`, distance(ffaHulls[s], ffaHulls[o])]);
+          }
         }
         return pairs;
       }
@@ -2614,7 +2618,8 @@ describe('player identity: ring and shell tint', () => {
         // ONE colour that is none of the three shades, which makes the set below exactly four.
         for (const palette of OWNER_PALETTE_IDS) {
           const coop = hullsDrawn(palette, fourPlayerWorld()).slice(1);
-          expect(new Set([...coop, ...SHADES[palette]]).size, `${palette}: co-op hulls ${coop.map((c) => c.toString(16))}`).toBe(4);
+          const seen = `${palette}: co-op hulls ${coop.map((c) => c.toString(16)).join(' ')}`;
+          expect(new Set([...coop, ...SHADES[palette]]).size, seen).toBe(4);
         }
       });
 
@@ -2626,8 +2631,10 @@ describe('player identity: ring and shell tint', () => {
           // is on VERSUS_HULL_SHADES. Rings come from the palette, whose drawing the site tests
           // above pin; the hulls are read off the rendered FFA and Teams worlds.
           const { rings, teams } = OWNER_PALETTES[palette];
-          const pairs = versusPairs(rings, teams, hullsDrawn(palette, fourPlayers('ffa')), hullsDrawn(palette, fourPlayers('teams')));
-          expect(pairs, '3 rings vs their hulls + 3 teams x 3 hulls + 3 vs P1 + 3 hull pairs').toHaveLength(18);
+          const ffa = hullsDrawn(palette, fourPlayers('ffa'));
+          const pairs = versusPairs(rings, teams, ffa, hullsDrawn(palette, fourPlayers('teams')));
+          expect(pairs, '3 rings vs their hulls + 3 teams x 3 hulls + 3 vs P1 + 3 hull pairs')
+            .toHaveLength(18);
           expect(underFloor(pairs), `${palette}: pairs at or under OWNER_FLOOR`).toEqual([]);
         },
       );
@@ -2640,15 +2647,17 @@ describe('player identity: ring and shell tint', () => {
         for (const palette of OWNER_PALETTE_IDS) {
           const { rings, teams } = OWNER_PALETTES[palette];
           const [h1, h2, h3] = SHADES[palette];
-          const failing = (hulls: number[]): string[] => underFloor(versusPairs(rings, teams, hulls, hulls));
-          expect(failing([ROSTER_PLAYER, rings[1], rings[2], rings[3]]), `${palette}: exact rings`).toEqual(
+          const failing = (hulls: number[]): string[] =>
+            underFloor(versusPairs(rings, teams, hulls, hulls));
+          const P1 = ROSTER_PLAYER;
+          expect(failing([P1, rings[1], rings[2], rings[3]]), `${palette}: exact rings`).toEqual(
             expect.arrayContaining(['ring1 vs hull1', 'ring2 vs hull2', 'ring3 vs hull3']),
           );
-          expect(failing([ROSTER_PLAYER, teams[0], teams[1], teams[2]]), `${palette}: team-coloured`).toEqual(
+          expect(failing([P1, teams[0], teams[1], teams[2]]), `${palette}: team-coloured`).toEqual(
             expect.arrayContaining(['team A vs hull1', 'team B vs hull2', 'team C vs hull3']),
           );
-          expect(failing([ROSTER_PLAYER, h1, h1, h3]), `${palette}: two hulls alike`).toContain('hull1 vs hull2');
-          expect(failing([ROSTER_PLAYER, h1, h2, ROSTER_PLAYER]), `${palette}: P1's hull`).toContain("P1's hull vs hull3");
+          expect(failing([P1, h1, h1, h3]), `${palette}: two hulls alike`).toContain('hull1 vs hull2');
+          expect(failing([P1, h1, h2, P1]), `${palette}: P1's hull`).toContain("P1's hull vs hull3");
         }
       });
     });
