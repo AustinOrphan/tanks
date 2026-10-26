@@ -831,7 +831,8 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
  *
  * The tracked player (slot 0) is not this function's to answer for. Its death keeps the path
  * it always had in `onFrameEvents` -- vignette, Lives pulse, its "Life lost" rule and the
- * run's lives -- whether a person, autoplay or a bot drives it.
+ * run's lives -- when a person or autoplay drives it. A bot driving slot 0 is not tracked:
+ * the caller passes `trackedId` -1, and `botSlots` keeps its own death quiet.
  *
  * ONE FLASH PER FRAME. The vignette is one element whose animation each call restarts, so
  * two calls in one frame would show only the second. When the tracked player died in the
@@ -2893,13 +2894,19 @@ export function startGameWith(
     // docs/agent/testing-and-review.md warns about. Discriminate on tankId: kind alone stops
     // being unique the moment a second player-kind tank exists (the co-op foundation).
     onFrameEvents(events): void {
+      // A bot driving slot 0 (a Versus Setup role, or `bots` covering every slot) dies as
+      // quietly as any bot (issue #1123). Autoplay wins slot 0 over a bot and stands in for
+      // the person, so it keeps the tracked player's signal.
+      const trackedIsBot = !deps.devFlags.autoplay && botSources.has(0);
       if (isPlayerDeath(events, playerId ?? -1)) {
-        hud.signalPlayerDeath(
-          deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette),
-          // Where the co-op toast below names this death, it is the death's only sentence, so
-          // the HUD owes no "Life lost" line beside it (issue #925, death-toast.ts).
-          { announce: !deathToastNamesDeaths(driver.world, currentDescriptor.kind) },
-        );
+        if (!trackedIsBot) {
+          hud.signalPlayerDeath(
+            deathVignetteColor(driver.world, playerId ?? -1, playerCount, sessionOwnerPalette),
+            // Where the co-op toast below names this death, it is the death's only sentence,
+            // so the HUD owes no "Life lost" line beside it (issue #925, death-toast.ts).
+            { announce: !deathToastNamesDeaths(driver.world, currentDescriptor.kind) },
+          );
+        }
         // The #152 fix: persist the reduced life count on the RUN before the player
         // can escape it by refreshing or leaving gameplay -- not deferred to any
         // later click. `driver.world.lives` is already the post-step count: the
@@ -2910,7 +2917,10 @@ export function startGameWith(
       // Every other human's death flashes the vignette too, in its own color, and does
       // nothing else: a lost stock is narrated by the strip and a co-op death by the toast
       // below (issue #1123). `botSources` is the live bot set, reassignments included.
-      const flashId = otherHumanDeathFlash(events, driver.world, botSources, playerId ?? -1);
+      // A bot in slot 0 is no tracked player: its death preempts nobody's flash.
+      const flashId = otherHumanDeathFlash(
+        events, driver.world, botSources, trackedIsBot ? -1 : playerId ?? -1,
+      );
       if (flashId !== null) {
         hud.signalDeathVignette(
           deathVignetteColor(driver.world, flashId, playerCount, sessionOwnerPalette),

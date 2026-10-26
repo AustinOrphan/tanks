@@ -4035,11 +4035,12 @@
  * through it the instant they respawn.
  *
  * --hud-damage-color drives both gradient stops (death-pulse issue #200): hud.ts's
- * signalPlayerDeath sets it before every trigger, so the vignette can tint to whichever
+ * flashDeathVignette sets it before every trigger, for signalPlayerDeath and for another
+ * human's signalDeathVignette alike (issue #1123), so the vignette can tint to whichever
  * player died -- classic red in single-player, that player's identity ring colour
  * otherwise. The default here is only what shows before the first death ever fires (it
  * never does in practice, since the class that plays this gradient is never present
- * without signalPlayerDeath having just set the property first) and matches the old
+ * without flashDeathVignette having just set the property first) and matches the old
  * hardcoded rgba(180, 30, 30, ...) exactly (0xb4=180, 0x1e=30 -- SINGLE_PLAYER_DEATH_VIGNETTE
  * in hud.ts). color-mix against transparent keeps the alpha ramp identical to the old
  * rgba stops: mixing a fully-opaque colour N% with transparent yields alpha N/100

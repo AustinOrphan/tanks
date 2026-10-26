@@ -1,8 +1,8 @@
 {
   "id": "other-human-death-flashes-nothing",
   "file": "src/game/loop.ts",
-  "find": "      const flashId = otherHumanDeathFlash(events, driver.world, botSources, playerId ?? -1);",
-  "replace": "      const flashId: number | null = null;",
+  "find": "      if (flashId !== null) {",
+  "replace": "      if (false) {",
   "expect": "killed",
   "tests": [
     "src/game/loop.test.ts"

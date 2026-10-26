@@ -4456,6 +4456,29 @@ describe('startGameWith: a real player death reaches the HUD', () => {
     }
   });
 
+  it("signals nothing for a bot driving slot 0, unless autoplay stands in for the person (issue #1123)", () => {
+    // `bots: 2` at two players claims slot 0 as well. P2's shell on P1, three ways: both slots
+    // bots (quiet), slot 0 a person (the control), and both bots under autoplay, which wins
+    // slot 0 and so keeps the tracked player's signal.
+    const arms = [
+      ['a bot in slot 0', { bots: 2 }, 0],
+      ['a person in slot 0', { bots: 1 }, 1],
+      ['autoplay over a slot-0 bot', { bots: 2, autoplay: true }, 1],
+    ] as const;
+    for (const [name, flags, want] of arms) {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa', ...flags } }));
+      const world = h.rec.builtWorlds[0];
+      const [p1, p2] = world.tanks.filter((t: Tank) => t.kind === 'player');
+      versusShellOn(world, p2, p1, 900);
+      h.setState('playing');
+      h.fireFrame(20);
+      expect(diedInSession(h, p1.id), `${name}: P1 really died`).toBe(true);
+      expect(h.rec.deathSignals, name).toBe(want);
+      expect(h.rec.vignetteFlashes, `${name}: no flash in its place`).toEqual([]);
+      h.handle.dispose();
+    }
+  });
+
   it("flashes once, in the tracked player's color, when they die on the frame another human does (issue #1123)", () => {
     // P2's shell is first in the array, so the sim reports P2's death before P1's. P1's flash
     // is still the frame's, and nothing restarts it in P2's color.

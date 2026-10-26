@@ -1,0 +1,14 @@
+{
+  "id": "autoplay-over-a-slot-0-bot-goes-quiet",
+  "file": "src/game/loop.ts",
+  "find": "      const trackedIsBot = !deps.devFlags.autoplay && botSources.has(0);",
+  "replace": "      const trackedIsBot = botSources.has(0);",
+  "expect": "killed",
+  "tests": [
+    "src/game/loop.test.ts"
+  ],
+  "why": "Autoplay wins slot 0 over a bot (the effectiveInput map checks it first) and stands in for the person, so its death keeps the tracked player's signal. Reading the bot set alone silences the demo and capture driver whenever `bots` also covers slot 0.",
+  "killedBy": [
+    "startGameWith: a real player death reaches the HUD signals nothing for a bot driving slot 0, unless autoplay stands in for the person (issue #1123)"
+  ]
+}
