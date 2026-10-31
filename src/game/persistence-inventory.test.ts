@@ -70,14 +70,15 @@ describe('persistence inventory: the privacy policies', () => {
     });
 
     it(`${name} says which listed keys a save file leaves out, and no others`, () => {
-      // Both policies promise an export of "the keys above"; the inventory is what says
+      // Both policies say a developer session's export carries "the keys above" (export is a
+      // `?dev=1&saveIo=1` console facility, not a player feature); the inventory is what says
       // which of them an export does not carry.
       const left = PERSISTED_DATA.filter((datum) => !datum.exported).map((datum) => datum.key);
       const code = name.endsWith('.html') ? (k: string) => `<code>${k}</code>` : (k: string) => `\`${k}\``;
       const flat = text.replace(/\s+/g, ' ');
       const except = left.length === 0 ? '' : ` except ${left.map(code).join(', ')}`;
       const clause = `all of the keys above${except} as a single file`;
-      expect(flat).toContain(`You can export and import ${clause}`);
+      expect(flat).toContain(`a developer session can export and import ${clause}`);
     });
 
     it(`${name} names no key that is neither current nor classified legacy`, () => {

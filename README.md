@@ -4,7 +4,7 @@ A top-down arena tank game. Clear the arena; one shot kills anything, including 
 
 [Play it](https://austinorphan.com/tanks/)
 
-![A blue tank fights teal, olive, grey, green and orange enemy tanks across a green arena of stone walls and wooden crates, white shells crossing between them.](docs/media/showcase/campaign-combat.gif)
+![A blue tank fights teal, olive, grey, green and brown enemy tanks across a green arena of stone walls and wooden crates, white shells crossing between them.](docs/media/showcase/campaign-combat.gif)
 
 *Campaign level 4 at normal speed, played by the scripted player.*
 
@@ -126,8 +126,9 @@ declares nothing and the engine synthesises every sound in Web Audio rather than
 requesting files that are not there — a deliberate choice, not a degraded mode,
 so development is never blocked on assets. (It used to declare all ten anyway and
 let each 404: 10 requests and 93,790 uncached bytes per load, measured against the
-deployed site.) See [CREDITS.md](CREDITS.md); its attribution tables are
-intentionally empty rather than fabricated.
+deployed site.) [CREDITS.md](CREDITS.md) credits the project's third-party assets, the
+bundled typefaces among them; its audio attribution tables are intentionally empty rather
+than fabricated.
 
 ## License
 
@@ -144,11 +145,14 @@ Three things govern this repository, and every file is under exactly one of them
   which of the three applies to any file.
 - **Dependencies and vendored source** — their own licenses, recorded in
   [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). The deterministic math in
-  `src/sim/math` includes ports of fdlibm and V8.
+  `src/sim/math` includes ports of fdlibm and V8, and the bundled typefaces are under the
+  SIL Open Font License.
 
-Shield permits reading and private experimentation, but **not** using the software to
-provide a competing product — and that holds whether a competing release is **paid or
-free**. `LICENSE` controls; this paragraph is a summary, not the terms.
+In short: you're welcome to use, change and share the code. The main thing the license asks
+is that you don't use it to build something that competes with this game, or with anything
+the owner builds on it, even if your version is free. If you share a copy, please keep the
+license and its `Required Notice:` line with it. This is just a summary; if it and `LICENSE`
+ever disagree, `LICENSE` is the one that counts.
 
 The owner may grant exceptions, commercial licenses or modding permissions separately, and
 separately granted **written** permission overrides the default.

@@ -35,13 +35,8 @@ describes.
 
 ## If you want to use the code
 
-`LICENSE` governs. In short — and the license text controls, not this summary — you may read
-the code and experiment with it privately, but you may **not** use it to provide a competing
-product. That holds whether the competing release is paid **or free**.
-
-For anything the license does not permit, ask. The owner may grant exceptions, commercial
-licenses or modding permissions separately, and separately granted written permission
-overrides the default.
+The [License section of the README](README.md#license) sums up what `LICENSE` allows and how
+exceptions work; `LICENSE` is the one that counts. For anything it doesn't allow, please ask.
 
 ## Related
 

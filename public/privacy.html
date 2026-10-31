@@ -27,7 +27,7 @@
     </head>
     <body>
       <h1>Privacy Policy</h1>
-      <p>Last updated: October 22, 2026</p>
+      <p>Last updated: October 31, 2026</p>
 
       <p>This policy covers the <strong>Tanks!</strong> browser game (the &ldquo;game&rdquo; or
       &ldquo;app&rdquo;), published at <code>austinorphan.com/tanks/</code>.</p>
@@ -65,7 +65,8 @@
       The first time you open this version of the game, any touch control settings saved
       under the old key are copied into the new one and the old key is deleted. The game
       never writes <code>tanks.touch.v1</code> again; it is still accepted when importing a
-      save file exported by an older version.</p>
+      save file exported by an older version. An older <code>tanks.run.v1</code> key, if
+      present, is deleted unread when the game starts.</p>
 
       <p>The settings key stores your <strong>preferences only</strong>. It never records
       which controllers are connected, their identifiers, their slot numbers, or which
@@ -79,16 +80,28 @@
       site storage blocked &mdash; the game still runs, and shows a brief on-screen note
       that settings will not be saved for that session.</p>
 
-      <p>You can export and import all of the keys above except <code>tanks.versus.v1</code>
-      as a single file, and you can reset your settings back to their defaults. Resetting
-      settings does not affect campaign progress, statistics, or achievements, and
-      resetting progress does not affect settings.</p>
+      <p>In Settings, under Data, <strong>Reset stats</strong> sets your lifetime statistics
+      and those of the campaign run in progress back to zero, and <strong>Reset
+      progress</strong> clears your campaign progress (the levels unlocked in Level Select)
+      and your earned achievements. Neither changes your settings or your tank
+      customization. To remove everything the game has stored, clear this site&rsquo;s data
+      in your browser&rsquo;s settings.</p>
 
-       <h2>Audio &amp; visuals</h2>
-       <p><strong>Sound is synthesized in real time.</strong> The game uses the Web Audio API
-      to generate sound effects and music. No audio files are downloaded from the network.
-      All visuals are generated in real time via the Canvas API; no external assets
-      (images, models, textures) are downloaded or included.</p>
+      <p>Developer sessions, opened with <code>?dev=1</code>, keep their data under separate
+      keys that start with <code>tanks.dev.</code>, unless <code>prodSave=1</code> asks for
+      the keys above. With <code>saveIo=1</code> as well, a developer session can export and
+      import all of the keys above except <code>tanks.versus.v1</code> as a single file, from
+      the browser console. That is a development facility; the game has no button for
+      it.</p>
+
+      <h2>Audio &amp; visuals</h2>
+      <p><strong>Sound is synthesized in real time.</strong> The game uses the Web Audio API
+      to generate its sound effects and music. No audio files are downloaded from the
+      network.</p>
+
+      <p><strong>Graphics are drawn in real time</strong> with WebGL, through the Three.js
+      library. The game downloads no external images, models or textures; its fonts and
+      icons are served from the same site as the game.</p>
 
       <h2>The website that hosts the game</h2>
       <p>The game is served from <code>austinorphan.com</code> through Cloudflare. Like any
@@ -109,9 +122,9 @@
 
       <h2>Third-party services</h2>
       <p>The game&rsquo;s own code has <strong>no third-party integrations</strong>. It does
-      not use analytics, advertising, social media plugins, external APIs, or cookies. The
-      website that serves the game uses Cloudflare for hosting and Web Analytics, as
-      described above.</p>
+      not use analytics or tracking services, advertising networks, social media plugins or
+      buttons, external APIs, servers or CDNs, or cookies. The website that serves the game
+      uses Cloudflare for hosting and Web Analytics, as described above.</p>
 
       <p>The game does use a few browser APIs for local input only:</p>
       <ul>
@@ -122,16 +135,15 @@
       <h2>Children&rsquo;s privacy</h2>
       <p>The game is designed for all ages. The game itself collects no personal
       information from any user, including children; what the hosting website&rsquo;s
-      Cloudflare services receive is described above. This policy is provided to comply with best
-      practices and platform requirements (notably the Google Play policy requiring
-      a privacy policy even for zero-collection apps).</p>
+      Cloudflare services receive is described above. This policy is published as a matter
+      of good practice, even though the game itself collects no personal data.</p>
 
       <h2>Changes to this policy</h2>
       <p>If the game&rsquo;s privacy practices change, this policy will be updated.</p>
 
       <h2>Contact</h2>
       <p>For questions, open an issue on the
-      <a href="https://github.com/AustinOrphan/tanks/issues">Tanks! GitHub
+      <a href="https://github.com/AustinOrphan/tanks">Tanks! GitHub
       repository</a>.</p>
     </body>
 </html>

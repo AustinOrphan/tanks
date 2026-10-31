@@ -35,6 +35,10 @@ prototype never set out to include are not listed.
 - **Short screens.** On a short viewport, a menu pane's Back control can start below the fold,
   reachable by scrolling: in 15 of 36 pane-and-viewport combinations measured on 2026-09-26
   (#1034).
+- **Stock strip on a phone.** At 480px wide and narrower, the Versus stock strip shows one mark and
+  a count instead of one mark per stock for four players at five stocks, in FFA and Teams, and for
+  four-player Teams at four stocks. The count stays exact
+  ([`stock-cue.ts`](../../../src/presentation/stock-cue.ts); ruled on #1128).
 - **Controllers.** Controller assignment is tested with synthetic gamepads. It has not been verified
   end to end with real gamepads in Safari and a Chromium-based browser, including hotplug and a
   reconnect that returns a different index (#616).
@@ -58,7 +62,9 @@ prototype never set out to include are not listed.
   the tank that fired it (#1061). Versus fires standard shells only.
 - **Shell owner.** With two or more players, a shell shows who fired it by tint alone (#1024).
 - **Bounces left.** How many bounces a shell has left is conveyed by sound alone (#632).
-- **Teams.** In Teams, teammates share a color, and no non-color mark identifies a team (#923).
+- **Teams.** In Teams, each tank's ring carries its own player's shape, drawn in the team color, and
+  the stock strip keeps each entry's A/B/C team letter (#1132). On the arena, a side is still told by
+  color alone: teammates share one color, and no non-color mark identifies a team there (#923).
 - **Focus ring over gameplay.** The focus ring's contrast is derived from a bound and measured on
   six application surfaces, but it has not been sampled over live gameplay behind Pause, where
   explosions and muzzle flashes pass under it (#1081).
@@ -77,6 +83,10 @@ prototype never set out to include are not listed.
   playtest (#277).
 - **AI targeting.** How an AI tank commits to one of several player targets in co-op and versus bot
   play was accepted on recorded evidence, without a normal-speed human sign-off (#719).
+- **Bot aim.** A computer player in Versus, and the scripted player in the README clip, re-rolls its
+  aim error every tick with no aim hold, so its turret can visibly jitter where a campaign enemy's
+  holds steady (`decidePlayerInput` in `src/sim/ai/player-profile.ts`; the enemies' hold is
+  #344's). Seen during the Public Prototype 1.0 sign-offs and placed after the cutover.
 - **Campaign co-op and controllers.** Campaign and Practice are played by one player on keyboard,
   mouse or touch. A controller for Player 1 and co-op for two to four players exist only behind the
   `gamepad` and `players` developer flags ([dev flags](../../dev-flags.md)).
@@ -113,5 +123,3 @@ prototype never set out to include are not listed.
   milestone, waits for.
 - Issues on the Public Prototype 1.0 milestone are not listed, because the freeze waits for them.
   One that is deferred instead of completed gains an entry here.
-- #925, a non-color channel for the death vignette in co-op and versus, was in progress when this
-  note was drafted and is not listed.

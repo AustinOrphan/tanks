@@ -1,0 +1,25 @@
+{
+  "id": "notices-plex-mono-drops-its-600-weight",
+  "file": "tools/notices/vendored.mjs",
+  "find": "      'src/game/fonts/ibm-plex-mono-latin-400-normal.woff2',\n      'src/game/fonts/ibm-plex-mono-latin-600-normal.woff2',\n",
+  "replace": "      'src/game/fonts/ibm-plex-mono-latin-400-normal.woff2',\n",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) accounts for every font file under src/game/fonts, so a new face cannot ship without its notice",
+    "vendored third-party source (issue #771) names every vendored file in CONTENT-LICENSE.md, which would otherwise class it as first-party code"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/game/fonts/README.md",
+    "src/game/fonts/OFL.txt",
+    "src/game/fonts/OFL-ibm-plex-mono.txt",
+    "src/game/fonts/OFL-atkinson-hyperlegible.txt",
+    "src/game/fonts/OFL-inter.txt"
+  ],
+  "why": "A font file that ships without a declaration: the 600 weight of IBM Plex Mono stays in src/game/fonts and is emitted into dist/, but the notices stop naming it. Nothing reads the font directory except the inventory, so only it names the file; the CONTENT-LICENSE.md test fails through its control, which expects all six font files when the fonts' row is removed. Scoped to vendored.test.ts alone: generate.test.ts's regenerate-and-diff would also fail, but only until `npm run notices` is run, after which the declaration and the committed notices agree on the mistake."
+}
