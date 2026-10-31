@@ -1,7 +1,7 @@
 /**
  * Renders THIRD-PARTY-NOTICES.md's content from package.json's runtime "dependencies" and
- * the license each one ships in node_modules, then from the third-party source vendored into
- * `src/`, declared in vendored.mjs (issue #771).
+ * the license each one ships in node_modules, then from the third-party source and typefaces
+ * vendored into `src/`, declared in vendored.mjs (issues #771 and #294).
  *
  * Pure string building against the filesystem state of node_modules: generate.mjs writes
  * the result and generate.test.ts compares the committed file against this exact function
@@ -69,12 +69,12 @@ function renderDependencySection(name) {
 
 /**
  * One vendored source's section (issue #771): where it came from, the files that carry it,
- * and its notice, read from the source file's header or from the licence stored beside
- * `vendored.mjs`.
+ * and its notice, read from the source file's header or from the license file the declaration
+ * names.
  */
 export function renderVendoredSection(source) {
   const files = source.files.map((f) => `\`${f}\``).join(', ');
-  const where = source.notice.source ? ` The licence below is ${source.notice.source}, verbatim from the copyright line on.` : '';
+  const where = source.notice.source ? ` The license below is ${source.notice.source}, verbatim from the copyright line on.` : '';
   return (
     `### ${source.name} (${source.license})\n\n` +
     `Vendored into ${files}. Origin: ${source.origin}.${where}\n\n` +
@@ -95,10 +95,11 @@ export function renderNotices() {
     // Not an H1: the Legal page takes a document's first H1 as its title (issue #771's first
     // render titled the whole notices document "Vendored source").
     '## Vendored source\n\n' +
-    'Third-party code copied into this repository rather than installed, and so not listed ' +
-    `above (${VENDORED_SOURCES.length} at generation time: ` +
-    `${VENDORED_SOURCES.map((s) => s.name).join(', ')}). Each notice is also preserved in the ` +
-    'header of the files named. Declared in tools/notices/vendored.mjs.\n';
+    'Third-party code and typefaces copied into this repository rather than installed, and so ' +
+    `not listed above (${VENDORED_SOURCES.length} at generation time: ` +
+    `${VENDORED_SOURCES.map((s) => s.name).join(', ')}). Each code notice is also preserved in ` +
+    "the header of the files named, and each typeface's license is kept beside its font files. " +
+    'Declared in tools/notices/vendored.mjs.\n';
   const vendored = VENDORED_SOURCES.map(renderVendoredSection);
   return `${GENERATED_HEADER}\n${intro}\n${sections.join('\n')}\n${vendoredIntro}\n${vendored.join('\n')}`;
 }

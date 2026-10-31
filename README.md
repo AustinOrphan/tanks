@@ -4,7 +4,7 @@ A top-down arena tank game. Clear the arena; one shot kills anything, including 
 
 [Play it](https://austinorphan.com/tanks/)
 
-![A blue tank fights teal, olive, grey, green and orange enemy tanks across a green arena of stone walls and wooden crates, white shells crossing between them.](docs/media/showcase/campaign-combat.gif)
+![A blue tank fights teal, olive, grey, green and brown enemy tanks across a green arena of stone walls and wooden crates, white shells crossing between them.](docs/media/showcase/campaign-combat.gif)
 
 *Campaign level 4 at normal speed, played by the scripted player.*
 
@@ -126,8 +126,9 @@ declares nothing and the engine synthesises every sound in Web Audio rather than
 requesting files that are not there — a deliberate choice, not a degraded mode,
 so development is never blocked on assets. (It used to declare all ten anyway and
 let each 404: 10 requests and 93,790 uncached bytes per load, measured against the
-deployed site.) See [CREDITS.md](CREDITS.md); its attribution tables are
-intentionally empty rather than fabricated.
+deployed site.) [CREDITS.md](CREDITS.md) credits the project's third-party assets, the
+bundled typefaces among them; its audio attribution tables are intentionally empty rather
+than fabricated.
 
 ## License
 

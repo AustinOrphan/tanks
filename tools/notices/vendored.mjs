@@ -7,9 +7,15 @@
  * notices are preserved in the files' own headers, but `CONTENT-LICENSE.md` classified all of
  * `src/**` as first-party code under `LICENSE`, and the generated notices never mentioned them.
  *
+ * The typefaces in `src/game/fonts/` are the same case in a different form (issue #294's cutover
+ * audit): woff2 files copied unchanged from @fontsource packages, under the SIL Open Font License
+ * 1.1, which requires its text and each face's copyright line to travel with every copy. The
+ * build emits all six files into dist/, the developer-only faces included, so every one is listed.
+ *
  * This module is the one declared list both surfaces are checked against:
  * `vendored.test.ts` fails when a file carrying a third-party provenance marker is on neither
- * list below, and when `CONTENT-LICENSE.md` stops naming a vendored file.
+ * list below, when a font file in `src/game/fonts/` is not declared, and when
+ * `CONTENT-LICENSE.md` stops naming a vendored file.
  *
  * NOT LEGAL ADVICE. It records where code came from and which notice travels with it.
  */
@@ -33,11 +39,13 @@ export const PROVENANCE_MARKERS = Object.freeze([
 ]);
 
 /**
- * Where each vendored body of code came from, which files carry it, and its notice.
+ * Where each vendored body of code or typeface came from, which files carry it, and its notice.
  *
  * `notice.fromHeaderOf` reads the notice out of that file's own header, between the fdlibm
  * `=====` rules, so the text in THIRD-PARTY-NOTICES.md is quoted from the source rather than
- * retyped. `notice.file` is a licence stored verbatim beside this module.
+ * retyped. `notice.file` is a license stored verbatim as a file: V8's beside this module, and
+ * each typeface's beside its font files, as its package ships it. A font's package and version
+ * are also in `src/game/fonts/README.md`, and the test holds the two to each other.
  */
 export const VENDORED_SOURCES = Object.freeze([
   Object.freeze({
@@ -60,6 +68,59 @@ export const VENDORED_SOURCES = Object.freeze([
     notice: Object.freeze({
       file: 'tools/notices/v8-bsd-license.txt',
       source: 'https://chromium.googlesource.com/v8/v8/+/branch-heads/13.6/LICENSE',
+    }),
+  }),
+  // The typefaces. IBM Plex Sans and Plex Mono are separate packages with separate copyright
+  // years (2019 and 2017), so each keeps its own license file.
+  Object.freeze({
+    name: 'IBM Plex Sans',
+    origin:
+      'the Latin-subset variable woff2 of @fontsource-variable/ibm-plex-sans@5.3.0, ' +
+      'copied unchanged',
+    files: Object.freeze(['src/game/fonts/ibm-plex-sans-latin-wght-normal.woff2']),
+    license: 'OFL-1.1',
+    notice: Object.freeze({ file: 'src/game/fonts/OFL.txt', source: "that package's LICENSE file" }),
+  }),
+  Object.freeze({
+    name: 'IBM Plex Mono',
+    origin:
+      'the Latin-subset 400 and 600 woff2 files of @fontsource/ibm-plex-mono@5.3.0, ' +
+      'copied unchanged',
+    files: Object.freeze([
+      'src/game/fonts/ibm-plex-mono-latin-400-normal.woff2',
+      'src/game/fonts/ibm-plex-mono-latin-600-normal.woff2',
+    ]),
+    license: 'OFL-1.1',
+    notice: Object.freeze({
+      file: 'src/game/fonts/OFL-ibm-plex-mono.txt',
+      source: "that package's LICENSE file",
+    }),
+  }),
+  Object.freeze({
+    name: 'Atkinson Hyperlegible',
+    origin:
+      'the Latin-subset 400 and 700 woff2 files of @fontsource/atkinson-hyperlegible@5.3.0, ' +
+      'copied unchanged',
+    files: Object.freeze([
+      'src/game/fonts/atkinson-hyperlegible-latin-400-normal.woff2',
+      'src/game/fonts/atkinson-hyperlegible-latin-700-normal.woff2',
+    ]),
+    license: 'OFL-1.1',
+    notice: Object.freeze({
+      file: 'src/game/fonts/OFL-atkinson-hyperlegible.txt',
+      source: "that package's LICENSE file",
+    }),
+  }),
+  Object.freeze({
+    name: 'Inter',
+    origin:
+      'the Latin-subset variable woff2 of @fontsource-variable/inter@5.3.0, ' +
+      'copied unchanged',
+    files: Object.freeze(['src/game/fonts/inter-latin-wght-normal.woff2']),
+    license: 'OFL-1.1',
+    notice: Object.freeze({
+      file: 'src/game/fonts/OFL-inter.txt',
+      source: "that package's LICENSE file",
     }),
   }),
 ]);

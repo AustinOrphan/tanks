@@ -146,6 +146,9 @@ describe('src/game/legal-content.ts is generated, not hand-edited', () => {
     // The renderer sets `textContent`, so anything left un-flattened is shown as literal
     // syntax. Each case here is a construct one of the five documents actually uses.
     expect(inlineText('**bold** and `code` and _italic_')).toBe('bold and code and italic');
+    // A code span is literal. CONTENT-LICENSE.md's `src/**` and `tools/**` once lost their
+    // asterisks, the bold pass pairing one span's `**` with the other's.
+    expect(inlineText('`src/**` (other than) `tools/**`')).toBe('src/** (other than) tools/**');
     expect(inlineText('see [`LICENSE`](LICENSE) for terms')).toBe('see LICENSE for terms');
     expect(inlineText('[Play it](https://example.com/x)')).toBe('Play it (https://example.com/x)');
     expect(inlineText('<https://example.com/x>')).toBe('https://example.com/x');

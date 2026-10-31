@@ -1,0 +1,24 @@
+{
+  "id": "notices-font-origin-drifts-from-the-fonts-readme",
+  "file": "tools/notices/vendored.mjs",
+  "find": "'the Latin-subset 400 and 700 woff2 files of @fontsource/atkinson-hyperlegible@5.3.0, ' +",
+  "replace": "'the Latin-subset 400 and 700 woff2 files of @fontsource/atkinson-hyperlegible@5.2.0, ' +",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) gives each typeface the package and version src/game/fonts/README.md records for its files"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/game/fonts/README.md",
+    "src/game/fonts/OFL.txt",
+    "src/game/fonts/OFL-ibm-plex-mono.txt",
+    "src/game/fonts/OFL-atkinson-hyperlegible.txt",
+    "src/game/fonts/OFL-inter.txt"
+  ],
+  "why": "The package version is written twice, in src/game/fonts/README.md's table and in the declaration the notices render from, and the README's update steps are the only thing that keeps them together. A bump that refreshes one leaves the notices citing a package the files did not come from. Scoped to vendored.test.ts alone: generate.test.ts's regenerate-and-diff would also fail, but only until `npm run notices` is run, after which the declaration and the committed notices agree on the mistake."
+}

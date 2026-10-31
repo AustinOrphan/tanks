@@ -141,10 +141,10 @@ describe('the legal block renderer', () => {
 
   it('nests a third-level heading under the second, which the shipped notices exercise', () => {
     // Until #771 no committed document used `###`, so this case alone reached the `h5`
-    // branch. THIRD-PARTY-NOTICES.md's two vendored-source sections (fdlibm and V8) are now
-    // level 3, so the sweep above walks that branch on shipped data. The count is exact, so
-    // re-levelling either section fails here rather than silently leaving the branch to the
-    // fixture below.
+    // branch. THIRD-PARTY-NOTICES.md's six vendored-source sections (fdlibm, V8, and since the
+    // #294 cutover audit the four typefaces) are level 3, so the sweep above walks that branch
+    // on shipped data. The count is exact, so re-levelling any section fails here rather than
+    // silently leaving the branch to the fixture below.
     const deepest = new Map<number, number>();
     for (const doc of LEGAL_DOCUMENTS) {
       for (const block of doc.blocks) {
@@ -152,7 +152,7 @@ describe('the legal block renderer', () => {
       }
     }
     expect(deepest.get(2), 'the shipped documents have level-2 headings').toBeGreaterThan(0);
-    expect(deepest.get(3), 'the vendored-source sections are the shipped level-3 headings').toBe(2);
+    expect(deepest.get(3), 'the vendored-source sections are the shipped level-3 headings').toBe(6);
     expect(legalBlockElement({ kind: 'heading', level: 3, text: 'Sub-clause' }).tagName).toBe('H5');
   });
 

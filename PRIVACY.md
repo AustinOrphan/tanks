@@ -4,7 +4,7 @@ title: Privacy Policy
 
 # Privacy Policy
 
-Last updated: 2026-10-22
+Last updated: 2026-10-31
 
 This policy covers the **Tanks!** browser game (the "game" or "app"), published at
 `austinorphan.com/tanks/`.
@@ -41,8 +41,9 @@ The stored data is organized into the following keys:
 `tanks.settings.v1` replaces an older `tanks.touch.v1` key. The first time you open
 this version of the game, any touch control settings saved under the old key are
 copied into the new one and the old key is deleted. The game never writes
-`tanks.touch.v1` again; it is still accepted when importing a save file exported by
-an older version.
+`tanks.touch.v1` again; a developer session still accepts it when importing a save file
+exported by an older version. An older `tanks.run.v1` key, if present, is deleted unread when the
+game starts.
 
 The settings key stores your **preferences only**. It never records which
 controllers are connected, their identifiers, their slot numbers, or which player is
@@ -55,21 +56,29 @@ If your browser cannot save data &mdash; for example in a private window, or wit
 site storage blocked &mdash; the game still runs, and shows a brief on-screen note
 that settings will not be saved for that session.
 
-You can export and import all of the keys above except `tanks.versus.v1` as a single
-file, and you can reset your settings back to their defaults. Resetting settings does
-not affect campaign progress, statistics, or achievements, and resetting progress does
-not affect settings.
+In Settings, under Data, **Reset stats** sets your lifetime statistics and those of the
+campaign run in progress back to zero, and **Reset progress** clears your campaign
+progress (the levels unlocked in Level Select) and your earned achievements. Neither
+changes your settings or your tank customization. To remove everything the game has
+stored, clear this site's data in your browser's settings.
+
+Developer sessions, opened with `?dev=1`, keep their data under separate keys that
+start with `tanks.dev.`, unless `prodSave=1` asks for the keys above. With `saveIo=1`
+as well, a developer session can export and import all of the keys above except
+`tanks.versus.v1` as a single file, from the browser console. That is a development
+facility; the game has no button for it.
 
 The data is scoped to the game's origin: it is accessible only to the origin
 that serves the game and is unreachable by other sites.
 
 ## Audio and visuals
 
-**Sound is SYNTHESISED.** The game builds audio in real time using the Web Audio API.
-No audio files are downloaded from the network.
+**Sound is synthesized in real time.** The game uses the Web Audio API to generate its
+sound effects and music. No audio files are downloaded from the network.
 
-**Graphics are PROGRAMMED.** All visuals are generated in real time via the Canvas API.
-No external assets (images, models, textures) are downloaded or included.
+**Graphics are drawn in real time** with WebGL, through the Three.js library. The game
+downloads no external images, models or textures; its fonts and icons are served from
+the same site as the game.
 
 ## The website that hosts the game
 
@@ -111,9 +120,8 @@ The game does use a few browser APIs that may be worth noting:
 
 The game is designed for all ages. The game itself collects no personal information
 from any user, including children; what the hosting website's Cloudflare services
-receive is described above. This policy is provided to comply with best practices
-and platform requirements (including the Google Play Developer Policy on app
-privacy), even though the game collects no personal data.
+receive is described above. This policy is published as a matter of good practice,
+even though the game itself collects no personal data.
 
 ## Changes to this policy
 
@@ -122,4 +130,4 @@ If the game's privacy practices change, this policy will be updated accordingly.
 ## Contact
 
 For questions about this policy, open an issue on the
-[Tanks! GitHub repository](https://github.com/AustinOrphan/tanks/issues).
+[Tanks! GitHub repository](https://github.com/AustinOrphan/tanks).
