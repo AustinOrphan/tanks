@@ -2094,8 +2094,8 @@ describe('player identity: ring and shell tint', () => {
   });
 
   it('leaves the shipped ring a RingGeometry when no marker is selected (issue #630)', () => {
-    // The control for the one-mesh case above. `null` is what teams, co-op and single-player
-    // draw, and what the reversal value `solid` resolves to, so it has to leave the geometry the
+    // The control for the one-mesh case above. `null` is what co-op and single-player draw,
+    // and what the reversal value `solid` resolves to, so it has to leave the geometry the
     // shipped one -- not a circle that merely resembles it. A `shape` slot-1 outline is a
     // 48-gon band and would look identical on screen while failing this.
     const scene = new THREE.Scene();

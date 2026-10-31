@@ -402,11 +402,11 @@ export interface DevFlags {
   mineWarn: MineWarnStyle | null;
   /**
    * Which SECOND IDENTITY CHANNEL to draw on the identity ring and the stock strip (issues
-   * #630, #922). A KEPT ROLLBACK LEVER, not an open question: `shape` won on #234 and ships.
-   * The ruled arm is `null` -- absent or unrecognised -- in an FFA session, which draws
-   * `shape`; in teams, co-op and single-player `null` keeps the solid hue-only ring. `solid`
-   * restores the pre-ruling ring, and the strip draws pips with no mark (issue #1022); `shape`
-   * selects itself in any session. `arcs` and `roof` were deleted (issue #1023) and are
+   * #630, #922, #1128). A KEPT ROLLBACK LEVER, not an open question: `shape` won on #234 and
+   * ships. The ruled arm is `null` -- absent or unrecognised -- in an FFA or Teams session,
+   * which draws `shape`; in co-op and single-player `null` keeps the solid hue-only ring.
+   * `solid` restores the pre-ruling ring, and the strip draws pips with no mark (issue #1022);
+   * `shape` selects itself in any session. `arcs` and `roof` were deleted (issue #1023) and are
    * rejected. See `identity-marker-flag.ts` for the resolution and why `solid` is not a
    * drawable style.
    */

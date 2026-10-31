@@ -105,8 +105,8 @@ export interface RendererOptions {
   readonly mineTimer?: boolean;
   /** Experimental mine-warning treatment (`mineWarn` dev flag); absent = shipped default. */
   readonly mineWarn?: MineWarnStyle | null;
-  /** Second identity channel (issues #630, #922), already resolved by the game layer: an
-   *  FFA session passes the shipped `shape`; absent = the solid hue-only ring. */
+  /** Second identity channel (issues #630, #922, #1128), already resolved by the game layer:
+   *  an FFA or Teams session passes the shipped `shape`; absent = the solid hue-only ring. */
   readonly identityMarker?: IdentityMarkerStyle | null;
   /** Experimental non-colour role cue (`enemyRole` dev flag, issues #357/#773); absent =
    *  the shipped board, where what a tank does is carried by hue alone. */
