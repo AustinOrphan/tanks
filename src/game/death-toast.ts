@@ -15,9 +15,9 @@ import type { FrameEvent } from './driver';
  * player at that moment depends on the session:
  *
  *  - VERSUS (FFA and teams) already names every death without color. Each stock strip entry
- *    is labeled `P<n>` (with the team letter under teams, and drawn as the slot's shape marks
- *    under FFA), every death lowers that slot's stock, the final one included, and the unit
- *    that just emptied carries the stock-loss cue; the live region says "Player N lost a
+ *    is labeled `P<n>` (with the team letter under teams) and drawn as the slot's shape marks,
+ *    every death lowers that slot's stock, the final one included, and the unit that just
+ *    emptied carries the stock-loss cue; the live region says "Player N lost a
  *    stock. N remaining." (issue #629), one sentence per status push. A toast there would
  *    write a second sentence into the same live region for the same death, so versus is left
  *    alone.
@@ -28,7 +28,7 @@ import type { FrameEvent } from './driver';
  * So a co-op session at two or more player tanks raises a toast for a player tank that dies,
  * naming its slot: "P2 out". The ruling on #925 (2026-10-13, re-ruled 2026-10-24 to name the
  * player who died rather than the killer) asked for the slot's shape marker as well. Co-op
- * draws no shape marker anywhere -- `identity-marker-flag.ts` ships `shape` to FFA only -- so
+ * draws no shape marker anywhere -- `identity-marker-flag.ts` ships `shape` to versus only -- so
  * a shape here would pair with nothing on the board; the slot number, which the controller
  * assignment and the stock strip both use, is the channel. Single-player keeps its classic
  * red vignette and its "Life lost" sentence exactly as before: one player, nobody to tell

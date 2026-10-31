@@ -1,18 +1,20 @@
 /**
  * How the versus stock strip draws each player's stocks, and how it marks one just lost
- * (issues #230, #1022).
+ * (issues #230, #1022, #1128).
  *
- * THE RULING ON #230 SHIPPED `marks`: an FFA entry draws one copy of its slot's own identity
+ * THE RULING ON #230 SHIPPED `marks`: an entry draws one copy of its slot's own identity
  * outline (issue #234's `shape`: circle, triangle, square, starburst) per stock the match started
  * with, held ones filled and lost ones hollow, so one channel states both which player and how
  * many stocks are left, and the row replaces the separate leading mark. The accepted risk is the
  * one the comparison named: a count wants uniform simple units and identity wants distinct ones,
  * so five starbursts in a row may read as texture rather than as a number. The comparison's other
- * arms, `strike` and `badge`, went with its `?dev=1&stockCue=` flag (issue #1022).
+ * arms, `strike` and `badge`, went with its `?dev=1&stockCue=` flag (issue #1022). Since issue
+ * #1128 a Teams entry draws the same row after its A/B/C letter: the outline says which player,
+ * and the letter and the team color say which side.
  *
  * `pips` STAYS, AS A DRAWING ROUTINE AND NOT AS A CHOICE: the same row with a neutral dot for its
- * unit. It is what a teams entry draws beside its A/B/C letter, and what an FFA entry draws when
- * the identity marker is not `shape`. `stockRowFor` is the one rule that picks between them.
+ * unit. It is what every entry, FFA or Teams, draws when the identity marker is not `shape`.
+ * `stockRowFor` is the one rule that picks between them.
  *
  * Every entry marks a loss the same way: the unit that just emptied swells, and the
  * reduced-motion form keeps the information and drops the movement (`hud.css`).
@@ -26,28 +28,28 @@ import type { IdentityMarkerStyle } from './identity-marker';
 export type StockRow = 'marks' | 'pips';
 
 /**
- * Which row draws one stock entry, the strip's one rule (issue #1022): `marks` for an entry with
- * no team whose resolved marker is `shape`, and `pips` for every other combination.
+ * Which row draws one stock entry, the strip's one rule (issues #1022, #1128): `marks` when the
+ * resolved marker is `shape`, and `pips` when there is none, for an FFA and a Teams entry alike.
  *
  * `marker` is the HUD's resolved `identityMarker` option. The page's HUD is handed `shape` when
  * the flag is absent or names it, and `null` for the reversal value `solid`
  * (`identity-marker-flag.ts`); an injected HUD built without the option has `null`.
  *
- *  - A TEAMS ENTRY DRAWS PIPS. `marks` spends the SLOT's outline, and a teams player shares a
- *    side, not a slot: two teammates in one colour drawn with two outlines would claim to be
- *    different sides, and the A/B/C letter beside the number already answers the question the
- *    outline would ask (PR #836's fallback, a week before the ruling).
  *  - NO MARKER DRAWS PIPS. The ruling reserved `marks` for a `shape` marker that is on by
  *    default, so that the strip's outlines never appear without the ground ring's. With the
  *    marker reversed (`?dev=1&identityMarker=solid`) there is no outline on the ground to pair
  *    with. `shape` is the one style since issue #1023 deleted `arcs` and `roof`, so a non-null
- *    marker is `shape`.
- *
- * Both readings are derived from the code and the ruling's own condition rather than ruled on
- * directly, and a later ruling can reverse either.
+ *    marker is `shape`. That reading is derived from the ruling's own condition rather than
+ *    ruled on directly.
+ *  - THE TEAM DOES NOT ENTER, RULED 2026-10-31 (#1128). Until then a Teams entry drew pips
+ *    whatever the marker: `marks` spends the SLOT's outline, and two teammates in one color
+ *    drawn with two outlines were read as claiming to be different sides (PR #836's fallback).
+ *    The ruling reads the two as separate channels instead: the outline says which player, and
+ *    the letter and the color say which side, so a teammate's outline in the strip pairs with
+ *    the same outline on that tank's ring.
  */
-export function stockRowFor(team: number | undefined, marker: IdentityMarkerStyle | null): StockRow {
-  return team === undefined && marker === 'shape' ? 'marks' : 'pips';
+export function stockRowFor(marker: IdentityMarkerStyle | null): StockRow {
+  return marker === 'shape' ? 'marks' : 'pips';
 }
 
 /**
@@ -99,13 +101,15 @@ export const STOCK_CUE_MS = 700;
  * Only consulted on a narrow viewport. At desktop widths the strip has room and every row draws
  * at its full size.
  *
- * A TEAMS ENTRY IS LAID OUT BY THIS SAME RULE (issue #1055). Every teams entry draws pips
- * (`stockRowFor`), after a `P1 A ` label, so it carries a space and a letter the table above
- * never measured. Measured on the real HUD at a 390px viewport
- * (`tools/hud/strip-width.mjs`), lettered A, B, A, B, the widest split: the letter fits at every
- * rung this rule already takes, so a teams entry needs no rule of its own. Spare is the room left
- * inside the topbar's content box, which ends at 380px. Teams is offered at three and four
- * players only, so these 10 configurations are the whole population:
+ * A TEAMS ENTRY IS LAID OUT BY THIS SAME RULE (issue #1055). A teams entry draws pips after a
+ * `P1 A ` label, so it carries a space and a letter the table above never measured. Since issue
+ * #1128 that is the reversed marker's teams strip (`?dev=1&identityMarker=solid`); under the
+ * shipped `shape` a teams entry draws marks, laid out by `narrowMarkLayout`. Measured on the real
+ * HUD at a 390px viewport (`tools/hud/strip-width.mjs`), lettered A, B, A, B, the widest split:
+ * the letter fits at every rung this rule already takes, so a teams entry needs no rule of its
+ * own. Spare is the room left inside the topbar's content box, which ends at 380px. Teams is
+ * offered at three and four players only, so these 10 configurations are the whole population
+ * (re-measured 2026-10-31 under the reversed marker, every figure unchanged):
  *
  *   slots  stocks        rung   strip px   spare px
  *     3      1          10/3      163.2      166.6
@@ -163,8 +167,9 @@ export type PipLayout =
 
 /**
  * How the `marks` row draws one entry on a narrow viewport, for a strip of `slots` entries each
- * holding `total` stocks: at the stylesheet's own size, as a smaller row, or as the crowded
- * fallback (issue #1021) -- the `marks` analogue of `narrowPipLayout` above.
+ * holding `total` stocks, `lettered` when the entry is a Teams entry carrying its A/B/C letter:
+ * at the stylesheet's own size, as a smaller row, or as the crowded fallback (issues #1021,
+ * #1128) -- the `marks` analogue of `narrowPipLayout` above.
  *
  * MEASURED, NOT DERIVED: real Chromium layout at a 390px viewport against the real stylesheet,
  * on the page and budget `tools/hud/strip-width.mjs` then used for the pips table (254.1px, the
@@ -194,16 +199,42 @@ export type PipLayout =
  * the four outlines read apart under. The fallback is #838's: one full-size mark, then the
  * count as a digit, which keeps the slot's outline and gives the loss cue its target.
  *
+ * A TEAMS ENTRY IS `lettered` (issue #1128): it draws the same row after a `P1 A ` label, a
+ * space and a letter wider than the FFA entry the table above was chosen from. Measured on the
+ * real HUD at a 390px viewport (`tools/hud/strip-width.mjs`), lettered A, B, A, B, the widest
+ * split; spare is the room left inside the topbar's content box, which ends at 380px. Teams is
+ * offered at three and four players only, so these 10 configurations are the whole population:
+ *
+ *   slots  stocks        rung   strip px   spare px
+ *     3      1          full      163.0      166.9
+ *     3      2          full      198.7      131.1
+ *     3      3          full      234.4       95.4
+ *     3      4          full      270.1       59.7
+ *     3      5          full      305.8       24.0
+ *     4      1          full      220.6      109.2
+ *     4      2          full      268.2       61.6
+ *     4      3          full      315.8       14.0
+ *     4      4     one+digit      275.0       54.8
+ *     4      5     one+digit      275.0       54.8
+ *
+ * The letter costs exactly one rung. Four players at four stocks overflows the 8/2 row FFA takes
+ * by 3.2px (333.0px of strip), so a lettered entry falls back there, as it does at five. An 8/1
+ * row would fit, with 8.8px to spare, and was passed over for the reason the 1px gap is passed
+ * over above, and because the one-unit fallback is what the reversed marker's teams strip draws
+ * at four by four too (`narrowPipLayout`), so the two teams strips agree there.
+ *
  * Only consulted on a narrow viewport; the desktop strip draws every mark at its full size.
- * Measured at the default UI scale (100%) only. Since #1048 `.hud-versus-stocks` is sized
- * `calc(1rem * var(--hud-ui-scale))` (`hud.css`), and the full-size marks follow it in `em`; at
- * scale 1 that is numerically the `1rem` this table was measured against, so it holds there.
+ * Measured at the default UI scale (100%) only, the teams table included. Since #1048
+ * `.hud-versus-stocks` is sized `calc(1rem * var(--hud-ui-scale))` (`hud.css`), and the
+ * full-size marks follow it in `em`; at scale 1 that is numerically the `1rem` these tables were
+ * measured against, so they hold there.
  * At 125% and 150% the `em`-sized marks grow while the `px`-sized narrow row does not, and
  * nothing has measured either scale on a phone.
  */
-export function narrowMarkLayout(slots: number, total: number): MarkLayout {
+export function narrowMarkLayout(slots: number, total: number, lettered: boolean): MarkLayout {
   if (slots <= 3 || total <= 3) return { kind: 'full' };
-  if (total === 4) return { kind: 'row', mark: 8, gap: 2 };
+  // A Teams entry's letter is the 3.2px the 8/2 row overflows by; it falls back as at five.
+  if (total === 4 && !lettered) return { kind: 'row', mark: 8, gap: 2 };
   return { kind: 'one' };
 }
 

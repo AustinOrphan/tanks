@@ -13,7 +13,7 @@
     "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) four players at five stocks: ONE full-size mark and the count, and the cue still has a target",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) the fallback mark goes hollow once the player is out",
     "hud: stock-loss cue arms (issue #230) a rematch that resets stocks upward is not a loss, and starts a new pip count",
-    "hud: stock-loss cue arms (issue #230) a teams entry on a narrow viewport (issue #1055) four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
+    "hud: stock-loss cue arms (issue #230) a teams entry's pips on a narrow viewport (issue #1055) four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
     "hud: stock-loss cue arms (issue #230) marks: a cue is gone once STOCK_CUE_MS has passed",
     "hud: stock-loss cue arms (issue #230) marks: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
     "hud: stock-loss cue arms (issue #230) marks: a rebuild with no new status after STOCK_CUE_MS -- a pause -- draws no cue",

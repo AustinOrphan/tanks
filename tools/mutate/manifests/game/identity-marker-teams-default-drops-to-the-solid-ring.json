@@ -1,0 +1,16 @@
+{
+  "id": "identity-marker-teams-default-drops-to-the-solid-ring",
+  "file": "src/game/identity-marker-flag.ts",
+  "find": "  return mode === 'ffa' || mode === 'teams' ? SHIPPED_VERSUS_IDENTITY_MARKER : null;",
+  "replace": "  return mode === 'ffa' ? SHIPPED_VERSUS_IDENTITY_MARKER : null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Teams sessions draw no marker again (issue #1128): an unflagged Teams match goes back to the solid ring in team colors, so two teammates on the arena are told apart by nothing, while the page's stock strip, which `stripIdentityMarker` resolves as an FFA session would, still draws each player's shape marks. The strip and the ground then disagree, the one thing #1022 reserved `marks` against. FFA, co-op and single-player all stay green, so only a Teams cell can see it.",
+  "killedBy": [
+    "sessionIdentityMarker: what a session renderer draws (issue #922) draws the shipped `shape` marker in an unflagged Teams session (issue #1128)",
+    "startGameWith: dev flags stay off by default the shipped identity marker reaches versus sessions only (issues #922, #1128) draws `shape` in a Teams match, from the Versus Setup pane and from ?dev=1&mode=teams&players=4 (issue #1128)"
+  ]
+}

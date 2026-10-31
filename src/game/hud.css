@@ -3742,7 +3742,7 @@
   display: none;
 }
 
-/* ---- Identity-shaped stocks (issue #230's `marks` row, the FFA strip) ----------- */
+/* ---- Identity-shaped stocks (issue #230's `marks` row; FFA, and Teams since #1128) */
 
 /* Marks: `pips`, with the dot replaced by this slot's own identity outline (#234's
  * `shape`). Held stocks are filled, lost ones hollow -- the same read the pip gets from its
@@ -3811,8 +3811,8 @@
  * as wide as its radius, with an inset shadow over the hole a floored border leaves; a hollow
  * one is a thin border. */
 
-/* Pips: one per starting stock, drawn for a teams entry and for an FFA entry under any marker
- * but `shape` (`stockRowFor` in `presentation/stock-cue.ts`). The pip just lost swells, bursts a
+/* Pips: one per starting stock, drawn for every entry, FFA or Teams, under any marker but
+ * `shape` (`stockRowFor` in `presentation/stock-cue.ts`). The pip just lost swells, bursts a
  * ring, and empties.
  *
  * `--hud-pip` and `--hud-pip-gap` default to the full size and are overridden per strip on a

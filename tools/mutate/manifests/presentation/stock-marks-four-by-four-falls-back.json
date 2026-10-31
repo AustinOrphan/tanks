@@ -1,8 +1,8 @@
 {
   "id": "stock-marks-four-by-four-falls-back",
   "file": "src/presentation/stock-cue.ts",
-  "find": "  if (total === 4) return { kind: 'row', mark: 8, gap: 2 };\n",
-  "replace": "  if (total === 4) return { kind: 'one' };\n",
+  "find": "  if (total === 4 && !lettered) return { kind: 'row', mark: 8, gap: 2 };\n",
+  "replace": "  if (total === 4 && !lettered) return { kind: 'one' };\n",
   "expect": "killed",
   "tests": [
     "src/presentation/stock-cue.test.ts",
@@ -13,6 +13,8 @@
     "stock cue: mark sizing on a narrow viewport (issue #1021) matches the measured table in every one of the 15 configurations",
     "stock cue: mark sizing on a narrow viewport (issue #1021) THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there",
     "stock cue: mark sizing on a narrow viewport (issue #1021) shrinks four players at four stocks to an 8px row, not a fallback",
-    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) four players at four stocks: a row of 8px marks with a 2px gap"
+    "stock cue: a teams entry's marks on a narrow viewport (issue #1128) differs from the FFA table at four players and four stocks alone",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) four players at four stocks: a row of 8px marks with a 2px gap",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry falls back to ONE mark and the count at four players and four stocks, where FFA keeps the 8px row (issue #1128)"
   ]
 }

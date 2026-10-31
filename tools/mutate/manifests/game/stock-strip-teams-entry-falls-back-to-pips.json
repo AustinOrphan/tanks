@@ -1,0 +1,21 @@
+{
+  "id": "stock-strip-teams-entry-falls-back-to-pips",
+  "file": "src/game/hud.ts",
+  "find": "      const row = stockRowFor(identityMarker);",
+  "replace": "      const row = entry.team === undefined ? stockRowFor(identityMarker) : 'pips';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The Teams strip falls back to pips (issue #1128): the pre-ruling per-entry exception comes back at the HUD, so a Teams entry under the shipped `shape` draws neutral dots beside its letter while that player's ring carries its shape. The strip stops saying which player is which in Teams, the half of the ruling the stock strip carries. The FFA strip stays green, and so does `stockRowFor` itself, which no longer sees the team.",
+  "killedBy": [
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry keeps its letter and full-size marks where they fit: 4x3 and 3x5 (issue #1128)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry falls back to ONE mark and the count at four players and four stocks, where FFA keeps the 8px row (issue #1128)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry falls back at four players and five stocks too, as FFA does (issue #1128)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) THE CONTROL for the narrow cases: the desktop strip draws every mark at full size",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) a teams entry under `shape` (issue #1128) draws every entry as its OWN slot's marks, after its letter, in its team's color -- population: 5 splits, 18 entries",
+    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn",
+    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped identity mark for FFA and Teams entries, and none for the reversal value (issues #922, #1128)"
+  ]
+}

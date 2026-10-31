@@ -1390,8 +1390,8 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Br
         // keeps `null`, which draws pips with no mark. RESOLVED, not passed through (issue
         // #922): the page's HUD gets the shipped `shape`, and so the `marks` row, with the flag
         // absent, and pips with no mark for `solid`. It resolves with no session mode because
-        // its own per-entry rule already gives teams entries pips and no mark; the renderer
-        // resolves per session in `startGameWith`. See identity-marker-flag.ts.
+        // only versus carries a strip, and FFA and Teams resolve alike (issue #1128); the
+        // renderer resolves per session in `startGameWith`. See identity-marker-flag.ts.
         identityMarker: stripIdentityMarker(devFlags.identityMarker),
         // Issue #243's developer shell. The EFFECTIVE GATE, read from the same `search`
         // the flags came from: `parseDevFlags` returns `DEV_FLAGS_OFF` for a bare
@@ -2091,8 +2091,8 @@ export function startGameWith(
     blockedFire: deps.devFlags.blockedFire,
     mineTimer: deps.devFlags.mineTimer,
     mineWarn: deps.devFlags.mineWarn,
-    // Issue #922: the shipped `shape` marker for an unflagged FFA session, and the solid
-    // ring everywhere else unless a style is named. Resolved from THIS session's mode, which
+    // Issues #922, #1128: the shipped `shape` marker for an unflagged FFA or Teams session,
+    // and the solid ring everywhere else unless a style is named. Resolved from THIS session's mode, which
     // the setup pane (`applyVersusToDeps`) or `?dev=1&mode=` has already put on its flags.
     identityMarker: sessionIdentityMarker(deps.devFlags.identityMarker, deps.devFlags.mode),
     shellTrail: deps.devFlags.shellTrail,

@@ -1,0 +1,17 @@
+{
+  "id": "stock-marks-teams-four-by-four-draws-the-ffa-row",
+  "file": "src/presentation/stock-cue.ts",
+  "find": "total === 4 && !lettered",
+  "replace": "total === 4",
+  "expect": "killed",
+  "tests": [
+    "src/presentation/stock-cue.test.ts",
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The narrow marks rule ignores the team letter (issue #1128), so a lettered entry at four players and four stocks takes the FFA 8/2 row. Measured on the real HUD at 390px, that teams strip is 333.0px and ends 3.2px past the topbar's content edge, so the last entry clips. Every FFA cell stays green; only the lettered table can see it.",
+  "killedBy": [
+    "stock cue: a teams entry's marks on a narrow viewport (issue #1128) takes the rung measured to hold the letter in every one of the 10 teams configurations",
+    "stock cue: a teams entry's marks on a narrow viewport (issue #1128) THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry falls back to ONE mark and the count at four players and four stocks, where FFA keeps the 8px row (issue #1128)"
+  ]
+}

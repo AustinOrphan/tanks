@@ -1710,18 +1710,16 @@ export interface HudOptions {
    */
   readonly versusActions?: VersusActionLayout | null;
   /**
-   * The identity marker the stock strip pairs with the arena's (issues #778, #922, #1022): the
-   * RESOLVED style, which picks each entry's row through `stockRowFor`. `shape` draws an FFA
-   * entry as the `marks` row, one copy of the slot's own outline per stock; `null` (and absent,
-   * which is every injected HUD) draws pips, with identity in hue alone. The page's HUD is
-   * handed the shipped `shape` here unless the flag says otherwise: `loop.ts` resolves the flag
-   * before this option sees it, so the default lives in `identity-marker-flag.ts`, not in this
-   * file.
+   * The identity marker the stock strip pairs with the arena's (issues #778, #922, #1022,
+   * #1128): the RESOLVED style, which picks each entry's row through `stockRowFor`. `shape`
+   * draws every entry, FFA or Teams, as the `marks` row, one copy of the slot's own outline per
+   * stock; `null` (and absent, which is every injected HUD) draws pips, with identity in hue
+   * alone. The page's HUD is handed the shipped `shape` here unless the flag says otherwise:
+   * `loop.ts` resolves the flag before this option sees it, so the default lives in
+   * `identity-marker-flag.ts`, not in this file.
    *
-   * FFA ONLY, which is the owner's direction on #234: a teams entry draws pips and no mark
-   * whatever this says. It already carries a second non-colour channel -- the A/B/C letter
-   * beside the player number -- so a mark there would be a third name for a side the reader has
-   * already been told twice.
+   * A Teams entry keeps its A/B/C letter under either row: the outline says which player, and
+   * the letter and the team color say which side (ruled 2026-10-31, #1128).
    */
   readonly identityMarker?: IdentityMarkerStyle | null;
   /**
@@ -3479,9 +3477,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // screenshot all lose the hue and keep the letter. Same A/B/C the setup pane's team
       // selector shows, so the readout and the control that set it agree.
       const teamMark = entry.team !== undefined ? ` ${TEAM_LABELS[entry.team] ?? '?'}` : '';
-      // The strip's one rule (issue #1022): the `marks` row for an FFA entry under `shape`, pips
-      // for every other entry. See `stockRowFor`.
-      const row = stockRowFor(entry.team, identityMarker);
+      // The strip's one rule (issues #1022, #1128): the `marks` row under `shape`, pips under no
+      // marker, for an FFA and a Teams entry alike; a Teams entry keeps its letter before either.
+      // See `stockRowFor`.
+      const row = stockRowFor(identityMarker);
       const started = stockCueStarts.get(entry.slot);
       const running = started !== undefined && now - started.at < STOCK_CUE_MS ? started : null;
       fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, row, running, now, stocks.length);
@@ -3653,8 +3652,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     const total = Math.max(stockBaseline.get(entry.slot) ?? entry.stock, entry.stock);
     // ISSUE #1021, the `marks` half of #835: on a narrow viewport the row is sized from the
     // measured table in `stock-cue.ts`, and where no row of legible marks fits -- four
-    // players at five stocks -- the entry keeps ONE mark and states the count as a digit.
-    const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };
+    // players at five stocks -- the entry keeps ONE mark and states the count as a digit. A
+    // Teams entry is measured with its letter (issue #1128), which costs it the 8px row at four.
+    const layout: MarkLayout = isNarrowViewport()
+      ? narrowMarkLayout(slots, total, entry.team !== undefined)
+      : { kind: 'full' };
     const marks = document.createElement('span');
     marks.className = 'hud-stock-marks';
     if (layout.kind === 'row') {

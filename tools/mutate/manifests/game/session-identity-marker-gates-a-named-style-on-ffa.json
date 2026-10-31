@@ -12,6 +12,6 @@
   "killedBy": [
     "sessionIdentityMarker: what a session renderer draws (issue #922) draws `shape`, named, in every mode -- population: 4 modes",
     "startGameWith: dev flags stay off by default threads the identityMarker dev flag through to the renderer (issue #630)",
-    "startGameWith: dev flags stay off by default the shipped FFA identity marker reaches FFA sessions only (issue #922) draws the solid ring in an FFA session for the reversal value, and a named style in any mode"
+    "startGameWith: dev flags stay off by default the shipped identity marker reaches versus sessions only (issues #922, #1128) draws the solid ring in FFA and Teams sessions for the reversal value, and a named style in co-op"
   ]
 }

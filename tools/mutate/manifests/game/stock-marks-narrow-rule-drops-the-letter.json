@@ -1,0 +1,14 @@
+{
+  "id": "stock-marks-narrow-rule-drops-the-letter",
+  "file": "src/game/hud.ts",
+  "find": "      ? narrowMarkLayout(slots, total, entry.team !== undefined)",
+  "replace": "      ? narrowMarkLayout(slots, total, false)",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts"
+  ],
+  "why": "The HUD stops telling the narrow marks rule an entry carries its team letter (issue #1128), so a four-player Teams strip at four stocks on a phone takes the FFA 8px row, measured on the real HUD at 390px 3.2px past the topbar's content edge: the last entry clips. stock-cue.test.ts stays green, because the rule itself is untouched; only a Teams case driven through the narrow-viewport seam can see it.",
+  "killedBy": [
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry falls back to ONE mark and the count at four players and four stocks, where FFA keeps the 8px row (issue #1128)"
+  ]
+}
