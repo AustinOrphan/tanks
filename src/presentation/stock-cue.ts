@@ -2,7 +2,7 @@
  * How the versus stock strip draws each player's stocks, and how it marks one just lost
  * (issues #230, #1022, #1128).
  *
- * THE RULING ON #230 SHIPPED `marks`: an FFA entry draws one copy of its slot's own identity
+ * THE RULING ON #230 SHIPPED `marks`: an entry draws one copy of its slot's own identity
  * outline (issue #234's `shape`: circle, triangle, square, starburst) per stock the match started
  * with, held ones filled and lost ones hollow, so one channel states both which player and how
  * many stocks are left, and the row replaces the separate leading mark. The accepted risk is the
