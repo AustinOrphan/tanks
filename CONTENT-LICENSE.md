@@ -40,31 +40,33 @@ apply, the more specific one wins.
 its verification remain the authoritative third-party notice path — this notice does not
 restate, override or relicense any of it.
 
-**Third-party source vendored into `src/`** is third-party first too. These files are ports
-of other projects' code, and each carries its original notice in its header:
+**Third-party source vendored into `src/`** is third-party first too. The `src/sim/math` files
+are ports of other projects' code, each carrying its original notice in its header. The font
+files are other projects' typefaces, with their license texts beside them:
 
 | Path | Origin | Notice |
 | --- | --- | --- |
 | `src/sim/math/trig.ts` | fdlibm (netlib), with two V8-authored expressions | fdlibm permission notice; V8 BSD-3-Clause |
 | `src/sim/math/rem-pio2.ts` | fdlibm (netlib), with one V8-authored expression | fdlibm permission notice; V8 BSD-3-Clause |
 | `src/sim/math/hypot.ts` | V8 (`src/builtins/math.tq`), transliterated | V8 BSD-3-Clause |
+| `src/game/fonts/**` | IBM Plex Sans, IBM Plex Mono, Atkinson Hyperlegible and Inter, Latin subsets from @fontsource | SIL OFL 1.1; license texts beside the files (`OFL.txt`, `OFL-ibm-plex-mono.txt`, `OFL-atkinson-hyperlegible.txt`, `OFL-inter.txt`) |
 
-`LICENSE` does not relicense the ported code in them. The list is declared in
+`LICENSE` does not relicense the ported code or the typefaces. The list is declared in
 `tools/notices/vendored.mjs`, and a test fails when a file with a third-party provenance
-marker is missing from it.
+marker, or a font file under `src/game/fonts/`, is missing from it.
 
 **Then reserved content:**
 
 | Path | Why |
 | --- | --- |
-| `public/icons/**`, `public/favicon.svg` | branding and product marks |
+| `public/icons/**`, `public/favicon.svg`, `public/share-image.png` | branding, product marks and promotional media |
 | `public/audio/**` | audio (no audio is committed today — see [`CREDITS.md`](CREDITS.md)) |
 | `src/sim/config/data/arenas.json`, `campaign.json`, `versus-catalog.json` | level, arena and map content |
 | `docs/**` prose, and screenshots or captures referenced from it | narrative, copy and media |
 | Product names and logos wherever they appear | branding |
 
 **Everything else is code**, and is licensed under `LICENSE`: `src/**` (other than the
-content data and the vendored source named above), `tools/**`, `tests`, build
+content data, and the vendored source and typefaces named above), `tools/**`, `tests`, build
 configuration, and repository tooling.
 
 **Two boundary cases, stated so they are not judgement calls:**

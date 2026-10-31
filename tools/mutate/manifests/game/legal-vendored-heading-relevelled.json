@@ -10,5 +10,5 @@
   "killedBy": [
     "the legal block renderer nests a third-level heading under the second, which the shipped notices exercise"
   ],
-  "why": "The two vendored-source sections are the only shipped level-3 headings, so they are what walks the renderer's h5 branch on real data. Scoped to legal.test.ts alone, so the regenerate-and-diff test cannot be what kills it: re-levelling one must fail the exact count, rather than leaving that branch to the fixture case again without a word."
+  "why": "The six vendored-source sections (fdlibm, V8 and, since the #294 cutover audit, four typefaces) are the only shipped level-3 headings, so they are what walks the renderer's h5 branch on real data. Scoped to legal.test.ts alone, so the regenerate-and-diff test cannot be what kills it: re-levelling one must fail the exact count, rather than leaving that branch to the fixture case again without a word."
 }

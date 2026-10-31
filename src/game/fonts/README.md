@@ -3,7 +3,7 @@
 Vendored rather than depended on, because these files are the whole of what ships and a
 package that resolves them adds a build-time dependency for no runtime benefit.
 
-## Shipped
+## Loaded by default
 
 | File | Family | Weights | Source |
 | --- | --- | --- | --- |
@@ -16,6 +16,10 @@ package that resolves them adds a build-time dependency for no runtime benefit.
 Reached only through `?dev=1&hudFont=atkinson` or `=inter`, and **not downloaded otherwise** --
 a `@font-face` whose family no matched rule asks for is never fetched. That is verified in a
 real browser rather than assumed; see the issue.
+
+Not fetched is not the same as not shipped. The build still emits these three files into
+`dist/` and the site serves them, so their licenses travel with the site just as the
+default faces' do: `THIRD-PARTY-NOTICES.md` and `CREDITS.md` cover all six files.
 
 | File | Family | Weights | Source |
 | --- | --- | --- | --- |
@@ -30,12 +34,14 @@ offers, and a developer arm is for looking at the face as it is.
 Latin subsets only. The game ships no other script, and the full files are several times the
 size for glyphs nothing renders.
 
-All three families are released under the SIL Open Font License 1.1, which permits bundling and
+All four families are released under the SIL Open Font License 1.1, which permits bundling and
 redistribution. Each package carries its own copyright line, so each licence is kept whole and
-separate: `OFL.txt` (IBM Plex), `OFL-atkinson-hyperlegible.txt`, `OFL-inter.txt`. Keep them
-beside the files.
+separate, as the package ships it: `OFL.txt` (IBM Plex Sans), `OFL-ibm-plex-mono.txt`,
+`OFL-atkinson-hyperlegible.txt`, `OFL-inter.txt`. Keep them beside the files. Each is declared
+in `tools/notices/vendored.mjs`, which renders it into `THIRD-PARTY-NOTICES.md`.
 
-To update, install the package at the new version, copy the same files, and refresh the
-versions above. Then **regenerate the screen baselines**: a new version can change metrics, and
+To update, install the package at the new version, copy the same files and its `LICENSE`, and
+refresh the versions above and in `tools/notices/vendored.mjs`; then run `npm run notices` and
+`npm run legal`. Then **regenerate the screen baselines**: a new version can change metrics, and
 metric stability is the reason these are bundled at all — see `tools/screens/README.md`,
 "The required gate, decided".

@@ -113,9 +113,11 @@ describe('vendored third-party source (issue #771)', () => {
 
   it('names every vendored file in CONTENT-LICENSE.md, which would otherwise class it as first-party code', () => {
     const license = readFileSync(join(ROOT, 'CONTENT-LICENSE.md'), 'utf8');
-    expect(unnamedIn(license, vendoredFiles())).toEqual([]);
+    expect(unnamedIn(license, vendoredFiles().filter((f) => !f.startsWith('src/game/fonts/')))).toEqual([]);
     // Negative control: the same document with hypot.ts's code span removed.
     const withoutHypot = license.replaceAll('`src/sim/math/hypot.ts`', 'hypot');
-    expect(unnamedIn(withoutHypot, vendoredFiles())).toEqual(['src/sim/math/hypot.ts']);
+    expect(unnamedIn(withoutHypot, vendoredFiles().filter((f) => !f.startsWith('src/game/fonts/')))).toEqual([
+      'src/sim/math/hypot.ts',
+    ]);
   });
 });

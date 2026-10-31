@@ -1,4 +1,6 @@
-# Audio Credits
+# Credits
+
+## Audio
 
 **No third-party audio assets are currently committed to this repository.**
 `public/audio/` contains only a `.gitkeep` placeholder — there are no `.wav`
@@ -27,7 +29,7 @@ the live one; the difference between effects and music still matters:
 Both are authored as code, which is a deliberate consequence of the policy
 below: nothing to licence, nothing to verify, and no AI-generated audio.
 
-## Licensing policy for future assets
+## Licensing policy for future audio assets
 
 When real audio assets are sourced and committed, they must be dropped into
 `public/audio/` and re-declared in `AUDIO_MANIFEST` — `AUTHORED_LAYOUT` in the same
@@ -55,3 +57,19 @@ for a file that has not actually been committed.
 |                       |        |         |
 
 _(Tables intentionally empty — no assets have been sourced yet.)_
+
+## Typefaces
+
+IBM Plex Sans and IBM Plex Mono are the HUD's typefaces. Inter and Atkinson Hyperlegible ship
+in the build too, but a page loads them only under the developer arms `?dev=1&hudFont=inter`
+and `?dev=1&hudFont=atkinson`. The copyright line of each:
+
+- **IBM Plex Sans:** Copyright 2019 IBM Corp. All rights reserved.
+- **IBM Plex Mono:** Copyright 2017 IBM Corp. All rights reserved.
+- **Atkinson Hyperlegible:** Copyright 2020 Braille Institute of America, Inc.
+- **Inter:** Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+
+All four are released under the SIL Open Font License 1.1. Each license text is kept in full
+beside the font files in `src/game/fonts/` (`OFL.txt`, `OFL-ibm-plex-mono.txt`,
+`OFL-atkinson-hyperlegible.txt` and `OFL-inter.txt`) and reproduced in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

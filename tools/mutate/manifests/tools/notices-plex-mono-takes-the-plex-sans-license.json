@@ -1,0 +1,24 @@
+{
+  "id": "notices-plex-mono-takes-the-plex-sans-license",
+  "file": "tools/notices/vendored.mjs",
+  "find": "      file: 'src/game/fonts/OFL-ibm-plex-mono.txt',\n",
+  "replace": "      file: 'src/game/fonts/OFL.txt',\n",
+  "expect": "killed",
+  "tests": [
+    "tools/notices/vendored.test.ts"
+  ],
+  "killedBy": [
+    "vendored third-party source (issue #771) stores each typeface's SIL Open Font License whole, under that face's own copyright line"
+  ],
+  "reads": [
+    "CONTENT-LICENSE.md",
+    "THIRD-PARTY-NOTICES.md",
+    "tools/notices/v8-bsd-license.txt",
+    "src/game/fonts/README.md",
+    "src/game/fonts/OFL.txt",
+    "src/game/fonts/OFL-ibm-plex-mono.txt",
+    "src/game/fonts/OFL-atkinson-hyperlegible.txt",
+    "src/game/fonts/OFL-inter.txt"
+  ],
+  "why": "Points IBM Plex Mono at IBM Plex Sans's license file, the arrangement the fonts shipped with before the #294 cutover audit: the same OFL text under the wrong copyright line (Sans says 2019, Mono's own package says 2017). Every rendered section still carries a whole OFL, so only a check that spells each face's copyright line literally can tell. Scoped to vendored.test.ts alone: generate.test.ts's regenerate-and-diff would also fail, but only until `npm run notices` is run, after which the declaration and the committed notices agree on the mistake."
+}
