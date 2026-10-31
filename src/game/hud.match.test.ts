@@ -785,16 +785,17 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
   });
 
   /**
-   * Issue #1055: a teams entry draws `P1 A ` and then pips -- every teams entry does, whatever the
-   * marker (`stockRowFor`), so these mount the page's shipped `shape`. Measured on the real HUD at
-   * 390px, the letter fits at every rung `narrowPipLayout` takes, so a teams entry is laid out by
-   * that same rule -- and these cases pin that the rule reaches a teams entry at all, through the
-   * builder `renderVersusStocks` calls for every entry on every status that moves.
+   * Issue #1055: a teams entry draws `P1 A ` and then pips under no marker -- the reversed marker
+   * `solid` since issue #1128 gave the shipped `shape` teams strip marks -- so these mount `null`,
+   * which `solid` resolves to. Measured on the real HUD at 390px, the letter fits at every rung
+   * `narrowPipLayout` takes, so a teams entry is laid out by that same rule -- and these cases pin
+   * that the rule reaches a teams entry at all, through the builder `renderVersusStocks` calls for
+   * every entry on every status that moves.
    */
   const teamsAt = (players: number, stock: number): VersusStock[] =>
     Array.from({ length: players }, (_, slot) => ({ slot, stock, team: slot % 2 }));
 
-  describe('a teams entry on a narrow viewport (issue #1055)', () => {
+  describe('a teams entry\'s pips on a narrow viewport (issue #1055)', () => {
     let wide: typeof window.matchMedia;
     beforeEach(() => {
       wide = window.matchMedia;
@@ -809,7 +810,7 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
     });
 
     it('four players at three stocks keep the letter and take the 9px row', () => {
-      const { hud: h, root } = mountCue('shape');
+      const { hud: h, root } = mountCue(null);
       h.setStatus(versusStatus(teamsAt(4, 3)));
       expect(entries(root).map((e) => e.textContent)).toEqual(['P1 A ', 'P2 B ', 'P3 A ', 'P4 B ']);
       const rows = Array.from(root.querySelectorAll<HTMLElement>('.hud-stock-pips'));
@@ -824,7 +825,7 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
 
     it('four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target', () => {
       vi.useFakeTimers({ toFake: ['performance'] });
-      const { hud: h, root } = mountCue('shape');
+      const { hud: h, root } = mountCue(null);
       h.setStatus(versusStatus(teamsAt(4, 5)));
       expect(root.querySelectorAll('.hud-stock-pip'), 'one pip per entry').toHaveLength(4);
       // The letter stays, and the digit is the only text the fallback adds.
@@ -849,7 +850,7 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
     // jsdom's own matchMedia, which reports false: the same crowded teams strips draw every pip
     // with no size override and no digit. Without this, the narrow cases could pass on a builder
     // that applied the phone rule at every width.
-    const threes = mountCue('shape');
+    const threes = mountCue(null);
     threes.hud.setStatus(versusStatus(teamsAt(4, 3)));
     const rows = Array.from(threes.root.querySelectorAll<HTMLElement>('.hud-stock-pips'));
     expect(rows, 'four players at three stocks: one row per entry').toHaveLength(4);
@@ -857,7 +858,7 @@ describe('hud: stock-loss cue arms (issue #230)', () => {
       expect(row.style.getPropertyValue('--hud-pip'), 'four players at three stocks').toBe('');
     }
     threes.hud.dispose();
-    const fives = mountCue('shape');
+    const fives = mountCue(null);
     fives.hud.setStatus(versusStatus(teamsAt(4, 5)));
     expect(fives.root.querySelectorAll('.hud-stock-pip'), 'four players at five stocks').toHaveLength(20);
     expect(fives.root.querySelectorAll('.hud-stock-pip-count')).toHaveLength(0);
@@ -1350,24 +1351,22 @@ describe('hud: identity-shaped stocks, the `marks` arm (issue #230)', () => {
     expect((fours.root.querySelector('.hud-stock-marks') as HTMLElement).style.getPropertyValue('--hud-mark')).toBe('');
   });
 
-  it('draws pips instead for a teams entry, and for the reversed marker (issue #1022)', () => {
-    const { hud: h, root } = mountMarks('shape');
-    h.setStatus(versusStatus([{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]));
-    // Teams draws the neutral dot: the A/B/C letter is already that entry's non-colour channel,
-    // and two teammates drawn with different outlines would claim to be different sides while
-    // wearing one colour. The COUNT is still drawn and cued, so a teams player keeps a complete
-    // stock-loss cue rather than having none.
-    expect(allMarks(root), 'a teams entry grew identity marks').toHaveLength(0);
-    expect(root.querySelectorAll('.hud-stock-pip'), 'teams lost its count entirely').toHaveLength(6);
-    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 A ', 'P2 B ']);
-    h.dispose();
+  it('draws pips instead for the reversed marker, in FFA and teams alike (issues #1022, #1128)', () => {
     // The reversal resolves to `null`, which is also every injected HUD: no outline on the
-    // ground for the row to pair with, so the FFA strip draws the dot too.
+    // ground for the row to pair with, so the strip draws the neutral dot.
     const reversed = mountMarks(null);
     reversed.hud.setStatus(versusStatus(four));
     expect(allMarks(reversed.root)).toHaveLength(0);
     expect(reversed.root.querySelectorAll('.hud-stock-pip'), 'the reversal drew no pips').toHaveLength(12);
     expect(entries(reversed.root).map((e) => e.textContent)).toEqual(['P1 ', 'P2 ', 'P3 ', 'P4 ']);
+    reversed.hud.dispose();
+    // ...and a teams entry draws the same dot, after its letter. The COUNT is still drawn and
+    // cued, so the reversal leaves a teams player a complete stock-loss cue.
+    const teams = mountMarks(null);
+    teams.hud.setStatus(versusStatus([{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]));
+    expect(allMarks(teams.root), 'the reversal drew teams marks').toHaveLength(0);
+    expect(teams.root.querySelectorAll('.hud-stock-pip'), 'teams lost its count entirely').toHaveLength(6);
+    expect(entries(teams.root).map((e) => e.textContent)).toEqual(['P1 A ', 'P2 B ']);
   });
 });
 
@@ -1400,7 +1399,6 @@ describe('hud: the stock strip draws by one rule (issue #1022)', () => {
     'ffa x shape': { row: 'marks' },
     'ffa x null': { row: 'pips' },
     'ffa x absent': { row: 'pips' },
-    'teams x shape': { row: 'pips' },
     'teams x null': { row: 'pips' },
     'teams x absent': { row: 'pips' },
   };
@@ -1433,7 +1431,7 @@ describe('hud: the stock strip draws by one rule (issue #1022)', () => {
   }
 
   it('covers entry x resolved marker, 2 x 3 = 6 cells, and only the seam has the absent ones', () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(6);
+    expect(Object.keys(EXPECTED)).toHaveLength(5);
     expect(Object.keys(EXPECTED).filter((c) => c.endsWith(' x absent'))).toEqual(['ffa x absent', 'teams x absent']);
   });
 

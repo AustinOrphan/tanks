@@ -454,9 +454,10 @@ export function createEntityViews(
    */
   mineWarnStyle: MineWarnStyle | null = null,
   /**
-   * Second identity channel (issues #630, #922): the style to draw, already resolved from
-   * the `identityMarker` flag and the session's mode by `game/identity-marker-flag.ts`, so
-   * an FFA session arrives with the shipped `shape`. null/absent = the solid hue-only ring.
+   * Second identity channel (issues #630, #922, #1128): the style to draw, already resolved
+   * from the `identityMarker` flag and the session's mode by `game/identity-marker-flag.ts`,
+   * so an FFA or Teams session arrives with the shipped `shape`. null/absent = the solid
+   * hue-only ring.
    * See identity-marker.ts.
    */
   identityMarker: IdentityMarkerStyle | null = null,
@@ -1418,6 +1419,11 @@ export function createEntityViews(
       // PR1's own placeholder-swatch shape. `t.team` is always defined here in real
       // play (loadArena only reaches a 'teams' world with it stamped); `?? 0` is a
       // defensive fallback for a hand-built fixture, not a reachable campaign state.
+      //
+      // The COLOR follows the team and the OUTLINE follows the slot (issue #1128): in Teams
+      // each tank's ring is its own player's shape drawn in its side's color, so the shape
+      // says which player and the color says which side. Keying the outline to the team
+      // would draw two teammates as one player.
       if (t.kind === 'player') {
         if (multiPlayer && !view.ring) {
           const color = resolveOwnerColor(curr, t, ownerPalette);

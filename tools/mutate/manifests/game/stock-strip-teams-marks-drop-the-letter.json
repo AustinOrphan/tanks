@@ -1,0 +1,15 @@
+{
+  "id": "stock-strip-teams-marks-drop-the-letter",
+  "file": "src/game/hud.ts",
+  "find": "      fillStockCueEntry(span, `P${entry.slot + 1}${teamMark} `, entry, row, running, now, stocks.length);",
+  "replace": "      fillStockCueEntry(span, `P${entry.slot + 1}${row === 'marks' ? '' : teamMark} `, entry, row, running, now, stocks.length);",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The Teams strip drops its letter once it draws marks (issue #1128), the reading that the shape replaces the letter. The ruling keeps both: the shape says which player, and the letter and the color say which side, so a color-blind reader, a forced-colors palette and a greyscale screenshot lose the side with the letter gone. `stock-chip-drops-the-team-letter` cannot see it: its case mounts a HUD with no marker, which draws pips and keeps the letter here.",
+  "killedBy": [
+    "PLACEHOLDER"
+  ]
+}

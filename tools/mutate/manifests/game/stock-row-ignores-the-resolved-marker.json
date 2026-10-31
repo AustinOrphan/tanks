@@ -1,8 +1,8 @@
 {
   "id": "stock-row-ignores-the-resolved-marker",
   "file": "src/game/hud.ts",
-  "find": "const row = stockRowFor(entry.team, identityMarker);",
-  "replace": "const row = stockRowFor(entry.team, 'shape');",
+  "find": "const row = stockRowFor(identityMarker);",
+  "replace": "const row = stockRowFor('shape');",
   "expect": "killed",
   "tests": [
     "src/game/hud.match.test.ts",

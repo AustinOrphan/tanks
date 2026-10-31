@@ -1,14 +1,14 @@
 {
   "id": "identity-marker-ffa-default-drops-to-the-solid-ring",
   "file": "src/game/identity-marker-flag.ts",
-  "find": "  return mode === 'ffa' ? SHIPPED_FFA_IDENTITY_MARKER : null;",
+  "find": "  return mode === 'ffa' || mode === 'teams' ? SHIPPED_VERSUS_IDENTITY_MARKER : null;",
   "replace": "  return null;",
   "expect": "killed",
   "tests": [
     "src/game/identity-marker-flag.test.ts",
     "src/game/loop.test.ts"
   ],
-  "why": "Un-ships the ruling on #234 (issue #922): an unflagged FFA session's ring and the page's stock strip go back to identity in hue alone, while the flag, its registry text and the developer pane all still say `shape` ships. Every pre-#922 test expected exactly this result, so only the resolver's own table, the loop cases that boot an FFA session, and the page-HUD case can tell. Killed by all three.",
+  "why": "Un-ships the rulings on #234 and #1128 (issues #922, #1128): an unflagged FFA or Teams session's ring and the page's stock strip go back to identity in hue alone, while the flag, its registry text and the developer pane all still say `shape` ships. Every pre-#922 test expected exactly this result, so only the resolver's own table, the loop cases that boot a versus session, and the page-HUD case can tell. Killed by all three.",
   "killedBy": [
     "sessionIdentityMarker: what a session renderer draws (issue #922) draws the shipped `shape` marker in an unflagged FFA session",
     "stripIdentityMarker: what the page HUD draws on FFA entries (issue #922) draws the shipped mark unflagged, none for the reversal value, and a named style as named",

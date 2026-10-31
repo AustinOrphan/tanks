@@ -1,14 +1,14 @@
 {
   "id": "stock-row-rule-never-draws-marks",
   "file": "src/presentation/stock-cue.ts",
-  "find": "  return team === undefined && marker === 'shape' ? 'marks' : 'pips';",
+  "find": "  return marker === 'shape' ? 'marks' : 'pips';",
   "replace": "  return 'pips';",
   "expect": "killed",
   "tests": [
     "src/presentation/stock-cue.test.ts",
     "src/game/hud.match.test.ts"
   ],
-  "why": "The strip's rule never picks the `marks` row, so the shipped FFA strip under `shape` draws neutral pips (issue #1022) -- the ruling on #230 undone with every test of the rule's other cells still green.",
+  "why": "The strip's rule never picks the `marks` row, so the shipped FFA and Teams strips under `shape` draw neutral pips (issues #1022, #1128) -- the ruling on #230 undone with every test of the rule's other cell still green.",
   "killedBy": [
     "hud: identity-shaped stocks, the `marks` arm (issue #230) THE CONTROL for the narrow cases: the desktop strip draws every mark at full size",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) draws one mark per stock, in the outline the shared table gives that slot",

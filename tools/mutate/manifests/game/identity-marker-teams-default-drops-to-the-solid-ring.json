@@ -1,0 +1,15 @@
+{
+  "id": "identity-marker-teams-default-drops-to-the-solid-ring",
+  "file": "src/game/identity-marker-flag.ts",
+  "find": "  return mode === 'ffa' || mode === 'teams' ? SHIPPED_VERSUS_IDENTITY_MARKER : null;",
+  "replace": "  return mode === 'ffa' ? SHIPPED_VERSUS_IDENTITY_MARKER : null;",
+  "expect": "killed",
+  "tests": [
+    "src/game/identity-marker-flag.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "Teams sessions draw no marker again (issue #1128): an unflagged Teams match goes back to the solid ring in team colors, so two teammates on the arena are told apart by nothing, while the page's stock strip, which `stripIdentityMarker` resolves as an FFA session would, still draws each player's shape marks. The strip and the ground then disagree, the one thing #1022 reserved `marks` against. FFA, co-op and single-player all stay green, so only a Teams cell can see it.",
+  "killedBy": [
+    "PLACEHOLDER"
+  ]
+}

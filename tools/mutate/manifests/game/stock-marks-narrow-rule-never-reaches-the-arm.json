@@ -1,7 +1,7 @@
 {
   "id": "stock-marks-narrow-rule-never-reaches-the-arm",
   "file": "src/game/hud.ts",
-  "find": "    const layout: MarkLayout = isNarrowViewport() ? narrowMarkLayout(slots, total) : { kind: 'full' };",
+  "find": "    const layout: MarkLayout = isNarrowViewport()\n      ? narrowMarkLayout(slots, total, entry.team !== undefined)\n      : { kind: 'full' };",
   "replace": "    const layout: MarkLayout = { kind: 'full' };",
   "expect": "killed",
   "tests": [

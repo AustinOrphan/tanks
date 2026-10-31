@@ -1,8 +1,10 @@
 /**
  * Measure the versus stock strip at a 390px viewport, for every player count and stock setting
  * the game allows, and say whether each fits: the shipped FFA strip, the `marks` row (issue
- * #1021); a teams entry, which draws its A/B/C letter before its pips (issue #1055); and the FFA
- * strip under the reversed marker, which draws pips with no mark (issue #1022).
+ * #1021); the shipped teams strip, whose entries draw their A/B/C letter before the same row
+ * (issue #1128); the teams strip under the reversed marker, the letter before pips (issue
+ * #1055); and the FFA strip under the reversed marker, which draws pips with no mark (issue
+ * #1022).
  *
  * WHY A TOOL AND NOT A UNIT TEST. The unit suite runs in jsdom, which reads declared values but
  * lays nothing out, so it can pin the sizing TABLE and cannot prove a width. This drives real
@@ -24,12 +26,14 @@
  * mirrors a layout rule; the HUD applies `narrowPipLayout` and `narrowMarkLayout` itself, under
  * the real `NARROW_STRIP_QUERY`. Checked against the game page itself, booted at 390x844 as a
  * four-player teams session under `?dev=1&stockCue=pips` (the flag #1022 removed; a teams
- * session has drawn those pips with no flag since): its strip's right edge read 355.16px, and
- * this tool reads 355.2px.
+ * session drew those pips with no flag from then until #1128, and draws them under
+ * `?dev=1&identityMarker=solid` since): its strip's right edge read 355.16px, and this tool
+ * reads 355.2px.
  *
  * Every row also checks that the shipped face really loaded (a run with the font files blocked
- * flagged every row), and every teams row that the reversed marker drew the same markup as the
- * shipped one: a teams entry's strip does not depend on the marker.
+ * flagged every row), that every entry drew the row its report names -- `marks` with the flag
+ * absent, pips under `solid` -- and that every teams entry kept its letter (issue #1128): a
+ * width measured on the wrong row, or on a label without its letter, proves nothing.
  *
  * FITS means the strip's right edge is inside the topbar's content box -- 380px at 390px, where
  * the topbar's narrow padding is 10px -- so the strip keeps the margin the bar gives every other
@@ -84,22 +88,26 @@ const teams = (players, total) =>
 
 /**
  * `flag` is the `identityMarker` flag value the page would be loaded with, `null` for absent.
- * Each report is the strip a player sees: no flag is the shipped strip.
+ * Each report is the strip a player sees: no flag is the shipped strip. `row` is the row every
+ * entry must draw, and `lettered` whether every label must carry its team letter.
  */
 const REPORTS = [
   {
     name: 'marks', note: 'the shipped FFA strip: one outline per stock, no leading mark',
-    flag: null, players: [2, 3, 4], stocks: ffa,
+    flag: null, row: 'marks', lettered: false, players: [2, 3, 4], stocks: ffa,
   },
   {
-    // Teams is offered at three and four players only. Required to draw exactly what the
-    // reversed marker draws, since a teams entry's strip does not depend on the marker.
-    name: 'teams', note: '`P1 A ` and its pips, the shipped teams strip',
-    flag: null, same: 'solid', players: [3, 4], stocks: teams,
+    // Teams is offered at three and four players only.
+    name: 'teams', note: '`P1 A ` and its outline per stock, the shipped teams strip',
+    flag: null, row: 'marks', lettered: true, players: [3, 4], stocks: teams,
+  },
+  {
+    name: 'teams-reversal', note: 'teams under ?dev=1&identityMarker=solid: `P1 A ` and its pips',
+    flag: 'solid', row: 'pips', lettered: true, players: [3, 4], stocks: teams,
   },
   {
     name: 'reversal', note: 'FFA under ?dev=1&identityMarker=solid: pips, no mark',
-    flag: 'solid', players: [2, 3, 4], stocks: ffa,
+    flag: 'solid', row: 'pips', lettered: false, players: [2, 3, 4], stocks: ffa,
   },
 ];
 
@@ -158,19 +166,17 @@ try {
         const fits = r.right <= r.edge;
         if (fits) fit += 1;
         if (!r.face) ok = false;
-        let same = '';
-        if (report.same !== undefined) {
-          const other = await read(page, report.same, report.stocks(players, stocks));
-          if (other.html !== r.html) {
-            ok = false;
-            same = `   DIFFERS under ${report.same}`;
-          }
-        }
+        // `P1 A ` and the rest: the slot number, then the letter, before the row.
+        const letteredAll = r.labels.every((l) => /^P\d [ABC] /.test(l));
+        let drew = '';
+        if (r.rows.some((row) => row !== report.row)) drew += `   DREW ${r.rows.join(',')}`;
+        if (letteredAll !== report.lettered) drew += `   LETTERS ${letteredAll ? 'PRESENT' : 'MISSING'}`;
+        if (drew !== '') ok = false;
         console.log(
           `${players}p x ${stocks}   ${r.layout.padStart(7)}   strip ${String(r.width).padStart(6)}px   `
           + `right ${String(r.right).padStart(6)}px   `
           + (fits ? `fits, ${(r.edge - r.right).toFixed(1)}px spare` : `OVER by ${(r.right - r.edge).toFixed(1)}px`)
-          + `${r.face ? '' : '   FACE NOT LOADED'}${same}`,
+          + `${r.face ? '' : '   FACE NOT LOADED'}${drew}`,
         );
       }
     }

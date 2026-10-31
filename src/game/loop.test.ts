@@ -5557,7 +5557,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     expect(options.identityMarker).toBe('shape');
     h.handle.dispose();
     // ...and an unflagged single-player session still draws the solid ring: the shipped
-    // `shape` default is FFA-only.
+    // `shape` default is versus-only (FFA and Teams).
     const off = boot();
     expect((off.rec.rendererArgs[0][4] as { identityMarker?: string | null }).identityMarker).toBeNull();
     off.handle.dispose();
@@ -5597,7 +5597,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     });
   });
 
-  describe('the shipped FFA identity marker reaches FFA sessions only (issue #922)', () => {
+  describe('the shipped identity marker reaches versus sessions only (issues #922, #1128)', () => {
     const markerOf = (h: ReturnType<typeof makeDeps>): string | null | undefined =>
       (h.rec.rendererArgs[0][4] as { identityMarker?: string | null }).identityMarker;
     const noop = (_config: VersusConfig): void => {};
@@ -5625,12 +5625,9 @@ describe('startGameWith: dev flags stay off by default', () => {
       h.handle.dispose();
     });
 
-    it('keeps the solid ring in teams, co-op campaign and single-player sessions', () => {
-      // The ruling covers FFA only. Each session is unflagged; a mode-blind default would fail
-      // the first two.
-      const teams = bootFromPane(TEAMS);
-      expect(markerOf(teams), 'teams from the pane').toBeNull();
-      teams.handle.dispose();
+    it('keeps the solid ring in co-op campaign and single-player sessions', () => {
+      // The rulings cover FFA and Teams only. Each session is unflagged; a mode-blind default
+      // would fail the first.
       const coop = boot(makeDeps({ devFlags: { players: 2 } }));
       expect(markerOf(coop), 'co-op campaign').toBeNull();
       coop.handle.dispose();
@@ -8213,10 +8210,6 @@ describe('createBrowserDeps', () => {
       // outline anywhere -- so the case above is the flag's doing, not the strip's default.
       expect(strip('?dev=1&identityMarker=solid', ffa), 'the reversal value')
         .toEqual({ outlines: [[], [], [], []], pips: 12 });
-      // Teams entries draw pips and no mark under the shipped default: the HUD's own per-entry
-      // rule, which is why the page HUD can resolve without a session mode.
-      expect(strip('', [{ slot: 0, stock: 3, team: 0 }, { slot: 1, stock: 3, team: 1 }]), 'teams')
-        .toEqual({ outlines: [[], []], pips: 6 });
     });
 
     it('leaves the URL exactly as it found it', () => {

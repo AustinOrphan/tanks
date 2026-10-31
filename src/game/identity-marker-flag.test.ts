@@ -15,18 +15,19 @@ import { IDENTITY_MARKER_STYLES } from '../presentation/identity-marker';
 import {
   IDENTITY_MARKER_FLAG_VALUES,
   IDENTITY_MARKER_REVERSAL,
-  SHIPPED_FFA_IDENTITY_MARKER,
+  SHIPPED_VERSUS_IDENTITY_MARKER,
   isIdentityMarkerFlag,
   sessionIdentityMarker,
   stripIdentityMarker,
 } from './identity-marker-flag';
 
 const MODES: readonly (GameMode | null)[] = [null, 'campaign-coop', 'ffa', 'teams'];
-const NOT_FFA = MODES.filter((m) => m !== 'ffa');
+/** The sessions with no stock strip and no ruling on the marker: co-op campaign, both spellings. */
+const NOT_VERSUS = MODES.filter((m) => m !== 'ffa' && m !== 'teams');
 
 describe('the identity-marker flag vocabulary (issue #922)', () => {
   it('ships `shape`, and keeps `solid` out of the drawable styles', () => {
-    expect(SHIPPED_FFA_IDENTITY_MARKER).toBe('shape');
+    expect(SHIPPED_VERSUS_IDENTITY_MARKER).toBe('shape');
     expect(IDENTITY_MARKER_REVERSAL).toBe('solid');
     // The reversal value draws nothing, so it must never reach a layer that draws: tests pin
     // IDENTITY_MARKER_STYLES as the drawable list, and the renderer's `identityMarkerGeometry`
@@ -50,13 +51,14 @@ describe('the identity-marker flag vocabulary (issue #922)', () => {
 
 describe('sessionIdentityMarker: what a session renderer draws (issue #922)', () => {
   it('draws the shipped `shape` marker in an unflagged FFA session', () => {
-    expect(sessionIdentityMarker(null, 'ffa')).toBe(SHIPPED_FFA_IDENTITY_MARKER);
+    expect(sessionIdentityMarker(null, 'ffa')).toBe(SHIPPED_VERSUS_IDENTITY_MARKER);
   });
 
-  it('keeps the solid ring in every unflagged session that is not FFA -- population: 3 modes', () => {
-    // The ruling covers FFA only. A mode-blind default would put slot shapes on teams tanks in
-    // team colours and change co-op rings.
-    for (const mode of NOT_FFA) expect(sessionIdentityMarker(null, mode), String(mode)).toBeNull();
+  it('keeps the solid ring in every unflagged session that is not versus -- population: 2 modes', () => {
+    // The rulings cover FFA (#234) and Teams (#1128) only. A mode-blind default would change
+    // co-op rings, which neither ruled on.
+    expect(NOT_VERSUS).toEqual([null, 'campaign-coop']);
+    for (const mode of NOT_VERSUS) expect(sessionIdentityMarker(null, mode), String(mode)).toBeNull();
   });
 
   it('draws no marker for the reversal value, in every mode -- population: 4 modes', () => {
@@ -72,9 +74,9 @@ describe('sessionIdentityMarker: what a session renderer draws (issue #922)', ()
   });
 });
 
-describe('stripIdentityMarker: what the page HUD draws on FFA entries (issue #922)', () => {
+describe('stripIdentityMarker: what the page HUD draws on every stock entry (issues #922, #1128)', () => {
   it('draws the shipped mark unflagged, none for the reversal value, and a named style as named', () => {
-    expect(stripIdentityMarker(null)).toBe(SHIPPED_FFA_IDENTITY_MARKER);
+    expect(stripIdentityMarker(null)).toBe(SHIPPED_VERSUS_IDENTITY_MARKER);
     expect(stripIdentityMarker(IDENTITY_MARKER_REVERSAL)).toBeNull();
     expect(stripIdentityMarker('shape')).toBe('shape');
   });

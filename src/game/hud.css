@@ -3811,8 +3811,8 @@
  * as wide as its radius, with an inset shadow over the hole a floored border leaves; a hollow
  * one is a thin border. */
 
-/* Pips: one per starting stock, drawn for a teams entry and for an FFA entry under any marker
- * but `shape` (`stockRowFor` in `presentation/stock-cue.ts`). The pip just lost swells, bursts a
+/* Pips: one per starting stock, drawn for every entry, FFA or Teams, under any marker but
+ * `shape` (`stockRowFor` in `presentation/stock-cue.ts`). The pip just lost swells, bursts a
  * ring, and empties.
  *
  * `--hud-pip` and `--hud-pip-gap` default to the full size and are overridden per strip on a

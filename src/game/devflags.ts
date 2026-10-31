@@ -1424,16 +1424,16 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'valued',
     values: [...IDENTITY_MARKER_FLAG_VALUES],
     description:
-      'Selects the second, non-color channel of player identity (issues #630, #922). ' +
-      "'shape' gives each slot its own outline on the ground ring. In an FFA match the HUD " +
-      "stock strip follows it (issues #778, #1022): each player's stocks are drawn as their " +
-      'own outline. Teams entries draw pips beside their A/B/C letter under every value. ' +
-      "'shape' ships as the FFA default; 'solid' restores the pre-ruling solid ring, and the " +
-      'strip draws pips with no mark.',
+      'Selects the second, non-color channel of player identity (issues #630, #922, #1128). ' +
+      "'shape' gives each slot its own outline on the ground ring, drawn in the team color in " +
+      "Teams. The HUD stock strip follows it (issues #778, #1022): each player's stocks are " +
+      'drawn as their own outline, after the A/B/C letter in Teams. ' +
+      "'shape' ships as the FFA and Teams default; 'solid' restores the pre-ruling solid ring, " +
+      'and the strip draws pips with no mark.',
     notes: [
-      'A kept rollback lever: the comparison is settled (#234), and the flag stays so the ' +
-        'default can be reversed and a regression report checked.',
-      "Absent is the ruled arm: 'shape' in an FFA session, and the solid ring in teams, " +
+      'A kept rollback lever: the comparison is settled (#234, widened to Teams by #1128), and ' +
+        'the flag stays so the default can be reversed and a regression report checked.',
+      "Absent is the ruled arm: 'shape' in an FFA or Teams session, and the solid ring in " +
         "co-op and single-player. 'shape', named, applies in any session.",
     ],
   },

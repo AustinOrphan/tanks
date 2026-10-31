@@ -21,8 +21,8 @@ export interface StripReading {
   layout: string;
   /** Each entry's text, which is the label plus any digit a fallback adds. */
   labels: string[];
-  /** The strip's markup, so the runner can compare two markers that should draw the same thing. */
-  html: string;
+  /** The row each entry drew, `marks` or `pips`, so the runner can tell which row it measured. */
+  rows: string[];
   /** Whether the shipped face had loaded when the strip was measured. */
   face: boolean;
 }
@@ -45,8 +45,8 @@ function describe(entry: Element): string {
 /**
  * Measure one strip as the page's HUD draws it under `?dev=1&identityMarker=<flag>`, where
  * `null` is the flag absent: resolved exactly as `loop.ts` resolves it, so the shipped FFA strip
- * is the `marks` row, `solid` draws pips with no mark, and a teams entry draws pips under any
- * value (issue #1022, `stockRowFor`).
+ * is the `marks` row, after the A/B/C letter for a teams entry (issue #1128), and `solid` draws
+ * pips with no mark (issue #1022, `stockRowFor`).
  */
 async function measureStrip(flag: IdentityMarkerFlag | null, stocks: VersusStock[]): Promise<StripReading> {
   hud?.dispose();
@@ -75,7 +75,7 @@ async function measureStrip(flag: IdentityMarkerFlag | null, stocks: VersusStock
     edge: round(bar.right - parseFloat(getComputedStyle(topbar).paddingRight)),
     layout: entries.length > 0 ? describe(entries[0]) : 'none',
     labels: entries.map((e) => e.textContent ?? ''),
-    html: strip.innerHTML,
+    rows: entries.map((e) => (e.querySelector('.hud-stock-marks') !== null ? 'marks' : 'pips')),
     face,
   };
 }

@@ -1,0 +1,15 @@
+{
+  "id": "stock-strip-teams-entry-falls-back-to-pips",
+  "file": "src/game/hud.ts",
+  "find": "      const row = stockRowFor(identityMarker);",
+  "replace": "      const row = entry.team === undefined ? stockRowFor(identityMarker) : 'pips';",
+  "expect": "killed",
+  "tests": [
+    "src/game/hud.match.test.ts",
+    "src/game/loop.test.ts"
+  ],
+  "why": "The Teams strip falls back to pips (issue #1128): the pre-ruling per-entry exception comes back at the HUD, so a Teams entry under the shipped `shape` draws neutral dots beside its letter while that player's ring carries its shape. The strip stops saying which player is which in Teams, the half of the ruling the stock strip carries. The FFA strip stays green, and so does `stockRowFor` itself, which no longer sees the team.",
+  "killedBy": [
+    "PLACEHOLDER"
+  ]
+}

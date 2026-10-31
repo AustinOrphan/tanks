@@ -1,14 +1,14 @@
 {
   "id": "stock-row-rule-ignores-the-marker",
   "file": "src/presentation/stock-cue.ts",
-  "find": "  return team === undefined && marker === 'shape' ? 'marks' : 'pips';",
-  "replace": "  return team === undefined ? 'marks' : 'pips';",
+  "find": "  return marker === 'shape' ? 'marks' : 'pips';",
+  "replace": "  return 'marks';",
   "expect": "killed",
   "tests": [
     "src/presentation/stock-cue.test.ts",
     "src/game/hud.match.test.ts"
   ],
-  "why": "The strip's rule stops reading the marker, so an FFA entry draws the `marks` row under the reversal value `solid` (which resolves to `null`) and in every injected HUD (issue #1022). The ruling reserved `marks` for a `shape` marker on by default, so that the strip's outlines never appear without the ground ring's; this is the reversed marker drawing marks.",
+  "why": "The strip's rule stops reading the marker, so every entry, FFA or Teams, draws the `marks` row under the reversal value `solid` (which resolves to `null`) and in every injected HUD (issue #1022). The ruling reserved `marks` for a `shape` marker on by default, so that the strip's outlines never appear without the ground ring's; this is the reversed marker drawing marks.",
   "killedBy": [
     "hud: identity mark in the stock strip (issue #778) draws nothing at all without the flag, and leaves the strip byte-identical",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for a teams entry, and for the reversed marker (issue #1022)",

@@ -6,35 +6,30 @@ import {
 import type { IdentityMarkerStyle } from './identity-marker';
 
 /**
- * Issue #1022: which row draws a stock entry is ONE rule -- `marks` for an entry with no team
- * whose resolved marker is `shape`, `pips` for every other combination -- and this is the table.
+ * Issues #1022, #1128: which row draws a stock entry is ONE rule -- `marks` when the resolved
+ * marker is `shape`, `pips` when there is none -- and this is the table. The team stopped being
+ * an input on 2026-10-31 (#1128), so a Teams entry takes the same row as an FFA entry; that half
+ * is pinned at the HUD seam (`hud.match.test.ts`), where an entry's team exists.
  *
- * Population: entry (FFA, teams) x resolved marker (`shape`, `null`) = 4 cells; `arcs` and
- * `roof` left the table when issue #1023 deleted them, so `shape` is the one non-null marker.
- * `null` is both the reversal value `solid` and a HUD built without the option; the absent flag
- * resolves to `shape` before this rule sees it, so "absent" is a cell only at the HUD seam
- * (`hud.match.test.ts`, which mounts it).
+ * Population: resolved marker (`shape`, `null`) = 2 cells; `arcs` and `roof` left the table when
+ * issue #1023 deleted them, so `shape` is the one non-null marker. `null` is both the reversal
+ * value `solid` and a HUD built without the option; the absent flag resolves to `shape` before
+ * this rule sees it, so "absent" is a cell only at the HUD seam (`hud.match.test.ts`, which
+ * mounts it).
  */
 describe('stock cue: the strip\'s one row rule (issue #1022)', () => {
-  /** A teams entry's team; any team takes the same branch, so one stands for all three. */
-  const TEAM = 1;
   const EXPECTED: Record<string, StockRow> = {
-    'ffa x shape': 'marks',
-    'ffa x null': 'pips',
-    'teams x shape': 'pips',
-    'teams x null': 'pips',
+    shape: 'marks',
+    null: 'pips',
   };
-  type Rule = (team: number | undefined, marker: IdentityMarkerStyle | null) => StockRow;
-  const args = (cell: string): [number | undefined, IdentityMarkerStyle | null] => {
-    const [kind, marker] = cell.split(' x ');
-    return [kind === 'teams' ? TEAM : undefined, marker === 'null' ? null : (marker as IdentityMarkerStyle)];
-  };
+  type Rule = (marker: IdentityMarkerStyle | null) => StockRow;
+  const arg = (cell: string): IdentityMarkerStyle | null => (cell === 'null' ? null : (cell as IdentityMarkerStyle));
   /** The cells where `rule` disagrees with the table. */
   const mismatches = (rule: Rule): string[] =>
-    Object.entries(EXPECTED).filter(([cell, want]) => rule(...args(cell)) !== want).map(([cell]) => cell);
+    Object.entries(EXPECTED).filter(([cell, want]) => rule(arg(cell)) !== want).map(([cell]) => cell);
 
-  it('draws the row the table names in every one of the 4 cells', () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(4);
+  it('draws the row the table names in every one of the 2 cells', () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(2);
     expect(mismatches(stockRowFor)).toEqual([]);
   });
 
@@ -43,20 +38,10 @@ describe('stock cue: the strip\'s one row rule (issue #1022)', () => {
     // reported a cell would pass the case above for any rule at all.
     const other = (row: StockRow): StockRow => (row === 'marks' ? 'pips' : 'marks');
     for (const cell of Object.keys(EXPECTED)) {
-      const [t, m] = args(cell);
-      const wrongHere: Rule = (team, marker) =>
-        team === t && marker === m ? other(stockRowFor(team, marker)) : stockRowFor(team, marker);
+      const m = arg(cell);
+      const wrongHere: Rule = (marker) => (marker === m ? other(stockRowFor(marker)) : stockRowFor(marker));
       expect(mismatches(wrongHere), cell).toEqual([cell]);
     }
-  });
-
-  it('every team takes the teams branch, not only the one the table uses', () => {
-    // Teams has three sides (A, B, C); a rule that tested `team === 1` would pass the table.
-    for (const team of [0, 1, 2]) {
-      expect(stockRowFor(team, 'shape'), `team ${team}`).toBe('pips');
-    }
-    // NEGATIVE CONTROL: the same marker with no team is the shipped row.
-    expect(stockRowFor(undefined, 'shape')).toBe('marks');
   });
 });
 
@@ -148,10 +133,12 @@ describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
         return JSON.stringify(rule(slots, total)) !== JSON.stringify(want);
       })
       .map(([cell]) => cell);
+  /** An FFA entry: no letter in its label. */
+  const ffa = (slots: number, total: number): MarkLayout => narrowMarkLayout(slots, total, false);
 
   it('matches the measured table in every one of the 15 configurations', () => {
     expect(Object.keys(EXPECTED)).toHaveLength(15);
-    expect(mismatches(narrowMarkLayout)).toEqual([]);
+    expect(mismatches(ffa)).toEqual([]);
   });
 
   it('THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there', () => {
@@ -161,7 +148,7 @@ describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
     for (const cell of Object.keys(EXPECTED)) {
       const [s, t] = cell.split('x').map(Number);
       const wrongHere = (slots: number, total: number): MarkLayout =>
-        slots === s && total === t ? other(narrowMarkLayout(slots, total)) : narrowMarkLayout(slots, total);
+        slots === s && total === t ? other(ffa(slots, total)) : ffa(slots, total);
       expect(mismatches(wrongHere), cell).toEqual([cell]);
     }
   });
@@ -169,26 +156,26 @@ describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
   it('leaves every strip that already fits at the full size, including 3x5 and 4x3', () => {
     // The derivation in the issue expected 3x5 over by about 4px; measured, it is 18.8px inside
     // the budget, and 4x3 35.6px inside. Shrinking them would be a cost with nothing bought.
-    expect(narrowMarkLayout(3, 5)).toEqual({ kind: 'full' });
-    expect(narrowMarkLayout(4, 3)).toEqual({ kind: 'full' });
+    expect(ffa(3, 5)).toEqual({ kind: 'full' });
+    expect(ffa(4, 3)).toEqual({ kind: 'full' });
   });
 
   it('shrinks four players at four stocks to an 8px row, not a fallback', () => {
     // Measured 12px over at full size and 18.5px inside at 8/2. The 9/2 row fits by 2.5px,
     // which is the one-pixel fragility the pips table refused.
-    expect(narrowMarkLayout(4, 4)).toEqual({ kind: 'row', mark: 8, gap: 2 });
+    expect(ffa(4, 4)).toEqual({ kind: 'row', mark: 8, gap: 2 });
   });
 
   it('falls back to one mark and the count at four players and five stocks', () => {
     // 8px marks overflow by 5.5px even at a 1px gap; only 7px fits, below the floor.
-    expect(narrowMarkLayout(4, 5)).toEqual({ kind: 'one' });
+    expect(ffa(4, 5)).toEqual({ kind: 'one' });
   });
 
   it('never draws a row of marks below the 8px floor, or with a gap under 2px', () => {
     // Population: every player count the game allows (2-4) against every stock setting (1-5).
     for (let slots = 2; slots <= 4; slots++) {
       for (let total = 1; total <= 5; total++) {
-        const layout = narrowMarkLayout(slots, total);
+        const layout = ffa(slots, total);
         if (layout.kind !== 'row') continue;
         expect(layout.mark, `${slots}p x ${total}`).toBeGreaterThanOrEqual(8);
         expect(layout.gap, `${slots}p x ${total}`).toBeGreaterThanOrEqual(2);
@@ -198,9 +185,9 @@ describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
 });
 
 /**
- * Issue #1055: a teams entry draws `P1 A ` before its pips -- every teams entry draws pips
- * (`stockRowFor`) -- so it is wider than the FFA entry the pips table was chosen from, by a space
- * and a letter.
+ * Issue #1055: a teams entry draws `P1 A ` before its pips -- under the reversed marker since
+ * issue #1128, which gave the shipped teams strip marks -- so it is wider than the FFA entry the
+ * pips table was chosen from, by a space and a letter.
  *
  * Measured on the real HUD at 390px by `tools/hud/strip-width.mjs`, the letter fits at every rung
  * `narrowPipLayout` already takes, so a teams entry is laid out by that same rule, and these cases

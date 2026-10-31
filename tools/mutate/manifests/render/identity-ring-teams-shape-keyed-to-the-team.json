@@ -1,0 +1,14 @@
+{
+  "id": "identity-ring-teams-shape-keyed-to-the-team",
+  "file": "src/render/entities.ts",
+  "find": "          view.ring = makeIdentityRing(color, identityMarker, slot);",
+  "replace": "          view.ring = makeIdentityRing(color, identityMarker, curr.rules.mode === 'teams' ? (t.team ?? 0) : slot);",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The Teams ring's shape is keyed to the team instead of the slot (issue #1128): every tank on a side draws one outline, so two teammates read as one player, and the ring's shape repeats what its color already says. The ruling gives the two channels one meaning each: the shape says which player, the color which side. Every ring is still a `shape` outline in its team's color, so the FFA cases and the color cases stay green.",
+  "killedBy": [
+    "PLACEHOLDER"
+  ]
+}

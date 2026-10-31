@@ -16,17 +16,19 @@
  * twelve has a red-green deficiency, and under forced colours every hue here is replaced
  * outright.
  *
- * `shape` SHIPS AS THE FFA DEFAULT, AND IT IS THE ONE STYLE. Three styles were built and
+ * `shape` SHIPS AS THE VERSUS DEFAULT, AND IT IS THE ONE STYLE. Three styles were built and
  * compared behind `?dev=1&identityMarker=`, and the ruling on #234 chose `shape` on still
- * evidence (issue #922). The other two, `arcs` (the ring broken into one arc per slot) and
+ * evidence for FFA (issue #922); since 2026-10-31 Teams draws it too, in the team color
+ * (issue #1128). The other two, `arcs` (the ring broken into one arc per slot) and
  * `roof` (blades on the turret crown), were deleted by issue #1023, and the flag now
  * rejects their names like any unknown value. This module still says nothing about
- * defaults: a `null` style here is "no marker", which is what teams, co-op and
- * single-player draw. WHICH sessions get `shape` without asking, and the `solid` value that
+ * defaults: a `null` style here is "no marker", which is what co-op and single-player
+ * draw. WHICH sessions get `shape` without asking, and the `solid` value that
  * takes it back off, are the flag layer's (`game/identity-marker-flag.ts`), which resolves
  * both before the renderer or the HUD is handed a style.
  *
- *  - `shape` -- circle / triangle / square / starburst outline. Recognition. Ships in FFA.
+ *  - `shape` -- circle / triangle / square / starburst outline. Recognition. Ships in FFA
+ *    and Teams.
  *
  * WHY THE MARKER IS WORLD-ALIGNED, and the thing a mockup cannot tell you: the ring is
  * parented to the tank's group, and `view.group.rotation.y = -bodyA` is written every

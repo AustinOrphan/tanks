@@ -1,8 +1,8 @@
 {
   "id": "stock-marks-four-by-four-falls-back",
   "file": "src/presentation/stock-cue.ts",
-  "find": "  if (total === 4) return { kind: 'row', mark: 8, gap: 2 };\n",
-  "replace": "  if (total === 4) return { kind: 'one' };\n",
+  "find": "  if (total === 4 && !lettered) return { kind: 'row', mark: 8, gap: 2 };\n",
+  "replace": "  if (total === 4 && !lettered) return { kind: 'one' };\n",
   "expect": "killed",
   "tests": [
     "src/presentation/stock-cue.test.ts",
