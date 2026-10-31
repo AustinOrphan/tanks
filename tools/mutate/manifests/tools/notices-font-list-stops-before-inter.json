@@ -10,6 +10,7 @@
   "killedBy": [
     "vendored third-party source (issue #771) accounts for every font file under src/game/fonts, so a new face cannot ship without its notice",
     "vendored third-party source (issue #771) stores each typeface's SIL Open Font License whole, under that face's own copyright line",
+    "vendored third-party source (issue #771) gives each typeface the package and version src/game/fonts/README.md records for its files",
     "vendored third-party source (issue #771) names every vendored file in CONTENT-LICENSE.md, which would otherwise class it as first-party code"
   ],
   "reads": [
@@ -22,5 +23,5 @@
     "src/game/fonts/OFL-atkinson-hyperlegible.txt",
     "src/game/fonts/OFL-inter.txt"
   ],
-  "why": "Drops a whole typeface, the last one declared, from VENDORED_SOURCES: Inter ships in dist/ behind a developer arm and its notice disappears from THIRD-PARTY-NOTICES.md and the Legal page. The inventory names the undeclared file, the OFL test's list of faces comes up short, and the CONTENT-LICENSE.md control no longer finds six font files. Scoped to vendored.test.ts alone: generate.test.ts's regenerate-and-diff would also fail, but only until `npm run notices` is run, after which the declaration and the committed notices agree on the mistake."
+  "why": "Drops a whole typeface, the last one declared, from VENDORED_SOURCES: Inter ships in dist/ behind a developer arm and its notice disappears from THIRD-PARTY-NOTICES.md and the Legal page. The inventory names the undeclared file, the OFL test's list of faces comes up short, and the README and CONTENT-LICENSE.md controls no longer find Inter among the declared files. Scoped to vendored.test.ts alone: generate.test.ts's regenerate-and-diff would also fail, but only until `npm run notices` is run, after which the declaration and the committed notices agree on the mistake."
 }
