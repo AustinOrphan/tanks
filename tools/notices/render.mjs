@@ -74,7 +74,7 @@ function renderDependencySection(name) {
  */
 export function renderVendoredSection(source) {
   const files = source.files.map((f) => `\`${f}\``).join(', ');
-  const where = source.notice.source ? ` The licence below is ${source.notice.source}, verbatim from the copyright line on.` : '';
+  const where = source.notice.source ? ` The license below is ${source.notice.source}, verbatim from the copyright line on.` : '';
   return (
     `### ${source.name} (${source.license})\n\n` +
     `Vendored into ${files}. Origin: ${source.origin}.${where}\n\n` +

@@ -11,23 +11,23 @@ the engine asks for nothing. It used to declare all ten anyway and let every req
 404 — measured against the deployed site, that cost 10 round trips and 93,790 bytes
 per load, uncached, to rediscover each time that the files were still missing.
 
-What the game plays is unchanged by that, because the synthesised path was already
+What the game plays is unchanged by that, because the synthesized path was already
 the live one; the difference between effects and music still matters:
 
-- **Sound effects are SYNTHESISED.** `play(key)` finds no Howl — now because none
+- **Sound effects are synthesized.** `play(key)` finds no Howl — now because none
   was ever requested, previously because its load had failed — and builds the
   sound in `src/audio/synth.ts`: filtered noise bursts, pitched bodies with
   falling envelopes, and short transients, layered per key. This is the live
   path for every effect in the game today. (`engine.ts`'s one-oscillator `beep`
   remains below it as a floor for any context that cannot support the graph.)
-- **Music is GENERATED.** `music` is `null` because the manifest declares no loop
+- **Music is generated.** `music` is `null` because the manifest declares no loop
   (previously, because its `loaderror` had fired), so `startMusic()` falls through
   to `src/audio/music.ts`: a slow seeded bass pulse
   under a sparse drone, scheduled on the audio clock. Until that existed, music
   was the one thing with no fallback of any kind and the game was simply silent.
 
 Both are authored as code, which is a deliberate consequence of the policy
-below: nothing to licence, nothing to verify, and no AI-generated audio.
+below: nothing to license, nothing to verify, and no AI-generated audio.
 
 ## Licensing policy for future audio assets
 

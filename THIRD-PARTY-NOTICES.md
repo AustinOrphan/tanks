@@ -76,7 +76,7 @@ is preserved.
 
 ### V8 (BSD-3-Clause)
 
-Vendored into `src/sim/math/hypot.ts`, `src/sim/math/trig.ts`, `src/sim/math/rem-pio2.ts`. Origin: V8's src/builtins/math.tq (FastMathHypot's two-argument path), transliterated into hypot.ts; and three V8-authored expressions from src/base/ieee754.cc kept in trig.ts and rem-pio2.ts, all at branch-heads/13.6. The licence below is https://chromium.googlesource.com/v8/v8/+/branch-heads/13.6/LICENSE, verbatim from the copyright line on.
+Vendored into `src/sim/math/hypot.ts`, `src/sim/math/trig.ts`, `src/sim/math/rem-pio2.ts`. Origin: V8's src/builtins/math.tq (FastMathHypot's two-argument path), transliterated into hypot.ts; and three V8-authored expressions from src/base/ieee754.cc kept in trig.ts and rem-pio2.ts, all at branch-heads/13.6. The license below is https://chromium.googlesource.com/v8/v8/+/branch-heads/13.6/LICENSE, verbatim from the copyright line on.
 
 ```
 Copyright 2014, the V8 project authors. All rights reserved.
@@ -109,7 +109,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### IBM Plex Sans (OFL-1.1)
 
-Vendored into `src/game/fonts/ibm-plex-sans-latin-wght-normal.woff2`. Origin: the Latin-subset variable woff2 of @fontsource-variable/ibm-plex-sans@5.3.0, copied unchanged. The licence below is that package's LICENSE file, verbatim from the copyright line on.
+Vendored into `src/game/fonts/ibm-plex-sans-latin-wght-normal.woff2`. Origin: the Latin-subset variable woff2 of @fontsource-variable/ibm-plex-sans@5.3.0, copied unchanged. The license below is that package's LICENSE file, verbatim from the copyright line on.
 
 ```
 Copyright 2019 IBM Corp. All rights reserved. IBMPlexSans-Italic[wdth,wght].ttf: Copyright 2019 IBM Corp. All rights reserved.
@@ -209,7 +209,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ### IBM Plex Mono (OFL-1.1)
 
-Vendored into `src/game/fonts/ibm-plex-mono-latin-400-normal.woff2`, `src/game/fonts/ibm-plex-mono-latin-600-normal.woff2`. Origin: the Latin-subset 400 and 600 woff2 files of @fontsource/ibm-plex-mono@5.3.0, copied unchanged. The licence below is that package's LICENSE file, verbatim from the copyright line on.
+Vendored into `src/game/fonts/ibm-plex-mono-latin-400-normal.woff2`, `src/game/fonts/ibm-plex-mono-latin-600-normal.woff2`. Origin: the Latin-subset 400 and 600 woff2 files of @fontsource/ibm-plex-mono@5.3.0, copied unchanged. The license below is that package's LICENSE file, verbatim from the copyright line on.
 
 ```
 Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-ThinItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-ExtraLight.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-ExtraLightItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Light.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-LightItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Regular.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Italic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Medium.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-MediumItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-SemiBold.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-SemiBoldItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Bold.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-BoldItalic.ttf: Copyright 2017 IBM Corp. All rights reserved.
@@ -309,7 +309,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ### Atkinson Hyperlegible (OFL-1.1)
 
-Vendored into `src/game/fonts/atkinson-hyperlegible-latin-400-normal.woff2`, `src/game/fonts/atkinson-hyperlegible-latin-700-normal.woff2`. Origin: the Latin-subset 400 and 700 woff2 files of @fontsource/atkinson-hyperlegible@5.3.0, copied unchanged. The licence below is that package's LICENSE file, verbatim from the copyright line on.
+Vendored into `src/game/fonts/atkinson-hyperlegible-latin-400-normal.woff2`, `src/game/fonts/atkinson-hyperlegible-latin-700-normal.woff2`. Origin: the Latin-subset 400 and 700 woff2 files of @fontsource/atkinson-hyperlegible@5.3.0, copied unchanged. The license below is that package's LICENSE file, verbatim from the copyright line on.
 
 ```
 Copyright 2020 Braille Institute of America, Inc. AtkinsonHyperlegible-Italic.ttf: Copyright 2020 Braille Institute of America, Inc. AtkinsonHyperlegible-Bold.ttf: Copyright 2020 Braille Institute of America, Inc. AtkinsonHyperlegible-BoldItalic.ttf: Copyright 2020 Braille Institute of America, Inc.
@@ -409,7 +409,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ### Inter (OFL-1.1)
 
-Vendored into `src/game/fonts/inter-latin-wght-normal.woff2`. Origin: the Latin-subset variable woff2 of @fontsource-variable/inter@5.3.0, copied unchanged. The licence below is that package's LICENSE file, verbatim from the copyright line on.
+Vendored into `src/game/fonts/inter-latin-wght-normal.woff2`. Origin: the Latin-subset variable woff2 of @fontsource-variable/inter@5.3.0, copied unchanged. The license below is that package's LICENSE file, verbatim from the copyright line on.
 
 ```
 Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)

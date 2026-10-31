@@ -41,8 +41,8 @@ The stored data is organized into the following keys:
 `tanks.settings.v1` replaces an older `tanks.touch.v1` key. The first time you open
 this version of the game, any touch control settings saved under the old key are
 copied into the new one and the old key is deleted. The game never writes
-`tanks.touch.v1` again; it is still accepted when importing a save file exported by
-an older version. An older `tanks.run.v1` key, if present, is deleted unread when the
+`tanks.touch.v1` again; a developer session still accepts it when importing a save file
+exported by an older version. An older `tanks.run.v1` key, if present, is deleted unread when the
 game starts.
 
 The settings key stores your **preferences only**. It never records which
@@ -130,4 +130,4 @@ If the game's privacy practices change, this policy will be updated accordingly.
 ## Contact
 
 For questions about this policy, open an issue on the
-[Tanks! GitHub repository](https://github.com/AustinOrphan/tanks/issues).
+[Tanks! GitHub repository](https://github.com/AustinOrphan/tanks).

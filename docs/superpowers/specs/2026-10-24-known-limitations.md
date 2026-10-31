@@ -83,6 +83,10 @@ prototype never set out to include are not listed.
   playtest (#277).
 - **AI targeting.** How an AI tank commits to one of several player targets in co-op and versus bot
   play was accepted on recorded evidence, without a normal-speed human sign-off (#719).
+- **Bot aim.** A computer player in Versus, and the scripted player in the README clip, re-rolls its
+  aim error every tick with no aim hold, so its turret can visibly jitter where a campaign enemy's
+  holds steady (`decidePlayerInput` in `src/sim/ai/player-profile.ts`; the enemies' hold is
+  #344's). Seen during the Public Prototype 1.0 sign-offs and placed after the cutover.
 - **Campaign co-op and controllers.** Campaign and Practice are played by one player on keyboard,
   mouse or touch. A controller for Player 1 and co-op for two to four players exist only behind the
   `gamepad` and `players` developer flags ([dev flags](../../dev-flags.md)).
