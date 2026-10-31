@@ -10,9 +10,9 @@
   ],
   "why": "The HUD stops handing the strip's rule its resolved marker, so every FFA entry draws the `marks` row whatever the marker says (issue #1022). The reversal `?dev=1&identityMarker=solid` and every injected HUD would then draw the slot's outline in the strip with no `shape` outline on the ground to pair with, which is the one thing the ruling on #230 reserved `marks` against.",
   "killedBy": [
-    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)",
+    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped identity mark for FFA and Teams entries, and none for the reversal value (issues #922, #1128)",
     "hud: identity mark in the stock strip (issue #778) draws nothing at all without the flag, and leaves the strip byte-identical",
-    "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for a teams entry, and for the reversed marker (issue #1022)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for the reversed marker, in FFA and teams alike (issues #1022, #1128)",
     "hud: stock-loss cue arms (issue #230) a rematch that resets stocks upward is not a loss, and starts a new pip count",
     "hud: stock-loss cue arms (issue #230) pips: a cue is gone once STOCK_CUE_MS has passed",
     "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",

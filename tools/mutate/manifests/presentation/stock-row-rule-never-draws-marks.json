@@ -25,7 +25,6 @@
     "hud: stock-loss cue arms (issue #230) marks: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
     "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn",
     "stock cue: the strip's one row rule (issue #1022) THE NEGATIVE CONTROLS, one per cell: a rule wrong in that cell alone is caught there",
-    "stock cue: the strip's one row rule (issue #1022) draws the row the table names in every one of the 4 cells",
-    "stock cue: the strip's one row rule (issue #1022) every team takes the teams branch, not only the one the table uses"
+    "stock cue: the strip's one row rule (issue #1022) draws the row the table names in every one of the 2 cells"
   ]
 }
