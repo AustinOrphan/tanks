@@ -70,10 +70,15 @@ export function inlineText(line) {
   // An autolink is the bare URL. LICENSE:5 is `<https://polyformproject.org/...>`, which
   // is the canonical text of the licence and the one line a reader might retype.
   out = out.replace(AUTOLINK, '$1');
-  out = out.replace(/`([^`]*)`/g, '$1');
+  // A code span is literal, so it is set aside before the emphasis passes and put back after
+  // them: CONTENT-LICENSE.md's `src/**` and `tools/**` otherwise lose their asterisks to a
+  // bold pass that pairs one span's `**` with the other's.
+  const spans = [];
+  out = out.replace(/`([^`]*)`/g, (_m, code) => `\u0000${spans.push(code) - 1}\u0000`);
   out = out.replace(/\*\*([^*]+)\*\*/g, '$1');
   out = out.replace(/\*([^*]+)\*/g, '$1');
   out = out.replace(/(^|[^A-Za-z0-9_])_([^_]+)_(?![A-Za-z0-9_])/g, '$1$2');
+  out = out.replace(/\u0000(\d+)\u0000/g, (_m, i) => spans[Number(i)]);
   for (const [entity, char] of ENTITIES) out = out.split(entity).join(char);
   return out.trim();
 }

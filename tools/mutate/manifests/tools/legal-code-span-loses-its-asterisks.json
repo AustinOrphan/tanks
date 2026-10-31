@@ -1,0 +1,14 @@
+{
+  "id": "legal-code-span-loses-its-asterisks",
+  "file": "tools/legal/parse.mjs",
+  "find": "  out = out.replace(/`([^`]*)`/g, (_m, code) => `\\u0000${spans.push(code) - 1}\\u0000`);",
+  "replace": "  out = out.replace(/`([^`]*)`/g, '$1');",
+  "expect": "killed",
+  "tests": [
+    "tools/legal/generate.test.ts"
+  ],
+  "killedBy": [
+    "src/game/legal-content.ts is generated, not hand-edited flattens inline markdown to plain text, keeping only the URLs that leave the repository"
+  ],
+  "why": "Unwraps code spans before the emphasis passes instead of setting them aside, which is how the Legal pane showed CONTENT-LICENSE.md's `src/**` and `tools/**` as \"src/\" and \"tools/\": the bold pass paired one span's `**` with the other's and deleted both."
+}
