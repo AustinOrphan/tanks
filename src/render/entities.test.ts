@@ -2555,7 +2555,7 @@ describe('player identity: ring and shell tint', () => {
       /** Each tank's hull colour, by the tank group sitting at world x: the material as drawn. */
       function hullsDrawn(palette: OwnerPaletteId, w: World): number[] {
         const scene = new THREE.Scene();
-        const v = createEntityViews(scene, undefined, null, null, null, null, OWNER_PALETTES[palette]);
+        const v = createEntityViews(scene, undefined, null, null, null, OWNER_PALETTES[palette]);
         v.sync(w, w, 0);
         const hulls = XS.map((x) => {
           let c = -1;
