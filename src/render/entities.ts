@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
-import type { Wall, TankKind, Tank } from '../sim/types';
+import type { Wall, TankKind, Tank, GameMode } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor, hasAbility, TankAbility, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../presentation/customization';
-import { identityApplies, resolveOwnerColor, type OwnerPalette } from '../presentation/identity';
+import {
+  identityApplies, identityColor, resolveOwnerColor, type OwnerPalette,
+} from '../presentation/identity';
 import { identityMarkerGeometry } from './identity-marker';
 import {
   weaponLever, mineLever, weaponShapeFor, mineShapeFor, type EnemyRoleCue,
@@ -132,7 +134,8 @@ export interface EntityViews {
   barrelOf(tankId: number): THREE.Object3D | null;
   /**
    * The colour a tank's HULL is actually painted: its slot's chosen hex for a player-kind
-   * tank, its kind's roster colour otherwise.
+   * tank, its kind's roster colour otherwise. `world` is asked for its mode, which decides
+   * what an unstyled slot >= 1 wears: its versus shade, or the co-op placeholder (#1124).
    *
    * A seam rather than something a caller recomputes, for the reason `identityApplies`
    * records in identity.ts: the last call site that rebuilt colour logic instead of calling
@@ -144,7 +147,7 @@ export interface EntityViews {
    * Safe to call for a tank whose view has already been disposed, which the wreck does: the
    * per-slot styles this reads outlive any view built from them.
    */
-  bodyColorOf(tank: Tank): number;
+  bodyColorOf(world: World, tank: Tank): number;
   dispose(): void;
 }
 
@@ -524,8 +527,54 @@ export function createEntityViews(
    * every roster kind's own colour (pinned by entities.test.ts's diff-against-
    * `configFor` sweep) -- a feel value, implementer's pick, same treatment
    * docs/agent/development.md gives `TANK_TURN_RATE`.
+   *
+   * Developer co-op only since issue #1124: versus draws `VERSUS_HULL_SHADES` instead.
    */
   const UNSTYLED_SLOT_HEX = '#c23b8f';
+  /**
+   * VERSUS HULLS (issue #1124): an unstyled slot 1-3 in FFA or Teams wears a darker shade of
+   * its own identity ring, so the hull belongs with the ring around it the way P1's default
+   * `#3d7bd6` sits under its cyan `#3fd0ff`. Keyed by the RING colour, so the session's owner
+   * palette picks the shade: `unstyledHexFor` looks up `identityColor(slot, ownerPalette)`. A
+   * ring with no entry falls back to the placeholder, which `entities.test.ts` would show as a
+   * slot missing its shade. The same hull in FFA and Teams, where the ring takes the team
+   * colour instead. Rejected: the exact ring colour, which #579 measured as carrying no
+   * information beside its own ring, and team-coloured hulls, which P1, in its own paint,
+   * could never match.
+   *
+   * AUTHORED, NOT DERIVED. Every uniform darkening tried (sRGB and linear-light scaling, OKLab
+   * lightness scaled or lowered 0.20-0.30, at several chroma factors) left some pair under
+   * `OWNER_FLOOR` or within 0.4 of it: Classic's orange and vermillion rings sit only 20.11
+   * apart and converge as they darken, while its violet ring is already dark enough that its
+   * hull has to go much further. So each shade sits 0.23-0.32 below its ring in OKLab
+   * lightness (P1's hull: 0.21) with its OKLab hue within 8 degrees of the ring's, the
+   * vermillion turned toward crimson and the violet toward purple to keep them apart.
+   *
+   * Measured with `presentation/colour-distance.ts` on 2026-10-25 (origin/main 72b0b2bf plus
+   * issue #1124), the way `entities.test.ts`'s versus hull sweep measures it: each ring over
+   * the felt with `overFelt`, each hull opaque, CIEDE2000. Every team counts against every
+   * hull, since any slot can pick any team. Each figure is the closest pair in its group.
+   *
+   * | palette | ring vs its hull | team vs hull | hull vs hull | vs P1's hull | vs the felt |
+   * | --- | ---: | ---: | ---: | ---: | ---: |
+   * | Classic | 19.83 ring3 | 20.45 A-hull2 | 21.25 hull1-hull2 | 34.85 hull3 | 39.98 hull1 |
+   * | High contrast | 21.46 ring3 | 22.96 B-hull3 | 19.29 hull1-hull3 | 33.96 hull2 | 20.09 hull1 |
+   *
+   * A hull in its ring's exact colour measures 3.96-6.15 against that ring, the control the
+   * sweep is held to. The felt column is recorded, not asserted: the roster's green tank sits
+   * 4.67 from it. Developer co-op keeps the placeholder because campaign enemies share its
+   * screen and these would not stay clear of them: Classic hull 1 sits 6.78 from the brown
+   * tank and High contrast hull 1 8.56 from the olive, where the placeholder's nearest roster
+   * kind is 29.40 away (grey).
+   */
+  const VERSUS_HULL_SHADES: ReadonlyMap<number, string> = new Map([
+    [0xff8a1e, '#9a5000'], // Classic ring 1, orange: burnt orange
+    [0xff4d2e, '#8a1618'], // Classic ring 2, vermillion: crimson
+    [0x9d3bff, '#580c80'], // Classic ring 3, violet: deep purple
+    [0x8ffd00, '#4f8a00'], // High contrast ring 1, lime: dark lime
+    [0xfdbbc6, '#9e5868'], // High contrast ring 2, pink: dusty rose
+    [0xfdfdbb, '#a89a40'], // High contrast ring 3, pale yellow: khaki
+  ]);
   /** The bit-identical-to-boot default for slot 0: no hex override, no skin map. */
   const DEFAULT_SLOT_0_STYLE: PlayerStyle = {
     hex: null, skinMap: null, skin: 'solid', scroll: null, gen: 0, spawnAnim: DEFAULT_SPAWN_ANIM,
@@ -545,10 +594,23 @@ export function createEntityViews(
   function styleFor(slot: number): PlayerStyle {
     return playerStyles.get(slot) ?? (slot === 0 ? DEFAULT_SLOT_0_STYLE : DEFAULT_OTHER_SLOT_STYLE);
   }
+  /**
+   * The hull an unstyled slot >= 1 wears in `mode`: the placeholder in developer co-op, its
+   * versus shade otherwise. Only the hex depends on the mode, so `styleFor` stays mode-free
+   * for the gen, skin and spawn-animation reads that share its placeholder style.
+   */
+  function unstyledHexFor(slot: number, mode: GameMode): string {
+    if (mode === 'campaign-coop') return UNSTYLED_SLOT_HEX;
+    return VERSUS_HULL_SHADES.get(identityColor(slot, ownerPalette)) ?? UNSTYLED_SLOT_HEX;
+  }
   /** See `bodyColorOf` on the interface. The view builder below calls this too. */
-  function bodyColorFor(kind: TankKind, controlledBy: number | undefined): number {
-    const style = kind === 'player' ? styleFor(controlledBy ?? 0) : null;
-    return kind === 'player' && style?.hex ? cssHex(style.hex) : tankColor(kind);
+  function bodyColorFor(kind: TankKind, controlledBy: number | undefined, mode: GameMode): number {
+    if (kind !== 'player') return tankColor(kind);
+    const slot = controlledBy ?? 0;
+    const style = styleFor(slot);
+    // `styleFor` hands every unstyled slot >= 1 the one placeholder style, so this is that case.
+    const hex = style === DEFAULT_OTHER_SLOT_STYLE ? unstyledHexFor(slot, mode) : style.hex;
+    return hex ? cssHex(hex) : tankColor(kind);
   }
   /**
    * One two-tone texture PER ENEMY KIND, shared by every tank of that kind -- issue
@@ -807,6 +869,8 @@ export function createEntityViews(
 
   function makeTank(
     kind: TankKind,
+    /** The world's mode, for an unstyled slot's hull (issue #1124): see `unstyledHexFor`. */
+    mode: GameMode,
     controlledBy?: number,
     /**
      * This tank's own active-mine budget, when a session overrode the roster's (`Tank.mineCap`,
@@ -838,7 +902,7 @@ export function createEntityViews(
     // Resolved per-tank from its OWN slot -- see styleFor -- not off a single global,
     // so two player-kind tanks in the same world can carry different paint.
     const style = kind === 'player' ? styleFor(controlledBy ?? 0) : null;
-    const color = bodyColorFor(kind, controlledBy);
+    const color = bodyColorFor(kind, controlledBy, mode);
 
     // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
     // A patterned skin rides as a map on the hull and turret ONLY -- tracks keep
@@ -1334,7 +1398,10 @@ export function createEntityViews(
       }
       if (!view) {
         const gen = t.kind === 'player' ? styleFor(slot).gen : 0;
-        view = { ...makeTank(t.kind, t.controlledBy, t.mineCap), kind: t.kind, gen, ring: null, spawn: null };
+        // The hull is resolved from `curr`'s mode here, once, as the identity ring's colour is
+        // below: a session's mode does not change under one renderer.
+        const parts = makeTank(t.kind, curr.rules.mode, t.controlledBy, t.mineCap);
+        view = { ...parts, kind: t.kind, gen, ring: null, spawn: null };
         tankViews.set(t.id, view);
       }
       // Identity ring: WHO, not WHAT style -- see presentation/identity.ts's IDENTITY_RING_COLORS. Only a
@@ -1888,7 +1955,8 @@ export function createEntityViews(
 
   return {
     sync,
-    bodyColorOf: (tank: Tank): number => bodyColorFor(tank.kind, tank.controlledBy),
+    bodyColorOf: (world: World, tank: Tank): number =>
+      bodyColorFor(tank.kind, tank.controlledBy, world.rules.mode),
     setReducedMotion(on: boolean): void {
       reducedMotion = on;
     },

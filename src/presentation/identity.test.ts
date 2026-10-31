@@ -2,10 +2,11 @@
 // the floors each palette is held to, measured the way a player sees them -- composited over
 // the felt with `overFelt`, then (for a colour-vision floor) simulated, then CIEDE2000.
 //
-// What lives elsewhere, and why: the floors against the roster and the unstyled placeholder,
-// and the team pairs in normal vision, are in render/entities.test.ts, because the
-// placeholder is read off a rendered scene and a presentation test cannot import the
-// renderer. Classic's paint floor is #975's, in customization.test.ts, and is not repeated.
+// What lives elsewhere, and why: the floors against the roster, the unstyled placeholder and
+// the versus hulls (issue #1124), and the team pairs in normal vision, are in
+// render/entities.test.ts, because those hulls are read off a rendered scene and a
+// presentation test cannot import the renderer. Classic's paint floor is #975's, in
+// customization.test.ts, and is not repeated.
 //
 // Figures quoted below were measured with colour-distance.ts on 2026-10-10, origin/main
 // c200cf62 plus issue #1056; identity.ts carries the full table per palette.
