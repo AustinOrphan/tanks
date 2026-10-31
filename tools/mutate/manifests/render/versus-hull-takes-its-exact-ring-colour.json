@@ -1,0 +1,15 @@
+{
+  "id": "versus-hull-takes-its-exact-ring-colour",
+  "file": "src/render/entities.ts",
+  "find": "    [0x9d3bff, '#580c80'], // Classic ring 3, violet: deep purple",
+  "replace": "    [0x9d3bff, '#9d3bff'], // Classic ring 3, violet: deep purple",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "The option issue #1124 rejected, on one slot: Classic slot 3's hull in its ring's exact violet. The ring as drawn over the felt then sits 3.96 from the hull it surrounds, under OWNER_FLOOR 15 -- #579's case of a ring carrying no information beside its own colour (colour-distance.ts, 2026-10-25). Every other pair the sweep measures stays clear, so this is the production control for the ring-versus-own-hull family; the literal pin fails too, as it does for any moved shade.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) versus hulls (issue #1124) slots 1-3 wear their classic shade in FFA and in Teams, and slot 0 keeps the roster hull",
+    "player identity: ring and shell tint the owner palette (issue #1057) versus hulls (issue #1124) the classic hulls clear OWNER_FLOOR as drawn: from the ring around each, every team ring, each other and P1's hull"
+  ]
+}

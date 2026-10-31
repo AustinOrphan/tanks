@@ -1,0 +1,14 @@
+{
+  "id": "versus-shade-ignores-the-session-palette",
+  "file": "src/render/entities.ts",
+  "find": "VERSUS_HULL_SHADES.get(identityColor(slot, ownerPalette))",
+  "replace": "VERSUS_HULL_SHADES.get(identityColor(slot))",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Drops the session's owner palette from the shade lookup, so `identityColor` falls back to Classic and a High contrast session draws Classic's burnt orange, crimson and deep purple hulls inside its lime, pink and pale yellow rings. Issue #1124 asks for the shade of the ring the session actually draws. Classic sessions are unchanged, and High contrast's measured sweep still passes (Classic's dark shades sit far from High contrast's light rings), so only the High contrast literal pin can see it.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) versus hulls (issue #1124) slots 1-3 wear their high-contrast shade in FFA and in Teams, and slot 0 keeps the roster hull"
+  ]
+}

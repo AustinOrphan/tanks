@@ -8,9 +8,9 @@
  * longer imports a Three.js module to learn a player's colour, and so no renderer file
  * is the authoritative source of a semantic the HUD paints too.
  *
- * Semantics only. Ring radii, materials and the placeholder hull swatch stay in
- * `render/entities.ts`; this module imports nothing but simulation TYPES, which
- * `src/dependency-direction.test.ts` enforces.
+ * Semantics only. Ring radii, materials and the hull swatches -- the co-op placeholder and the
+ * versus shades of each ring (issue #1124) -- stay in `render/entities.ts`; this module
+ * imports nothing but simulation TYPES, which `src/dependency-direction.test.ts` enforces.
  */
 import type { World } from '../sim/world';
 import type { Tank, TankKind } from '../sim/types';
@@ -33,7 +33,8 @@ import type { Tank, TankKind } from '../sim/types';
  * (sim/config/data/tank-defs.json) and the co-op placeholder hull swatch
  * (`render/entities.ts`'s `UNSTYLED_SLOT_HEX`) -- measured by entities.test.ts's ring sweep
  * for both owner palettes (issue #1056), which replaced a sweep that compared hexes for
- * inequality only.
+ * inequality only. Since issue #1124, slots 1-3 also clear the darker shade of themselves
+ * that a versus hull wears inside them (`VERSUS_HULL_SHADES`, the versus hull sweep).
  *
  * Slot 2: a bright vermillion. Slot 3: a reddish-purple pushed toward violet. Both are
  * the remaining Okabe-Ito-adjacent hues past blue/orange (its own vermillion #D55E00
@@ -131,6 +132,11 @@ export function identityColor(
  * higher against the hull and looked more vivid, and was rejected: it collapses to 8.6
  * against team C under tritanopia, because cyan and green converge there (#579's figure; its
  * cyan's hex and simulation were not recorded, so it is not re-measured here).
+ *
+ * The placeholder in the table's first row is no longer a hull a team ring sits beside: since
+ * issue #1124 versus slots 1-3 wear darker shades of their own rings (`render/entities.ts`'s
+ * `VERSUS_HULL_SHADES`), and entities.test.ts's versus hull sweep measures every team against
+ * those. The row records what #579 measured.
  */
 export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0xfcc0fc, 0x4eff3b];
 
@@ -211,7 +217,9 @@ export const OWNER_PALETTES: Readonly<Record<OwnerPaletteId, OwnerPalette>> = {
    * predates the 3:1 and colour-vision floors and is not held to them. It is held to the
    * floors both palettes share: 38.82 from the felt (ring0), rings 17.09 from the roster
    * (ring0 vs teal) and 19.41 from the placeholder (ring3), teams 33.36 from the player hull
-   * (team B) and 25.54 from the placeholder (team A), team pairs 35.98 against TEAM_FLOOR.
+   * (team B), team pairs 35.98 against TEAM_FLOOR. Its versus hulls (issue #1124, measured
+   * 2026-10-25) sit 19.83 from the ring around each (ring3) and 20.45 from any team (team A vs
+   * hull 2); teams sat 25.54 from the placeholder (team A) before those hulls replaced it.
    * Its tightest paint pair, ring1 vs orange at 1.17, is tolerated by #586.
    */
   classic: { rings: IDENTITY_RING_COLORS, teams: TEAM_COLORS },
@@ -228,7 +236,9 @@ export const OWNER_PALETTES: Readonly<Record<OwnerPaletteId, OwnerPalette>> = {
    * Ground contrast: rings 3.00 / 3.91 / 3.19 / 4.71; teams 3.00 / 4.17 / 3.32. Against the
    * other floors: 38.83 from the felt (ring0), 17.87 from the hull paints (team C vs white),
    * rings 17.33 from the roster (ring0 vs teal) and 30.23 from the placeholder (ring2), teams
-   * 25.29 from the player hull (team A) and 37.67 from the placeholder (team C).
+   * 25.29 from the player hull (team A). Its versus hulls (issue #1124, measured 2026-10-25)
+   * sit 21.46 from the ring around each (ring3) and 22.96 from any team (team B vs hull 3);
+   * teams sat 37.67 from the placeholder (team C) before those hulls replaced it.
    *
    * THREE THINGS TO KNOW BEFORE MOVING A COLOUR. Ring 0 and team A, the same cyan, reach 3:1
    * by 0.0021 (3.0021): one level down in any channel fails it (G gives 2.9761). Two tightest

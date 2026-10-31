@@ -1,0 +1,14 @@
+{
+  "id": "coop-slots-take-the-versus-shades",
+  "file": "src/render/entities.ts",
+  "find": "    if (mode === 'campaign-coop') return UNSTYLED_SLOT_HEX;",
+  "replace": "    // co-op takes the versus shades too",
+  "expect": "killed",
+  "tests": [
+    "src/render/entities.test.ts"
+  ],
+  "why": "Removes developer co-op's placeholder branch, so a campaign with the `players` flag paints slots 1-3 in the versus shades. Issue #1124 keeps the placeholder there because campaign enemies share that screen: Classic hull 1 #9a5000 sits 6.78 from the brown tank and High contrast hull 1 #4f8a00 8.56 from the olive (colour-distance.ts, 2026-10-25). Every older co-op assertion passes under it -- each shade is unequal to every roster hex and clears the ring sweep's floor -- so only the co-op test that requires one shared swatch outside the shades can see it.",
+  "killedBy": [
+    "player identity: ring and shell tint the owner palette (issue #1057) versus hulls (issue #1124) developer co-op keeps one placeholder on every unstyled slot under either palette, not the versus shades"
+  ]
+}
