@@ -185,6 +185,71 @@ describe('stock cue: mark sizing on a narrow viewport (issue #1021)', () => {
 });
 
 /**
+ * Issue #1128: a teams entry draws `P1 A ` before the `marks` row under the shipped `shape`, so
+ * it is wider than the FFA entry the marks table was chosen from, by a space and a letter, and
+ * `narrowMarkLayout` is told so (`lettered`).
+ *
+ * Measured on the real HUD at 390px by `tools/hud/strip-width.mjs`, lettered A, B, A, B: the
+ * letter fits at full size wherever FFA draws full size, and the 8/2 row FFA takes at four
+ * players and four stocks overflows by 3.2px, so a lettered entry falls back there as it does at
+ * five. Teams is offered at three and four players only, so 3-4 players x 1-5 stocks, 10
+ * configurations. The figure beside each cell is the px left inside the topbar's content box.
+ */
+describe('stock cue: a teams entry\'s marks on a narrow viewport (issue #1128)', () => {
+  const FULL: MarkLayout = { kind: 'full' };
+  const ONE: MarkLayout = { kind: 'one' };
+  /** The measured table, spelled out cell by cell. */
+  const EXPECTED: Record<string, MarkLayout> = {
+    '3x1': FULL, // 166.9 spare
+    '3x2': FULL, // 131.1
+    '3x3': FULL, // 95.4
+    '3x4': FULL, // 59.7
+    '3x5': FULL, // 24.0
+    '4x1': FULL, // 109.2
+    '4x2': FULL, // 61.6
+    '4x3': FULL, // 14.0
+    '4x4': ONE, // 54.8; the FFA 8/2 row overflows by 3.2 (an 8/1 row would fit by 8.8)
+    '4x5': ONE, // 54.8
+  };
+  /** A teams entry: its label carries the letter. */
+  const lettered = (slots: number, total: number): MarkLayout => narrowMarkLayout(slots, total, true);
+
+  /** The cells where `rule` disagrees with the measured table. */
+  const mismatches = (rule: (slots: number, total: number) => MarkLayout): string[] =>
+    Object.entries(EXPECTED)
+      .filter(([cell, want]) => {
+        const [slots, total] = cell.split('x').map(Number);
+        return JSON.stringify(rule(slots, total)) !== JSON.stringify(want);
+      })
+      .map(([cell]) => cell);
+
+  it('takes the rung measured to hold the letter in every one of the 10 teams configurations', () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(10);
+    expect(mismatches(lettered)).toEqual([]);
+  });
+
+  it('THE NEGATIVE CONTROLS, one per table cell: a rule wrong in that cell alone is caught there', () => {
+    // Without these the table check could be comparing nothing -- a `mismatches` that never
+    // reported a cell would pass the case above for any rule at all.
+    const other = (l: MarkLayout): MarkLayout => (l.kind === 'one' ? FULL : ONE);
+    for (const cell of Object.keys(EXPECTED)) {
+      const [s, t] = cell.split('x').map(Number);
+      const wrongHere = (slots: number, total: number): MarkLayout =>
+        slots === s && total === t ? other(lettered(slots, total)) : lettered(slots, total);
+      expect(mismatches(wrongHere), cell).toEqual([cell]);
+    }
+  });
+
+  it('differs from the FFA table at four players and four stocks alone', () => {
+    // THE CONTROL for the letter being read at all: the FFA rule meets this table everywhere but
+    // the one cell the letter overflows, so a rule that ignored `lettered` fails only there.
+    const ffa = (slots: number, total: number): MarkLayout => narrowMarkLayout(slots, total, false);
+    expect(mismatches(ffa)).toEqual(['4x4']);
+    expect(ffa(4, 4)).toEqual({ kind: 'row', mark: 8, gap: 2 });
+  });
+});
+
+/**
  * Issue #1055: a teams entry draws `P1 A ` before its pips -- under the reversed marker since
  * issue #1128, which gave the shipped teams strip marks -- so it is wider than the FFA entry the
  * pips table was chosen from, by a space and a letter.

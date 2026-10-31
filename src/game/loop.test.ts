@@ -5625,6 +5625,21 @@ describe('startGameWith: dev flags stay off by default', () => {
       h.handle.dispose();
     });
 
+    it('draws `shape` in a Teams match, from the Versus Setup pane and from ?dev=1&mode=teams&players=4 (issue #1128)', () => {
+      // Ruled 2026-10-31: the shapes always say which player is which, so a Teams tank carries
+      // its own slot's shape too, in its team's color (entities.ts). Both entry paths, because
+      // each stamps the mode its own way. THE CONTROL is the co-op case below, which boots
+      // unflagged the same way and keeps the solid ring.
+      const pane = bootFromPane(TEAMS);
+      expect(pane.deps.devFlags.identityMarker, 'the premise: no flag reached the session').toBeNull();
+      expect(pane.deps.devFlags.mode, 'the premise: the pane stamped Teams').toBe('teams');
+      expect(markerOf(pane), 'teams from the pane').toBe('shape');
+      pane.handle.dispose();
+      const dev = boot(makeDeps({ devFlags: parseDevFlags('?dev=1&mode=teams&players=4') }));
+      expect(markerOf(dev), 'teams from ?dev=1&mode=teams').toBe('shape');
+      dev.handle.dispose();
+    });
+
     it('keeps the solid ring in co-op campaign and single-player sessions', () => {
       // The rulings cover FFA and Teams only. Each session is unflagged; a mode-blind default
       // would fail the first.
@@ -5636,12 +5651,17 @@ describe('startGameWith: dev flags stay off by default', () => {
       single.handle.dispose();
     });
 
-    it('draws the solid ring in an FFA session for the reversal value, and a named style in any mode', () => {
+    it('draws the solid ring in FFA and Teams sessions for the reversal value, and a named style in co-op', () => {
+      // `solid` is the kept rollback lever, and since issue #1128 it has to take Teams back too.
       const solid = bootFromPane(FFA, { identityMarker: 'solid' });
       expect(markerOf(solid), 'solid in FFA').toBeNull();
       solid.handle.dispose();
-      const named = bootFromPane(TEAMS, { identityMarker: 'shape' });
-      expect(markerOf(named), 'shape in teams').toBe('shape');
+      const teams = bootFromPane(TEAMS, { identityMarker: 'solid' });
+      expect(markerOf(teams), 'solid in teams').toBeNull();
+      teams.handle.dispose();
+      // Named in co-op, where the default is the solid ring, so only the name can draw it.
+      const named = boot(makeDeps({ devFlags: { players: 2, identityMarker: 'shape' } }));
+      expect(markerOf(named), 'shape in co-op').toBe('shape');
       named.handle.dispose();
     });
   });
@@ -8170,7 +8190,7 @@ describe('createBrowserDeps', () => {
       expect(deps.devFlags.aimRay).toBe(true);
     });
 
-    it('hands the page HUD the shipped FFA identity mark, and none for the reversal value (issue #922)', () => {
+    it('hands the page HUD the shipped identity mark for FFA and Teams entries, and none for the reversal value (issues #922, #1128)', () => {
       // The HUD half of #922, through the page's real HUD factory: an injected HUD in any
       // other test is built with no `identityMarker` and draws pips with no mark, so only this
       // path shows what a production page puts in the stock strip. Since issue #1022 the
@@ -8209,6 +8229,13 @@ describe('createBrowserDeps', () => {
       // NEGATIVE CONTROL: the reversal value draws the same four entries as pips, with no
       // outline anywhere -- so the case above is the flag's doing, not the strip's default.
       expect(strip('?dev=1&identityMarker=solid', ffa), 'the reversal value')
+        .toEqual({ outlines: [[], [], [], []], pips: 12 });
+      // Teams entries draw the same marks under the shipped default (issue #1128): each its OWN
+      // slot's outline, whatever its team, which is why the page HUD can resolve without a session
+      // mode. And the reversal value takes them back to pips, as it does FFA.
+      const teams: VersusStock[] = [0, 1, 2, 3].map((slot) => ({ slot, stock: 3, team: slot % 2 }));
+      expect(strip('', teams), 'teams, no ?dev').toEqual({ outlines: want, pips: 0 });
+      expect(strip('?dev=1&identityMarker=solid', teams), 'teams under the reversal value')
         .toEqual({ outlines: [[], [], [], []], pips: 12 });
     });
 

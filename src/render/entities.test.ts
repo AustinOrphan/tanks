@@ -2293,6 +2293,105 @@ describe('player identity: ring and shell tint', () => {
     views.dispose();
   });
 
+  /**
+   * Issue #1128, ruled 2026-10-31: in Teams each tank's ring carries its OWN player's shape,
+   * drawn in its team's color -- the shape says which player, the color which side, so two
+   * teammates share a color and not an outline. Population: every split Teams can be played at,
+   * 2-4 players -- 1v1, 2v1, 1v1v1, 2v2, 3v1 and 2v1v1, 6 splits and 20 rings. The outline each
+   * ring must draw is read off the ring its slot draws in an FFA world, which the shared-table
+   * cases in identity-marker.test.ts pin, so this asserts "its own slot's shape" rather than
+   * restating the table.
+   */
+  describe('teams mode draws each player\'s own shape in the team color (issue #1128)', () => {
+    const XS = [3, 9, 15, 21];
+    const SPLITS: Record<string, readonly number[]> = {
+      '1v1': [0, 1],
+      '2v1': [0, 1, 0],
+      '1v1v1': [0, 1, 2],
+      '2v2': [0, 1, 0, 1],
+      '3v1': [0, 1, 0, 0],
+      '2v1v1': [0, 0, 1, 2],
+    };
+    /** One player tank per slot at a distinct x, on `teams[slot]` when teams are given. */
+    function playersWorld(slots: number, teams: readonly number[] | null): World {
+      const tanks: Tank[] = Array.from({ length: slots }, (_, slot) => ({
+        ...makeTank(slot + 1, 'player', XS[slot], slot % 2 === 0 ? 3 : 9),
+        controlledBy: slot,
+        ...(teams !== null ? { team: teams[slot] } : {}),
+      }));
+      const spawns: Spawn[] = tanks.map((t) => ({ kind: 'player', pos: { ...t.pos }, angle: 0 }));
+      return createWorld({ walls: [], tanks, spawns, lives: 3, mode: teams !== null ? 'teams' : 'ffa' });
+    }
+    /** The identity ring on the tank group at world x. */
+    function ringAt(scene: THREE.Scene, x: number): THREE.Mesh {
+      let ring: THREE.Mesh | null = null;
+      scene.traverse((o) => {
+        if (o.name !== 'identity-ring') return;
+        let g: THREE.Object3D | null = o;
+        while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+        if ((g as THREE.Group).position.x === x) ring = o as THREE.Mesh;
+      });
+      expect(ring, `no identity ring at x=${x}`).not.toBeNull();
+      return ring as unknown as THREE.Mesh;
+    }
+    const outlineOf = (ring: THREE.Mesh): number[] => Array.from(ring.geometry.getAttribute('position').array);
+    const colorOf = (ring: THREE.Mesh): number => (ring.material as THREE.MeshBasicMaterial).color.getHex();
+    /** The outline each slot's ring draws in a four-player FFA world under `shape`. */
+    function ffaOutlines(): number[][] {
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene, undefined, null, 'shape');
+      const w = playersWorld(4, null);
+      views.sync(w, w, 0);
+      const outlines = XS.map((x) => outlineOf(ringAt(scene, x)));
+      views.dispose();
+      return outlines;
+    }
+
+    it('gives every ring its own slot\'s outline in its team\'s color -- population: 6 splits, 20 rings', () => {
+      const outlines = ffaOutlines();
+      // The premise that makes a match informative: the four slots draw four different outlines.
+      for (let i = 0; i < outlines.length; i++) {
+        for (let j = i + 1; j < outlines.length; j++) {
+          expect(outlines[i], `slot ${i} and slot ${j} draw one outline`).not.toEqual(outlines[j]);
+        }
+      }
+      let rings = 0;
+      for (const [split, teams] of Object.entries(SPLITS)) {
+        const scene = new THREE.Scene();
+        const views = createEntityViews(scene, undefined, null, 'shape');
+        const w = playersWorld(teams.length, teams);
+        views.sync(w, w, 0);
+        expect(identityRings(scene), split).toHaveLength(teams.length);
+        teams.forEach((team, slot) => {
+          const ring = ringAt(scene, XS[slot]);
+          // A ring keyed to the team would draw slot `team`'s outline here, which is another
+          // slot's wherever the two indices differ: P3 in 2v1, 2v2 and 3v1, P4 in every
+          // four-player split, and P2 in 2v1v1 (1v1 and 1v1v1 cannot tell the two apart).
+          expect(outlineOf(ring), `${split}: P${slot + 1}'s outline`).toEqual(outlines[slot]);
+          expect(colorOf(ring), `${split}: P${slot + 1}'s color`).toBe(TEAM_COLORS[team]);
+          rings += 1;
+        });
+        views.dispose();
+      }
+      expect(rings, 'every ring of every split').toBe(20);
+    });
+
+    it('NEGATIVE CONTROL: with no marker -- what `solid` resolves to -- a teams ring is the solid ring in its team color', () => {
+      // The same 2v2 world without the option: what makes the shapes above the marker's doing,
+      // and what the rollback lever `?dev=1&identityMarker=solid` has to restore in Teams.
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene);
+      const w = playersWorld(4, SPLITS['2v2']);
+      views.sync(w, w, 0);
+      SPLITS['2v2'].forEach((team, slot) => {
+        const ring = ringAt(scene, XS[slot]);
+        expect(ring.geometry.type, `P${slot + 1} drew a shape with no marker`).toBe('RingGeometry');
+        expect(colorOf(ring), `P${slot + 1}'s color`).toBe(TEAM_COLORS[team]);
+      });
+      views.dispose();
+    });
+  });
+
   it('teams mode colours shell tint by TEAM too, mirroring the ring dispatch', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);

@@ -1,8 +1,8 @@
 /*
- * Issue #922's resolution: which identity marker a session's renderer and the page's HUD
- * draw, from the `identityMarker` flag and the session's mode. The wiring that hands these
- * results to `createRenderer` and `createHud` is asserted in loop.test.ts; this file pins the
- * table itself.
+ * Issue #922's resolution, widened to Teams by issue #1128: which identity marker a session's
+ * renderer and the page's HUD draw, from the `identityMarker` flag and the session's mode. The
+ * wiring that hands these results to `createRenderer` and `createHud` is asserted in
+ * loop.test.ts; this file pins the table itself.
  *
  * Population: the three flag states (absent, the reversal value `solid`, and `shape`, the one
  * drawable style since issue #1023 deleted `arcs` and `roof`) against the four mode states a
@@ -52,6 +52,13 @@ describe('the identity-marker flag vocabulary (issue #922)', () => {
 describe('sessionIdentityMarker: what a session renderer draws (issue #922)', () => {
   it('draws the shipped `shape` marker in an unflagged FFA session', () => {
     expect(sessionIdentityMarker(null, 'ffa')).toBe(SHIPPED_VERSUS_IDENTITY_MARKER);
+  });
+
+  it('draws the shipped `shape` marker in an unflagged Teams session (issue #1128)', () => {
+    // Ruled 2026-10-31: the shapes always say which player is which, so a Teams tank carries
+    // its own slot's shape, in its team's color. THE CONTROL is the co-op case below: the same
+    // unflagged resolver keeps the solid ring there.
+    expect(sessionIdentityMarker(null, 'teams')).toBe(SHIPPED_VERSUS_IDENTITY_MARKER);
   });
 
   it('keeps the solid ring in every unflagged session that is not versus -- population: 2 modes', () => {
