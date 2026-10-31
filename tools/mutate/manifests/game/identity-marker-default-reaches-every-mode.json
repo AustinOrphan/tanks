@@ -11,9 +11,9 @@
   "why": "Makes the shipped `shape` marker mode-blind (issues #922, #1128): co-op campaign rings change, although the ruling on #234 covered FFA and the ruling on #1128 added Teams, and neither covered co-op. The single-player ring is still gated by `identityApplies` (two or more player tanks) in entities.ts, so only the renderer OPTION shows it there. Killed by the resolver's non-versus case and by the loop case that boots co-op and single-player.",
   "killedBy": [
     "sessionIdentityMarker: what a session renderer draws (issue #922) keeps the solid ring in every unflagged session that is not versus -- population: 2 modes",
-    "startGameWith: dev flags stay off by default the shipped identity marker reaches versus sessions only (issues #922, #1128) keeps the solid ring in co-op campaign and single-player sessions",
-    "startGameWith: dev flags stay off by default threads the identityMarker dev flag through to the renderer (issue #630)",
     "startGameWith: dev flags stay off by default asks the renderer for every dev overlay OFF by default",
-    "startGameWith: dev flags stay off by default asks for each overlay only when its own flag is on"
+    "startGameWith: dev flags stay off by default asks for each overlay only when its own flag is on",
+    "startGameWith: dev flags stay off by default threads the identityMarker dev flag through to the renderer (issue #630)",
+    "startGameWith: dev flags stay off by default the shipped identity marker reaches versus sessions only (issues #922, #1128) keeps the solid ring in co-op campaign and single-player sessions"
   ]
 }

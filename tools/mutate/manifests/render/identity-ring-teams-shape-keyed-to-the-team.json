@@ -9,6 +9,6 @@
   ],
   "why": "The Teams ring's shape is keyed to the team instead of the slot (issue #1128): every tank on a side draws one outline, so two teammates read as one player, and the ring's shape repeats what its color already says. The ruling gives the two channels one meaning each: the shape says which player, the color which side. Every ring is still a `shape` outline in its team's color, so the FFA cases and the color cases stay green.",
   "killedBy": [
-    "PLACEHOLDER"
+    "player identity: ring and shell tint teams mode draws each player's own shape in the team color (issue #1128) gives every ring its own slot's outline in its team's color -- population: 6 splits, 20 rings"
   ]
 }

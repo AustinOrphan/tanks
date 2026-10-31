@@ -11,9 +11,11 @@
   "why": "Un-ships the rulings on #234 and #1128 (issues #922, #1128): an unflagged FFA or Teams session's ring and the page's stock strip go back to identity in hue alone, while the flag, its registry text and the developer pane all still say `shape` ships. Every pre-#922 test expected exactly this result, so only the resolver's own table, the loop cases that boot a versus session, and the page-HUD case can tell. Killed by all three.",
   "killedBy": [
     "sessionIdentityMarker: what a session renderer draws (issue #922) draws the shipped `shape` marker in an unflagged FFA session",
+    "sessionIdentityMarker: what a session renderer draws (issue #922) draws the shipped `shape` marker in an unflagged Teams session (issue #1128)",
     "stripIdentityMarker: what the page HUD draws on every stock entry (issues #922, #1128) draws the shipped mark unflagged, none for the reversal value, and a named style as named",
     "startGameWith: dev flags stay off by default the shipped identity marker reaches versus sessions only (issues #922, #1128) draws `shape` in an FFA match started from the Versus Setup pane, with no ?dev",
     "startGameWith: dev flags stay off by default the shipped identity marker reaches versus sessions only (issues #922, #1128) draws `shape` in an FFA session entered by ?dev=1&mode=ffa&players=4, with no identityMarker",
+    "startGameWith: dev flags stay off by default the shipped identity marker reaches versus sessions only (issues #922, #1128) draws `shape` in a Teams match, from the Versus Setup pane and from ?dev=1&mode=teams&players=4 (issue #1128)",
     "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped identity mark for FFA and Teams entries, and none for the reversal value (issues #922, #1128)"
   ]
 }

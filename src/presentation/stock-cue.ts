@@ -224,9 +224,10 @@ export type PipLayout =
  * at four by four too (`narrowPipLayout`), so the two teams strips agree there.
  *
  * Only consulted on a narrow viewport; the desktop strip draws every mark at its full size.
- * Measured at the default UI scale (100%) only, the teams table included. Since #1048 `.hud-versus-stocks` is sized
- * `calc(1rem * var(--hud-ui-scale))` (`hud.css`), and the full-size marks follow it in `em`; at
- * scale 1 that is numerically the `1rem` this table was measured against, so it holds there.
+ * Measured at the default UI scale (100%) only, the teams table included. Since #1048
+ * `.hud-versus-stocks` is sized `calc(1rem * var(--hud-ui-scale))` (`hud.css`), and the
+ * full-size marks follow it in `em`; at scale 1 that is numerically the `1rem` these tables were
+ * measured against, so they hold there.
  * At 125% and 150% the `em`-sized marks grow while the `px`-sized narrow row does not, and
  * nothing has measured either scale on a phone.
  */

@@ -10,14 +10,17 @@
   ],
   "why": "The HUD stops handing the strip's rule its resolved marker, so every FFA entry draws the `marks` row whatever the marker says (issue #1022). The reversal `?dev=1&identityMarker=solid` and every injected HUD would then draw the slot's outline in the strip with no `shape` outline on the ground to pair with, which is the one thing the ruling on #230 reserved `marks` against.",
   "killedBy": [
-    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped identity mark for FFA and Teams entries, and none for the reversal value (issues #922, #1128)",
+    "hud: stock-loss cue arms (issue #230) pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue",
+    "hud: stock-loss cue arms (issue #230) pips: a narrow viewport shrinks the pip, and hands back the digit when none fits (#835)",
+    "hud: stock-loss cue arms (issue #230) a teams entry's pips on a narrow viewport (issue #1055) four players at three stocks keep the letter and take the 9px row",
+    "hud: stock-loss cue arms (issue #230) a teams entry's pips on a narrow viewport (issue #1055) four players at five stocks keep the letter, ONE full-size pip and the count, and the cue a target",
+    "hud: stock-loss cue arms (issue #230) THE CONTROL for the teams cases: the desktop strip draws every teams pip at full size",
+    "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
+    "hud: stock-loss cue arms (issue #230) pips: a cue is gone once STOCK_CUE_MS has passed",
+    "hud: stock-loss cue arms (issue #230) a rematch that resets stocks upward is not a loss, and starts a new pip count",
     "hud: identity mark in the stock strip (issue #778) draws nothing at all without the flag, and leaves the strip byte-identical",
     "hud: identity-shaped stocks, the `marks` arm (issue #230) draws pips instead for the reversed marker, in FFA and teams alike (issues #1022, #1128)",
-    "hud: stock-loss cue arms (issue #230) a rematch that resets stocks upward is not a loss, and starts a new pip count",
-    "hud: stock-loss cue arms (issue #230) pips: a cue is gone once STOCK_CUE_MS has passed",
-    "hud: stock-loss cue arms (issue #230) pips: a cue still running survives the rebuild another slot's loss causes, resumed at its elapsed time",
-    "hud: stock-loss cue arms (issue #230) pips: a narrow viewport shrinks the pip, and hands back the digit when none fits (#835)",
-    "hud: stock-loss cue arms (issue #230) pips: one pip per starting stock, lost ones hollow, and the one just lost carries the cue",
-    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn"
+    "hud: the stock strip draws by one rule (issue #1022) draws every cell as the table says: one row per entry, every stock drawn",
+    "createBrowserDeps carries the parsed browser query state into GameDeps hands the page HUD the shipped identity mark for FFA and Teams entries, and none for the reversal value (issues #922, #1128)"
   ]
 }

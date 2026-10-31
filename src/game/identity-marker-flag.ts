@@ -29,7 +29,7 @@
  * of pips beside its A/B/C letter. Ruled 2026-10-31 (#1128, recorded on #923): the shapes
  * always say which player is which, so a Teams tank carries its own slot's shape too, drawn
  * in its team's color, and a Teams stock entry draws that slot's `marks` row after its letter.
- * The two channels each carry one meaning: the shape says which player, the ring colour and
+ * The two channels each carry one meaning: the shape says which player, the ring color and
  * the letter say which side. A team cue on the arena that does not lean on color is #923's,
  * after the cutover. Co-op campaign and single-player sessions draw exactly what they drew
  * before, and shell owner identity (#1024) is a separate question. The default resolves in

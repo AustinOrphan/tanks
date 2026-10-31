@@ -8,8 +8,13 @@
     "src/game/hud.match.test.ts",
     "src/game/loop.test.ts"
   ],
-  "why": "The Teams strip drops its letter once it draws marks (issue #1128), the reading that the shape replaces the letter. The ruling keeps both: the shape says which player, and the letter and the color say which side, so a color-blind reader, a forced-colors palette and a greyscale screenshot lose the side with the letter gone. `stock-chip-drops-the-team-letter` cannot see it: its case mounts a HUD with no marker, which draws pips and keeps the letter here.",
+  "why": "The Teams strip drops its letter once it draws marks (issue #1128), the reading that the shape replaces the letter. The ruling keeps both: the shape says which player, and the letter and the color say which side, so a color-blind reader, a forced-colors palette and a grayscale screenshot lose the side with the letter gone. `stock-chip-drops-the-team-letter` cannot see it: its case mounts a HUD with no marker, which draws pips and keeps the letter here.",
   "killedBy": [
-    "PLACEHOLDER"
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry keeps its letter and full-size marks where they fit: 4x3 and 3x5 (issue #1128)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry falls back to ONE mark and the count at four players and four stocks, where FFA keeps the 8px row (issue #1128)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) on a narrow viewport (issue #1021) a teams entry falls back at four players and five stocks too, as FFA does (issue #1128)",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) a teams entry under `shape` (issue #1128) draws every entry as its OWN slot's marks, after its letter, in its team's color -- population: 5 splits, 18 entries",
+    "hud: identity-shaped stocks, the `marks` arm (issue #230) a teams entry under `shape` (issue #1128) says what the reversed marker's pips say: the same text and row names, and one sentence for a loss",
+    "hud: the stock strip draws by one rule (issue #1022) draws no digit-only strip in any cell: the count is each row's name, and the text is the label alone"
   ]
 }
